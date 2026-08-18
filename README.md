@@ -6,11 +6,20 @@ DSH 预设：5 个 prompt + camera 技能 + 共享运行时，让 agent 在本�
 
 ```powershell
 # 一次性：装 Python 3.10+，把 preset 拿到本地，然后：
+git clone https://github.com/cxin21/dsh-comfyui-chenxin.git
+# 从 GitHub Releases (v0.1.0) 下载 3 个数据包（.gz），解压后放回：
+#   skills/anima-prompt-v1/knowledge/tag-catalog.sqlite   （来自 tag-catalog.sqlite.gz）
+#   skills/anima-prompt-v1/knowledge/tags.sqlite          （来自 tags.sqlite.gz）
+#   skills/minimax-h3-prompt/knowledge/tokenizer.json     （来自 tokenizer.json.gz）
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 # 重启 DSH，会话起来后 loader 会自动注册 5 个 CLI 工具
 # （anima_prompt_v1 / minimax_h3_prompt / camera_image / camera_video / camera_multiview）
 ```
+
+> **大文件不走 git**：三个知识库快照（共 ~993 MB）体积过大，托管在
+> [GitHub Releases](https://github.com/cxin21/dsh-comfyui-chenxin/releases)（tag `v0.1.0`，
+> gzip 压缩后共 ~241 MB）。clone 后按上表放回路径即可，仓库内 `.gitignore` 已排除它们。
 
 `scripts/setup.ps1` 会创建 `<preset>/.venv`、装 `tokenizers`、把 8 个本地包装进 venv、自检 5 个 CLI，全部幂等。详见 `docs/development.md`。
 

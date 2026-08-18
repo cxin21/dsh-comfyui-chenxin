@@ -1,0 +1,24 @@
+# Normalize line endings: LF in repo, platform-native on checkout.
+* text=auto
+
+# Source files — always LF in the repo (keep deterministic diffs)
+*.py    text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+*.ps1   text eol=lf
+*.toml  text eol=lf
+*.txt   text eol=lf
+
+# Binary assets — never touch
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.sqlite binary
+*.db    binary
+*.wav   binary
+*.mp4   binary

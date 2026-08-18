@@ -1,0 +1,72 @@
+{
+  "t2va": {
+    "limits": {
+      "quality_cap": 1200,
+      "hard_limit": 262144
+    },
+    "fields": [
+      {"name": "fixed_structure_and_labels", "recommended_min_share": 0.03, "recommended_max_share": 0.05, "hard_max_share": 0.05},
+      {"name": "integrated_multimodal_description", "recommended_min_share": 0.72, "recommended_max_share": 0.82, "hard_max_share": 0.82},
+      {"name": "overall_soundscape", "recommended_min_share": 0.08, "recommended_max_share": 0.12, "hard_max_share": 0.12},
+      {"name": "non_diegetic_music", "recommended_min_share": 0.03, "recommended_max_share": 0.08, "hard_max_share": 0.08},
+      {"name": "safety_margin", "recommended_min_share": 0.05, "recommended_max_share": 0.05, "hard_max_share": 0.05}
+    ]
+  },
+  "i2va": {
+    "limits": {
+      "quality_cap": 1500,
+      "hard_limit": 262144
+    },
+    "fields": [
+      {"name": "alignment_preamble", "recommended_min_share": 0.02, "recommended_max_share": 0.04, "hard_max_share": 0.04},
+      {"name": "integrated_multimodal_description", "recommended_min_share": 0.72, "recommended_max_share": 0.82, "hard_max_share": 0.82},
+      {"name": "overall_soundscape", "recommended_min_share": 0.06, "recommended_max_share": 0.10, "hard_max_share": 0.12},
+      {"name": "non_diegetic_music", "recommended_min_share": 0.02, "recommended_max_share": 0.06, "hard_max_share": 0.08},
+      {"name": "safety_margin", "recommended_min_share": 0.05, "recommended_max_share": 0.05, "hard_max_share": 0.05}
+    ]
+  },
+  "fl2va": {
+    "limits": {
+      "quality_cap": 1700,
+      "hard_limit": 262144
+    },
+    "fields": [
+      {"name": "alignment_preamble", "recommended_min_share": 0.02, "recommended_max_share": 0.05, "hard_max_share": 0.05},
+      {"name": "integrated_multimodal_description", "recommended_min_share": 0.70, "recommended_max_share": 0.80, "hard_max_share": 0.82},
+      {"name": "overall_soundscape", "recommended_min_share": 0.05, "recommended_max_share": 0.10, "hard_max_share": 0.12},
+      {"name": "non_diegetic_music", "recommended_min_share": 0.02, "recommended_max_share": 0.06, "hard_max_share": 0.08},
+      {"name": "safety_margin", "recommended_min_share": 0.05, "recommended_max_share": 0.05, "hard_max_share": 0.05}
+    ]
+  },
+  "l2va": {
+    "limits": {
+      "quality_cap": 1700,
+      "hard_limit": 262144
+    },
+    "fields": [
+      {"name": "alignment_preamble", "recommended_min_share": 0.02, "recommended_max_share": 0.04, "hard_max_share": 0.04},
+      {"name": "integrated_multimodal_description", "recommended_min_share": 0.72, "recommended_max_share": 0.82, "hard_max_share": 0.82},
+      {"name": "overall_soundscape", "recommended_min_share": 0.05, "recommended_max_share": 0.10, "hard_max_share": 0.12},
+      {"name": "non_diegetic_music", "recommended_min_share": 0.02, "recommended_max_share": 0.06, "hard_max_share": 0.08},
+      {"name": "safety_margin", "recommended_min_share": 0.05, "recommended_max_share": 0.05, "hard_max_share": 0.05}
+    ]
+  },
+  "ref2va": {
+    "limits": {
+      "quality_cap": 2400,
+      "hard_limit": 262144
+    },
+    "fields": [
+      {"name": "subject_definitions", "recommended_min_share": 0.12, "recommended_max_share": 0.18, "hard_max_share": 0.18},
+      {"name": "summary", "recommended_min_share": 0.03, "recommended_max_share": 0.05, "hard_max_share": 0.05},
+      {"name": "retention_analysis", "recommended_min_share": 0.10, "recommended_max_share": 0.16, "hard_max_share": 0.16},
+      {"name": "detailed_description", "recommended_min_share": 0.52, "recommended_max_share": 0.64, "hard_max_share": 0.64},
+      {"name": "overall_soundscape", "recommended_min_share": 0.05, "recommended_max_share": 0.08, "hard_max_share": 0.08},
+      {"name": "non_diegetic_music", "recommended_min_share": 0.02, "recommended_max_share": 0.05, "hard_max_share": 0.05},
+      {"name": "safety_margin", "recommended_min_share": 0.05, "recommended_max_share": 0.05, "hard_max_share": 0.05}
+    ]
+  },
+  "official_envelope": {
+    "max_prompt_chars": 7000
+  }
+}

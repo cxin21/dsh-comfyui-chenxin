@@ -1,0 +1,2 @@
+name: ComfyUI Chenxin
+description: Anima / MiniMax H3 提示词作者与 Camera 工作流执行器。loader.js 自动发现项目根与 venv，注册 5 个 SKILL.md prompt sections 与 5 个 console-script wrapper Host Tools。

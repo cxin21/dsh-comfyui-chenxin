@@ -1,0 +1,23 @@
+{
+  "asset_policy": "bundled-fixed-api-json",
+  "workflow": {
+    "filename": "Flux2-Klein人物一键多视图工作流.json",
+    "sha256": "33584a54b6587914fce078cdcddbab7915e7d834ca741ded06a44a3ba484252e",
+    "node_count": 261
+  },
+  "poses": [
+    { "index": 1, "filename": "姿势骨架1.png", "node_id": "152", "sha256": "a6e988caa54806beee608fb63350ff64039e7f12b37488323fcdc1a68d29b8ed" },
+    { "index": 2, "filename": "姿势骨架2.png", "node_id": "154", "sha256": "9729498dfd83319303a42b0781027ad5c75995e421d1e856cc8a7d3153bd1d28" },
+    { "index": 3, "filename": "姿势骨架3.png", "node_id": "360", "sha256": "f9a98b5e74a4e375f8d5fe94347b3c15def6fd8b542d955b5ba20e4d03bd36cc" },
+    { "index": 4, "filename": "姿势骨架4.png", "node_id": "364", "sha256": "a563e4dee54150862cf362386716adb1e5572a1b8dad712d20b8ada9841f180c" },
+    { "index": 5, "filename": "姿势骨架5.png", "node_id": "148", "sha256": "728617d530da4dc11ea9a6bb437382e8238401c981963bd8aaccd7dd13a78df8" },
+    { "index": 6, "filename": "姿势骨架6.png", "node_id": "149", "sha256": "86f37f9651060a49203b141cc2f813e41071a64a5acea2493a9b71debe295184" },
+    { "index": 7, "filename": "姿势骨架7.png", "node_id": "147", "sha256": "581c7c5823902d43d65ae1f35a6105172de26e354804aeaf048b8ac2e3d41651" },
+    { "index": 8, "filename": "姿势骨架8.png", "node_id": "373", "sha256": "51a4b87b1dfa2c1e1841bc140b6e676bcfe1946cb86b32de274d9824f25a95da" },
+    { "index": 9, "filename": "姿势骨架9.png", "node_id": "150", "sha256": "9857873f4834ad07c59d3313061c176fcefa7b383a59453c4feda20349f542f9" },
+    { "index": 10, "filename": "姿势骨架10.png", "node_id": "367", "sha256": "facb88197fccc428f48ab030f681663985bf6c3bd623a27c0967826fa442f5d4" },
+    { "index": 11, "filename": "姿势骨架11.png", "node_id": "368", "sha256": "f2880afced9579e6efeb9f4c4f53ff9d56346d96a6f023322868f83926f04a56" },
+    { "index": 12, "filename": "姿势骨架12.png", "node_id": "151", "sha256": "1d5fcb37f5d149f20745fa2a81ec012f112651ac5bcefd7ae9d962843f4a1aa5" },
+    { "index": 13, "filename": "姿势骨架13.png", "node_id": "757", "sha256": "6187a6746f1f7a28d01e90f15e74dd27528d9c4e2be089b508fbcaeb0bac366c" }
+  ]
+}

@@ -1,0 +1,28 @@
+# Python build/venv artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node caches
+.npm-cache/
+node_modules/
+
+# Run working directories (created by agent sessions)
+out/
+outs/
+run/
+runs/
+briefs/
+scratch/
+
+# Runtime-generated artifacts (all skill outputs land here, grouped per skill)
+temp/
+
+# Large knowledge snapshots — shipped via GitHub Releases, not the repo.
+# Download from https://github.com/cxin21/dsh-comfyui-chenxin/releases
+# (tag v0.1.0) and place them back at these paths before use:
+skills/anima-prompt-v1/knowledge/tag-catalog.sqlite
+skills/anima-prompt-v1/knowledge/tags.sqlite
+skills/minimax-h3-prompt/knowledge/tokenizer.json

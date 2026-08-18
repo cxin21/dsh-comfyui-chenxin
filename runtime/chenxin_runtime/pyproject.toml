@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chenxin-runtime"
+version = "1.0.0"
+description = "Shared P1 envelope, CLI runner, and ComfyUI re-export for the 5 comfyui-chenxin skills."
+requires-python = ">=3.10"
+dependencies = [
+    "comfyui-http-runtime",
+    "comfyui-mcp-runtime",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["chenxin_runtime*"]

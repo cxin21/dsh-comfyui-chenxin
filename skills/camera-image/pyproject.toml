@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camera-image"
+version = "2.0.0"
+description = "Anima camera workflow skill (fixed asset + preset surface, executed via comfyui-mcp)."
+requires-python = ">=3.10"
+dependencies = [
+    "chenxin-runtime",
+]
+
+[project.scripts]
+camera-image = "camera_image.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["camera_image*"]
+exclude = ["workflow*", "tests*", "test*", "*.tests", "*.tests.*"]

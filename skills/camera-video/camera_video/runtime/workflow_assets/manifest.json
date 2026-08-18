@@ -1,0 +1,36 @@
+{
+  "asset_policy": "bundled-fixed-api-json",
+  "normalization": "remove-unconnected-UniBlockSwap-nodes-and-unsupported-SageAttention-patches-from-user-exported-api; rewire-LoRA-to-original-model",
+  "scenes": {
+    "t2v": {
+      "workflow": "minimax-h3-t2v.json",
+      "source_filename": "MiniMax H3文生视频.json",
+      "source_sha256": "678486600c77a3a0a6376a58652d6b1e935614e5da2c5766c806d143ca0abc63",
+      "sha256": "e406612dad0203d91211853288e31d6f6f0e2966d1ffa69f6ffc2514b1be81a0",
+      "node_count": 17,
+      "prompt_node": "234",
+      "duration_node": "236",
+      "image_nodes": []
+    },
+    "i2v": {
+      "workflow": "minimax-h3-i2v-single.json",
+      "source_filename": "MiniMax H3单图参考生视频.json",
+      "source_sha256": "87d3d15cd21a81b44ffbb222bb3e0da81033902f70a57d7bc475c1d6e50c58c2",
+      "sha256": "ef15549c7db7f241ce16c54d9631421d517a2c84ab1dc25963997d9173624797",
+      "node_count": 18,
+      "prompt_node": "312",
+      "duration_node": "323",
+      "image_nodes": ["335"]
+    },
+    "multi-i2v": {
+      "workflow": "minimax-h3-i2v-multi.json",
+      "source_filename": "MiniMax H3多图参考生视频.json",
+      "source_sha256": "1847bc70ba6c58bbea13d126526c120e62f5d185c227655de7a932c5c88d3be7",
+      "sha256": "4c79c82cf278d73e0e720076a29a3b8cc8ccaa8afe4921340c96c45afaad5bb8",
+      "node_count": 20,
+      "prompt_node": "339",
+      "duration_node": "350",
+      "image_nodes": ["362", "364", "365"]
+    }
+  }
+}

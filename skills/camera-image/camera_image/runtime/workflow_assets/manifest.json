@@ -1,0 +1,8 @@
+{
+  "schema_version": "2.0",
+  "asset_policy": "bundled-fixed-ui-json",
+  "asset": "camera-anima.json",
+  "asset_sha256": "48ca38d40e6a32c9706570a3a6c2524c704d5af05e512a00d34c66809bca33b5",
+  "workflow_fingerprint": "05eadbb3dea8ae7fb254e46979358dd4d3b0f9f55721a93bab642f4ce7cd28cd",
+  "profile_id": "camera-anima-v1"
+}

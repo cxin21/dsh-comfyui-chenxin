@@ -1,0 +1,123 @@
+﻿# ComfyUI Chenxin Agent Preset
+#
+# Persona + host skill stack + compaction + basic tools + loader (single
+# plugin that registers the 5 bundled SKILL.md files into the host's
+# `ctx.skills` registry, plus 5 CLI wrapper Host Tools if a Python venv has
+# been set up at <preset>/.venv/).
+#
+# Self-contained: copy this directory to ~/.dsh/.agent-presets/comfyui-chenxin/
+# and the 5 SKILL.md files appear in the session skill catalog (names +
+# descriptions only). The model loads any skill's full instructions on demand
+# by calling the `skill` tool, or automatically when the user types
+# `/skill-name`. To enable the 5 CLI tools, run scripts/setup.ps1 (Windows)
+# or scripts/setup.sh (macOS/Linux) ONCE per machine; then restart DSH.
+#
+# Path injection (highest priority first):
+#   1. agent.cordis.yml `config.presetRoot` (this file)
+#   2. shellEnv DSH_COMFYUI_PRESET_ROOT (runtime shell env)
+#   3. process.env DSH_COMFYUI_PRESET_ROOT (preset-process env)
+#   4. __dirname of the loader file (always the preset's own directory —
+#      correct on a fresh machine where no override is set)
+
+# ── Persona ──────────────────────────────────────────────────────────────
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |-
+      You are the ComfyUI Chenxin agent. You author prompts for Anima and MiniMax H3,
+      and execute camera workflows via local Python console scripts.
+
+      The preset bundles five Skills under skills/, exposed via the standard skill
+      catalog (see <available_skills> in your system reminder):
+      - anima-prompt-v1: Anima prompt authoring with Catalog, relation graph, and quality policy
+      - minimax-h3-prompt: MiniMax H3 T2VA/Ref2VA prompt authoring with tokenizer
+      - camera-image: Anima camera workflow (t2i/i2i)
+      - camera-video: MiniMax H3 video workflow (T2V/I2V/multi-I2V)
+      - camera-multiview: Flux2-Klein multiview generation
+
+      When the user's task matches a skill's description, call the `skill` tool with
+      the EXACT name from the catalog to load its full instructions. Do NOT act on
+      skill-domain tasks before loading — the catalog contains summaries only, not
+      the full instructions. Load all applicable skills, then follow them.
+
+      When the CLI wrapper Tools (anima_prompt_v1 / minimax_h3_prompt / camera_image /
+      camera_video / camera_multiview) are registered, prefer them over directly
+      spawning the console scripts. All CLI calls return P1 JSON Envelope responses;
+      surface advisories to the user verbatim. If the CLI Tools are NOT registered,
+      follow the SKILL.md instructions using your own reasoning and the bundled
+      references/.
+    complete: false
+
+# ── Basic Tools (host-provided) ──────────────────────────────────────────
+# ── User questions (host-provided): ask_user_question — required by TencentDB memory proxy session-init ──
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── Skill registry (host-provided) ───────────────────────────────────────
+# `skill-filesystem` discovers skills from .dsh/skills, .agents/skills, the
+# user's DSH home, and the agent home. `tool-skill` registers the model-facing
+# `skill` tool, injects the <available_skills> catalog as a system reminder
+# each step, and auto-loads skills when the user types `/skill-name`.
+#
+# The loader below registers the preset's own 5 SKILL.md files as an
+# additional provider into ctx.skills, so they appear in the same catalog
+# alongside any workspace skills.
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── Compaction (host-provided) ───────────────────────────────────────────
+# The 5 SKILL.md files are large. Without compaction, long sessions overflow
+# the context window and the model returns CONTEXT_WINDOW_EXCEEDED. The pruner
+# keeps large CLI tool results from inflating the surface; the basic engine
+# summarizes older history into a structured checkpoint; command-compact
+# exposes /compact for manual triggers.
+#
+# `compaction` and `toolResultPruner` are services this group provides, so
+# both belong in an isolate realm — without it the second session mounting
+# this preset would collide on the same names.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 4096
+        headChars: 2048
+        tailChars: 512
+
+# ── ComfyUI Chenxin Loader ───────────────────────────────────────────────
+# Single plugin. Registers a custom skill provider that lists the 5 bundled
+# SKILL.md files into ctx.skills (so tool-skill's catalog picks them up and
+# the model can load each on demand via the `skill` tool). If
+# <preset>/.venv/ exists with 5 console scripts, also registers 5 CLI
+# wrapper Tools.
+- id: comfyui-loader
+  name: './loader.js'
+  config:
+    # Override the preset root here if auto-discovery fails. Leave unset to use
+    # shellEnv / process.env / __dirname (preset's own directory) fallback.
+    presetRoot: null

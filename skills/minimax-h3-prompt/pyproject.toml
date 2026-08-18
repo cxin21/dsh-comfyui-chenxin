@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minimax-h3-prompt"
+version = "6.0.0"
+description = "MiniMax-H3 story-to-prompt authoring across T2VA / I2VA / FL2VA / L2VA / Ref2VA with audit, exact token budget, 7000-character cap, and a structural Chinese skeleton. Optionally consumes a precompiled multishot plan via --plan. The canonical MiniMax H3 prompt syntax lives upstream at MiniMax-AI/MiniMax-H3; this skill is a validation pipeline that complements but does not duplicate that guide."
+requires-python = ">=3.10"
+dependencies = [
+    "chenxin-runtime",
+    "tokenizers==0.22.2",
+]
+
+[project.scripts]
+minimax-h3-prompt = "h3_prompt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["h3_prompt*"]

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui-http-runtime"
+version = "1.0.0"
+description = "Neutral stdlib HTTP transport for direct ComfyUI API access"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["comfyui_http*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["..", "..", "."]

@@ -2,6 +2,22 @@
 
 DSH 预设：5 个 prompt + camera 技能 + 共享运行时，让 agent 在本机 ComfyUI 上完成 Anima / MiniMax H3 提示词编写与生图生视频。
 
+![GitHub stars](https://img.shields.io/github/stars/cxin21/dsh-comfyui-chenxin)
+![GitHub license](https://img.shields.io/github/license/cxin21/dsh-comfyui-chenxin)
+![GitHub release](https://img.shields.io/github/v/release/cxin21/dsh-comfyui-chenxin)
+![GitHub last commit](https://img.shields.io/github/last-commit/cxin21/dsh-comfyui-chenxin)
+![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![DSH](https://img.shields.io/badge/DSH-Agent%20Preset-8A2BE2)
+
+## ✨ 功能亮点
+
+- **5 个开箱即用的 CLI 技能**：提示词编写（Anima / MiniMax H3）+ 生图 + 生视频 + 多视图角色卡
+- **Anima 文生图 / 图生图**：`camera-image`（t2i / i2i），pinned 工作流零配置
+- **MiniMax H3 视频**：`camera-video`（t2v / i2v / multi-i2v），支持跨段参考图与参考音频
+- **多视图角色卡**：`camera-multiview`（Flux2-Klein），一张卡出多视角
+- **统一 P1 Envelope**：所有 CLI 输出结构一致，agent / 脚本都好解析
+- **幂等一键安装**：`scripts/setup.ps1` 自动建 venv、装依赖、自检 5 个 CLI
+
 ## 5 分钟跑起来
 
 ```powershell

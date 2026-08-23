@@ -1,4 +1,4 @@
-﻿# ComfyUI Chenxin Agent Preset
+# ComfyUI Chenxin Agent Preset
 #
 # Persona + host skill stack + compaction + basic tools + loader (single
 # plugin that registers the 5 bundled SKILL.md files into the host's
@@ -48,6 +48,15 @@
       references/.
     complete: false
 
+# ── Global instructions (host-provided) ──────────────────────────────────
+# Loads ~/.dsh/AGENTS.md (global thinking protocol) into this session's
+# durable history so the model follows the Kaizike 12-Prompt frameworks
+# automatically. See ~/.dsh/rules/ for the full per-scenario rules.
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
 # ── Basic Tools (host-provided) ──────────────────────────────────────────
 # ── User questions (host-provided): ask_user_question — required by TencentDB memory proxy session-init ──
 - id: tool-ask-user
@@ -63,6 +72,15 @@
   name: '@deepseek-ai/dsh-tool-fs-search'
   config:
     sampleOverCapGlobResults: false
+
+# ── Background jobs ─────────────────────────────────────────────────────
+# Model-facing controls for job_output / job_list / job_kill. The job
+# REGISTRY stays on the host plane; what the preset chooses is whether its
+# agent can manage background work at all. Without this entry, all
+# run_in_background calls fail with "background jobs unavailable: load
+# @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs".
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
 
 # ── Skill registry (host-provided) ───────────────────────────────────────
 # `skill-filesystem` discovers skills from .dsh/skills, .agents/skills, the

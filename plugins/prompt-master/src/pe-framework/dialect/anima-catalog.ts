@@ -28,32 +28,35 @@ const defaultCatalogPath = () => resolveKnowledgePath({ skillDir: 'anima-prompt-
 const defaultOverlayPath = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'relation-overlay.sqlite' })
 
 let _db: DatabaseSync | null = null
-let _dbPath = process.env.ANIMA_CATALOG_PATH ?? defaultCatalogPath()
+/** 惰性解析（MF-1）：路径在 db() 打开时才解析，保证 setPresetRoot(config.presetRoot) 先于路径求值；
+ *  模块求值期不再触碰文件系统（resolveKnowledgePath fallback 失败的 throw 不再发生在 import 时）。 */
+let _dbPathOverride: string | null = process.env.ANIMA_CATALOG_PATH ?? null
 let _manifestChecked = false
 
 /** manifest 对账只跑一次；失败 console.warn 但不硬崩（资源层无 ctx.logger，spec §4.2）。
- *  在模块求值期执行（先于任何 db 打开）：783MiB catalog 的 sha256 在全量测试并行 IO 下会超过
- *  vitest 单测 5s 超时，放在惰性 db() 路径会把首次查询拖超时；模块期不计入测试计时。 */
+ *  在首次 db() 调用时执行（MF-1：从模块求值期移入惰性路径，先于任何 db 打开）：783MiB catalog 的
+ *  sha256 在全量测试并行 IO 下会超过 vitest 单测 5s 超时，once-flag 保证每个进程只对账一次。 */
 function verifyManifestOnce(): void {
   if (_manifestChecked) return
   _manifestChecked = true
   const r = assertAnimaCatalog()
   if (!r.ok) console.warn(`[prompt-master] ${r.reason}：资产与 golden 基线不同，请 re-run fidelity capture`)
 }
-verifyManifestOnce()
 
 export function catalogPath(): string {
-  return _dbPath
+  return _dbPathOverride ?? defaultCatalogPath()
 }
 
 export function setCatalogPath(path: string): void {
   if (_db) { _db.close(); _db = null }
-  _dbPath = path
+  // 空串 = 清除显式覆盖，回落到 env 优先级（level 0），再回落 defaultCatalogPath()
+  _dbPathOverride = path || (process.env.ANIMA_CATALOG_PATH ?? null)
 }
 
 function db(): DatabaseSync {
   if (!_db) {
-    _db = new DatabaseSync(_dbPath, { readOnly: true })
+    verifyManifestOnce()
+    _db = new DatabaseSync(catalogPath(), { readOnly: true })
   }
   return _db
 }
@@ -153,12 +156,13 @@ export function catalogMeta(): { file: string; sizeBytes: number; tables: string
     .map((r) => (r as { name: string }).name)
   const fts = tables.includes('catalog_fts')
   let sizeBytes = 0
+  const path = catalogPath()
   try {
-    sizeBytes = statSync(_dbPath).size
+    sizeBytes = statSync(path).size
   } catch {
     /* path may be a file: URI fallback */
   }
-  return { file: _dbPath, sizeBytes, tables, fts }
+  return { file: path, sizeBytes, tables, fts }
 }
 
 /** 便捷 close（测试隔离用） */

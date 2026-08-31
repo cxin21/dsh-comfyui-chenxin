@@ -46,6 +46,19 @@ describe('prompt_compile (target=h3)', () => {
     expect(raw.audit.gates.some((g: any) => g.rule === 'ref_count' && g.severity === 'critical')).toBe(true)
   })
 
+  it('MF-3: critical gate keeps result for non-audit_only compile (ok=false but result.text present)', async () => {
+    const raw = await run({
+      target: 'h3',
+      stage: 'ref2va',
+      shots: { duration_seconds: 8, shots: [{ what: 'x', who: 'A' }] },
+      form_fields: { references: [{ who: 'A', image: 'a.png' }, { who: 'B', image: 'b.png' }] },
+    })
+    expect(raw.ok).toBe(false)
+    expect(raw.result).toBeDefined()
+    expect(typeof raw.result.text).toBe('string')
+    expect(raw.result.text.length).toBeGreaterThan(0)
+  })
+
   it('budget counter is official-tokenizer (T12 switch)', async () => {
     const raw = await run({ target: 'h3', shots: { duration_seconds: 6, shots: [{ what: 'x' }] } })
     expect(raw.audit.budget.counter).toBe('official-tokenizer')

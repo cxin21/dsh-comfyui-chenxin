@@ -21,10 +21,13 @@ export interface CompileArgs {
   variant?: string
 }
 
-/** StageResult → Envelope（thin view 组装点）；omitResult 用于 audit_only 语义（不返回提示词正文） */
+/** StageResult → Envelope（thin view 组装点）；omitResult 用于 audit_only 语义（不返回提示词正文）。
+ *  MF-3：result 省略仅限 audit_only——非 audit_only 即使 ok=false（critical 闸门）也保留 result
+ *  （对齐旧 compile 行为：ok:true + audit.passed:false 可见编译产物；确定性编译无「修复重试」路径）。 */
 function stageToEnvelope(stage: StageResult, opts?: { omitResult?: boolean }): string {
   const env = JSON.parse(assembleEnvelope(stage)) as Record<string, unknown>
   if (opts?.omitResult) delete env.result
+  else if (env.result === undefined) env.result = stage.result
   return serializeReport(env as never)
 }
 

@@ -58,7 +58,7 @@ describe('runStage', () => {
 describe('assembleEnvelope', () => {
   it('emits P1 envelope with ok/result/audit/advisories/target_slot_hint', () => {
     const s = JSON.parse(assembleEnvelope(
-      { ok: true, result: { x: 1 }, gates: [], advisories: ['a'], assumptions: [], targetSlotHint: 't2i.prompt' } as any,
+      { ok: true, result: { x: 1 }, gates: [], advisories: ['a'], assumptions: ['assumed:1'], targetSlotHint: 't2i.prompt' } as any,
       ['trail'],
     ))
     expect(s.ok).toBe(true)
@@ -66,6 +66,8 @@ describe('assembleEnvelope', () => {
     expect(s.audit.passed).toBe(true)
     // Task 4 定案：audit 收敛为 {passed, gates, budget?}——assumptions/advisories 不再入 audit 对象
     expect(Object.keys(s.audit).sort()).toEqual(['gates', 'passed'])
+    // MF-2：内核计算的 assumptions 必须到达 Envelope（顶层，与 advisories 并列）
+    expect(s.assumptions).toEqual(['assumed:1'])
     expect(s.target_slot_hint).toBe('t2i.prompt')
     expect(s.advisories).toEqual(['a', 'trail'])
   })

@@ -12,7 +12,7 @@ export function targetSlotHint(target: string): string {
 /**
  * P1 Envelope 唯一组装点（Task 4 定案：audit 收敛为 legacy 形状 {passed, gates, budget?}；
  * assumptions/advisories 不再入 audit 对象——顶层 advisories 是唯一读取点）：
- * { ok, ...(ok ? {result} : {}), audit:{passed, gates, ...(budget?{budget}:{})}, advisories:[...stage.advisories, ...trail], target_slot_hint }
+ * { ok, ...(ok ? {result} : {}), audit:{passed, gates, ...(budget?{budget}:{})}, assumptions:[...stage.assumptions], advisories:[...stage.advisories, ...trail], target_slot_hint }
  */
 export function assembleEnvelope(stage: StageResult, trail?: string[]): string {
   const audit = {
@@ -24,6 +24,7 @@ export function assembleEnvelope(stage: StageResult, trail?: string[]): string {
     ok: stage.ok,
     ...(stage.ok ? { result: stage.result } : {}),
     audit,
+    assumptions: stage.assumptions,
     advisories: [...stage.advisories, ...(trail ?? [])],
     target_slot_hint: stage.targetSlotHint,
   }

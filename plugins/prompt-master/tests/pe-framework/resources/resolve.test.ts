@@ -2,6 +2,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { join, sep } from 'node:path'
 import { setPresetRoot, getPresetRoot, resolveKnowledgePath } from '../../../src/pe-framework/resources/resolve.js'
+import { catalogPath, setCatalogPath, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
 
 describe('resolveKnowledgePath', () => {
   beforeEach(() => setPresetRoot('C:/fake-preset'))
@@ -49,5 +50,36 @@ describe('resolveKnowledgePath', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+})
+
+// MF-1：catalog 路径惰性解析——setPresetRoot 在 import 之后（插件 apply 期）改变时 catalogPath 必须跟随
+describe('anima-catalog lazy path resolution', () => {
+  afterEach(() => {
+    setCatalogPath(process.env.ANIMA_CATALOG_PATH ?? '')
+    delete (process.env as Record<string, string | undefined>).ANIMA_CATALOG_PATH
+    closeCatalog()
+  })
+
+  it('catalogPath() reflects setPresetRoot called after module import', () => {
+    setPresetRoot('C:/late-preset')
+    expect(catalogPath()).toBe(join('C:/late-preset', 'skills', 'anima-prompt-v1', 'knowledge', 'tag-catalog.sqlite'))
+    setPresetRoot('C:/other-preset')
+    expect(catalogPath()).toBe(join('C:/other-preset', 'skills', 'anima-prompt-v1', 'knowledge', 'tag-catalog.sqlite'))
+  })
+
+  it('setCatalogPath override wins over presetRoot; clearing restores lazy default', () => {
+    setPresetRoot('C:/late-preset')
+    setCatalogPath('C:/custom/catalog.sqlite')
+    expect(catalogPath()).toBe('C:/custom/catalog.sqlite')
+    setCatalogPath('')
+    expect(catalogPath()).toBe(join('C:/late-preset', 'skills', 'anima-prompt-v1', 'knowledge', 'tag-catalog.sqlite'))
+  })
+
+  it('ANIMA_CATALOG_PATH env takes priority level 0 over presetRoot', () => {
+    setPresetRoot('C:/late-preset')
+    process.env.ANIMA_CATALOG_PATH = 'C:/env/catalog.sqlite'
+    setCatalogPath('') // re-derive override from env
+    expect(catalogPath()).toBe('C:/env/catalog.sqlite')
   })
 })

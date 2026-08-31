@@ -64,6 +64,8 @@ describe('assembleEnvelope', () => {
     expect(s.ok).toBe(true)
     expect(s.result).toEqual({ x: 1 })
     expect(s.audit.passed).toBe(true)
+    // Task 4 定案：audit 收敛为 {passed, gates, budget?}——assumptions/advisories 不再入 audit 对象
+    expect(Object.keys(s.audit).sort()).toEqual(['gates', 'passed'])
     expect(s.target_slot_hint).toBe('t2i.prompt')
     expect(s.advisories).toEqual(['a', 'trail'])
   })

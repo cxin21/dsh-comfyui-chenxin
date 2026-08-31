@@ -87,7 +87,7 @@ describe('h3 dialect golden double-run (dialect.py port)', () => {
       const input = golden.input
       const compiled = compileH3(input, { stage })
       assertGolden(
-        { result: { text: compiled.text, text_zh: compiled.textZh } },
+        { result: { text: compiled.text, text_zh: compiled.text_zh } },
         name,
         ['result.text', 'result.text_zh'],
       )

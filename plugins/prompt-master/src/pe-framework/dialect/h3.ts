@@ -5,7 +5,7 @@ import { KEYFRAME_STAGES, type Reference, type H3Shot, type StoryRequest, type H
 import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
 import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js'
-import { buildH3Budget } from '../audit/budget.js'
+import { buildH3Budget, h3BudgetToReport } from '../audit/budget.js'
 import { H3_PERSONA, H3_SCHEMA } from '../intent/subagent-provider.js'
 
 const CJK = /[\u4e00-\u9fff]/
@@ -243,11 +243,11 @@ export function buildTextPair(stage: string, request: StoryRequest): { text: str
   return { text: textEn, textZh: buildTextZh(textEn) }
 }
 
-/** 供 T7/E2E 消费（brief 接口）：输入扁平 story → {text, textZh} */
+/** 供 T7/E2E 消费（brief 接口）：输入扁平 story → {text, text_zh}（Task 6 键桥接：result 键直接匹配 golden text_zh） */
 export function compileH3(
   input: { duration_seconds: number; shots: H3Shot[]; references?: unknown[] },
   opts?: { stage?: string },
-): { text: string; textZh: string } {
+): { text: string; text_zh: string } {
   const stage = opts?.stage ?? 't2va'
   const refs: Reference[] = Array.isArray(input.references)
     ? (input.references as unknown[]).map((r) => {
@@ -268,13 +268,14 @@ export function compileH3(
     videos: [],
     audios: [],
   }
-  return buildTextPair(stage, request)
+  const pair = buildTextPair(stage, request)
+  return { text: pair.text, text_zh: pair.textZh }
 }
 
-/* ── Task 5：方言注册（normalize 收敛 inferH3Stage/toRefs；工具侧副本 Task 6 删）── */
+/* ── Task 5：方言注册（normalize 收敛 inferH3Stage/refs 归一；工具侧副本 Task 6 删）── */
 
-/** toRefs 移植（prompt-author.ts 收敛单点）：who/image 字符串化 + width/height 仅接受 number（否则 null） */
-function toRefsNormalized(raw: unknown[]): Reference[] {
+/** refs 归一单点（prompt-author/prompt-compile/prompt-audit 的 toRefs 收敛）：who/image 字符串化 + width/height 仅接受 number（否则 null） */
+export function normalizeRefs(raw: unknown[]): Reference[] {
   return raw.map((r) => {
     const x = r as Record<string, unknown>
     return {
@@ -298,14 +299,14 @@ export function normalizeH3Input(
   const formRefs = Array.isArray((opts.formFields as Record<string, unknown> | undefined)?.references)
     ? ((opts.formFields as Record<string, unknown>).references as unknown[]) : []
   const refs = Array.isArray(shots.references) ? shots.references : []
-  const references = toRefsNormalized(refs.length > 0 ? refs : formRefs)
+  const references = normalizeRefs(refs.length > 0 ? refs : formRefs)
   // 优先级与现 prompt-author.ts inferH3Stage 一致：显式 stage > references 存在 > scenarioId==='full_reference' > t2va
   const stage = opts.stage || (references.length > 0 ? 'ref2va' : opts.scenarioId === 'full_reference' ? 'ref2va' : 't2va')
   return { value: shots, stage, references }
 }
 
 export function registerH3Dialect(): void {
-  const contract: DialectContract<H3ShotsInput, { text: string; textZh: string }> = {
+  const contract: DialectContract<H3ShotsInput, { text: string; text_zh: string }> = {
     id: 'h3',
     label: 'MiniMax-H3',
     auditOnlyOk: true,
@@ -320,7 +321,7 @@ export function registerH3Dialect(): void {
       ]
       return { gates, assumptions: [] }
     },
-    budget: (compiled, ctx) => buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? []),
+    budget: (compiled, ctx) => h3BudgetToReport(buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? [])),
     targetSlotHint: 't2v.prompt',
     intent: { persona: H3_PERSONA, schema: H3_SCHEMA },
   }

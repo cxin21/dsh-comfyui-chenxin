@@ -1,12 +1,13 @@
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { compileH3 } from '../pe-framework/dialect/h3.js'
-import { auditH3Full, contractGatesH3 } from '../pe-framework/audit/rules-h3.js'
-import { buildH3Budget, h3BudgetToReport } from '../pe-framework/audit/budget.js'
-import { serializeReport, buildAuditReport } from '../pe-framework/audit/report.js'
-import { sceneToShots, sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
-import type { H3ShotsInput, Reference } from '../pe-framework/schema/h3-shots.js'
-import { compileAnima, auditAnima, type AnimaSlots } from '../pe-framework/dialect/anima.js'
-import type { AuditGate } from '../pe-framework/types.js'
+// 方言模块副作用注册（Task 6：编排走 runStage 注册表，需保证 anima/h3 已装配）
+import '../pe-framework/dialect/anima.js'
+import '../pe-framework/dialect/h3.js'
+import { runStage } from '../pe-framework/pipeline/runStage.js'
+import { assembleEnvelope } from '../pe-framework/render/envelope.js'
+import type { StageResult } from '../pe-framework/pipeline/types.js'
+import { serializeReport } from '../pe-framework/audit/report.js'
+import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
+import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js'
 
 export interface CompileArgs {
   target?: string
@@ -19,67 +20,23 @@ export interface CompileArgs {
   variant?: string
 }
 
-export function toReferences(raw: unknown[]): Reference[] {
-  return raw.map((r) => {
-    const x = r as Record<string, unknown>
-    return {
-      who: x['who'] != null ? String(x['who']) : null,
-      image: String(x['image'] ?? ''),
-      width: typeof x['width'] === 'number' ? x['width'] : null,
-      height: typeof x['height'] === 'number' ? x['height'] : null,
-    }
-  })
+/** StageResult → Envelope（thin view 组装点）；omitResult 用于 audit_only 语义（不返回提示词正文） */
+function stageToEnvelope(stage: StageResult, opts?: { omitResult?: boolean }): string {
+  const env = JSON.parse(assembleEnvelope(stage)) as Record<string, unknown>
+  if (opts?.omitResult) delete env.result
+  return serializeReport(env as never)
 }
 
-/** stage 推断（official-capabilities 路由）：有 references → ref2va；full_reference 场景 → ref2va；否则 t2va */
-export function inferH3Stage(shots: H3ShotsInput, scenarioId?: string): 't2va' | 'ref2va' {
-  if (Array.isArray(shots.references) && shots.references.length > 0) return 'ref2va'
-  if (scenarioId === 'full_reference') return 'ref2va'
-  return 't2va'
-}
+const VARIANT_SET = ['base', 'aesthetic', 'turbo']
 
-export function compileH3Envelope(
-  input: { stage: string; shots: H3ShotsInput; references?: unknown[]; auditOnly?: boolean },
-): string {
-  const { text, textZh } = compileH3(input.shots, { stage: input.stage })
-  const shotCount = input.shots.shots.length
-  const gates = [
-    ...contractGatesH3(input.stage, input.shots, input.references ?? []), // T13 F1 前置契约闸门
-    ...auditH3Full(text, { stage: input.stage, duration: input.shots.duration_seconds, shotCount }, input.references),
-  ]
-  const budget = h3BudgetToReport(buildH3Budget(input.stage, text, toReferences(input.references ?? [])))
-  const report = buildAuditReport({ gates, budget, assumptions: [], advisories: [] })
-  const envelope: Record<string, unknown> = {
-    ok: true,
-    audit: { passed: report.passed, gates: report.gates, budget: report.budget },
-    advisories: report.advisories,
-  }
-  if (!input.auditOnly) {
-    envelope.result = { text, text_zh: textZh }
-  }
-  return serializeReport(envelope as never)
-}
-
-/** anima 分支：slots → compileAnima + auditAnima → Envelope（无 budget）。variant 未知 → 参数错误（t50 Minor 处置） */
+/** anima 分支：slots → runStage（compileAnima + auditAnima，无 budget）→ Envelope。variant 未知 → 参数错误（t50 Minor 处置） */
 export function compileAnimaEnvelope(slots: Record<string, unknown> | undefined, variant?: string, auditOnly?: boolean): string {
   if (!slots || typeof slots !== 'object') throw new Error('anima 分支需要 slots 输入（AnimaSlots 形状）')
-  if (variant !== undefined && !['base', 'aesthetic', 'turbo'].includes(variant)) {
+  if (variant !== undefined && !VARIANT_SET.includes(variant)) {
     throw new Error(`未知 variant: ${variant}；可选 base|aesthetic|turbo`)
   }
-  const aSlots = slots as unknown as AnimaSlots
-  const v = (variant ?? 'base') as 'base' | 'aesthetic' | 'turbo'
-  const compiled = compileAnima(aSlots, { variant: v })
-  const gates = auditAnima(compiled.positive, compiled.negative, { variant: v, slots: aSlots })
-  const report = buildAuditReport({ gates, assumptions: [], advisories: [] })
-  const envelope: Record<string, unknown> = {
-    ok: true,
-    audit: { passed: report.passed, gates: report.gates },
-    advisories: report.advisories,
-  }
-  if (!auditOnly) {
-    envelope.result = { positive: compiled.positive, negative: compiled.negative }
-  }
-  return serializeReport(envelope as never)
+  const stage = runStage({ target: 'anima', slots, variant, auditOnly: auditOnly === true })
+  return stageToEnvelope(stage, { omitResult: auditOnly === true })
 }
 
 export function registerCompileTool() {
@@ -118,7 +75,7 @@ export function registerCompileTool() {
       }
       let shots: H3ShotsInput | null = null
       let scenarioId: string | undefined
-      const extraGates: AuditGate[] = []
+      const extraGates: StageResult['gates'] = []
       const extraAdvisories: string[] = []
       if (a.scenario_id) {
         scenarioId = String(a.scenario_id).trim()
@@ -132,16 +89,19 @@ export function registerCompileTool() {
         shots = a.shots as unknown as H3ShotsInput
       }
       if (!shots) throw new Error('需要 scenario_id 或 shots 输入')
-      const stage = inferH3Stage(shots, scenarioId)
-      const references = Array.isArray(a.form_fields?.references) ? (a.form_fields.references as unknown[]) : []
-      const envelope = JSON.parse(compileH3Envelope({ stage, shots, references, auditOnly: a.audit_only === true })) as Record<string, unknown>
+      // stage 推断在 runStage normalize 单点（references > full_reference 场景 > t2va）；references 走 formFields
+      let stage = runStage({
+        target: 'h3',
+        shots,
+        scenarioId,
+        formFields: a.form_fields,
+        auditOnly: a.audit_only === true,
+      })
       if (extraGates.length || extraAdvisories.length) {
-        const audit = envelope.audit as { passed: boolean; gates: AuditGate[] }
-        const mergedGates = [...extraGates, ...(audit.gates ?? [])]
-        envelope.audit = { passed: !mergedGates.some((g) => g.severity === 'critical'), gates: mergedGates }
-        envelope.advisories = [...(extraAdvisories), ...((envelope.advisories as string[]) ?? [])]
+        const gates = [...extraGates, ...stage.gates]
+        stage = { ...stage, gates, advisories: [...extraAdvisories, ...stage.advisories], ok: !gates.some((g) => g.severity === 'critical') }
       }
-      return serializeReport(envelope as never)
+      return stageToEnvelope(stage, { omitResult: a.audit_only === true })
     },
   })
 }

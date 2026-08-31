@@ -1,13 +1,16 @@
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { TARGETS, type Target } from '../pe-framework/index.js'
-import { serializeReport, buildAuditReport } from '../pe-framework/audit/index.js'
-import { compileAnima, auditAnima, type AnimaSlots } from '../pe-framework/dialect/anima.js'
-import { compileH3 } from '../pe-framework/dialect/h3.js'
-import { auditH3Full, contractGatesH3 } from '../pe-framework/audit/rules-h3.js'
-import { buildH3Budget, h3BudgetToReport } from '../pe-framework/audit/budget.js'
+import { serializeReport } from '../pe-framework/audit/index.js'
+import type { AnimaSlots } from '../pe-framework/dialect/anima.js'
+// 方言模块副作用注册（Task 6：DIALECT_READY 静态表 → 注册表查询）
+import '../pe-framework/dialect/anima.js'
+import '../pe-framework/dialect/h3.js'
+import { isDialectReady as registryIsDialectReady } from '../pe-framework/dialect/registry.js'
+import { runStage } from '../pe-framework/pipeline/runStage.js'
+import { assembleEnvelope } from '../pe-framework/render/envelope.js'
+import type { StageResult } from '../pe-framework/pipeline/types.js'
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js'
-import type { AuditGate } from '../pe-framework/types.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../llm/complete.js'
@@ -24,11 +27,9 @@ export interface AuthorArgs {
   audit_only?: boolean
 }
 
-/** 方言归化状态机：T13 点亮 anima/h3；sd/generic 保持未归化 */
-const DIALECT_READY: Record<Target, boolean> = { anima: true, h3: true, sd: false, generic: false }
-
+/** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
 export function isDialectReady(target: Target): boolean {
-  return DIALECT_READY[target] === true
+  return registryIsDialectReady(target)
 }
 
 /* ── intent 层（LLM；测试注入 seam）── */
@@ -100,97 +101,55 @@ function normalizeSlots(raw: Record<string, unknown>): AnimaSlots {
   return out as AnimaSlots
 }
 
-/* ── 编排（意图 → schema → dialect → audit → render + 修正闭环）── */
+/* ── 视图层（意图 → runStage 内核 → 场景表单闸门合并 → Envelope + 修正闭环）── */
 
 const VARIANT_SET = new Set(['base', 'aesthetic', 'turbo'])
-
-function inferH3Stage(shots: H3ShotsInput, references: unknown[], scenarioId?: string): string {
-  if (references.length > 0) return 'ref2va'
-  if (scenarioId === 'full_reference') return 'ref2va'
-  return 't2va'
-}
-
-function toRefs(raw: unknown[]): Array<{ who: string | null; image: string; width: number | null; height: number | null }> {
-  return raw.map((r) => {
-    const x = r as Record<string, unknown>
-    return {
-      who: x['who'] != null ? String(x['who']) : null,
-      image: String(x['image'] ?? ''),
-      width: typeof x['width'] === 'number' ? x['width'] : null,
-      height: typeof x['height'] === 'number' ? x['height'] : null,
-    }
-  })
-}
-
-function runDraftStage(opts: { target: string; draft: AuthorDraft; stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): StageResult {
-  const target = opts.target
-  if (target === 'anima') {
-    const slots = opts.draft.slots
-    if (!slots || typeof slots !== 'object') throw new Error('intent 未产出 slots 结构')
-    const variant = opts.variant ?? 'base'
-    if (!VARIANT_SET.has(variant)) throw new Error(`未知 variant: ${variant}；可选 base|aesthetic|turbo`)
-    const compiled = compileAnima(slots, { variant: variant as 'base' | 'aesthetic' | 'turbo' })
-    const gates = auditAnima(compiled.positive, compiled.negative, { variant: variant as 'base' | 'aesthetic' | 'turbo', slots })
-    return {
-      ok: gates.every((g) => g.severity !== 'critical'),
-      result: { positive: compiled.positive, negative: compiled.negative },
-      gates,
-      advisories: [],
-      targetSlotHint: 't2i.prompt',
-    }
-  }
-  const shots = opts.draft.shots
-  if (!shots || !Array.isArray(shots.shots) || shots.shots.length === 0) throw new Error('intent 未产出 shots 结构')
-  const refs = Array.isArray(shots.references) ? shots.references : []
-  const formRefs = Array.isArray(opts.formFields?.references) ? (opts.formFields.references as unknown[]) : []
-  const references = refs.length ? refs : formRefs
-  const stage = opts.stage ?? inferH3Stage(shots, references, opts.scenarioId)
-  const extraGates: AuditGate[] = []
-  const extraAdvisories: string[] = []
-  if (opts.scenarioId) {
-    const checked = sceneToShotsChecked(opts.scenarioId, opts.formFields ?? {})
-    const unmapped = references.length > 0
-    extraGates.push(...checked.gates.filter((g) => !(g.rule === 'references_unmapped' && unmapped)))
-    extraAdvisories.push(...checked.advisories.filter((a) => !(a === 'references_unmapped' && unmapped)))
-  }
-  const { text, textZh } = compileH3(shots, { stage })
-  const gates = [
-    ...contractGatesH3(stage, shots, references), // T13 F1
-    ...extraGates,
-    ...auditH3Full(text, { stage, duration: shots.duration_seconds, shotCount: shots.shots.length }, references),
-  ]
-  const budget = h3BudgetToReport(buildH3Budget(stage, text, toRefs(references)))
-  return {
-    ok: gates.every((g) => g.severity !== 'critical'),
-    result: { text, text_zh: textZh },
-    gates,
-    advisories: extraAdvisories,
-    budget,
-    targetSlotHint: 't2v.prompt',
-  }
-}
-
-export interface StageResult {
-  ok: boolean
-  result: Record<string, unknown>
-  gates: AuditGate[]
-  advisories: string[]
-  budget?: { counter: 'official-tokenizer' | 'estimate'; tokens: number; max?: number; over: boolean }
-  targetSlotHint: string
-}
-
-function renderEnvelope(stage: StageResult, trailAdvisories: string[]): string {
-  const envelope: Record<string, unknown> = {
-    ok: stage.ok,
-    result: stage.result,
-    audit: { passed: stage.ok, gates: stage.gates, ...(stage.budget ? { budget: stage.budget } : {}) },
-    advisories: [...stage.advisories, ...trailAdvisories],
-    target_slot_hint: stage.targetSlotHint,
-  }
-  return serializeReport(envelope as never)
-}
-
 const MAX_CORRECTIONS = 2
+
+/** draft → PipelineInput 输入段：anima {slots, variant}；h3 {shots, stage, scenarioId, formFields} */
+function normalizeDraftToInput(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): { slots?: Record<string, unknown>; variant?: string; shots?: unknown; stage?: string; scenarioId?: string; formFields?: Record<string, unknown> } {
+  if (target === 'anima') {
+    if (!draft.slots || typeof draft.slots !== 'object') throw new Error('intent 未产出 slots 结构')
+    return { slots: draft.slots as unknown as Record<string, unknown>, variant: opts.variant ?? 'base' }
+  }
+  if (!draft.shots || !Array.isArray(draft.shots.shots) || draft.shots.shots.length === 0) throw new Error('intent 未产出 shots 结构')
+  return { shots: draft.shots, stage: opts.stage || undefined, scenarioId: opts.scenarioId, formFields: opts.formFields }
+}
+
+/** h3 references 计数（原 L144-146 优先级：shots.references > form_fields.references） */
+function referencesCount(draft: AuthorDraft, formFields?: Record<string, unknown>): number {
+  const refs = Array.isArray(draft.shots?.references) ? draft.shots!.references : []
+  if (refs.length > 0) return refs.length
+  const formRefs = Array.isArray(formFields?.references) ? (formFields!.references as unknown[]) : []
+  return formRefs.length
+}
+
+/**
+ * 场景表单闸门合并（原 prompt-author L150-155 语义，视图层职责——场景表单语义不是方言本质）：
+ * sceneToShotsChecked 的 extraGates/advisories 并入 stage；references 非空时抑制 references_unmapped；
+ * 合并后 ok 按全部 gates 重算（extraGates 可能引入 critical）。
+ */
+function applyScenarioGates(stage: StageResult, opts: { scenarioId?: string; formFields?: Record<string, unknown>; refsCount: number }): StageResult {
+  if (!opts.scenarioId) return stage
+  const checked = sceneToShotsChecked(opts.scenarioId, opts.formFields ?? {})
+  const unmapped = opts.refsCount > 0
+  const extraGates = checked.gates.filter((g) => !(g.rule === 'references_unmapped' && unmapped))
+  const extraAdvisories = checked.advisories.filter((a) => !(a === 'references_unmapped' && unmapped))
+  const gates = [...stage.gates, ...extraGates]
+  return {
+    ...stage,
+    gates,
+    advisories: [...stage.advisories, ...extraAdvisories],
+    ok: gates.every((g) => g.severity !== 'critical'),
+  }
+}
+
+/** draft → runStage → applyScenarioGates（author 每轮统一入口；audit 不通过不在此处理——闭环在 execute） */
+function runDraftThroughStage(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): StageResult {
+  const input = normalizeDraftToInput(target, draft, opts)
+  const stageResult = runStage({ target: target as Target, ...input })
+  return applyScenarioGates(stageResult, { scenarioId: opts.scenarioId, formFields: opts.formFields, refsCount: referencesCount(draft, opts.formFields) })
+}
 
 export function registerAuthorTool(ctx: Context, config: Config) {
   return defineTool({
@@ -230,8 +189,14 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       if (!input.trim()) throw new Error('input 必填')
 
       const scenarioId = String(a.scenario_id ?? '').trim() || undefined
+      const runOpts = { stage: a.stage || undefined, scenarioId, formFields: a.form_fields, variant: a.variant }
 
-      // audit_only：不调 LLM，把 input 当结构 JSON
+      // anima variant 参数校验（runStage 的 compileAnima 对未知 variant 静默回退 base——契约要求显式报错）
+      if (target === 'anima' && a.variant !== undefined && !VARIANT_SET.has(a.variant)) {
+        throw new Error(`未知 variant: ${a.variant}；可选 base|aesthetic|turbo`)
+      }
+
+      // audit_only：不调 LLM，把 input 当结构 JSON（原语义：完整编译+审计，result 照常产出——不用内核 auditOnly 标志）
       if (a.audit_only === true) {
         let draft: AuthorDraft
         try {
@@ -240,25 +205,25 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         } catch {
           throw new Error('audit_only 需要结构化 JSON 输入（anima: slots；h3: shots{...}）')
         }
-        const stage = runDraftStage({ target, draft, stage: a.stage, scenarioId, formFields: a.form_fields, variant: a.variant })
-        return renderEnvelope(stage, [])
+        const stage = runDraftThroughStage(target, draft, runOpts)
+        return assembleEnvelope(stage, [])
       }
 
       const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
       let draft = await provider({ target, input, variant: a.variant, scenarioId, formFields: a.form_fields, round: 0 }, exec)
-      let stage = runDraftStage({ target, draft, stage: a.stage, scenarioId, formFields: a.form_fields, variant: a.variant })
+      let stage = runDraftThroughStage(target, draft, runOpts)
       const trailAdvisories: string[] = []
       let corrections = 0
       while (!stage.ok && stage.gates.some((g) => g.severity === 'critical') && corrections < MAX_CORRECTIONS) {
         corrections++
         const feedback = stage.gates.filter((g) => g.severity === 'critical').map((g) => `[${g.rule}] ${g.detail}`).join('\n')
         draft = await provider({ target, input, variant: a.variant, scenarioId, formFields: a.form_fields, round: corrections, feedback }, exec)
-        stage = runDraftStage({ target, draft, stage: a.stage, scenarioId, formFields: a.form_fields, variant: a.variant })
+        stage = runDraftThroughStage(target, draft, runOpts)
       }
       if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
         trailAdvisories.push('loop_exhausted:true')
       }
-      return renderEnvelope(stage, trailAdvisories)
+      return assembleEnvelope(stage, trailAdvisories)
     },
   })
 }

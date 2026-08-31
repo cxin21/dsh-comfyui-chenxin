@@ -1,5 +1,6 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { compileAnima, auditAnima, type AnimaSlots } from '../pe-framework/dialect/anima.js'
+import { normalizeRefs } from '../pe-framework/dialect/h3.js'
 import { auditH3Full, contractGatesH3 } from '../pe-framework/audit/rules-h3.js'
 import { buildH3Budget, h3BudgetToReport } from '../pe-framework/audit/budget.js'
 import { serializeReport } from '../pe-framework/audit/report.js'
@@ -48,7 +49,7 @@ export function auditContentEnvelope(content: AuditContent): string {
       ...contractGatesH3(stage, { duration_seconds: duration, shots: [{ what: 'x' }] }, references),
       ...auditH3Full(content.text, { stage, duration, shotCount }, references),
     ]
-    budget = h3BudgetToReport(buildH3Budget(stage, content.text, toRefs(references)))
+    budget = h3BudgetToReport(buildH3Budget(stage, content.text, normalizeRefs(references)))
     ok = gates.every((g) => g.severity !== 'critical')
     void shots
   }
@@ -57,18 +58,6 @@ export function auditContentEnvelope(content: AuditContent): string {
     audit: { passed: ok, gates, ...(budget ? { budget } : {}) },
     advisories: [],
   } as never)
-}
-
-function toRefs(raw: unknown[]): Array<{ who: string | null; image: string; width: number | null; height: number | null }> {
-  return raw.map((r) => {
-    const x = r as Record<string, unknown>
-    return {
-      who: x['who'] != null ? String(x['who']) : null,
-      image: String(x['image'] ?? ''),
-      width: typeof x['width'] === 'number' ? x['width'] : null,
-      height: typeof x['height'] === 'number' ? x['height'] : null,
-    }
-  })
 }
 
 export function registerAuditTool(_ctx: Context, _config: Config) {

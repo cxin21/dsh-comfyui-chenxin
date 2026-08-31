@@ -40,14 +40,16 @@ export function runStage(input: PipelineInput): StageResult {
   const tSchema = performance.now()
   if (normalized.error !== undefined) throw new Error(normalized.error)
   const slots = normalized.value
+  // normalize 单点推断的 stage（h3: references/full_reference → ref2va）优先于显式输入（Task 6：工具侧 inferH3Stage 已删）
+  const stage = normalized.stage ?? input.stage
 
-  const compiled = d.compile(slots as never, { variant: input.variant, stage: input.stage })
+  const compiled = d.compile(slots as never, { variant: input.variant, stage })
   const tDialect = performance.now()
 
-  const audit = d.audit(compiled as never, { stage: input.stage, references: normalized.references, shots: normalized.value ?? input.shots, variant: input.variant })
+  const audit = d.audit(compiled as never, { stage, references: normalized.references, shots: normalized.value ?? input.shots, variant: input.variant })
   const tAudit = performance.now()
 
-  const budgetRaw = d.budget?.(compiled as never, { stage: input.stage, references: normalized.references })
+  const budgetRaw = d.budget?.(compiled as never, { stage, references: normalized.references })
   const tBudget = performance.now()
 
   const ok = audit.gates.every((g) => g.severity !== 'critical')

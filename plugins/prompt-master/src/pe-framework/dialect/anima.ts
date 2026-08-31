@@ -5,6 +5,9 @@
  */
 import { SLOT_ORDER } from '../anima.js'
 import { normalizeTag, searchCatalog, overlayStatus, type CatalogHit } from './anima-catalog.js'
+import { registerDialect } from './registry.js'
+import type { DialectContract } from './contract.js'
+import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
 import type { AuditGate } from '../types.js'
 
 export interface AnimaSlots {
@@ -347,3 +350,48 @@ export function applyRelationOverlay(catalog: { overlayStatus(): string }): void
 export function variantPolicy(variant: string): Policy {
   return POLICIES[variant] ?? POLICIES.base
 }
+
+/* ── Task 5：方言注册（validateAnimaSlots 收敛 _coerce_brief 校验）── */
+
+const ANIMA_SLOT_KEYS = new Set(['count_gender', 'character', 'appearance', 'clothing', 'pose_action', 'expression', 'camera', 'scene', 'detail_mood'])
+
+/** composition.py _coerce_brief 移植：槽位键白名单 + 类型校验（narrative string、其余 string[]） */
+export function validateAnimaSlots(slots: unknown): string | undefined {
+  if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return 'anima 需要 slots 对象'
+  const s = slots as Record<string, unknown>
+  for (const k of Object.keys(s)) {
+    if (k === 'narrative') { if (typeof s[k] !== 'string') return 'narrative 需为 string'; continue }
+    if (!ANIMA_SLOT_KEYS.has(k)) return `未知槽位: ${k}`
+    if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return `槽位 ${k} 需为 string[]`
+  }
+  return undefined
+}
+
+export function registerAnimaDialect(): void {
+  const contract: DialectContract<Record<string, unknown>, { positive: string; negative: string }> = {
+    id: 'anima',
+    label: 'Anima',
+    auditOnlyOk: true,
+    normalize: (input) => {
+      const slots = (input as { slots?: Record<string, unknown> } | undefined)?.slots
+      const err = validateAnimaSlots(slots)
+      if (err) return { error: err }
+      return { value: slots as Record<string, unknown> }
+    },
+    compile: (slots, opts) => {
+      const variant = (opts.variant as 'base' | 'aesthetic' | 'turbo') ?? 'base'
+      return compileAnima(slots as AnimaSlots, { variant })
+    },
+    audit: (compiled, ctx) => {
+      const variant = (ctx.variant as 'base' | 'aesthetic' | 'turbo') ?? 'base'
+      const slots = ctx.shots as unknown as AnimaSlots // runStage audit ctx.shots = 归一化 value（slots）
+      return { gates: auditAnima(compiled.positive, compiled.negative, { variant, slots }) }
+    },
+    targetSlotHint: 't2i.prompt',
+    intent: { persona: ANIMA_PERSONA, schema: ANIMA_SCHEMA },
+  }
+  registerDialect(contract)
+}
+
+// 模块级副作用注册：plugin/index.ts import 本模块即完成装配
+registerAnimaDialect()

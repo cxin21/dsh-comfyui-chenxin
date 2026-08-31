@@ -1,7 +1,12 @@
 /**
  * H3 authoring dialect（TS 移植，逐字符对照 h3_prompt/dialect.py）。
  */
-import { KEYFRAME_STAGES, type Reference, type H3Shot, type StoryRequest } from '../schema/h3-shots.js'
+import { KEYFRAME_STAGES, type Reference, type H3Shot, type StoryRequest, type H3ShotsInput } from '../schema/h3-shots.js'
+import { registerDialect } from './registry.js'
+import type { DialectContract } from './contract.js'
+import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js'
+import { buildH3Budget } from '../audit/budget.js'
+import { H3_PERSONA, H3_SCHEMA } from '../intent/subagent-provider.js'
 
 const CJK = /[\u4e00-\u9fff]/
 const KANA = /[\u3040-\u30ff]/
@@ -265,3 +270,62 @@ export function compileH3(
   }
   return buildTextPair(stage, request)
 }
+
+/* ── Task 5：方言注册（normalize 收敛 inferH3Stage/toRefs；工具侧副本 Task 6 删）── */
+
+/** toRefs 移植（prompt-author.ts 收敛单点）：who/image 字符串化 + width/height 仅接受 number（否则 null） */
+function toRefsNormalized(raw: unknown[]): Reference[] {
+  return raw.map((r) => {
+    const x = r as Record<string, unknown>
+    return {
+      who: x['who'] != null ? String(x['who']) : null,
+      image: String(x['image'] ?? ''),
+      width: typeof x['width'] === 'number' ? x['width'] : null,
+      height: typeof x['height'] === 'number' ? x['height'] : null,
+    }
+  })
+}
+
+/** stage 推断 + references 规范化（从 prompt-author.ts inferH3Stage/toRefs 收敛；Task 6 删除工具侧副本） */
+export function normalizeH3Input(
+  input: unknown,
+  opts: { stage?: string; scenarioId?: string; formFields?: unknown },
+): { error?: string; value?: H3ShotsInput; stage?: string; references?: Reference[] } {
+  const shots = (input as { shots?: H3ShotsInput } | undefined)?.shots
+  if (!shots || !Array.isArray(shots.shots) || shots.shots.length === 0) {
+    return { error: 'intent 未产出 shots 结构' }
+  }
+  const formRefs = Array.isArray((opts.formFields as Record<string, unknown> | undefined)?.references)
+    ? ((opts.formFields as Record<string, unknown>).references as unknown[]) : []
+  const refs = Array.isArray(shots.references) ? shots.references : []
+  const references = toRefsNormalized(refs.length > 0 ? refs : formRefs)
+  // 优先级与现 prompt-author.ts inferH3Stage 一致：显式 stage > references 存在 > scenarioId==='full_reference' > t2va
+  const stage = opts.stage || (references.length > 0 ? 'ref2va' : opts.scenarioId === 'full_reference' ? 'ref2va' : 't2va')
+  return { value: shots, stage, references }
+}
+
+export function registerH3Dialect(): void {
+  const contract: DialectContract<H3ShotsInput, { text: string; textZh: string }> = {
+    id: 'h3',
+    label: 'MiniMax-H3',
+    auditOnlyOk: true,
+    normalize: (input, opts) => normalizeH3Input(input, opts),
+    compile: (shots, opts) => compileH3(shots, { stage: opts.stage ?? 't2va' }),
+    audit: (compiled, ctx) => {
+      const stage = ctx.stage ?? 't2va'
+      const shots = ctx.shots as H3ShotsInput
+      const gates = [
+        ...contractGatesH3(stage, shots, ctx.references ?? []),
+        ...auditH3Full(compiled.text, { stage, duration: shots.duration_seconds, shotCount: shots.shots.length }, ctx.references),
+      ]
+      return { gates, assumptions: [] }
+    },
+    budget: (compiled, ctx) => buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? []),
+    targetSlotHint: 't2v.prompt',
+    intent: { persona: H3_PERSONA, schema: H3_SCHEMA },
+  }
+  registerDialect(contract)
+}
+
+// 模块级副作用注册：plugin/index.ts import 本模块即完成装配
+registerH3Dialect()

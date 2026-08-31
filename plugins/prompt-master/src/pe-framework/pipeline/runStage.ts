@@ -44,7 +44,7 @@ export function runStage(input: PipelineInput): StageResult {
   const compiled = d.compile(slots as never, { variant: input.variant, stage: input.stage })
   const tDialect = performance.now()
 
-  const audit = d.audit(compiled as never, { stage: input.stage, references: normalized.references, shots: input.shots, variant: input.variant })
+  const audit = d.audit(compiled as never, { stage: input.stage, references: normalized.references, shots: normalized.value ?? input.shots, variant: input.variant })
   const tAudit = performance.now()
 
   const budgetRaw = d.budget?.(compiled as never, { stage: input.stage, references: normalized.references })

@@ -171,6 +171,67 @@ function normalizeSlots(raw: unknown): AnimaSlots {
   return out as AnimaSlots
 }
 
+/* ── per-target persona/schema 拆分（Task 5）：语义等价拆出，DEFAULT_* 保留原值作兜底 ── */
+
+export const ANIMA_PERSONA = `你是一位资深的 Anima 提示词工程创作者。
+你的任务：根据用户的创作意图，产出与 Anima 方言严格对齐的结构化输入内容。
+
+规则：
+1. 产出 Anima slots（count_gender / character / appearance / clothing / pose_action / expression / camera / scene / detail_mood 等）与 narrative；不输出方言编译结果
+2. 若 refs（图片/视频/音频引用）传入：保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
+3. **尊重用户原始意图**：用户给的描述字符串（narrative 等）保持原文字面，不要为了更"通顺"而重写或编造
+4. 字段尽量来自用户输入；缺则用最小化合理解释（不编造情节）
+
+输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
+`
+
+export const H3_PERSONA = `你是一位资深的 MiniMax-H3 视频提示词工程创作者。
+你的任务：根据用户的创作意图，产出与 H3 方言严格对齐的结构化输入内容。
+
+规则：
+1. 产出 H3 shots（duration_seconds + 每 shot 的 what/ambient/music/dialogue/who）
+2. 若 refs（图片/视频/音频引用）传入：保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
+3. **尊重用户原始意图**：用户给的描述字符串（what/ambient 等）保持原文字面，不要为了更"通顺"而重写或编造
+4. 字段尽量来自用户输入；缺则用最小化合理解释（不编造情节）
+
+输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
+`
+
+export const ANIMA_SCHEMA = `{
+  "slots": {
+    "count_gender": ["1girl"],
+    "character": ["Subject 1 from <Picture 1>"],
+    "appearance": ["long hair", "blue eyes"],
+    "clothing": ["red dress"],
+    "pose_action": ["standing"],
+    "expression": ["smile"],
+    "camera": ["close-up"],
+    "scene": ["sunset rooftop"],
+    "detail_mood": ["cinematic"],
+    "narrative": "自由文本，可空"
+  }
+}
+
+输出规则：
+- 只能输出一个 JSON 对象，不要任何前缀后缀文字
+- 必须用 \`\`\`json fence 或纯 JSON；纯 JSON 优先
+- 用户提供 references 时保持 ref 标签稳定
+`
+
+export const H3_SCHEMA = `{
+  "duration_seconds": 10,
+  "references": [],
+  "shots": [
+    { "what": "镜头内容", "who": "<Subject 1>", "ambient": "环境声", "music": "BGM", "dialogue": "对白或省略" }
+  ]
+}
+
+输出规则：
+- 只能输出一个 JSON 对象，不要任何前缀后缀文字
+- 必须用 \`\`\`json fence 或纯 JSON；纯 JSON 优先
+- 用户提供 references 时保持 ref 标签稳定
+`
+
 const DEFAULT_PERSONA = `你是一位资深的提示词工程创作者（Anima / MiniMax-H3 方言）。
 你的任务：根据用户的创作意图与目标方言，产出与目标方言严格对齐的结构化输入内容。
 

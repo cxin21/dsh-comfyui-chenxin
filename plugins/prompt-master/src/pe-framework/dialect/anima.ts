@@ -354,13 +354,17 @@ export function variantPolicy(variant: string): Policy {
 /* ── Task 5：方言注册（validateAnimaSlots 收敛 _coerce_brief 校验）── */
 
 const ANIMA_SLOT_KEYS = new Set(['count_gender', 'character', 'appearance', 'clothing', 'pose_action', 'expression', 'camera', 'scene', 'detail_mood'])
+/** brief 扩展字段（composition.py _coerce_brief 契约）：exclusions string[]；qualityPrefix/explicit boolean */
+const ANIMA_BOOL_KEYS = new Set(['qualityPrefix', 'explicit'])
 
-/** composition.py _coerce_brief 移植：槽位键白名单 + 类型校验（narrative string、其余 string[]） */
+/** composition.py _coerce_brief 移植：槽位键白名单 + 类型校验（narrative string、exclusions string[]、qualityPrefix/explicit boolean、其余槽 string[]） */
 export function validateAnimaSlots(slots: unknown): string | undefined {
   if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return 'anima 需要 slots 对象'
   const s = slots as Record<string, unknown>
   for (const k of Object.keys(s)) {
     if (k === 'narrative') { if (typeof s[k] !== 'string') return 'narrative 需为 string'; continue }
+    if (k === 'exclusions') { if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return 'exclusions 需为 string[]'; continue }
+    if (ANIMA_BOOL_KEYS.has(k)) { if (typeof s[k] !== 'boolean') return `${k} 需为 boolean`; continue }
     if (!ANIMA_SLOT_KEYS.has(k)) return `未知槽位: ${k}`
     if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return `槽位 ${k} 需为 string[]`
   }

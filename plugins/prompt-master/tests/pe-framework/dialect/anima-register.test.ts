@@ -20,4 +20,13 @@ describe('Anima dialect registration', () => {
   it('validateAnimaSlots accepts valid slots', () => {
     expect(validateAnimaSlots({ count_gender: ['1girl'], narrative: '描述' })).toBeUndefined()
   })
+
+  it('validateAnimaSlots accepts brief extension fields (exclusions/qualityPrefix) — composition.py _coerce_brief contract', () => {
+    expect(validateAnimaSlots({ count_gender: ['1girl'], exclusions: ['lowres', 'bad anatomy'], qualityPrefix: true })).toBeUndefined()
+  })
+
+  it('validateAnimaSlots rejects wrong-typed exclusions/qualityPrefix', () => {
+    expect(validateAnimaSlots({ exclusions: 'lowres' })).toContain('string[]')
+    expect(validateAnimaSlots({ qualityPrefix: 'yes' })).toContain('boolean')
+  })
 })

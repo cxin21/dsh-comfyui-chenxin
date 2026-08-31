@@ -32,10 +32,13 @@ export function registerExpandTool(ctx: Context, config: Config) {
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: ExpandArgs, exec: ToolRunContext) {
+      type LogCtx = { logger?: { info?: (msg: string) => void } }
+      const logInfo = (msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg)
       const text = String(args.text || '').trim()
       if (!text) throw new Error('text is required')
       const profile = findProfileById(String(args.profile || 'pe_expand_natural').trim())
       if (!profile) throw new Error(`Profile not found: ${String(args.profile || 'pe_expand_natural')}`)
+      logInfo(`[prompt-master] prompt_expand profile=${profile.id} length=${String(args.length || 'medium')}${args.dry_run ? ' dry_run=true' : ''}`)
       const expanded = resolveExpand(profile, {
         outputLang: String(args.output_lang || 'zh') as 'zh' | 'en' | 'auto',
         expandLen: String(args.length || 'medium'),
@@ -43,10 +46,12 @@ export function registerExpandTool(ctx: Context, config: Config) {
         shortText: text,
       })
       if (args.dry_run) {
-        return JSON.stringify({
+        const debug = JSON.stringify({
           debug: { system: expanded.system, user: expanded.user, maxTokens: expanded.maxTokens },
           profile_meta: { id: profile.id, name: profile.name, outputFormat: profile.outputFormat },
         })
+        logInfo(`[prompt-master] prompt_expand → ok=true dry_run=true chars=${debug.length}`)
+        return debug
       }
       const { provider, model } = resolveRoute(exec as ExecLike)
       const { text: result } = await complete(ctx, {
@@ -57,6 +62,7 @@ export function registerExpandTool(ctx: Context, config: Config) {
         temperature: config.temperature,
         signal: exec.signal,
       })
+      logInfo(`[prompt-master] prompt_expand → ok=true chars=${result.length}`)
       return result || ''
     },
   })

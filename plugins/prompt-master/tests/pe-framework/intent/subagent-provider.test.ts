@@ -114,6 +114,24 @@ describe('createSubagentIntentProvider', () => {
     await expect(fn({ target: 'sd', input: 'x', round: 0 } as any)).rejects.toThrow(/未知 target/)
   })
 
+  it('req.persona/req.schema 优先于 opts 与 DEFAULT（Task 7 方言化）', async () => {
+    let captured: any = null
+    const run = makeFakeRun({ outputText: JSON.stringify({ slots: { count_gender: ['1girl'] } }) })
+    const ctx = {
+      subagents: {
+        start: async (_provider: string, request: any) => { captured = request; return run.run },
+      },
+      agent: { options: { delegationDepth: 0 } },
+    } as any
+    const fn = createSubagentIntentProvider(ctx, { timeoutMs: 2000, persona: 'OPTS_PERSONA', schema: 'OPTS_SCHEMA' })
+    await fn({ target: 'anima', input: 'x', round: 0, persona: 'REQ_PERSONA_MARK', schema: 'REQ_SCHEMA_MARK' } as any)
+    const c = String(captured.prompt?.[0]?.text ?? '')
+    expect(c).toContain('REQ_PERSONA_MARK')
+    expect(c).toContain('REQ_SCHEMA_MARK')
+    expect(c).not.toContain('OPTS_PERSONA')
+    expect(c).not.toContain('资深')
+  })
+
   it('sends persona+schema+req as the subagent prompt', async () => {
     let captured: any = null
     const run = makeFakeRun({ outputText: JSON.stringify({ slots: { count_gender: ['1girl'] } }) })

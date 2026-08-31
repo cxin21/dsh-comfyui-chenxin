@@ -1,4 +1,5 @@
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { Context } from '@deepseek-ai/cordis'
 // 方言模块副作用注册（Task 6：编排走 runStage 注册表，需保证 anima/h3 已装配）
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
@@ -29,17 +30,20 @@ function stageToEnvelope(stage: StageResult, opts?: { omitResult?: boolean }): s
 
 const VARIANT_SET = ['base', 'aesthetic', 'turbo']
 
-/** anima 分支：slots → runStage（compileAnima + auditAnima，无 budget）→ Envelope。variant 未知 → 参数错误（t50 Minor 处置） */
-export function compileAnimaEnvelope(slots: Record<string, unknown> | undefined, variant?: string, auditOnly?: boolean): string {
+/** anima 分支：slots → runStage（compileAnima + auditAnima，无 budget）→ Envelope。variant 未知 → 参数错误（t50 Minor 处置）。onStage：成功前打点钩子（日志摘要，不打正文） */
+export function compileAnimaEnvelope(slots: Record<string, unknown> | undefined, variant?: string, auditOnly?: boolean, onStage?: (stage: StageResult) => void): string {
   if (!slots || typeof slots !== 'object') throw new Error('anima 分支需要 slots 输入（AnimaSlots 形状）')
   if (variant !== undefined && !VARIANT_SET.includes(variant)) {
     throw new Error(`未知 variant: ${variant}；可选 base|aesthetic|turbo`)
   }
   const stage = runStage({ target: 'anima', slots, variant, auditOnly: auditOnly === true })
+  onStage?.(stage)
   return stageToEnvelope(stage, { omitResult: auditOnly === true })
 }
 
-export function registerCompileTool() {
+export function registerCompileTool(ctx?: Context) {
+  type LogCtx = { logger?: { info?: (msg: string) => void } }
+  const logInfo = (msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg)
   return defineTool({
     name: 'prompt_compile',
     description:
@@ -61,11 +65,15 @@ export function registerCompileTool() {
     async execute(args: { target?: string; shots?: Record<string, unknown>; scenario_id?: string; form_fields?: Record<string, unknown>; output_lang?: string; audit_only?: boolean; slots?: Record<string, unknown>; variant?: string }, _exec: ToolRunContext) {
       const a = args as unknown as CompileArgs
       const target = String(a.target || 'h3')
+      logInfo(`[prompt-master] prompt_compile target=${target}${a.scenario_id ? ` scenario=${String(a.scenario_id).trim()}` : ''}`)
       if (target === 'anima') {
         if (a.scenario_id || a.shots || a.form_fields) {
           throw new Error('参数错误：scenario_id/form_fields/shots 属于 h3 分支，anima 请使用 slots + variant')
         }
-        return compileAnimaEnvelope(a.slots, a.variant, a.audit_only === true)
+        const out = compileAnimaEnvelope(a.slots, a.variant, a.audit_only === true, (stage) => {
+          logInfo(`[prompt-master] prompt_compile → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
+        })
+        return out
       }
       if (target !== 'h3') {
         throw new Error(`DIALECT_NOT_AVAILABLE: ${target} 方言未归化（本期支持 h3 / anima）`)
@@ -101,6 +109,7 @@ export function registerCompileTool() {
         const gates = [...extraGates, ...stage.gates]
         stage = { ...stage, gates, advisories: [...extraAdvisories, ...stage.advisories], ok: !gates.some((g) => g.severity === 'critical') }
       }
+      logInfo(`[prompt-master] prompt_compile → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
       return stageToEnvelope(stage, { omitResult: a.audit_only === true })
     },
   })

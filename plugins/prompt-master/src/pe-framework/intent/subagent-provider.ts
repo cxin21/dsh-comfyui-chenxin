@@ -47,8 +47,6 @@ export function createSubagentIntentProvider(
   ownerCtx: any,
   opts: SubagentProviderOptions = {},
 ): AuthorIntentFn {
-  const persona = opts.persona ?? DEFAULT_PERSONA
-  const schema = opts.schema ?? DEFAULT_SCHEMA
   const timeoutMs = opts.timeoutMs ?? 60_000
   const provider = opts.provider ?? 'spawn'
 
@@ -57,6 +55,9 @@ export function createSubagentIntentProvider(
   }
 
   return async function subagentIntent(req: AuthorIntentRequest, exec?: any): Promise<AuthorDraft> {
+    // persona/schema 解析（Task 7 方言化）：req（author 按 dialect.intent 注入）> opts（插件配置）> 全局 DEFAULT 兜底
+    const persona = (req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA
+    const schema = (req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA
     // parent 必须是当前调用 Agent：工具执行上下文（exec.agent）优先，
     // 回退到 apply 绑定的 ownerCtx.agent（仅在插件确实在 agent scope 下 apply 时可用）。
     const parent = exec?.agent ?? ownerCtx?.agent

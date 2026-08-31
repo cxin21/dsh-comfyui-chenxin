@@ -5,7 +5,7 @@ import type { AnimaSlots } from '../pe-framework/dialect/anima.js'
 // 方言模块副作用注册（Task 6：DIALECT_READY 静态表 → 注册表查询）
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
-import { isDialectReady as registryIsDialectReady } from '../pe-framework/dialect/registry.js'
+import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
 import { assembleEnvelope } from '../pe-framework/render/envelope.js'
 import type { StageResult } from '../pe-framework/pipeline/types.js'
@@ -47,6 +47,9 @@ export interface AuthorIntentRequest {
   formFields?: Record<string, unknown>
   round: number
   feedback?: string
+  /** Task 7 方言化：author 按 getDialect(target).intent 注入（req > opts > DEFAULT 兜底在 provider 内） */
+  persona?: string
+  schema?: string
 }
 
 export type AuthorIntentFn = (req: AuthorIntentRequest, exec?: ExecLike) => Promise<AuthorDraft>
@@ -210,19 +213,24 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       }
 
       const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
-      let draft = await provider({ target, input, variant: a.variant, scenarioId, formFields: a.form_fields, round: 0 }, exec)
+      // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
+      const intentCfg = getDialect(target)?.intent
+      const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema }
+      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}`)
+      let draft = await provider({ ...intentBase, round: 0 }, exec)
       let stage = runDraftThroughStage(target, draft, runOpts)
       const trailAdvisories: string[] = []
       let corrections = 0
       while (!stage.ok && stage.gates.some((g) => g.severity === 'critical') && corrections < MAX_CORRECTIONS) {
         corrections++
         const feedback = stage.gates.filter((g) => g.severity === 'critical').map((g) => `[${g.rule}] ${g.detail}`).join('\n')
-        draft = await provider({ target, input, variant: a.variant, scenarioId, formFields: a.form_fields, round: corrections, feedback }, exec)
+        draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
         stage = runDraftThroughStage(target, draft, runOpts)
       }
       if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
         trailAdvisories.push('loop_exhausted:true')
       }
+      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
       return assembleEnvelope(stage, trailAdvisories)
     },
   })

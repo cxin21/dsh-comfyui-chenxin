@@ -60,7 +60,9 @@ export function auditContentEnvelope(content: AuditContent): string {
   } as never)
 }
 
-export function registerAuditTool(_ctx: Context, _config: Config) {
+export function registerAuditTool(ctx: Context, _config: Config) {
+  type LogCtx = { logger?: { info?: (msg: string) => void } }
+  const logInfo = (msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg)
   return defineTool({
     name: 'prompt_audit',
     description:
@@ -84,7 +86,8 @@ export function registerAuditTool(_ctx: Context, _config: Config) {
     async execute(args: Record<string, unknown>) {
       const target = String(args.target ?? 'h3') as 'anima' | 'h3'
       if (target !== 'anima' && target !== 'h3') throw new Error(`未知 target: ${target}`)
-      return auditContentEnvelope({
+      logInfo(`[prompt-master] prompt_audit target=${target}${typeof args.stage === 'string' && target === 'h3' ? ` stage=${args.stage}` : ''}`)
+      const out = auditContentEnvelope({
         target,
         positive: typeof args.positive === 'string' ? args.positive : undefined,
         negative: typeof args.negative === 'string' ? args.negative : undefined,
@@ -96,6 +99,12 @@ export function registerAuditTool(_ctx: Context, _config: Config) {
         shotCount: typeof args.shotCount === 'number' ? args.shotCount : undefined,
         references: Array.isArray(args.references) ? args.references : undefined,
       })
+      try {
+        const env = JSON.parse(out) as { ok?: boolean; audit?: { gates?: Array<{ severity: string }> } }
+        const gates = env.audit?.gates ?? []
+        logInfo(`[prompt-master] prompt_audit → ok=${env.ok === true} gates=${gates.length} critical=${gates.filter((g) => g.severity === 'critical').length}`)
+      } catch { /* 日志失败不影响工具结果 */ }
+      return out
     },
   })
 }

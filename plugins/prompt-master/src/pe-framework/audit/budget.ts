@@ -56,6 +56,7 @@ export interface H3BudgetProjection {
   charCount: number
   charLimit: number
   qualityCap: number
+  chatTemplateTokens: number
   effectiveCap: number
   over: boolean
   tokenOver: boolean
@@ -72,8 +73,14 @@ export function buildH3Budget(
   const qualityCap = STAGE_QUALITY_CAPS[stage] ?? STAGE_QUALITY_CAPS.t2va
   const assumptions: string[] = []
   const visual = references.reduce((sum, ref) => sum + visualTokens(ref, assumptions), 0)
-  // chat 帧底（估算口径：无引用时 5 token 与官方 golden 一致；有引用按官方帧语义不做精确值）
-  const chatTemplateTokens = references.length === 0 ? 5 : Math.ceil(5 + references.length * 2)
+  // chat 帧底（T14 精确口径：官方 user 上下文帧全量 BPE，text="" + vision pads 展开；
+  // tokenizer 不可载 → 显式回退旧估算 5+2N，与 textTokens 的 estimate 回退相互独立）
+  let chatTemplateTokens: number
+  try {
+    chatTemplateTokens = countTokensH3('', options?.tokenizerSourceDir, references.length).tokens
+  } catch {
+    chatTemplateTokens = references.length === 0 ? 5 : Math.ceil(5 + references.length * 2)
+  }
   const available = H3_CONTEXT_LIMIT - visual - chatTemplateTokens - DEFAULT_RUNTIME_SAFETY_MARGIN
   if (available < 0) throw new Error('multimodal inputs exceed the physical H3 context limit')
   const effectiveCap = Math.min(qualityCap, available)
@@ -100,6 +107,7 @@ export function buildH3Budget(
     charCount,
     charLimit: MAX_PROMPT_CHARS,
     qualityCap,
+    chatTemplateTokens,
     effectiveCap,
     over: tokenOver || charOver,
     tokenOver,

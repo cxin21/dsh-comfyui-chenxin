@@ -58,11 +58,14 @@ export function registerReverseTool(ctx: Context, config: Config) {
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: ReverseArgs, exec: ToolRunContext) {
+      type LogCtx = { logger?: { info?: (msg: string) => void } }
+      const logInfo = (msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg)
       const desc = String(args.image_description || '').trim()
       const images = await collectRecentImages(exec)
       if (!desc && images.length === 0) throw new Error('image_description is required, or attach an image to the session')
       const profile = findProfileById(String(args.profile || 'pe_reverse_descriptive').trim())
       if (!profile) throw new Error(`Profile not found: ${String(args.profile || 'pe_reverse_descriptive')}`)
+      logInfo(`[prompt-master] prompt_reverse profile=${profile.id} media_target=${String(args.media_target || 'image')} images=${images.length}${args.dry_run ? ' dry_run=true' : ''}`)
       const reverseResult = resolveReverse(profile, {
         caption_lang: String(args.output_lang || 'zh') as 'zh' | 'en' | 'auto',
         len: String(args.length || 'medium'),
@@ -79,7 +82,7 @@ export function registerReverseTool(ctx: Context, config: Config) {
         ? (desc ? `${user}\n\n[${String(args.output_lang || 'zh') === 'en' ? 'Scene description' : '画面描述'}]\n${desc}` : user)
         : desc
       if (args.dry_run) {
-        return JSON.stringify({
+        const debug = JSON.stringify({
           debug: {
             system: reverseResult.system,
             text,
@@ -88,6 +91,8 @@ export function registerReverseTool(ctx: Context, config: Config) {
           },
           profile_meta: { id: profile.id, name: profile.name, outputFormat: profile.outputFormat },
         })
+        logInfo(`[prompt-master] prompt_reverse → ok=true dry_run=true chars=${debug.length}`)
+        return debug
       }
       const { provider, model } = resolveRoute(exec as ExecLike)
       const blocks: ContentBlock[] = [
@@ -116,6 +121,7 @@ export function registerReverseTool(ctx: Context, config: Config) {
         quality_prompt_enabled: args.quality_prompt_enabled === true,
         quality_prompt_prefix: String(args.quality_prompt_prefix || ''),
       })
+      logInfo(`[prompt-master] prompt_reverse → ok=true chars=${sanitized.length}`)
       return sanitized
     },
   })

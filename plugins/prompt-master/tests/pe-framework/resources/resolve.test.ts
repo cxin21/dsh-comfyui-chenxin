@@ -1,5 +1,5 @@
 // tests/pe-framework/resources/resolve.test.ts
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { join, sep } from 'node:path'
 import { setPresetRoot, getPresetRoot, resolveKnowledgePath } from '../../../src/pe-framework/resources/resolve.js'
 
@@ -38,6 +38,16 @@ describe('resolveKnowledgePath', () => {
       const root = result!.slice(0, result!.length - suffix.length).replace(/[\\/]+$/, '')
       expect(root.length).toBeGreaterThan(0)
       expect(sep === '\\' ? /^[A-Za-z]:[\\/]/.test(root) : root.startsWith('/')).toBe(true)
+    }
+  })
+
+  it('uses DSH_COMFYUI_PRESET_ROOT env when no explicit presetRoot is set', () => {
+    setPresetRoot(undefined)
+    vi.stubEnv('DSH_COMFYUI_PRESET_ROOT', 'C:/env-root')
+    try {
+      expect(resolveKnowledgePath({ skillDir: 'x', asset: 'y.json' })).toBe(join('C:/env-root', 'skills', 'x', 'knowledge', 'y.json'))
+    } finally {
+      vi.unstubAllEnvs()
     }
   })
 })

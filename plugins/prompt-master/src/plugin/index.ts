@@ -52,7 +52,7 @@ export function apply(ctx: Context, config: ConfigShape) {
     disposers.push(ctx.tools.register(registerMinimaxTool(ctx, config)))
     disposers.push(ctx.tools.register(registerProfileListTool(ctx, config, { scope: profileScope })))
     disposers.push(ctx.tools.register(registerAuthorTool(ctx, config)))
-    disposers.push(ctx.tools.register(registerCompileTool()))
+    disposers.push(ctx.tools.register(registerCompileTool(ctx)))
     disposers.push(ctx.tools.register(registerCatalogSearchTool(ctx, config)))
     disposers.push(ctx.tools.register(registerAuditTool(ctx, config)))
     return () => { for (const d of disposers) d() }

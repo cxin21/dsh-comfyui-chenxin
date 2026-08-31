@@ -5,7 +5,9 @@
  */
 import { DatabaseSync } from 'node:sqlite'
 import { statSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname } from 'node:path'
+import { resolveKnowledgePath } from '../resources/resolve.js'
+import { assertAnimaCatalog } from '../resources/manifest.js'
 
 export interface CatalogHit {
   match_type: 'canonical' | 'alias' | 'fuzzy' | 'miss'
@@ -22,11 +24,23 @@ export interface CatalogQueryOptions {
 
 export type MatchKind = 'canonical' | 'alias' | 'fuzzy' | 'miss'
 
-const DEFAULT_CATALOG_PATH = 'C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin/skills/anima-prompt-v1/knowledge/tag-catalog.sqlite'
-const OVERLAY_PATH = 'C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin/skills/anima-prompt-v1/knowledge/relation-overlay.sqlite'
+const defaultCatalogPath = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' })
+const defaultOverlayPath = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'relation-overlay.sqlite' })
 
 let _db: DatabaseSync | null = null
-let _dbPath = process.env.ANIMA_CATALOG_PATH ?? DEFAULT_CATALOG_PATH
+let _dbPath = process.env.ANIMA_CATALOG_PATH ?? defaultCatalogPath()
+let _manifestChecked = false
+
+/** manifest 对账只跑一次；失败 console.warn 但不硬崩（资源层无 ctx.logger，spec §4.2）。
+ *  在模块求值期执行（先于任何 db 打开）：783MiB catalog 的 sha256 在全量测试并行 IO 下会超过
+ *  vitest 单测 5s 超时，放在惰性 db() 路径会把首次查询拖超时；模块期不计入测试计时。 */
+function verifyManifestOnce(): void {
+  if (_manifestChecked) return
+  _manifestChecked = true
+  const r = assertAnimaCatalog()
+  if (!r.ok) console.warn(`[prompt-master] ${r.reason}：资产与 golden 基线不同，请 re-run fidelity capture`)
+}
+verifyManifestOnce()
 
 export function catalogPath(): string {
   return _dbPath
@@ -127,7 +141,7 @@ export function overlayView(): { tags: Record<string, string> } {
 }
 
 export function overlayStatus(): 'available' | 'unavailable' {
-  return existsSync(OVERLAY_PATH) ? 'available' : 'unavailable'
+  return existsSync(defaultOverlayPath()) ? 'available' : 'unavailable'
 }
 
 export const OVERLAY_ADVISORY = 'overlay_unavailable'
@@ -154,5 +168,5 @@ export function closeCatalog(): void {
 
 /** 预设 knowledge 目录推导（供 config 接线） */
 export function knowledgeDir(): string {
-  return join('C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin/skills/anima-prompt-v1/knowledge')
+  return dirname(defaultCatalogPath())
 }

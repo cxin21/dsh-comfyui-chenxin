@@ -6,7 +6,9 @@
  * 此处按 tokenizer.json 配置复刻同一标准 BPE 流水线（逐 token 精确是唯一验收；T12 双跑）。
  */
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { resolveKnowledgePath } from '../resources/resolve.js'
+import { assertH3Tokenizer } from '../resources/manifest.js'
 
 export interface H3TokenizerConfig {
   vocab: Map<string, number>
@@ -14,7 +16,16 @@ export interface H3TokenizerConfig {
   addedTokens: Array<{ id: number; content: string; special: boolean }>
 }
 
-const DEFAULT_SOURCE_DIR = 'C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin/skills/minimax-h3-prompt/knowledge'
+const defaultTokenizerSourceDir = () => dirname(resolveKnowledgePath({ skillDir: 'minimax-h3-prompt', asset: 'tokenizer.json' }))
+let _tokenizerManifestChecked = false
+
+/** manifest 对账只在首次加载前跑一次；失败 console.warn 不硬崩（tokenizer 加载失败 → estimate 回退语义不变） */
+function verifyTokenizerManifestOnce(): void {
+  if (_tokenizerManifestChecked) return
+  _tokenizerManifestChecked = true
+  const r = assertH3Tokenizer()
+  if (!r.ok) console.warn(`[prompt-master] ${r.reason}：资产与 golden 基线不同，请 re-run fidelity capture`)
+}
 
 /** GPT2 split regex（tokenizer.json pre_tokenizer Split pattern，行为 Isolated）——JS 以 i+u 旗标等价 Python (?i:) */
 const SPLIT_RE = /'s|'t|'re|'ve|'m|'ll|'d|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+/giu
@@ -56,7 +67,8 @@ export class H3Tokenizer {
   private readonly byteAlphabet: string[]
   private readonly specialMatcher: Array<{ id: number; content: string; special: boolean }>
 
-  constructor(sourceDir: string = DEFAULT_SOURCE_DIR) {
+  constructor(sourceDir: string = defaultTokenizerSourceDir()) {
+    verifyTokenizerManifestOnce()
     const raw = JSON.parse(readFileSync(join(sourceDir, 'tokenizer.json'), 'utf8'))
     const model = raw.model
     if (model.type !== 'BPE') throw new Error(`unsupported tokenizer model type: ${model.type}`)
@@ -201,7 +213,7 @@ let _instance: H3Tokenizer | null = null
 let _instanceDir: string | undefined
 
 export function h3Tokenizer(sourceDir?: string): H3Tokenizer {
-  const dir = sourceDir ?? process.env.H3_TOKENIZER_DIR ?? DEFAULT_SOURCE_DIR
+  const dir = sourceDir ?? process.env.H3_TOKENIZER_DIR ?? defaultTokenizerSourceDir()
   if (!_instance || _instanceDir !== dir) {
     _instance = new H3Tokenizer(dir)
     _instanceDir = dir

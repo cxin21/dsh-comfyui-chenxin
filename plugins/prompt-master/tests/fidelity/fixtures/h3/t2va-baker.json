@@ -1,0 +1,8 @@
+{
+  "duration_seconds": 8,
+  "shots": [
+    {"what": "A baker opens the shutters at sunrise.",
+     "dialogue": "First batch of the morning."},
+    {"what": "Steam rises from sliced bread."}
+  ]
+}

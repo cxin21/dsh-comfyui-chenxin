@@ -1,0 +1,36 @@
+{
+  "name": "anima-grinning",
+  "input": {
+    "tag": "grinning"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "391173",
+        "canonical_name": "grin",
+        "prompt_form": "grin",
+        "category": "general",
+        "usage_count": 348904,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "alias",
+        "matched_name": "grinning",
+        "name_type": "alias",
+        "score": 850,
+        "aliases": [
+          "grinning"
+        ],
+        "provenance": [
+          "raw_record_id:391173",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": false
+      }
+    ]
+  },
+  "sha256": "e67809be57c1acc9962aebfd55a60471fe9ba7c92605942505b6f46290ad86ef"
+}

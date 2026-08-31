@@ -1,0 +1,85 @@
+{
+  "name": "ref2va-mei-three-refs",
+  "input": {
+    "duration_seconds": 8,
+    "shots": [
+      {
+        "what": "Neko waves at Mei on the rooftop.",
+        "who": "Mei"
+      }
+    ],
+    "references": [
+      {
+        "kind": "picture",
+        "who": "Neko",
+        "image": "C:/refs/n.png",
+        "width": 1024,
+        "height": 1024
+      },
+      {
+        "kind": "picture",
+        "who": "Mei",
+        "image": "C:/refs/m.png",
+        "width": 1024,
+        "height": 1024
+      },
+      {
+        "kind": "picture",
+        "who": "Rooftop",
+        "image": "C:/refs/r.png",
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "videos": [
+      {
+        "kind": "video",
+        "label": "SourceA",
+        "path": "C:/refs/source.mp4",
+        "duration_seconds": 5
+      }
+    ]
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "ref2va",
+    "result": {
+      "text": "subject_definitions: <Subject 1> is Neko from <Picture 1>.\n<Subject 2> is Mei from <Picture 2>.\n<Subject 3> is Rooftop from <Picture 3>.\n\nsummary: [reference generation] Neko (<Picture 1>), Mei (<Picture 2>), Rooftop (<Picture 3>) appear in a 8-second, 1-shot video with synchronized audio.\n\nretention_analysis: <Subject 1> from <Picture 1> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n<Subject 2> from <Picture 2> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n<Subject 3> from <Picture 3> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n\ndetailed_description: [Shot 1] Neko waves at <Subject 2> on the rooftop.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A",
+      "text_zh": "主体定义: <主体 1> is Neko from <图片 1>.\n<主体 2> is Mei from <图片 2>.\n<主体 3> is Rooftop from <图片 3>.\n\n摘要: [参考生成] Neko (<图片 1>), Mei (<图片 2>), Rooftop (<图片 3>) appear in a 8-second, 1-shot video with synchronized audio.\n\n保持性分析: <主体 1> from <图片 1> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n<主体 2> from <图片 2> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n<主体 3> from <图片 3> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n\n详细描述: [镜头 1] Neko waves at <主体 2> on the rooftop.\n\n整体声音景观: 无\n\n非叙事音乐: 无",
+      "text_zh_meta": {
+        "quality": "skeleton",
+        "structural_tokens_translated": true,
+        "prose_translated": false,
+        "advisory": "Chinese skeleton only: structural tokens are translated, prose is verbatim English. The calling model is responsible for any literary Chinese translation on top of this skeleton."
+      },
+      "findings": [],
+      "assumptions": [],
+      "budget": {
+        "verified": true,
+        "snapshot_id": "h3-qwen3-vl",
+        "model_id": "MiniMaxAI/MiniMax-H3:text_encoder",
+        "model_hard_limit": 262144,
+        "reference_count": 3,
+        "video_count": 1,
+        "audio_count": 0,
+        "visual_tokens": 3072,
+        "chat_template_tokens": 32,
+        "available_tokens": 258784,
+        "text_tokens": 249,
+        "char_count": 789,
+        "char_limit": 7000,
+        "quality_cap": 2400,
+        "effective_cap": 2400,
+        "over": false,
+        "token_over": false,
+        "char_over": false
+      },
+      "mode": "ref2va",
+      "stage": "ref2va"
+    },
+    "errors": [],
+    "advisories": []
+  },
+  "sha256": "15b8dbf488a86d6b5af369f21a55fe71107d5585a87c0bd6df86909899bac15a"
+}

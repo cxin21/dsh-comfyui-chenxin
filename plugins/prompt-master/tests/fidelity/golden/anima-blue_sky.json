@@ -1,0 +1,34 @@
+{
+  "name": "anima-blue_sky",
+  "input": {
+    "tag": "blue sky"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "150846",
+        "canonical_name": "blue_sky",
+        "prompt_form": "blue sky",
+        "category": "environment",
+        "usage_count": 273883,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "canonical",
+        "matched_name": "blue_sky",
+        "name_type": "canonical",
+        "score": 1000,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:150846",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": false
+      }
+    ]
+  },
+  "sha256": "e911ba7327cd7f13794df71f4760507e3e79a5d486afc27b70c708b6422d2f12"
+}

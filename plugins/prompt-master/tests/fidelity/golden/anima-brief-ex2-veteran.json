@@ -1,0 +1,1190 @@
+{
+  "name": "anima-brief-ex2-veteran",
+  "input": {
+    "variant": "base",
+    "subject": "battle-damaged veteran warrior in torn bodysuit, kneeling in ruined city",
+    "slots": {
+      "count_gender": [
+        "1girl",
+        "solo"
+      ],
+      "appearance": [
+        "mature",
+        "long hair",
+        "black hair",
+        "ponytail",
+        "red eyes",
+        "makeup",
+        "lipstick",
+        "curvy",
+        "big breasts",
+        "wide hips",
+        "pale skin"
+      ],
+      "clothing": [
+        "bodysuit",
+        "skin tight",
+        "torn clothes",
+        "battle damage",
+        "scratches",
+        "gauntlets",
+        "high heel boots"
+      ],
+      "pose_action": [
+        "kneeling",
+        "hand on own hip",
+        "holding sword"
+      ],
+      "expression": [
+        "expressionless",
+        "smirk",
+        "narrow eyes"
+      ],
+      "camera": [
+        "cowboy shot",
+        "from below",
+        "looking at viewer"
+      ],
+      "scene": [
+        "ruins",
+        "debris",
+        "cityscape",
+        "night",
+        "rain",
+        "smoke",
+        "fire"
+      ],
+      "detail_mood": [
+        "cinematic",
+        "atmospheric"
+      ]
+    },
+    "narrative": "a cold veteran warrior kneeling in the rain amid the wreckage of a battle just won, her skin-tight bodysuit torn and battle-damaged at the shoulder pauldron, one sleeve, the side torso just under the arm, the hip seam, the outer thigh, and one knee guard — skin showing through every jagged rip but the chest plate and lower front still intact, gauntlets scratched and dusted, sword point down resting against the debris, smoke and distant fire drifting past crumbling pillars of a destroyed city, looking up at the viewer through the rain with the unhurried composure of a regal survivor who has already counted the bodies",
+    "exclusions": [
+      "no text",
+      "no watermark",
+      "no censored",
+      "no bar censor",
+      "no mosaic"
+    ]
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "author",
+    "result": {
+      "prompt": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, solo, mature, long hair, black hair, ponytail, red eyes, makeup, lipstick, curvy, large breasts, wide hips, pale skin, bodysuit, skin tight, torn clothes, battle damage, scratches, gauntlets, high heel boots, kneeling, hand on own hip, holding sword, expressionless, smirk, narrow eyes, cowboy shot, from below, looking at viewer, ruins, debris, cityscape, night, rain, smoke, fire, cinematic, atmospheric, a cold veteran warrior kneeling in the rain amid the wreckage of a battle just won, her skin-tight bodysuit torn and battle-damaged at the shoulder pauldron, one sleeve, the side torso just under the arm, the hip seam, the outer thigh, and one knee guard — skin showing through every jagged rip but the chest plate and lower front still intact, gauntlets scratched and dusted, sword point down resting against the debris, smoke and distant fire drifting past crumbling pillars of a destroyed city, looking up at the viewer through the rain with the unhurried composure of a regal survivor who has already counted the bodies",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, no text, no watermark, no censored, no bar censor, no mosaic",
+        "notes": [
+          "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:711477:match=canonical:canonical=mature:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:662719:match=canonical:canonical=long_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:144091:match=canonical:canonical=black_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:931272:match=canonical:canonical=ponytail:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:969068:match=canonical:canonical=red_eyes:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:688784:match=canonical:canonical=makeup:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:656357:match=canonical:canonical=lipstick:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:235619:match=canonical:canonical=curvy:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:636597:match=alias:canonical=large_breasts:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1294912:match=canonical:canonical=wide_hips:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:897213:match=canonical:canonical=pale_skin:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:153584:match=canonical:canonical=bodysuit:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1099255:match=canonical:canonical=skin_tight:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1212905:match=canonical:canonical=torn_clothes:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:128451:match=canonical:canonical=battle_damage:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1042314:match=canonical:canonical=scratches:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:364267:match=canonical:canonical=gauntlets:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:437499:match=canonical:canonical=high_heel_boots:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:591404:match=canonical:canonical=kneeling:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:411413:match=canonical:canonical=hand_on_own_hip:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:453817:match=canonical:canonical=holding_sword:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:315547:match=canonical:canonical=expressionless:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1104421:match=canonical:canonical=smirk:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:813406:match=canonical:canonical=narrow_eyes:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:226744:match=canonical:canonical=cowboy_shot:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:344150:match=canonical:canonical=from_below:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:663666:match=canonical:canonical=looking_at_viewer:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1003416:match=canonical:canonical=ruins:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:252362:match=canonical:canonical=debris:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:210655:match=canonical:canonical=cityscape:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:833932:match=canonical:canonical=night:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:958568:match=canonical:canonical=rain:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1104608:match=canonical:canonical=smoke:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:330494:match=canonical:canonical=fire:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:209603:match=canonical:canonical=cinematic:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:106948:match=canonical:canonical=atmospheric:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
+        ],
+        "assumptions": [
+          "safety_seed_injected:default_for_non_explicit_request"
+        ],
+        "advisories": []
+      },
+      "metadata": {
+        "variant": "base",
+        "subject": "battle-damaged veteran warrior in torn bodysuit, kneeling in ruined city"
+      },
+      "phase_status": {
+        "policy": "PASS",
+        "grounding": "PASS",
+        "composition": "PASS",
+        "inspection": "PASS"
+      },
+      "citations": [
+        {
+          "text": "1girl",
+          "record_id": "10768",
+          "canonical": "1girl",
+          "prompt_form": "1girl",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "solo",
+          "record_id": "1110119",
+          "canonical": "solo",
+          "prompt_form": "solo",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "mature",
+          "record_id": "711477",
+          "canonical": "mature",
+          "prompt_form": "mature",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "long hair",
+          "record_id": "662719",
+          "canonical": "long_hair",
+          "prompt_form": "long hair",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "black hair",
+          "record_id": "144091",
+          "canonical": "black_hair",
+          "prompt_form": "black hair",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "ponytail",
+          "record_id": "931272",
+          "canonical": "ponytail",
+          "prompt_form": "ponytail",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "red eyes",
+          "record_id": "969068",
+          "canonical": "red_eyes",
+          "prompt_form": "red eyes",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "makeup",
+          "record_id": "688784",
+          "canonical": "makeup",
+          "prompt_form": "makeup",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "lipstick",
+          "record_id": "656357",
+          "canonical": "lipstick",
+          "prompt_form": "lipstick",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "curvy",
+          "record_id": "235619",
+          "canonical": "curvy",
+          "prompt_form": "curvy",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "big breasts",
+          "record_id": "636597",
+          "canonical": "large_breasts",
+          "prompt_form": "large breasts",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "alias"
+        },
+        {
+          "text": "wide hips",
+          "record_id": "1294912",
+          "canonical": "wide_hips",
+          "prompt_form": "wide hips",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "pale skin",
+          "record_id": "897213",
+          "canonical": "pale_skin",
+          "prompt_form": "pale skin",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "bodysuit",
+          "record_id": "153584",
+          "canonical": "bodysuit",
+          "prompt_form": "bodysuit",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "skin tight",
+          "record_id": "1099255",
+          "canonical": "skin_tight",
+          "prompt_form": "skin tight",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "torn clothes",
+          "record_id": "1212905",
+          "canonical": "torn_clothes",
+          "prompt_form": "torn clothes",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "battle damage",
+          "record_id": "128451",
+          "canonical": "battle_damage",
+          "prompt_form": "battle damage",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "scratches",
+          "record_id": "1042314",
+          "canonical": "scratches",
+          "prompt_form": "scratches",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "gauntlets",
+          "record_id": "364267",
+          "canonical": "gauntlets",
+          "prompt_form": "gauntlets",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "high heel boots",
+          "record_id": "437499",
+          "canonical": "high_heel_boots",
+          "prompt_form": "high heel boots",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "kneeling",
+          "record_id": "591404",
+          "canonical": "kneeling",
+          "prompt_form": "kneeling",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "hand on own hip",
+          "record_id": "411413",
+          "canonical": "hand_on_own_hip",
+          "prompt_form": "hand on own hip",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "holding sword",
+          "record_id": "453817",
+          "canonical": "holding_sword",
+          "prompt_form": "holding sword",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "expressionless",
+          "record_id": "315547",
+          "canonical": "expressionless",
+          "prompt_form": "expressionless",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "smirk",
+          "record_id": "1104421",
+          "canonical": "smirk",
+          "prompt_form": "smirk",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "narrow eyes",
+          "record_id": "813406",
+          "canonical": "narrow_eyes",
+          "prompt_form": "narrow eyes",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "cowboy shot",
+          "record_id": "226744",
+          "canonical": "cowboy_shot",
+          "prompt_form": "cowboy shot",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "from below",
+          "record_id": "344150",
+          "canonical": "from_below",
+          "prompt_form": "from below",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "looking at viewer",
+          "record_id": "663666",
+          "canonical": "looking_at_viewer",
+          "prompt_form": "looking at viewer",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "ruins",
+          "record_id": "1003416",
+          "canonical": "ruins",
+          "prompt_form": "ruins",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "debris",
+          "record_id": "252362",
+          "canonical": "debris",
+          "prompt_form": "debris",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "cityscape",
+          "record_id": "210655",
+          "canonical": "cityscape",
+          "prompt_form": "cityscape",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "night",
+          "record_id": "833932",
+          "canonical": "night",
+          "prompt_form": "night",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "rain",
+          "record_id": "958568",
+          "canonical": "rain",
+          "prompt_form": "rain",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "smoke",
+          "record_id": "1104608",
+          "canonical": "smoke",
+          "prompt_form": "smoke",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "fire",
+          "record_id": "330494",
+          "canonical": "fire",
+          "prompt_form": "fire",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "cinematic",
+          "record_id": "209603",
+          "canonical": "cinematic",
+          "prompt_form": "cinematic",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "atmospheric",
+          "record_id": "106948",
+          "canonical": "atmospheric",
+          "prompt_form": "atmospheric",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "seg1",
+          "channel": "positive",
+          "text": "masterpiece",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg2",
+          "channel": "positive",
+          "text": "best quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg3",
+          "channel": "positive",
+          "text": "score_7",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg4",
+          "channel": "positive",
+          "text": "safe",
+          "origin": "policy",
+          "priority": 99,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg5",
+          "channel": "positive",
+          "text": "1girl",
+          "origin": "grounded",
+          "priority": 200,
+          "slot": "count_gender",
+          "citation": {
+            "text": "1girl",
+            "record_id": "10768",
+            "canonical": "1girl",
+            "prompt_form": "1girl",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg6",
+          "channel": "positive",
+          "text": "solo",
+          "origin": "grounded",
+          "priority": 201,
+          "slot": "count_gender",
+          "citation": {
+            "text": "solo",
+            "record_id": "1110119",
+            "canonical": "solo",
+            "prompt_form": "solo",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg7",
+          "channel": "positive",
+          "text": "mature",
+          "origin": "grounded",
+          "priority": 300,
+          "slot": "appearance",
+          "citation": {
+            "text": "mature",
+            "record_id": "711477",
+            "canonical": "mature",
+            "prompt_form": "mature",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg8",
+          "channel": "positive",
+          "text": "long hair",
+          "origin": "grounded",
+          "priority": 301,
+          "slot": "appearance",
+          "citation": {
+            "text": "long hair",
+            "record_id": "662719",
+            "canonical": "long_hair",
+            "prompt_form": "long hair",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg9",
+          "channel": "positive",
+          "text": "black hair",
+          "origin": "grounded",
+          "priority": 302,
+          "slot": "appearance",
+          "citation": {
+            "text": "black hair",
+            "record_id": "144091",
+            "canonical": "black_hair",
+            "prompt_form": "black hair",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg10",
+          "channel": "positive",
+          "text": "ponytail",
+          "origin": "grounded",
+          "priority": 303,
+          "slot": "appearance",
+          "citation": {
+            "text": "ponytail",
+            "record_id": "931272",
+            "canonical": "ponytail",
+            "prompt_form": "ponytail",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg11",
+          "channel": "positive",
+          "text": "red eyes",
+          "origin": "grounded",
+          "priority": 304,
+          "slot": "appearance",
+          "citation": {
+            "text": "red eyes",
+            "record_id": "969068",
+            "canonical": "red_eyes",
+            "prompt_form": "red eyes",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg12",
+          "channel": "positive",
+          "text": "makeup",
+          "origin": "grounded",
+          "priority": 305,
+          "slot": "appearance",
+          "citation": {
+            "text": "makeup",
+            "record_id": "688784",
+            "canonical": "makeup",
+            "prompt_form": "makeup",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg13",
+          "channel": "positive",
+          "text": "lipstick",
+          "origin": "grounded",
+          "priority": 306,
+          "slot": "appearance",
+          "citation": {
+            "text": "lipstick",
+            "record_id": "656357",
+            "canonical": "lipstick",
+            "prompt_form": "lipstick",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg14",
+          "channel": "positive",
+          "text": "curvy",
+          "origin": "grounded",
+          "priority": 307,
+          "slot": "appearance",
+          "citation": {
+            "text": "curvy",
+            "record_id": "235619",
+            "canonical": "curvy",
+            "prompt_form": "curvy",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg15",
+          "channel": "positive",
+          "text": "large breasts",
+          "origin": "grounded",
+          "priority": 308,
+          "slot": "appearance",
+          "citation": {
+            "text": "big breasts",
+            "record_id": "636597",
+            "canonical": "large_breasts",
+            "prompt_form": "large breasts",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "alias"
+          }
+        },
+        {
+          "segment_id": "seg16",
+          "channel": "positive",
+          "text": "wide hips",
+          "origin": "grounded",
+          "priority": 309,
+          "slot": "appearance",
+          "citation": {
+            "text": "wide hips",
+            "record_id": "1294912",
+            "canonical": "wide_hips",
+            "prompt_form": "wide hips",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg17",
+          "channel": "positive",
+          "text": "pale skin",
+          "origin": "grounded",
+          "priority": 310,
+          "slot": "appearance",
+          "citation": {
+            "text": "pale skin",
+            "record_id": "897213",
+            "canonical": "pale_skin",
+            "prompt_form": "pale skin",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg18",
+          "channel": "positive",
+          "text": "bodysuit",
+          "origin": "grounded",
+          "priority": 350,
+          "slot": "clothing",
+          "citation": {
+            "text": "bodysuit",
+            "record_id": "153584",
+            "canonical": "bodysuit",
+            "prompt_form": "bodysuit",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg19",
+          "channel": "positive",
+          "text": "skin tight",
+          "origin": "grounded",
+          "priority": 351,
+          "slot": "clothing",
+          "citation": {
+            "text": "skin tight",
+            "record_id": "1099255",
+            "canonical": "skin_tight",
+            "prompt_form": "skin tight",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg20",
+          "channel": "positive",
+          "text": "torn clothes",
+          "origin": "grounded",
+          "priority": 352,
+          "slot": "clothing",
+          "citation": {
+            "text": "torn clothes",
+            "record_id": "1212905",
+            "canonical": "torn_clothes",
+            "prompt_form": "torn clothes",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg21",
+          "channel": "positive",
+          "text": "battle damage",
+          "origin": "grounded",
+          "priority": 353,
+          "slot": "clothing",
+          "citation": {
+            "text": "battle damage",
+            "record_id": "128451",
+            "canonical": "battle_damage",
+            "prompt_form": "battle damage",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg22",
+          "channel": "positive",
+          "text": "scratches",
+          "origin": "grounded",
+          "priority": 354,
+          "slot": "clothing",
+          "citation": {
+            "text": "scratches",
+            "record_id": "1042314",
+            "canonical": "scratches",
+            "prompt_form": "scratches",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg23",
+          "channel": "positive",
+          "text": "gauntlets",
+          "origin": "grounded",
+          "priority": 355,
+          "slot": "clothing",
+          "citation": {
+            "text": "gauntlets",
+            "record_id": "364267",
+            "canonical": "gauntlets",
+            "prompt_form": "gauntlets",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg24",
+          "channel": "positive",
+          "text": "high heel boots",
+          "origin": "grounded",
+          "priority": 356,
+          "slot": "clothing",
+          "citation": {
+            "text": "high heel boots",
+            "record_id": "437499",
+            "canonical": "high_heel_boots",
+            "prompt_form": "high heel boots",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg25",
+          "channel": "positive",
+          "text": "kneeling",
+          "origin": "grounded",
+          "priority": 400,
+          "slot": "pose_action",
+          "citation": {
+            "text": "kneeling",
+            "record_id": "591404",
+            "canonical": "kneeling",
+            "prompt_form": "kneeling",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg26",
+          "channel": "positive",
+          "text": "hand on own hip",
+          "origin": "grounded",
+          "priority": 401,
+          "slot": "pose_action",
+          "citation": {
+            "text": "hand on own hip",
+            "record_id": "411413",
+            "canonical": "hand_on_own_hip",
+            "prompt_form": "hand on own hip",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg27",
+          "channel": "positive",
+          "text": "holding sword",
+          "origin": "grounded",
+          "priority": 402,
+          "slot": "pose_action",
+          "citation": {
+            "text": "holding sword",
+            "record_id": "453817",
+            "canonical": "holding_sword",
+            "prompt_form": "holding sword",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg28",
+          "channel": "positive",
+          "text": "expressionless",
+          "origin": "grounded",
+          "priority": 450,
+          "slot": "expression",
+          "citation": {
+            "text": "expressionless",
+            "record_id": "315547",
+            "canonical": "expressionless",
+            "prompt_form": "expressionless",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg29",
+          "channel": "positive",
+          "text": "smirk",
+          "origin": "grounded",
+          "priority": 451,
+          "slot": "expression",
+          "citation": {
+            "text": "smirk",
+            "record_id": "1104421",
+            "canonical": "smirk",
+            "prompt_form": "smirk",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg30",
+          "channel": "positive",
+          "text": "narrow eyes",
+          "origin": "grounded",
+          "priority": 452,
+          "slot": "expression",
+          "citation": {
+            "text": "narrow eyes",
+            "record_id": "813406",
+            "canonical": "narrow_eyes",
+            "prompt_form": "narrow eyes",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg31",
+          "channel": "positive",
+          "text": "cowboy shot",
+          "origin": "grounded",
+          "priority": 500,
+          "slot": "camera",
+          "citation": {
+            "text": "cowboy shot",
+            "record_id": "226744",
+            "canonical": "cowboy_shot",
+            "prompt_form": "cowboy shot",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg32",
+          "channel": "positive",
+          "text": "from below",
+          "origin": "grounded",
+          "priority": 501,
+          "slot": "camera",
+          "citation": {
+            "text": "from below",
+            "record_id": "344150",
+            "canonical": "from_below",
+            "prompt_form": "from below",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg33",
+          "channel": "positive",
+          "text": "looking at viewer",
+          "origin": "grounded",
+          "priority": 502,
+          "slot": "camera",
+          "citation": {
+            "text": "looking at viewer",
+            "record_id": "663666",
+            "canonical": "looking_at_viewer",
+            "prompt_form": "looking at viewer",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg34",
+          "channel": "positive",
+          "text": "ruins",
+          "origin": "grounded",
+          "priority": 550,
+          "slot": "scene",
+          "citation": {
+            "text": "ruins",
+            "record_id": "1003416",
+            "canonical": "ruins",
+            "prompt_form": "ruins",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg35",
+          "channel": "positive",
+          "text": "debris",
+          "origin": "grounded",
+          "priority": 551,
+          "slot": "scene",
+          "citation": {
+            "text": "debris",
+            "record_id": "252362",
+            "canonical": "debris",
+            "prompt_form": "debris",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg36",
+          "channel": "positive",
+          "text": "cityscape",
+          "origin": "grounded",
+          "priority": 552,
+          "slot": "scene",
+          "citation": {
+            "text": "cityscape",
+            "record_id": "210655",
+            "canonical": "cityscape",
+            "prompt_form": "cityscape",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg37",
+          "channel": "positive",
+          "text": "night",
+          "origin": "grounded",
+          "priority": 553,
+          "slot": "scene",
+          "citation": {
+            "text": "night",
+            "record_id": "833932",
+            "canonical": "night",
+            "prompt_form": "night",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg38",
+          "channel": "positive",
+          "text": "rain",
+          "origin": "grounded",
+          "priority": 554,
+          "slot": "scene",
+          "citation": {
+            "text": "rain",
+            "record_id": "958568",
+            "canonical": "rain",
+            "prompt_form": "rain",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg39",
+          "channel": "positive",
+          "text": "smoke",
+          "origin": "grounded",
+          "priority": 555,
+          "slot": "scene",
+          "citation": {
+            "text": "smoke",
+            "record_id": "1104608",
+            "canonical": "smoke",
+            "prompt_form": "smoke",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg40",
+          "channel": "positive",
+          "text": "fire",
+          "origin": "grounded",
+          "priority": 556,
+          "slot": "scene",
+          "citation": {
+            "text": "fire",
+            "record_id": "330494",
+            "canonical": "fire",
+            "prompt_form": "fire",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg41",
+          "channel": "positive",
+          "text": "cinematic",
+          "origin": "grounded",
+          "priority": 600,
+          "slot": "detail_mood",
+          "citation": {
+            "text": "cinematic",
+            "record_id": "209603",
+            "canonical": "cinematic",
+            "prompt_form": "cinematic",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg42",
+          "channel": "positive",
+          "text": "atmospheric",
+          "origin": "grounded",
+          "priority": 601,
+          "slot": "detail_mood",
+          "citation": {
+            "text": "atmospheric",
+            "record_id": "106948",
+            "canonical": "atmospheric",
+            "prompt_form": "atmospheric",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg43",
+          "channel": "positive",
+          "text": "a cold veteran warrior kneeling in the rain amid the wreckage of a battle just won, her skin-tight bodysuit torn and battle-damaged at the shoulder pauldron, one sleeve, the side torso just under the arm, the hip seam, the outer thigh, and one knee guard — skin showing through every jagged rip but the chest plate and lower front still intact, gauntlets scratched and dusted, sword point down resting against the debris, smoke and distant fire drifting past crumbling pillars of a destroyed city, looking up at the viewer through the rain with the unhurried composure of a regal survivor who has already counted the bodies",
+          "origin": "narrative",
+          "priority": 2000,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg44",
+          "channel": "negative",
+          "text": "worst quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg45",
+          "channel": "negative",
+          "text": "low quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg46",
+          "channel": "negative",
+          "text": "score_1",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg47",
+          "channel": "negative",
+          "text": "score_2",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg48",
+          "channel": "negative",
+          "text": "score_3",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg49",
+          "channel": "negative",
+          "text": "no text",
+          "origin": "exclusion",
+          "priority": 900,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg50",
+          "channel": "negative",
+          "text": "no watermark",
+          "origin": "exclusion",
+          "priority": 900,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg51",
+          "channel": "negative",
+          "text": "no censored",
+          "origin": "exclusion",
+          "priority": 900,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg52",
+          "channel": "negative",
+          "text": "no bar censor",
+          "origin": "exclusion",
+          "priority": 900,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg53",
+          "channel": "negative",
+          "text": "no mosaic",
+          "origin": "exclusion",
+          "priority": 900,
+          "slot": null,
+          "citation": null
+        }
+      ]
+    },
+    "errors": [],
+    "advisories": []
+  },
+  "sha256": "9a7d53fa5377df2268e38ecfed87ffddb89d9dc04fcc01b2f52a0d4db1655cb6"
+}

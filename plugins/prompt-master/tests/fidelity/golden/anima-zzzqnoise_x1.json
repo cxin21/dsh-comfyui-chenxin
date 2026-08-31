@@ -1,0 +1,128 @@
+{
+  "name": "anima-zzzqnoise_x1",
+  "input": {
+    "tag": "zzzqnoise_x1"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "114202",
+        "canonical_name": "ayumaru_(art_of_life)",
+        "prompt_form": "@ayumaru (art of life)",
+        "category": "artist",
+        "usage_count": 280,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "x1213hide",
+        "name_type": "alias",
+        "score": 515.8333293316945,
+        "aliases": [
+          "x1213hide"
+        ],
+        "provenance": [
+          "raw_record_id:114202",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1304911",
+        "canonical_name": "x172xqqq",
+        "prompt_form": "@x172xqqq",
+        "category": "artist",
+        "usage_count": 17,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "x172xqqq",
+        "name_type": "canonical",
+        "score": 515.8333293316945,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1304911",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1304920",
+        "canonical_name": "x1nx3i",
+        "prompt_form": "x1nx3i",
+        "category": "general",
+        "usage_count": 7,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "x1nx3i",
+        "name_type": "canonical",
+        "score": 515.8333293316945,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1304920",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1304906",
+        "canonical_name": "x155137",
+        "prompt_form": "@x155137",
+        "category": "artist",
+        "usage_count": 4,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "x155137",
+        "name_type": "canonical",
+        "score": 515.8333293316945,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1304906",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1304916",
+        "canonical_name": "x1ao1sm",
+        "prompt_form": "@x1ao1sm",
+        "category": "artist",
+        "usage_count": 4,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "x1ao1sm",
+        "name_type": "canonical",
+        "score": 515.8333293316945,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1304916",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      }
+    ]
+  },
+  "sha256": "2399f71f10236bf64887b0dffa7b09eef53d3ffb5ed0e4d36b1081ae211d4771"
+}

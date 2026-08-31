@@ -1,0 +1,7 @@
+{
+  "duration_seconds": 6,
+  "shots": [{"what": "The character turns toward the window as daylight fills the room."}],
+  "references": [
+    {"kind": "picture", "image": "C:/refs/first.png", "width": 1024, "height": 1024}
+  ]
+}

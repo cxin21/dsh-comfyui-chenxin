@@ -1,0 +1,61 @@
+{
+  "name": "i2va-window",
+  "input": {
+    "duration_seconds": 6,
+    "shots": [
+      {
+        "what": "The character turns toward the window as daylight fills the room."
+      }
+    ],
+    "references": [
+      {
+        "kind": "picture",
+        "image": "C:/refs/first.png",
+        "width": 1024,
+        "height": 1024
+      }
+    ]
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "i2va",
+    "result": {
+      "text": "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\nintegrated_multimodal_description: [Shot 1] The character turns toward the window as daylight fills the room.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A",
+      "text_zh": "For the target video, at 0.00 seconds into the target video, <图片 1> (from [镜头 1]) is fully referenced.\n\n整合多模态描述: [镜头 1] The character turns toward the window as daylight fills the room.\n\n整体声音景观: 无\n\n非叙事音乐: 无",
+      "text_zh_meta": {
+        "quality": "skeleton",
+        "structural_tokens_translated": true,
+        "prose_translated": false,
+        "advisory": "Chinese skeleton only: structural tokens are translated, prose is verbatim English. The calling model is responsible for any literary Chinese translation on top of this skeleton."
+      },
+      "findings": [],
+      "assumptions": [],
+      "budget": {
+        "verified": true,
+        "snapshot_id": "h3-qwen3-vl",
+        "model_id": "MiniMaxAI/MiniMax-H3:text_encoder",
+        "model_hard_limit": 262144,
+        "reference_count": 1,
+        "video_count": 0,
+        "audio_count": 0,
+        "visual_tokens": 1024,
+        "chat_template_tokens": 14,
+        "available_tokens": 260850,
+        "text_tokens": 86,
+        "char_count": 270,
+        "char_limit": 7000,
+        "quality_cap": 1500,
+        "effective_cap": 1500,
+        "over": false,
+        "token_over": false,
+        "char_over": false
+      },
+      "mode": "i2va",
+      "stage": "i2va"
+    },
+    "errors": [],
+    "advisories": []
+  },
+  "sha256": "ae29f5834907789f915a4f75af692b884d7a4564bcc9483689996f9a9b231222"
+}

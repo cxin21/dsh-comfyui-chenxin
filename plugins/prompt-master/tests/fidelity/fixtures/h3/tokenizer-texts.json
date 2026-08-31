@@ -1,0 +1,18 @@
+{
+  "note": "10+ H3 tokenizer 文本样本（T11 标定 / T12 双跑用）。golden_* 为 T5 golden 的 result.text；edge_* 为边界样本。",
+  "texts": [
+    { "id": "golden_t2va_baker", "text": "integrated_multimodal_description: [Shot 1] A baker opens the shutters at sunrise. <d>[English] First batch of the morning.</d> [Shot 2] At 00:04.000, the camera cuts to Steam rises from sliced bread.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A" },
+    { "id": "golden_t2va_sword", "text": "integrated_multimodal_description: [Shot 1] Above a sea of clouds at dusk, two immortal peaks face each other; a white-robed sword immortal stands on one, a black-robed demon on the other; lightning flickers in the storm. <d>[English] Let the duel begin.</d> [Shot 2] At 00:03.000, the camera cuts to The two figures leap and clash mid-air, swords colliding. [Shot 3] At 00:06.000, the camera cuts to The sword splits into a thousand flying swords.\n\noverall_soundscape: howling gale, rolling thunder\n\nnon_diegetic_music: low epic strings" },
+    { "id": "golden_i2va_window", "text": "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\nintegrated_multimodal_description: [Shot 1] The character turns toward the window as daylight fills the room.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A" },
+    { "id": "golden_fl2va_cyclist", "text": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] A rain-soaked cyclist opens an umbrella beside a bicycle.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A" },
+    { "id": "golden_ref2va_neko", "text": "subject_definitions: <Subject 1> is Neko from <Picture 1>.\n\nsummary: [reference generation] Neko (<Picture 1>) appears in a 8-second, 1-shot video with synchronized audio.\n\nretention_analysis: <Subject 1> from <Picture 1> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n\ndetailed_description: [Shot 1] Neko stands on the rooftop at dusk, wind in her hair.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A" },
+    { "id": "golden_ref2va_mei", "text": "subject_definitions: <Subject 1> is Neko from <Picture 1>.\n<Subject 2> is Mei from <Picture 2>.\n<Subject 3> is Rooftop from <Picture 3>.\n\nsummary: [reference generation] Neko (<Picture 1>), Mei (<Picture 2>), Rooftop (<Picture 3>) appear in a 8-second, 1-shot video with synchronized audio.\n\nretention_analysis: <Subject 1> from <Picture 1> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n<Subject 2> from <Picture 2> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A" },
+    { "id": "golden_fl2va_multishot", "text": "N/A" },
+    { "id": "edge_zh", "text": "整合多模态描述: 一只猫坐在窗台上，看着夕阳。" },
+    { "id": "edge_ja", "text": "【ショット1】猫が屋上で風に髪をなびかせて立っている。" },
+    { "id": "edge_en_dialogue", "text": "[Shot 1] A cat stretches. <d>[English] Hello there!</d> [Shot 2] At 00:02.000, the camera cuts to The cat yawns." },
+    { "id": "edge_emoji_punct", "text": "masterpiece, best quality: a cat 🐱!!  (parentheses) — em dash…" },
+    { "id": "edge_spaces_empty", "text": "one  two   three" },
+    { "id": "edge_empty", "text": "" }
+  ]
+}

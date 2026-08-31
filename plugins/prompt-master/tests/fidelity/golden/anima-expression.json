@@ -1,0 +1,126 @@
+{
+  "name": "anima-expression",
+  "input": {
+    "tag": "expression"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "315547",
+        "canonical_name": "expressionless",
+        "prompt_form": "expressionless",
+        "category": "general",
+        "usage_count": 170013,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "expressionless",
+        "name_type": "canonical",
+        "score": 515.4375840206814,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:315547",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "315556",
+        "canonical_name": "expressions",
+        "prompt_form": "expressions",
+        "category": "general",
+        "usage_count": 8784,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "expressions",
+        "name_type": "canonical",
+        "score": 515.4375840206814,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:315556",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "315545",
+        "canonical_name": "expressionles",
+        "prompt_form": "expressionles",
+        "category": "general",
+        "usage_count": 0,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "expressionles",
+        "name_type": "canonical",
+        "score": 515.4375840206814,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:315545",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "315546",
+        "canonical_name": "expressionlesbres",
+        "prompt_form": "expressionlesbres",
+        "category": "general",
+        "usage_count": 0,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "expressionlesbres",
+        "name_type": "canonical",
+        "score": 515.4375840206814,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:315546",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "315548",
+        "canonical_name": "expressionless,",
+        "prompt_form": "expressionless,",
+        "category": "general",
+        "usage_count": 0,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "expressionless,",
+        "name_type": "canonical",
+        "score": 515.4375840206814,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:315548",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      }
+    ]
+  },
+  "sha256": "558029265cbfd58c9d06c141724e66017ac83d4aa22690f5de9d2da7826f76dd"
+}

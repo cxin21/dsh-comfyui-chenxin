@@ -1,0 +1,363 @@
+{
+  "name": "anima-brief-ex1-minimal",
+  "input": {
+    "variant": "base",
+    "subject": "smiling girl portrait",
+    "slots": {
+      "count_gender": [
+        "1girl",
+        "solo"
+      ],
+      "appearance": [
+        "long hair",
+        "blue eyes",
+        "smile",
+        "blush"
+      ],
+      "expression": [
+        "smile"
+      ],
+      "camera": [
+        "close-up",
+        "looking at viewer"
+      ]
+    }
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "author",
+    "result": {
+      "prompt": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, solo, long hair, blue eyes, smile, blush, smile, close-up, looking at viewer",
+        "negative": "worst quality, low quality, score_1, score_2, score_3",
+        "notes": [
+          "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:662719:match=canonical:canonical=long_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:150038:match=canonical:canonical=blue_eyes:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1104119:match=canonical:canonical=smile:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:151975:match=canonical:canonical=blush:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:214098:match=canonical:canonical=close-up:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:663666:match=canonical:canonical=looking_at_viewer:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
+        ],
+        "assumptions": [
+          "safety_seed_injected:default_for_non_explicit_request"
+        ],
+        "advisories": [
+          "[warning] duplicate_segment: duplicate segment in positive: smile",
+          "[warning] tag_count_out_of_range: 9 content tags (working range 12-50)"
+        ]
+      },
+      "metadata": {
+        "variant": "base",
+        "subject": "smiling girl portrait"
+      },
+      "phase_status": {
+        "policy": "PASS",
+        "grounding": "PASS",
+        "composition": "PASS",
+        "inspection": "ADVISORY"
+      },
+      "citations": [
+        {
+          "text": "1girl",
+          "record_id": "10768",
+          "canonical": "1girl",
+          "prompt_form": "1girl",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "solo",
+          "record_id": "1110119",
+          "canonical": "solo",
+          "prompt_form": "solo",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "long hair",
+          "record_id": "662719",
+          "canonical": "long_hair",
+          "prompt_form": "long hair",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "blue eyes",
+          "record_id": "150038",
+          "canonical": "blue_eyes",
+          "prompt_form": "blue eyes",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "smile",
+          "record_id": "1104119",
+          "canonical": "smile",
+          "prompt_form": "smile",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "blush",
+          "record_id": "151975",
+          "canonical": "blush",
+          "prompt_form": "blush",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "close-up",
+          "record_id": "214098",
+          "canonical": "close-up",
+          "prompt_form": "close-up",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "looking at viewer",
+          "record_id": "663666",
+          "canonical": "looking_at_viewer",
+          "prompt_form": "looking at viewer",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "seg1",
+          "channel": "positive",
+          "text": "masterpiece",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg2",
+          "channel": "positive",
+          "text": "best quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg3",
+          "channel": "positive",
+          "text": "score_7",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg4",
+          "channel": "positive",
+          "text": "safe",
+          "origin": "policy",
+          "priority": 99,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg5",
+          "channel": "positive",
+          "text": "1girl",
+          "origin": "grounded",
+          "priority": 200,
+          "slot": "count_gender",
+          "citation": {
+            "text": "1girl",
+            "record_id": "10768",
+            "canonical": "1girl",
+            "prompt_form": "1girl",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg6",
+          "channel": "positive",
+          "text": "solo",
+          "origin": "grounded",
+          "priority": 201,
+          "slot": "count_gender",
+          "citation": {
+            "text": "solo",
+            "record_id": "1110119",
+            "canonical": "solo",
+            "prompt_form": "solo",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg7",
+          "channel": "positive",
+          "text": "long hair",
+          "origin": "grounded",
+          "priority": 300,
+          "slot": "appearance",
+          "citation": {
+            "text": "long hair",
+            "record_id": "662719",
+            "canonical": "long_hair",
+            "prompt_form": "long hair",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg8",
+          "channel": "positive",
+          "text": "blue eyes",
+          "origin": "grounded",
+          "priority": 301,
+          "slot": "appearance",
+          "citation": {
+            "text": "blue eyes",
+            "record_id": "150038",
+            "canonical": "blue_eyes",
+            "prompt_form": "blue eyes",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg9",
+          "channel": "positive",
+          "text": "smile",
+          "origin": "grounded",
+          "priority": 302,
+          "slot": "appearance",
+          "citation": {
+            "text": "smile",
+            "record_id": "1104119",
+            "canonical": "smile",
+            "prompt_form": "smile",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg10",
+          "channel": "positive",
+          "text": "blush",
+          "origin": "grounded",
+          "priority": 303,
+          "slot": "appearance",
+          "citation": {
+            "text": "blush",
+            "record_id": "151975",
+            "canonical": "blush",
+            "prompt_form": "blush",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg11",
+          "channel": "positive",
+          "text": "smile",
+          "origin": "grounded",
+          "priority": 450,
+          "slot": "expression",
+          "citation": {
+            "text": "smile",
+            "record_id": "1104119",
+            "canonical": "smile",
+            "prompt_form": "smile",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg12",
+          "channel": "positive",
+          "text": "close-up",
+          "origin": "grounded",
+          "priority": 500,
+          "slot": "camera",
+          "citation": {
+            "text": "close-up",
+            "record_id": "214098",
+            "canonical": "close-up",
+            "prompt_form": "close-up",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg13",
+          "channel": "positive",
+          "text": "looking at viewer",
+          "origin": "grounded",
+          "priority": 501,
+          "slot": "camera",
+          "citation": {
+            "text": "looking at viewer",
+            "record_id": "663666",
+            "canonical": "looking_at_viewer",
+            "prompt_form": "looking at viewer",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg14",
+          "channel": "negative",
+          "text": "worst quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg15",
+          "channel": "negative",
+          "text": "low quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg16",
+          "channel": "negative",
+          "text": "score_1",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg17",
+          "channel": "negative",
+          "text": "score_2",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg18",
+          "channel": "negative",
+          "text": "score_3",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        }
+      ]
+    },
+    "errors": [],
+    "advisories": [
+      "[warning] duplicate_segment: duplicate segment in positive: smile",
+      "[warning] tag_count_out_of_range: 9 content tags (working range 12-50)"
+    ]
+  },
+  "sha256": "4490fbe7b267bfaac9367b8d8343749f1f25a24641b162dcbaac68704e3861bf"
+}

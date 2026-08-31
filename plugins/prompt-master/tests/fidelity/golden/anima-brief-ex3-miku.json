@@ -1,0 +1,660 @@
+{
+  "name": "anima-brief-ex3-miku",
+  "input": {
+    "variant": "aesthetic",
+    "subject": "Hatsune Miku stage performance",
+    "slots": {
+      "count_gender": [
+        "1girl",
+        "solo"
+      ],
+      "character": [
+        "hatsune miku",
+        "vocaloid"
+      ],
+      "appearance": [
+        "long hair",
+        "aqua hair",
+        "twin tails",
+        "blue eyes"
+      ],
+      "clothing": [
+        "sleeves past wrists",
+        "necktie",
+        "boots"
+      ],
+      "pose_action": [
+        "standing",
+        "microphone"
+      ],
+      "expression": [
+        "smile",
+        "open mouth"
+      ],
+      "camera": [
+        "from below",
+        "cowboy shot"
+      ],
+      "scene": [
+        "stage",
+        "spotlights",
+        "confetti"
+      ],
+      "detail_mood": [
+        "cinematic"
+      ]
+    },
+    "exclusions": [
+      "no text"
+    ]
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "author",
+    "result": {
+      "prompt": {
+        "positive": "masterpiece, best quality, safe, 1girl, solo, hatsune miku, vocaloid, long hair, aqua hair, twin tails, blue eyes, sleeves past wrists, necktie, boots, standing, microphone, smile, open mouth, from below, cowboy shot, stage, spotlights, confetti, cinematic",
+        "negative": "worst quality, low quality, no text",
+        "notes": [
+          "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:422721:match=canonical:canonical=hatsune_miku:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1276269:match=canonical:canonical=vocaloid:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:662719:match=canonical:canonical=long_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:85254:match=canonical:canonical=aqua_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1232565:match=canonical:canonical=twin_tails:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:150038:match=canonical:canonical=blue_eyes:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1102169:match=canonical:canonical=sleeves_past_wrists:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:820432:match=canonical:canonical=necktie:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:156838:match=canonical:canonical=boots:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1126150:match=canonical:canonical=standing:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:732087:match=canonical:canonical=microphone:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1104119:match=canonical:canonical=smile:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:881349:match=canonical:canonical=open_mouth:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:344150:match=canonical:canonical=from_below:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:226744:match=canonical:canonical=cowboy_shot:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1125782:match=canonical:canonical=stage:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:221726:match=canonical:canonical=confetti:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:209603:match=canonical:canonical=cinematic:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
+        ],
+        "assumptions": [
+          "safety_seed_injected:default_for_non_explicit_request",
+          "catalog_miss:spotlights"
+        ],
+        "advisories": [
+          "[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"
+        ]
+      },
+      "metadata": {
+        "variant": "aesthetic",
+        "subject": "Hatsune Miku stage performance"
+      },
+      "phase_status": {
+        "policy": "PASS",
+        "grounding": "PASS",
+        "composition": "PASS",
+        "inspection": "ADVISORY"
+      },
+      "citations": [
+        {
+          "text": "1girl",
+          "record_id": "10768",
+          "canonical": "1girl",
+          "prompt_form": "1girl",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "solo",
+          "record_id": "1110119",
+          "canonical": "solo",
+          "prompt_form": "solo",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "hatsune miku",
+          "record_id": "422721",
+          "canonical": "hatsune_miku",
+          "prompt_form": "hatsune miku",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "vocaloid",
+          "record_id": "1276269",
+          "canonical": "vocaloid",
+          "prompt_form": "vocaloid",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "long hair",
+          "record_id": "662719",
+          "canonical": "long_hair",
+          "prompt_form": "long hair",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "aqua hair",
+          "record_id": "85254",
+          "canonical": "aqua_hair",
+          "prompt_form": "aqua hair",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "twin tails",
+          "record_id": "1232565",
+          "canonical": "twin_tails",
+          "prompt_form": "twin tails",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "blue eyes",
+          "record_id": "150038",
+          "canonical": "blue_eyes",
+          "prompt_form": "blue eyes",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "sleeves past wrists",
+          "record_id": "1102169",
+          "canonical": "sleeves_past_wrists",
+          "prompt_form": "sleeves past wrists",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "necktie",
+          "record_id": "820432",
+          "canonical": "necktie",
+          "prompt_form": "necktie",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "boots",
+          "record_id": "156838",
+          "canonical": "boots",
+          "prompt_form": "boots",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "standing",
+          "record_id": "1126150",
+          "canonical": "standing",
+          "prompt_form": "standing",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "microphone",
+          "record_id": "732087",
+          "canonical": "microphone",
+          "prompt_form": "microphone",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "smile",
+          "record_id": "1104119",
+          "canonical": "smile",
+          "prompt_form": "smile",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "open mouth",
+          "record_id": "881349",
+          "canonical": "open_mouth",
+          "prompt_form": "open mouth",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "from below",
+          "record_id": "344150",
+          "canonical": "from_below",
+          "prompt_form": "from below",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "cowboy shot",
+          "record_id": "226744",
+          "canonical": "cowboy_shot",
+          "prompt_form": "cowboy shot",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "stage",
+          "record_id": "1125782",
+          "canonical": "stage",
+          "prompt_form": "stage",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "confetti",
+          "record_id": "221726",
+          "canonical": "confetti",
+          "prompt_form": "confetti",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "cinematic",
+          "record_id": "209603",
+          "canonical": "cinematic",
+          "prompt_form": "cinematic",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "seg1",
+          "channel": "positive",
+          "text": "masterpiece",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg2",
+          "channel": "positive",
+          "text": "best quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg3",
+          "channel": "positive",
+          "text": "safe",
+          "origin": "policy",
+          "priority": 99,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg4",
+          "channel": "positive",
+          "text": "1girl",
+          "origin": "grounded",
+          "priority": 200,
+          "slot": "count_gender",
+          "citation": {
+            "text": "1girl",
+            "record_id": "10768",
+            "canonical": "1girl",
+            "prompt_form": "1girl",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg5",
+          "channel": "positive",
+          "text": "solo",
+          "origin": "grounded",
+          "priority": 201,
+          "slot": "count_gender",
+          "citation": {
+            "text": "solo",
+            "record_id": "1110119",
+            "canonical": "solo",
+            "prompt_form": "solo",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg6",
+          "channel": "positive",
+          "text": "hatsune miku",
+          "origin": "grounded",
+          "priority": 250,
+          "slot": "character",
+          "citation": {
+            "text": "hatsune miku",
+            "record_id": "422721",
+            "canonical": "hatsune_miku",
+            "prompt_form": "hatsune miku",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg7",
+          "channel": "positive",
+          "text": "vocaloid",
+          "origin": "grounded",
+          "priority": 251,
+          "slot": "character",
+          "citation": {
+            "text": "vocaloid",
+            "record_id": "1276269",
+            "canonical": "vocaloid",
+            "prompt_form": "vocaloid",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg8",
+          "channel": "positive",
+          "text": "long hair",
+          "origin": "grounded",
+          "priority": 300,
+          "slot": "appearance",
+          "citation": {
+            "text": "long hair",
+            "record_id": "662719",
+            "canonical": "long_hair",
+            "prompt_form": "long hair",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg9",
+          "channel": "positive",
+          "text": "aqua hair",
+          "origin": "grounded",
+          "priority": 301,
+          "slot": "appearance",
+          "citation": {
+            "text": "aqua hair",
+            "record_id": "85254",
+            "canonical": "aqua_hair",
+            "prompt_form": "aqua hair",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg10",
+          "channel": "positive",
+          "text": "twin tails",
+          "origin": "grounded",
+          "priority": 302,
+          "slot": "appearance",
+          "citation": {
+            "text": "twin tails",
+            "record_id": "1232565",
+            "canonical": "twin_tails",
+            "prompt_form": "twin tails",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg11",
+          "channel": "positive",
+          "text": "blue eyes",
+          "origin": "grounded",
+          "priority": 303,
+          "slot": "appearance",
+          "citation": {
+            "text": "blue eyes",
+            "record_id": "150038",
+            "canonical": "blue_eyes",
+            "prompt_form": "blue eyes",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg12",
+          "channel": "positive",
+          "text": "sleeves past wrists",
+          "origin": "grounded",
+          "priority": 350,
+          "slot": "clothing",
+          "citation": {
+            "text": "sleeves past wrists",
+            "record_id": "1102169",
+            "canonical": "sleeves_past_wrists",
+            "prompt_form": "sleeves past wrists",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg13",
+          "channel": "positive",
+          "text": "necktie",
+          "origin": "grounded",
+          "priority": 351,
+          "slot": "clothing",
+          "citation": {
+            "text": "necktie",
+            "record_id": "820432",
+            "canonical": "necktie",
+            "prompt_form": "necktie",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg14",
+          "channel": "positive",
+          "text": "boots",
+          "origin": "grounded",
+          "priority": 352,
+          "slot": "clothing",
+          "citation": {
+            "text": "boots",
+            "record_id": "156838",
+            "canonical": "boots",
+            "prompt_form": "boots",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg15",
+          "channel": "positive",
+          "text": "standing",
+          "origin": "grounded",
+          "priority": 400,
+          "slot": "pose_action",
+          "citation": {
+            "text": "standing",
+            "record_id": "1126150",
+            "canonical": "standing",
+            "prompt_form": "standing",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg16",
+          "channel": "positive",
+          "text": "microphone",
+          "origin": "grounded",
+          "priority": 401,
+          "slot": "pose_action",
+          "citation": {
+            "text": "microphone",
+            "record_id": "732087",
+            "canonical": "microphone",
+            "prompt_form": "microphone",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg17",
+          "channel": "positive",
+          "text": "smile",
+          "origin": "grounded",
+          "priority": 450,
+          "slot": "expression",
+          "citation": {
+            "text": "smile",
+            "record_id": "1104119",
+            "canonical": "smile",
+            "prompt_form": "smile",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg18",
+          "channel": "positive",
+          "text": "open mouth",
+          "origin": "grounded",
+          "priority": 451,
+          "slot": "expression",
+          "citation": {
+            "text": "open mouth",
+            "record_id": "881349",
+            "canonical": "open_mouth",
+            "prompt_form": "open mouth",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg19",
+          "channel": "positive",
+          "text": "from below",
+          "origin": "grounded",
+          "priority": 500,
+          "slot": "camera",
+          "citation": {
+            "text": "from below",
+            "record_id": "344150",
+            "canonical": "from_below",
+            "prompt_form": "from below",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg20",
+          "channel": "positive",
+          "text": "cowboy shot",
+          "origin": "grounded",
+          "priority": 501,
+          "slot": "camera",
+          "citation": {
+            "text": "cowboy shot",
+            "record_id": "226744",
+            "canonical": "cowboy_shot",
+            "prompt_form": "cowboy shot",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg21",
+          "channel": "positive",
+          "text": "stage",
+          "origin": "grounded",
+          "priority": 550,
+          "slot": "scene",
+          "citation": {
+            "text": "stage",
+            "record_id": "1125782",
+            "canonical": "stage",
+            "prompt_form": "stage",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg22",
+          "channel": "positive",
+          "text": "spotlights",
+          "origin": "user-fuzzy",
+          "priority": 551,
+          "slot": "scene",
+          "citation": {
+            "text": "spotlights",
+            "record_id": null,
+            "canonical": null,
+            "prompt_form": null,
+            "source": null,
+            "match_type": "miss"
+          }
+        },
+        {
+          "segment_id": "seg23",
+          "channel": "positive",
+          "text": "confetti",
+          "origin": "grounded",
+          "priority": 552,
+          "slot": "scene",
+          "citation": {
+            "text": "confetti",
+            "record_id": "221726",
+            "canonical": "confetti",
+            "prompt_form": "confetti",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg24",
+          "channel": "positive",
+          "text": "cinematic",
+          "origin": "grounded",
+          "priority": 600,
+          "slot": "detail_mood",
+          "citation": {
+            "text": "cinematic",
+            "record_id": "209603",
+            "canonical": "cinematic",
+            "prompt_form": "cinematic",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg25",
+          "channel": "negative",
+          "text": "worst quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg26",
+          "channel": "negative",
+          "text": "low quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg27",
+          "channel": "negative",
+          "text": "no text",
+          "origin": "exclusion",
+          "priority": 900,
+          "slot": null,
+          "citation": null
+        }
+      ]
+    },
+    "errors": [],
+    "advisories": [
+      "[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"
+    ]
+  },
+  "sha256": "f85f0e21613e7947ecc2093be32ac2e396325547bd4fa3ffec7886850d1a507c"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "h3-tokenizer-golden_fl2va_multishot",
+  "input": {
+    "text": "N/A"
+  },
+  "pythonOutput": {
+    "raw": 2,
+    "framed": 7,
+    "ids": [
+      45,
+      10360
+    ]
+  },
+  "sha256": "0b3c2ee6a8a4831730592f7cae76adde8ed249ad525e80a14a033b8096b08315"
+}

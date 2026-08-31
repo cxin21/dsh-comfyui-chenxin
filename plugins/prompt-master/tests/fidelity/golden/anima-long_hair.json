@@ -1,0 +1,36 @@
+{
+  "name": "anima-long_hair",
+  "input": {
+    "tag": "long hair"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "662719",
+        "canonical_name": "long_hair",
+        "prompt_form": "long hair",
+        "category": "hair",
+        "usage_count": 6349728,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "canonical",
+        "matched_name": "long_hair",
+        "name_type": "canonical",
+        "score": 1000,
+        "aliases": [
+          "/lh"
+        ],
+        "provenance": [
+          "raw_record_id:662719",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": false
+      }
+    ]
+  },
+  "sha256": "e7b1e266dcbb55fa11afc4d745fd6e07dc1ee11d29fea29f558c5955393752cc"
+}

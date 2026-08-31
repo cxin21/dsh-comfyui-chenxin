@@ -1,0 +1,10 @@
+{
+  "duration_seconds": 8,
+  "shots": [{"what": "Neko waves at Mei on the rooftop.", "who": "Mei"}],
+  "references": [
+    {"kind": "picture", "who": "Neko",    "image": "C:/refs/n.png", "width": 1024, "height": 1024},
+    {"kind": "picture", "who": "Mei",     "image": "C:/refs/m.png", "width": 1024, "height": 1024},
+    {"kind": "picture", "who": "Rooftop", "image": "C:/refs/r.png", "width": 1024, "height": 1024}
+  ],
+  "videos": [{"kind": "video", "label": "SourceA", "path": "C:/refs/source.mp4", "duration_seconds": 5}]
+}

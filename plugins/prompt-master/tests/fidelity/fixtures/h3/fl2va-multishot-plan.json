@@ -1,0 +1,17 @@
+{
+  "total_duration": 12.0,
+  "shot_count": 4,
+  "edit_rhythm": "establishing to release",
+  "continuity_strategy": "single subject, fixed rooftop",
+  "shots": [
+    {"shot": 1, "start": 0.0, "end": 3.0,  "content": "Neko lands on the rooftop at dusk.",
+     "camera": "static shot", "transition": "opening", "sound_focus": "city hum"},
+    {"shot": 2, "start": 3.0, "end": 6.0,  "content": "Neko walks.",
+     "camera": "truck right", "transition": "cut", "sound_focus": "footsteps"},
+    {"shot": 3, "start": 6.0, "end": 9.0,  "content": "Neko reaches.",
+     "camera": "push in", "transition": "cut", "sound_focus": "wind"},
+    {"shot": 4, "start": 9.0, "end": 12.0, "content": "Neko looks.",
+     "camera": "tilt up", "transition": "cut", "sound_focus": "city hum"}
+  ],
+  "continuity_ledger": {"identity": "Neko", "wardrobe_and_props": "black hoodie"}
+}

@@ -1,0 +1,8 @@
+{
+  "duration_seconds": 8,
+  "shots": [{"what": "A rain-soaked cyclist opens an umbrella beside a bicycle."}],
+  "references": [
+    {"kind": "picture", "image": "C:/refs/first.png", "width": 1024, "height": 1024},
+    {"kind": "picture", "image": "C:/refs/last.png",  "width": 1024, "height": 1024}
+  ]
+}

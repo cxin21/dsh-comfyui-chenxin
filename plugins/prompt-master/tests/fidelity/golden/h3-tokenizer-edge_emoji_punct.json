@@ -1,0 +1,34 @@
+{
+  "name": "h3-tokenizer-edge_emoji_punct",
+  "input": {
+    "text": "masterpiece, best quality: a cat 🐱!!  (parentheses) — em dash…"
+  },
+  "pythonOutput": {
+    "raw": 21,
+    "framed": 26,
+    "ids": [
+      13629,
+      22362,
+      11,
+      1850,
+      4271,
+      25,
+      264,
+      8251,
+      11162,
+      238,
+      109,
+      2928,
+      220,
+      320,
+      41064,
+      38322,
+      8,
+      1959,
+      976,
+      23911,
+      1940
+    ]
+  },
+  "sha256": "d85377508e27a03a3565bf2cd8c5c6937d2864491384e71f0fb8fafc7a8d6a38"
+}

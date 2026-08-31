@@ -1,0 +1,58 @@
+# Prompt Master MCP Server — YAML 完整配置
+# 此文件 ~/.prompt-master-mcp/config.yaml，即可覆盖所有默认值
+
+# 数据库路径
+db_path: ~/.prompt-master-mcp/data.db
+
+# 传输模式（stdio | sse）
+transport: stdio
+port: 3100
+
+# 默认供应商和模型（provider id 需在下方 providers 列表中）
+defaults:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.7
+
+# ─── 供应商列表 ───
+# 每个供应商：id / label / baseUrl / defaultModel / envKey / models / apiKey
+# 24 行完整定义一个供应商
+providers:
+  - id: deepseek
+    label: DeepSeek
+    baseUrl: https://api.deepseek.com
+    defaultModel: deepseek-chat
+    envKey: DEEPSEEK_API_KEY
+    models:
+      deepseek-chat: { label: DeepSeek V3, context: 65536 }
+      deepseek-reasoner: { label: DeepSeek R1, context: 65536 }
+    apiKey: "sk-1a05a502628c4338876db1a99a60eb76"
+
+  - id: openai
+    label: OpenAI
+    baseUrl: https://api.openai.com/v1
+    defaultModel: gpt-4o-mini
+    envKey: OPENAI_API_KEY
+    models:
+      gpt-4o: { label: GPT-4o, context: 128000 }
+      gpt-4o-mini: { label: GPT-4o-mini, context: 128000 }
+    # apiKey "未写到这" 则从 DEEPSEEK_API_KEY 获取
+    # 要么填在下面
+
+  - id: siliconflow
+    label: 硅基流动
+    baseUrl: https://api.siliconflow.cn/v1
+    defaultModel: deepseek-ai/DeepSeek-V3
+    envKey: SILICONFLOW_API_KEY
+    models:
+      deepseek-ai/DeepSeek-V3: { label: DeepSeek V3, context: 65536 }
+      deepseek-ai/DeepSeek-R1: { label: DeepSeek R1, context: 65536 }
+
+# 各个供应商的 API Key（与 providers.apiKey 等价，但集中管理更方便）
+# api_keys:
+#   deepseek: sk-xxx
+#   openai: sk-xxx
+
+logging:
+  level: info
+  history: true

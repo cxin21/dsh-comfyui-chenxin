@@ -1,0 +1,324 @@
+{
+  "name": "anima-brief-ex4-advisories",
+  "input": {
+    "variant": "base",
+    "subject": "advisory trigger demo",
+    "slots": {
+      "count_gender": [
+        "1girl"
+      ],
+      "appearance": [
+        "curvy"
+      ],
+      "clothing": [
+        "leotard"
+      ],
+      "camera": [
+        "from front",
+        "from behind"
+      ],
+      "scene": [
+        "moonlight",
+        "backlighting"
+      ]
+    }
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "author",
+    "result": {
+      "prompt": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, curvy, leotard, from front, from behind, moonlight, backlighting",
+        "negative": "worst quality, low quality, score_1, score_2, score_3",
+        "notes": [
+          "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:235619:match=canonical:canonical=curvy:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:645793:match=canonical:canonical=leotard:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:344160:match=canonical:canonical=from_front:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:344136:match=canonical:canonical=from_behind:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:775930:match=canonical:canonical=moonlight:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:118874:match=canonical:canonical=backlighting:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
+        ],
+        "assumptions": [
+          "safety_seed_injected:default_for_non_explicit_request"
+        ],
+        "advisories": [
+          "[warning] lighting_term_banned: lora-internal lighting term(s) present: backlighting, moonlight",
+          "[conflict] mutual_exclusion: mutually exclusive tags: from front + from behind",
+          "[warning] tag_count_out_of_range: 7 content tags (working range 12-50)"
+        ]
+      },
+      "metadata": {
+        "variant": "base",
+        "subject": "advisory trigger demo"
+      },
+      "phase_status": {
+        "policy": "PASS",
+        "grounding": "PASS",
+        "composition": "PASS",
+        "inspection": "ADVISORY"
+      },
+      "citations": [
+        {
+          "text": "1girl",
+          "record_id": "10768",
+          "canonical": "1girl",
+          "prompt_form": "1girl",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "curvy",
+          "record_id": "235619",
+          "canonical": "curvy",
+          "prompt_form": "curvy",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "leotard",
+          "record_id": "645793",
+          "canonical": "leotard",
+          "prompt_form": "leotard",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "from front",
+          "record_id": "344160",
+          "canonical": "from_front",
+          "prompt_form": "from front",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "from behind",
+          "record_id": "344136",
+          "canonical": "from_behind",
+          "prompt_form": "from behind",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "moonlight",
+          "record_id": "775930",
+          "canonical": "moonlight",
+          "prompt_form": "moonlight",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "backlighting",
+          "record_id": "118874",
+          "canonical": "backlighting",
+          "prompt_form": "backlighting",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "seg1",
+          "channel": "positive",
+          "text": "masterpiece",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg2",
+          "channel": "positive",
+          "text": "best quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg3",
+          "channel": "positive",
+          "text": "score_7",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg4",
+          "channel": "positive",
+          "text": "safe",
+          "origin": "policy",
+          "priority": 99,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg5",
+          "channel": "positive",
+          "text": "1girl",
+          "origin": "grounded",
+          "priority": 200,
+          "slot": "count_gender",
+          "citation": {
+            "text": "1girl",
+            "record_id": "10768",
+            "canonical": "1girl",
+            "prompt_form": "1girl",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg6",
+          "channel": "positive",
+          "text": "curvy",
+          "origin": "grounded",
+          "priority": 300,
+          "slot": "appearance",
+          "citation": {
+            "text": "curvy",
+            "record_id": "235619",
+            "canonical": "curvy",
+            "prompt_form": "curvy",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg7",
+          "channel": "positive",
+          "text": "leotard",
+          "origin": "grounded",
+          "priority": 350,
+          "slot": "clothing",
+          "citation": {
+            "text": "leotard",
+            "record_id": "645793",
+            "canonical": "leotard",
+            "prompt_form": "leotard",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg8",
+          "channel": "positive",
+          "text": "from front",
+          "origin": "grounded",
+          "priority": 500,
+          "slot": "camera",
+          "citation": {
+            "text": "from front",
+            "record_id": "344160",
+            "canonical": "from_front",
+            "prompt_form": "from front",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg9",
+          "channel": "positive",
+          "text": "from behind",
+          "origin": "grounded",
+          "priority": 501,
+          "slot": "camera",
+          "citation": {
+            "text": "from behind",
+            "record_id": "344136",
+            "canonical": "from_behind",
+            "prompt_form": "from behind",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg10",
+          "channel": "positive",
+          "text": "moonlight",
+          "origin": "grounded",
+          "priority": 550,
+          "slot": "scene",
+          "citation": {
+            "text": "moonlight",
+            "record_id": "775930",
+            "canonical": "moonlight",
+            "prompt_form": "moonlight",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg11",
+          "channel": "positive",
+          "text": "backlighting",
+          "origin": "grounded",
+          "priority": 551,
+          "slot": "scene",
+          "citation": {
+            "text": "backlighting",
+            "record_id": "118874",
+            "canonical": "backlighting",
+            "prompt_form": "backlighting",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg12",
+          "channel": "negative",
+          "text": "worst quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg13",
+          "channel": "negative",
+          "text": "low quality",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg14",
+          "channel": "negative",
+          "text": "score_1",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg15",
+          "channel": "negative",
+          "text": "score_2",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg16",
+          "channel": "negative",
+          "text": "score_3",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        }
+      ]
+    },
+    "errors": [],
+    "advisories": [
+      "[warning] lighting_term_banned: lora-internal lighting term(s) present: backlighting, moonlight",
+      "[conflict] mutual_exclusion: mutually exclusive tags: from front + from behind",
+      "[warning] tag_count_out_of_range: 7 content tags (working range 12-50)"
+    ]
+  },
+  "sha256": "111f498551a39eaec9ab467455871aaf317128a03d79ff5eeca71b295313b2f4"
+}

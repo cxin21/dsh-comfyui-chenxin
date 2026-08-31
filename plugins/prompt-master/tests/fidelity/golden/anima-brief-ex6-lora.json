@@ -1,0 +1,139 @@
+{
+  "name": "anima-brief-ex6-lora",
+  "input": {
+    "variant": "base",
+    "subject": "lora-driven portrait",
+    "quality_prefix": false,
+    "slots": {
+      "count_gender": [
+        "1girl",
+        "solo"
+      ],
+      "appearance": [
+        "long hair"
+      ]
+    }
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "author",
+    "result": {
+      "prompt": {
+        "positive": "safe, 1girl, solo, long hair",
+        "negative": "",
+        "notes": [
+          "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "citation:662719:match=canonical:canonical=long_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
+        ],
+        "assumptions": [
+          "safety_seed_injected:default_for_non_explicit_request"
+        ],
+        "advisories": [
+          "[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"
+        ]
+      },
+      "metadata": {
+        "variant": "base",
+        "subject": "lora-driven portrait"
+      },
+      "phase_status": {
+        "policy": "PASS",
+        "grounding": "PASS",
+        "composition": "PASS",
+        "inspection": "ADVISORY"
+      },
+      "citations": [
+        {
+          "text": "1girl",
+          "record_id": "10768",
+          "canonical": "1girl",
+          "prompt_form": "1girl",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "solo",
+          "record_id": "1110119",
+          "canonical": "solo",
+          "prompt_form": "solo",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        },
+        {
+          "text": "long hair",
+          "record_id": "662719",
+          "canonical": "long_hair",
+          "prompt_form": "long hair",
+          "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "match_type": "canonical"
+        }
+      ],
+      "segments": [
+        {
+          "segment_id": "seg1",
+          "channel": "positive",
+          "text": "safe",
+          "origin": "policy",
+          "priority": 99,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg2",
+          "channel": "positive",
+          "text": "1girl",
+          "origin": "grounded",
+          "priority": 200,
+          "slot": "count_gender",
+          "citation": {
+            "text": "1girl",
+            "record_id": "10768",
+            "canonical": "1girl",
+            "prompt_form": "1girl",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg3",
+          "channel": "positive",
+          "text": "solo",
+          "origin": "grounded",
+          "priority": 201,
+          "slot": "count_gender",
+          "citation": {
+            "text": "solo",
+            "record_id": "1110119",
+            "canonical": "solo",
+            "prompt_form": "solo",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        },
+        {
+          "segment_id": "seg4",
+          "channel": "positive",
+          "text": "long hair",
+          "origin": "grounded",
+          "priority": 300,
+          "slot": "appearance",
+          "citation": {
+            "text": "long hair",
+            "record_id": "662719",
+            "canonical": "long_hair",
+            "prompt_form": "long hair",
+            "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+            "match_type": "canonical"
+          }
+        }
+      ]
+    },
+    "errors": [],
+    "advisories": [
+      "[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"
+    ]
+  },
+  "sha256": "7bb66e29fe1ca3adb336c6599a0cf0b2de5c353b854b9c17980a36edda7a4eb3"
+}

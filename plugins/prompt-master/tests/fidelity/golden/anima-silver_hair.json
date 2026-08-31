@@ -1,0 +1,126 @@
+{
+  "name": "anima-silver_hair",
+  "input": {
+    "tag": "silver hair"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "1092380",
+        "canonical_name": "silver_hairband",
+        "prompt_form": "silver hairband",
+        "category": "general",
+        "usage_count": 771,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "silver_hairband",
+        "name_type": "canonical",
+        "score": 517.9166310309748,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1092380",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1092824",
+        "canonical_name": "silvery_hair",
+        "prompt_form": "silvery hair",
+        "category": "hair",
+        "usage_count": 2,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "silvery_hair",
+        "name_type": "canonical",
+        "score": 517.9166310309748,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1092824",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "3354",
+        "canonical_name": "+silver_hair",
+        "prompt_form": "+silver hair",
+        "category": "hair",
+        "usage_count": 0,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "+silver_hair",
+        "name_type": "canonical",
+        "score": 517.9166310309748,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:3354",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1092373",
+        "canonical_name": "silver_hair,",
+        "prompt_form": "silver hair,",
+        "category": "general",
+        "usage_count": 0,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "silver_hair,",
+        "name_type": "canonical",
+        "score": 517.9166310309748,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1092373",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      },
+      {
+        "record_id": "1092376",
+        "canonical_name": "silver_hair1girl",
+        "prompt_form": "silver hair1girl",
+        "category": "general",
+        "usage_count": 0,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "fuzzy",
+        "matched_name": "silver_hair1girl",
+        "name_type": "canonical",
+        "score": 517.9166310309748,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1092376",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": true
+      }
+    ]
+  },
+  "sha256": "9dab992e798dd95e8176df6a5866dac71e84ebad4baf85308c937e8abbd7afb1"
+}

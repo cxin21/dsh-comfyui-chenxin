@@ -1,0 +1,36 @@
+{
+  "name": "anima-clouds",
+  "input": {
+    "tag": "clouds"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "214603",
+        "canonical_name": "cloud",
+        "prompt_form": "cloud",
+        "category": "general",
+        "usage_count": 385328,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "alias",
+        "matched_name": "clouds",
+        "name_type": "alias",
+        "score": 850,
+        "aliases": [
+          "clouds"
+        ],
+        "provenance": [
+          "raw_record_id:214603",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": false
+      }
+    ]
+  },
+  "sha256": "47a9d555f86f0a3174bf3120d37ef9cb6c5653f4e8267b1a8d66541f8a2174dc"
+}

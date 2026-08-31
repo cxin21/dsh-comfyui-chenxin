@@ -1,0 +1,75 @@
+{
+  "name": "t2va-sword-peaks",
+  "input": {
+    "duration_seconds": 15,
+    "shots": [
+      {
+        "what": "Above a sea of clouds at dusk, two immortal peaks face each other; a white-robed sword immortal stands on one, a black-robed demon on the other; lightning flickers in the storm.",
+        "ambient": "howling gale, rolling thunder, whistling sword energies",
+        "music": "low epic strings, deep taiko drums and sparse guzheng plucks"
+      },
+      {
+        "what": "the two figures leap and clash mid-air, swords colliding; a ring-shaped shockwave erupts, the left peak cracks, debris flies.",
+        "ambient": "deafening clang of colliding swords, thunderous shockwave, tumbling boulders",
+        "music": "fierce taiko drumming and sharp erhu strokes"
+      },
+      {
+        "what": "the immortal forms hand seals; his sword splits into a thousand flying swords forming a colossal golden blade above the cloud sea.",
+        "ambient": "rising sword qi hum, crackling lightning",
+        "music": "swelling brass and rapid guzheng arpeggios"
+      },
+      {
+        "what": "the colossal sword descends like a falling star and pierces the demon's black vortex; the barrier shatters in a spiderweb of cracks.",
+        "ambient": "ear-splitting explosion, shattering stone",
+        "music": "thundering full-orchestra climax with war drums and a crashing gong"
+      },
+      {
+        "what": "the explosion fades, the right peak splits and crumbles into the abyss; the immortal lands alone on the remaining cliff.",
+        "ambient": "fading rumble, distant avalanche, calm wind",
+        "music": "sparse guzheng and soft strings, solemn resolution"
+      }
+    ]
+  },
+  "pythonOutput": {
+    "ok": true,
+    "command": "author",
+    "stage": "t2va",
+    "result": {
+      "text": "integrated_multimodal_description: [Shot 1] Above a sea of clouds at dusk, two immortal peaks face each other; a white-robed sword immortal stands on one, a black-robed demon on the other; lightning flickers in the storm. [Shot 2] At 00:03.000, the camera cuts to the two figures leap and clash mid-air, swords colliding; a ring-shaped shockwave erupts, the left peak cracks, debris flies. [Shot 3] At 00:06.000, the camera cuts to the immortal forms hand seals; his sword splits into a thousand flying swords forming a colossal golden blade above the cloud sea. [Shot 4] At 00:09.000, the camera cuts to the colossal sword descends like a falling star and pierces the demon's black vortex; the barrier shatters in a spiderweb of cracks. [Shot 5] At 00:12.000, the camera cuts to the explosion fades, the right peak splits and crumbles into the abyss; the immortal lands alone on the remaining cliff.\n\noverall_soundscape: howling gale, rolling thunder, whistling sword energies; deafening clang of colliding swords, thunderous shockwave, tumbling boulders; rising sword qi hum, crackling lightning; ear-splitting explosion, shattering stone; fading rumble, distant avalanche, calm wind\n\nnon_diegetic_music: low epic strings, deep taiko drums and sparse guzheng plucks; fierce taiko drumming and sharp erhu strokes; swelling brass and rapid guzheng arpeggios; thundering full-orchestra climax with war drums and a crashing gong; sparse guzheng and soft strings, solemn resolution",
+      "text_zh": "整合多模态描述: [镜头 1] Above a sea of clouds at dusk, two immortal peaks face each other; a white-robed sword immortal stands on one, a black-robed demon on the other; lightning flickers in the storm. [镜头 2] 在 00:03.000， the camera cuts to the two figures leap and clash mid-air, swords colliding; a ring-shaped shockwave erupts, the left peak cracks, debris flies. [镜头 3] 在 00:06.000， the camera cuts to the immortal forms hand seals; his sword splits into a thousand flying swords forming a colossal golden blade above the cloud sea. [镜头 4] 在 00:09.000， the camera cuts to the colossal sword descends like a falling star and pierces the demon's black vortex; the barrier shatters in a spiderweb of cracks. [镜头 5] 在 00:12.000， the camera cuts to the explosion fades, the right peak splits and crumbles into the abyss; the immortal lands alone on the remaining cliff.\n\n整体声音景观: howling gale, rolling thunder, whistling sword energies; deafening clang of colliding swords, thunderous shockwave, tumbling boulders; rising sword qi hum, crackling lightning; ear-splitting explosion, shattering stone; fading rumble, distant avalanche, calm wind\n\n非叙事音乐: low epic strings, deep taiko drums and sparse guzheng plucks; fierce taiko drumming and sharp erhu strokes; swelling brass and rapid guzheng arpeggios; thundering full-orchestra climax with war drums and a crashing gong; sparse guzheng and soft strings, solemn resolution",
+      "text_zh_meta": {
+        "quality": "skeleton",
+        "structural_tokens_translated": true,
+        "prose_translated": false,
+        "advisory": "Chinese skeleton only: structural tokens are translated, prose is verbatim English. The calling model is responsible for any literary Chinese translation on top of this skeleton."
+      },
+      "findings": [],
+      "assumptions": [],
+      "budget": {
+        "verified": true,
+        "snapshot_id": "h3-qwen3-vl",
+        "model_id": "MiniMaxAI/MiniMax-H3:text_encoder",
+        "model_hard_limit": 262144,
+        "reference_count": 0,
+        "video_count": 0,
+        "audio_count": 0,
+        "visual_tokens": 0,
+        "chat_template_tokens": 5,
+        "available_tokens": 261883,
+        "text_tokens": 385,
+        "char_count": 1478,
+        "char_limit": 7000,
+        "quality_cap": 1200,
+        "effective_cap": 1200,
+        "over": false,
+        "token_over": false,
+        "char_over": false
+      },
+      "mode": "t2va",
+      "stage": "t2va"
+    },
+    "errors": [],
+    "advisories": []
+  },
+  "sha256": "5a95816aff211117e1d374de7b6baed72456476f5e45a48bebd74b4bb1caf273"
+}

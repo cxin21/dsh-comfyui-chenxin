@@ -1,0 +1,4 @@
+{
+  "duration_seconds": 12,
+  "shots": [{"what": "ignored when --plan is used"}]
+}

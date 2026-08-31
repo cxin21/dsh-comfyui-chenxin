@@ -1,0 +1,7 @@
+{
+  "duration_seconds": 8,
+  "shots": [{"what": "Neko stands on the rooftop at dusk, wind in her hair.", "who": "Neko"}],
+  "references": [
+    {"kind": "picture", "who": "Neko", "image": "C:/refs/neko.png", "width": 1024, "height": 1024}
+  ]
+}

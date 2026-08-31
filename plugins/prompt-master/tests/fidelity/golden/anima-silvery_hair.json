@@ -1,0 +1,34 @@
+{
+  "name": "anima-silvery_hair",
+  "input": {
+    "tag": "silvery hair"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "1092824",
+        "canonical_name": "silvery_hair",
+        "prompt_form": "silvery hair",
+        "category": "hair",
+        "usage_count": 2,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "canonical",
+        "matched_name": "silvery_hair",
+        "name_type": "canonical",
+        "score": 1000,
+        "aliases": [],
+        "provenance": [
+          "raw_record_id:1092824",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": false
+      }
+    ]
+  },
+  "sha256": "23e9d03d28f7b3943c1490f49d097820b806bbc2f68456a8169d6a2d2fc803a9"
+}

@@ -1,0 +1,36 @@
+{
+  "name": "anima-wave",
+  "input": {
+    "tag": "wave"
+  },
+  "pythonOutput": {
+    "hits": [
+      {
+        "record_id": "1287447",
+        "canonical_name": "waving",
+        "prompt_form": "waving",
+        "category": "action",
+        "usage_count": 35337,
+        "source": "gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "source_version": "4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+        "deprecated": false,
+        "match_type": "alias",
+        "matched_name": "wave",
+        "name_type": "alias",
+        "score": 850,
+        "aliases": [
+          "wave"
+        ],
+        "provenance": [
+          "raw_record_id:1287447",
+          "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "source_name:gelbooru_canonical",
+          "version:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
+          "checksum:4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
+        ],
+        "candidate": false
+      }
+    ]
+  },
+  "sha256": "b0e96586f24bc084cd51e961598bfb4b839c92c520709d58ca9a60c5b8ccc427"
+}

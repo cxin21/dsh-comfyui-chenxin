@@ -24,7 +24,7 @@ import {
   buildOutputConstraints,
 } from './profiles/reverse/router.js';
 import { isReverseCatalogExpandProfile, resolveExpandFromReverseMirror } from './profiles/expand-mirror.js';
-import { isMinimaxScenarioProfile, resolveMinimaxScenarioExpand } from './minimax/index.js';
+import { isMinimaxScenarioProfile, resolveMinimaxScenarioExpand, isH3FullReferenceProfile, resolveH3FullReferenceExpand } from './minimax/index.js';
 
 // 给 router 函数起别名避免和上面 expand 解析中的 buildSystemPrompt 冲突
 const buildSystemPrompt = routerBuildSystemPrompt;
@@ -50,6 +50,18 @@ export function resolveExpand(profile: PEProfile, params: ExpandParams): ExpandR
       tokenLimits,
       mediaPaths: (params && params.mediaPaths) || [],
       minimaxForm: (params && params.minimaxForm) || {},
+    });
+    if (resolved) return resolved;
+  }
+
+  // 1b) H3 Full-Reference 独立入口（X7 — upstream h3FullReferencePromptEngineering.js）
+  // upstream electron resolver 场景路径优先（pe_expand_h3_full_reference 同时在 minimax catalog）；
+  // 独立入口在场景解析未命中时兜底，与 upstream「同一 peId 两条路径、场景路径在前」的调用关系一致
+  if (isH3FullReferenceProfile(profile)) {
+    const resolved = resolveH3FullReferenceExpand(profile, {
+      ...params,
+      tokenLimits,
+      mediaPaths: (params && params.mediaPaths) || [],
     });
     if (resolved) return resolved;
   }

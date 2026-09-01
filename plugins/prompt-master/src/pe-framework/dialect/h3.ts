@@ -10,7 +10,8 @@ import { H3_PERSONA, H3_SCHEMA } from '../intent/subagent-provider.js'
 
 const CJK = /[\u4e00-\u9fff]/
 const KANA = /[\u3040-\u30ff]/
-const END_PUNCT = '.!?…'
+// F3：中文标点也剥（用户输入结尾为中文句号/问号/叹号时，不应输出「推进。。」式双标点）
+const END_PUNCT = '.!?…。！？'
 
 export function formatTimestamp(seconds: number): string {
   const totalMs = Math.round(seconds * 1000)
@@ -249,6 +250,16 @@ export function compileH3(
   opts?: { stage?: string },
 ): { text: string; text_zh: string } {
   const stage = opts?.stage ?? 't2va'
+  // F2：shot 结构前置校验——非法字段（如把 content 当 what 传）给可读错误，而不是 trimPunct(undefined) 裸崩溃
+  if (!Array.isArray(input.shots)) {
+    throw new Error('compileH3: shots 需为数组（H3ShotsInput.shots: Shot[]，每镜含 what 文本）')
+  }
+  input.shots.forEach((shot, i) => {
+    if (!shot || typeof shot !== 'object' || typeof (shot as { what?: unknown }).what !== 'string' || !(shot as { what: string }).what.trim()) {
+      const keys = shot && typeof shot === 'object' ? Object.keys(shot).join(',') : String(shot)
+      throw new Error(`compileH3: 第 ${i + 1} 镜缺少 what 字段（当前字段: ${keys || '无'}）；H3 shot 契约键为 what（镜头内容文本），不是 content/what 之类——请参照 prompt_compile 的 shots schema`)
+    }
+  })
   const refs: Reference[] = Array.isArray(input.references)
     ? (input.references as unknown[]).map((r) => {
         const raw = r as Record<string, unknown>
@@ -300,9 +311,12 @@ export function normalizeH3Input(
     ? ((opts.formFields as Record<string, unknown>).references as unknown[]) : []
   const refs = Array.isArray(shots.references) ? shots.references : []
   const references = normalizeRefs(refs.length > 0 ? refs : formRefs)
+  // F1：当 shots.references 为空时，把 formFields.references 合并进编译入参 value.shots.references——
+  // 否则 normalize.exit references 只喂给 audit/budget，compileH3 仍看到 refs=[] → subject_definitions 空 → 审计必炸
+  const mergedShots: H3ShotsInput = refs.length > 0 ? shots : { ...shots, references }
   // 优先级与现 prompt-author.ts inferH3Stage 一致：显式 stage > references 存在 > scenarioId==='full_reference' > t2va
   const stage = opts.stage || (references.length > 0 ? 'ref2va' : opts.scenarioId === 'full_reference' ? 'ref2va' : 't2va')
-  return { value: shots, stage, references }
+  return { value: mergedShots, stage, references }
 }
 
 export function registerH3Dialect(): void {

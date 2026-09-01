@@ -1,5 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { searchCatalog, overlayStatus, type CatalogHit, type CatalogQueryOptions } from '../pe-framework/dialect/anima-catalog.js'
+import { lastManifestCheck, overlayStatus, searchCatalog, type CatalogHit, type CatalogQueryOptions } from '../pe-framework/dialect/anima-catalog.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -15,7 +15,7 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
       limit: { type: 'integer', default: 5, description: '返回命中数上限（1-20）' },
     },
     output: {
-      schema: { type: 'string', description: 'JSON 字符串 {hits, overlay}' },
+      schema: { type: 'string', description: 'JSON 字符串 {hits[].candidate, advisories?, manifest, overlay}' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: { tag?: string; mode?: string; limit?: number }) {
@@ -26,8 +26,15 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
       if (!(limit >= 1 && limit <= 20)) limit = 5
       const hits: CatalogHit[] = searchCatalog(tag, { mode, limit })
       const status = overlayStatus()
+      // G5：fuzzy 命中仅作候选参考；usage_count 低于采纳阈值时给出 advisory
+      const flagged = hits.map((h) => ({ ...h, candidate: h.match_type === 'fuzzy' }))
+      const advisories = flagged
+        .filter((h) => h.match_type === 'fuzzy' && (h.usage_count ?? 0) < 1000)
+        .map((h) => `fuzzy_below_threshold: usage_count=${h.usage_count ?? 0} 低于采纳阈值 1000，仅作候选参考`)
       return JSON.stringify({
-        hits,
+        hits: flagged,
+        advisories: advisories.length > 0 ? advisories : undefined,
+        manifest: lastManifestCheck(),
         overlay: { status, advisory: status === 'available' ? undefined : 'overlay_unavailable：关系覆盖层未启用——运行 anima-prompt-v1 relation.submit 初始化后可见 overlay 命中' },
       })
     },

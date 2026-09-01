@@ -44,5 +44,22 @@ describe('catalog_search', () => {
     expect(raw.hits[0].match_type).toBe('canonical')
   })
 
+  it('G5: fuzzy hits carry candidate=true; canonical without', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'silver hair', limit: 3 })))
+    for (const h of raw.hits) expect(h.candidate).toBe(h.match_type === 'fuzzy')
+  })
+
+  it('G5: fuzzy_below_threshold advisory when usage_count < 1000', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'silver hair', limit: 5 })))
+    const lowUse = (raw.hits ?? []).some((h: any) => h.match_type === 'fuzzy' && (h.usage_count ?? 0) < 1000)
+    if (lowUse) expect((raw.advisories ?? []).some((a: string) => a.includes('fuzzy_below_threshold'))).toBe(true)
+  })
+
+  it('G4: manifest status surfaced in output', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: '1girl' })))
+    expect(raw.manifest).toBeDefined()
+    expect(typeof raw.manifest.ok).toBe('boolean')
+  })
+
   afterAll(() => closeCatalog())
 })

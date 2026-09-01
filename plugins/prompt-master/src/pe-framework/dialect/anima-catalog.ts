@@ -195,6 +195,12 @@ export function catalogMeta(): { file: string; sizeBytes: number; tables: string
   return { file: path, sizeBytes, tables, fts }
 }
 
+/** G3（Task 2）anima-knowledge browse/stats/verify 的最小内部 SQL 通道（brief option a）：
+ *  复用句柄缓存 + mtime 重开 + manifest 对账，不导出 _db 本体。只读 SELECT 用。 */
+export function queryCatalogInternal(sql: string, params: readonly (string | number | null)[] = []): unknown[] {
+  return db().prepare(sql).all(...params)
+}
+
 /** 便捷 close（测试隔离用） */
 export function closeCatalog(): void {
   if (_db) { _db.close(); _db = null }

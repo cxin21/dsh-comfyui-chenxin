@@ -38,9 +38,17 @@ export const SCENE_OUTPUT_CONTRACTS: Record<string, OutputContract> = {
   },
 }
 
-/** 场景 → 输出契约解析：先按场景 id，再按 outputMode（声明制，未声明 → undefined） */
+/**
+ * 场景 → 输出契约解析：六段式 ref2va 契约只按场景 id 匹配——product_ad / brand_promo
+ * 虽然也是 outputMode 'full_reference'，但 pickStage 把它们路由到 t2va（三字段体），
+ * 永远不会出现六个 ref2va 段名 → 按 mode 兜底会导致无限续写轮。
+ * director_segments 按 mode 兜底安全：catalog 里只有 continuous_story 用它。
+ */
 export function sceneOutputContract(scenarioId: string, outputMode?: string): OutputContract | undefined {
-  return SCENE_OUTPUT_CONTRACTS[scenarioId] ?? (outputMode ? SCENE_OUTPUT_CONTRACTS[outputMode] : undefined)
+  const byId = SCENE_OUTPUT_CONTRACTS[scenarioId]
+  if (byId) return byId
+  if (outputMode === 'director_segments') return SCENE_OUTPUT_CONTRACTS['director_segments']
+  return undefined
 }
 
 export interface SceneMap {

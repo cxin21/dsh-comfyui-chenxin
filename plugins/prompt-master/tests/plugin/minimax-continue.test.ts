@@ -73,4 +73,19 @@ describe('minimax_scenario continue (contract-declared)', () => {
     expect(String(v.prompt)).toContain('non_diegetic_music: content-non_diegetic_music')
     expect(ctx.llm.calls.length).toBe(1)
   })
+
+  it('product_ad (full_reference outputMode but t2va stage) complete three-field body → exactly 1 llm call', async () => {
+    // t2va 三字段体（integrated_multimodal_description / overall_soundscape / non_diegetic_music）
+    const t2vaBody =
+      'integrated_multimodal_description: A glossy product shot of the bottle rotating on a pedestal.\n' +
+      'overall_soundscape: crisp fizz; subtle whoosh\n' +
+      'non_diegetic_music: upbeat electronic track'
+    const ctx = seqCtx([streamWith(t2vaBody, 'stop')])
+    const v = JSON.parse(
+      String(await runTool(ctx, def(ctx), { scenario_id: 'product_ad', form_fields: { subject: 'bottle' } })),
+    )
+    expect(String(v.prompt)).toContain('integrated_multimodal_description')
+    // 回归：full_reference 六段契约不得按 outputMode 兜底到 t2va 场景（否则空轮续写 ×3）
+    expect(ctx.llm.calls.length).toBe(1)
+  })
 })

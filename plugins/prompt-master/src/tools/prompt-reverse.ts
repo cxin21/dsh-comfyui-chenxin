@@ -7,6 +7,7 @@ import { completeWithBlocks } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
 import { resolveJoyExtraOptions, buildJoyExtraSystemBlock, buildJoyExtraUserTail, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
+import { sanitizeModelSpecific } from '../pe-framework/sanitize/model-specific.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -130,7 +131,10 @@ export function registerReverseTool(ctx: Context, config: Config) {
         temperature: effectiveParams.temperature,
         signal: exec.signal,
       })
-      const sanitized = sanitizeFinalCaption(raw, {
+      const family = inferModelFamily(provider, model)
+      const modelSanitized = sanitizeModelSpecific(raw, { family, outputLang: String(args.output_lang || 'zh') })
+      logInfo(`[prompt-master] prompt_reverse sanitize family=${family} changed=${modelSanitized !== raw}`)
+      const sanitized = sanitizeFinalCaption(modelSanitized, {
         type: reverseResult.captionType,
         caption_lang: String(args.output_lang || 'zh'),
         len: String(args.length || 'medium'),

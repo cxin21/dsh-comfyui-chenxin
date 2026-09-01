@@ -4,6 +4,7 @@ import { findProfileById } from '../resolver/profiles/index.js'
 import { complete } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
+import { sanitizeModelSpecific } from '../pe-framework/sanitize/model-specific.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -65,8 +66,11 @@ export function registerExpandTool(ctx: Context, config: Config) {
         temperature: effectiveParams.temperature,
         signal: exec.signal,
       })
-      logInfo(`[prompt-master] prompt_expand → ok=true chars=${result.length}`)
-      return result || ''
+      const family = inferModelFamily(provider, model)
+      const sanitized = sanitizeModelSpecific(result, { family, outputLang: String(args.output_lang || 'zh') })
+      logInfo(`[prompt-master] prompt_expand sanitize family=${family} changed=${sanitized !== result}`)
+      logInfo(`[prompt-master] prompt_expand → ok=true chars=${sanitized.length}`)
+      return sanitized || ''
     },
   })
 }

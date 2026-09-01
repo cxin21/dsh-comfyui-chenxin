@@ -107,7 +107,7 @@ describe('overlay lifecycle (tmp db)', () => {
 
     const candidates = listProposals({ status: 'candidate' })
     expect(candidates).toHaveLength(1)
-    expect(candidates[0].from_record_id).toBe('blue_hair')
+    expect(candidates[0].from_record_id).toBe('blue hair')
     expect(candidates[0].to_record_id).toBe('hair')
     expect(candidates[0].relation_type).toBe('child')
 
@@ -162,5 +162,19 @@ describe('overlay lifecycle (tmp db)', () => {
     )
     expect(r).toEqual({ ok: false, issues: [expect.stringContaining('ghost_tag')] })
     expect(listProposals({ status: 'all' })).toHaveLength(0)
+  })
+
+  it('MF-1: underscore endpoints stored normalized (matches overlayAliasHits from_record_id=? query)', () => {
+    const r = submitProposal(
+      { source_tag: 'blue_hair', target_tag: 'long_hair', relation: 'related', rationale: 'color variant', evidence: ['taxonomy'] },
+      { classify },
+    )
+    if (!('proposal_id' in r)) throw new Error('submit failed')
+    decideProposal(r.proposal_id, 'accept')
+    const rows = listProposals({ status: 'accepted' })
+    expect(rows).toHaveLength(1)
+    // 存储面归一化：查询侧 overlayAliasHits 用 normalizeTag(tag) 做 from_record_id=? —— 存储必须同形
+    expect(rows[0].from_record_id).toBe('blue hair')
+    expect(rows[0].to_record_id).toBe('long hair')
   })
 })

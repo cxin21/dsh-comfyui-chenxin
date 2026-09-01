@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { searchCatalog, classifyTag, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
-import { setOverlayPath, openOverlayDb } from '../../../src/pe-framework/anima-knowledge/relations.js'
+import { setOverlayPath, openOverlayDb, submitProposal, decideProposal } from '../../../src/pe-framework/anima-knowledge/relations.js'
 
 let tmp: string
 
@@ -119,6 +119,22 @@ describe('G7: overlay accepted-alias resolution in cascade', () => {
     expect(searchCatalog('glistening hair', { mode: 'exact', categories: ['nonexistent_category_xyz'] })).toEqual([])
     // sources 过滤同理
     expect(searchCatalog('glistening hair', { mode: 'exact', sources: ['official_anima_rule:protocol-v1@anima-f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b'] })).toEqual([])
+  })
+
+  it('MF-1: underscore-endpoint round-trip — submit(underline) → accept → searchCatalog(normalized) surfaces overlay alias', () => {
+    // 'blue hair' 是真实 catalog 端点（classifyTag 走 normalizeTag → 查 names.normalized_value）
+    expect(classifyTag('blue_hair')).toBe('canonical')
+    const sub = submitProposal(
+      { source_tag: 'blue_hair', target_tag: 'waving', relation: 'related', rationale: 'test round-trip', evidence: ['taxonomy'] },
+      { classify: classifyTag },
+    )
+    if (!('proposal_id' in sub)) throw new Error(`submit failed: ${JSON.stringify(sub)}`)
+    decideProposal(sub.proposal_id, 'accept')
+    // 'blue hair' 本身是 canonical：cascade 命中在前，overlay alias 追加在后（永不降级）
+    const hits = searchCatalog('blue hair', { limit: 100000 })
+    const overlayHits = hits.filter((h) => h.prompt_form === 'waving')
+    expect(overlayHits.length).toBeGreaterThan(0)
+    expect(overlayHits[0].match_type).toBe('alias')
   })
 })
 

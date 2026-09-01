@@ -32,7 +32,6 @@ export interface CatalogQueryOptions {
 export type MatchKind = 'canonical' | 'alias' | 'fuzzy' | 'miss'
 
 const defaultCatalogPath = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' })
-const defaultOverlayPath = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'relation-overlay.sqlite' })
 
 let _db: DatabaseSync | null = null
 /** 惰性解析（MF-1）：路径在 db() 打开时才解析，保证 setPresetRoot(config.presetRoot) 先于路径求值；
@@ -254,7 +253,9 @@ export function overlayView(): { tags: Record<string, string> } {
 }
 
 export function overlayStatus(): 'available' | 'unavailable' {
-  return existsSync(defaultOverlayPath()) ? 'available' : 'unavailable'
+  // MF-2：探针与 relations.ts 写入路径一致（overlayLibraryPath = <preset>/temp/anima-prompt-v1/relation-overlay.sqlite），
+  // 不再探 knowledge 目录的旧位置；env ANIMA_OVERLAY_PATH / setOverlayPath 覆盖同样生效。
+  return existsSync(overlayLibraryPath()) ? 'available' : 'unavailable'
 }
 
 export const OVERLAY_ADVISORY = 'overlay_unavailable'

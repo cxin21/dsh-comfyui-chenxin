@@ -16,6 +16,9 @@ import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { resolveKnowledgePath } from '../resources/resolve.js'
+// MF-1：normalizeTag 值导入（anima-catalog 是下层模块；两侧均为函数声明，ESM 循环 import 安全，
+// 运行期只在函数体内互调）。overlayStatus 路径探针反向依赖已存在（anima-catalog → relations）。
+import { normalizeTag } from '../dialect/anima-catalog.js'
 import type { MatchKind } from '../dialect/anima-catalog.js'
 
 export const RELATION_TYPES = ['parent', 'child', 'related'] as const
@@ -231,7 +234,7 @@ export function submitProposal(
          rationale=excluded.rationale, model=excluded.model,
          evidence=excluded.evidence, updated_at=excluded.updated_at`,
     ).run(
-      proposalId, p.from, p.to, p.relation,
+      proposalId, normalizeTag(p.from), normalizeTag(p.to), p.relation,
       p.confidence, 'llm', p.rationale, opts?.model ?? 'current-llm',
       JSON.stringify(p.evidence), now, now,
     )

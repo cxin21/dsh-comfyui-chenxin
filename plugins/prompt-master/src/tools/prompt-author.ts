@@ -15,6 +15,7 @@ import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
+import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 
 export interface AuthorArgs {
   target: Target
@@ -154,6 +155,28 @@ function runDraftThroughStage(target: string, draft: AuthorDraft, opts: { stage?
   return applyScenarioGates(stageResult, { scenarioId: opts.scenarioId, formFields: opts.formFields, refsCount: referencesCount(draft, opts.formFields) })
 }
 
+/**
+ * JoyExtra 硬约束输出过滤（Task 4，anima 分支）：form_fields.joy_extra_options 声明的禁写项
+ * 在 compileAnima 产物 positive/negative 上做子句过滤（复核兜底，硬约束优先级高于检查表）。
+ * 返回 true 表示发生了实际剔除。
+ */
+function applyAnimaJoyExtraFilter(stage: StageResult, formFields?: Record<string, unknown>): boolean {
+  if (!formFields) return false
+  const res = resolveJoyExtraOptions({ joyExtraOptions: formFields.joy_extra_options, extraPrompt: '' })
+  if (res.options.length === 0) return false
+  let filtered = false
+  for (const key of ['positive', 'negative'] as const) {
+    const text = stage.result[key]
+    if (typeof text !== 'string' || !text.trim()) continue
+    const out = filterJoyExtraClauses(text, res)
+    if (out !== text) {
+      stage.result[key] = out
+      filtered = true
+    }
+  }
+  return filtered
+}
+
 export function registerAuthorTool(ctx: Context, config: Config) {
   return defineTool({
     name: 'prompt_author',
@@ -209,6 +232,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           throw new Error('audit_only 需要结构化 JSON 输入（anima: slots；h3: shots{...}）')
         }
         const stage = runDraftThroughStage(target, draft, runOpts)
+        if (target === 'anima') applyAnimaJoyExtraFilter(stage, a.form_fields)
         return assembleEnvelope(stage, [])
       }
 
@@ -217,8 +241,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const intentCfg = getDialect(target)?.intent
       const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}`)
+      let joyExtraFiltered = false
       let draft = await provider({ ...intentBase, round: 0 }, exec)
       let stage = runDraftThroughStage(target, draft, runOpts)
+      if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       const trailAdvisories: string[] = []
       let corrections = 0
       while (!stage.ok && stage.gates.some((g) => g.severity === 'critical') && corrections < MAX_CORRECTIONS) {
@@ -226,11 +252,12 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const feedback = stage.gates.filter((g) => g.severity === 'critical').map((g) => `[${g.rule}] ${g.detail}`).join('\n')
         draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
         stage = runDraftThroughStage(target, draft, runOpts)
+        if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       }
       if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
         trailAdvisories.push('loop_exhausted:true')
       }
-      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
+      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
       return assembleEnvelope(stage, trailAdvisories)
     },
   })

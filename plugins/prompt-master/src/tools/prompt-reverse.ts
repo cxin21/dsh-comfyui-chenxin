@@ -6,6 +6,7 @@ import { sanitizeFinalCaption } from '../resolver/profiles/reverse/router.js'
 import { completeWithBlocks } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
+import { resolveJoyExtraOptions, buildJoyExtraSystemBlock, buildJoyExtraUserTail, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -15,6 +16,8 @@ export interface ReverseArgs {
   output_lang?: string
   length?: string
   extra_prompt?: string
+  joy_extra_options?: string[]
+  character_name?: string
   anima3_enhance?: boolean
   quality_prompt_enabled?: boolean
   quality_prompt_prefix?: string
@@ -48,6 +51,8 @@ export function registerReverseTool(ctx: Context, config: Config) {
       output_lang: { type: 'string', default: 'zh', description: '输出语言 zh/en' },
       length: { type: 'string', default: 'medium', description: '篇幅 short/medium/long' },
       extra_prompt: { type: 'string', default: '', description: '附加要求' },
+      joy_extra_options: { type: 'array', default: [], description: 'JoyExtra 硬约束选项（no_glasses_headwear / scene_only_no_character_appearance / no_artistic_style / character_name）；硬约束优先级高于检查表' },
+      character_name: { type: 'string', default: '', description: '角色称呼（配合 joy_extra_options=character_name 使用）' },
       anima3_enhance: { type: 'boolean', default: false, description: 'Anima3 增强' },
       quality_prompt_enabled: { type: 'boolean', default: false, description: '启用质量词前缀' },
       quality_prompt_prefix: { type: 'string', default: '', description: '自定义质量词前缀' },
@@ -74,7 +79,16 @@ export function registerReverseTool(ctx: Context, config: Config) {
         extra_prompt: String(args.extra_prompt || ''),
         anima3_enhance: args.anima3_enhance === true,
       })
-      const user = [reverseResult.userLead, reverseResult.userBody, reverseResult.outputConstraints, reverseResult.userTail]
+      const joyExtra = resolveJoyExtraOptions({
+        joyExtraOptions: args.joy_extra_options,
+        extraPrompt: String(args.extra_prompt || ''),
+        characterName: args.character_name,
+      })
+      const outputLang = (String(args.output_lang || 'zh') === 'en' ? 'en' : 'zh') as 'zh' | 'en'
+      const joySystemBlock = joyExtra.options.length > 0 ? buildJoyExtraSystemBlock(joyExtra, outputLang) : ''
+      const system = joySystemBlock ? `${reverseResult.system}\n\n${joySystemBlock}` : reverseResult.system
+      const joyUserTail = joyExtra.options.length > 0 ? buildJoyExtraUserTail(joyExtra, outputLang) : ''
+      const user = [reverseResult.userLead, reverseResult.userBody, reverseResult.outputConstraints, reverseResult.userTail, joyUserTail]
         .filter(Boolean).join('\n')
       // 文本路径修复：画面描述必须进入 LLM 上下文。user 是组装指令，desc 是用户对画面的描述；
       // user 开头非空时也要并入 desc，否则模型只收到指令、看不到画面内容（历史 bug：
@@ -85,7 +99,7 @@ export function registerReverseTool(ctx: Context, config: Config) {
       if (args.dry_run) {
         const debug = JSON.stringify({
           debug: {
-            system: reverseResult.system,
+            system,
             text,
             imageBlocks: images.length,
             maxTokens: 512,
@@ -110,7 +124,7 @@ export function registerReverseTool(ctx: Context, config: Config) {
       }
       const { text: raw } = await completeWithBlocks(ctx, {
         provider, model,
-        system: reverseResult.system,
+        system,
         blocks,
         maxTokens: 512,
         temperature: effectiveParams.temperature,
@@ -124,8 +138,10 @@ export function registerReverseTool(ctx: Context, config: Config) {
         quality_prompt_enabled: args.quality_prompt_enabled === true,
         quality_prompt_prefix: String(args.quality_prompt_prefix || ''),
       })
-      logInfo(`[prompt-master] prompt_reverse → ok=true chars=${sanitized.length}`)
-      return sanitized
+      const joyFilteredBefore = sanitized
+      const finalCaption = joyExtra.options.length > 0 ? filterJoyExtraClauses(sanitized, joyExtra) : sanitized
+      logInfo(`[prompt-master] prompt_reverse → ok=true chars=${finalCaption.length} joy_extra options=${joyExtra.options.join('|') || 'none'} filtered=${finalCaption !== joyFilteredBefore ? 'yes' : 'no'}`)
+      return finalCaption
     },
   })
 }

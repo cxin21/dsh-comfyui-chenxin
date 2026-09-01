@@ -110,6 +110,16 @@ describe('G7: overlay accepted-alias resolution in cascade', () => {
     expect(searchCatalog('zzzzzzzzq')).toEqual([])
     expect(classifyTag('wave')).toBe('alias')
   })
+
+  it('G7 fix: overlay alias hits respect categories/sources filters (filter active → overlay target 被过滤掉)', () => {
+    seedAccepted('glistening hair', 'waving')
+    // 不带过滤：overlay alias 命中在（对照）
+    expect(searchCatalog('glistening hair', { mode: 'exact' }).length).toBeGreaterThan(0)
+    // categories 过滤不含目标 record → overlay 命中被过滤排除
+    expect(searchCatalog('glistening hair', { mode: 'exact', categories: ['nonexistent_category_xyz'] })).toEqual([])
+    // sources 过滤同理
+    expect(searchCatalog('glistening hair', { mode: 'exact', sources: ['official_anima_rule:protocol-v1@anima-f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b'] })).toEqual([])
+  })
 })
 
 afterAll(() => closeCatalog())

@@ -24,7 +24,8 @@ export interface CatalogQueryOptions {
   limit?: number
   /** G7：records.category 白名单（下划线/空格等价归一） */
   categories?: string[]
-  /** G7：source 白名单（names.source_id 精确匹配 ∪ records.source_ids 包含匹配） */
+  /** G7：source 白名单（names.source_id 精确匹配 ∪ records.source_ids 包含匹配）。
+   *  overlay accepted 别名命中同样受 categories/sources 过滤（目标端解析走 records JOIN）。 */
   sources?: string[]
 }
 
@@ -178,8 +179,9 @@ function fuzzyQuery(value: string, limit: number, categories?: string[], sources
 
 /** G7 overlay accepted-alias：auto/exact 级联全部落空后，读 overlay accepted 提案
  *  （from_record_id=查询 tag）→ 目标端按 canonical→alias 解析，命中以 alias 级返回。
- *  canonical 保护：本函数只在 catalog 级联零命中时执行，真实 canonical/alias 命中永不降级。 */
-function overlayAliasHits(normalized: string, limit: number): CatalogHit[] {
+ *  canonical 保护：本函数只在 catalog 级联零命中时执行，真实 canonical/alias 命中永不降级。
+ *  G7：categories/sources 过滤透传到目标端 exactQuery 解析（overlay 命中走 records JOIN，真实过滤而非豁免）。 */
+function overlayAliasHits(normalized: string, limit: number, categories?: string[], sources?: string[]): CatalogHit[] {
   if (!existsSync(overlayLibraryPath())) return []
   const odb = openOverlayDb()
   try {
@@ -192,9 +194,9 @@ function overlayAliasHits(normalized: string, limit: number): CatalogHit[] {
     for (const row of rows) {
       const target = normalizeTag(row.to_record_id)
       if (!target) continue
-      const resolved = exactQuery(target, 'canonical', limit - hits.length).length
-        ? exactQuery(target, 'canonical', limit - hits.length)
-        : exactQuery(target, 'alias', limit - hits.length)
+      const resolved = exactQuery(target, 'canonical', limit - hits.length, categories, sources).length
+        ? exactQuery(target, 'canonical', limit - hits.length, categories, sources)
+        : exactQuery(target, 'alias', limit - hits.length, categories, sources)
       for (const h of resolved) {
         hits.push({ ...h, match_type: 'alias' })
         if (hits.length >= limit) return hits
@@ -225,7 +227,7 @@ export function searchCatalog(tag: string, opts?: CatalogQueryOptions): CatalogH
   }
   // G7：级联结果之后追加 overlay accepted 别名命中（alias 级；canonical/alias 命中在前，永不降级）
   if (cascadeHits.length >= limit) return cascadeHits
-  const overlay = overlayAliasHits(normalized, limit - cascadeHits.length)
+  const overlay = overlayAliasHits(normalized, limit - cascadeHits.length, opts?.categories, opts?.sources)
   return overlay.length ? [...cascadeHits, ...overlay] : cascadeHits
 }
 

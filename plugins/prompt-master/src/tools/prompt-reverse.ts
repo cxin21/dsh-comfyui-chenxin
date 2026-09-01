@@ -8,6 +8,7 @@ import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
 import { resolveJoyExtraOptions, buildJoyExtraSystemBlock, buildJoyExtraUserTail, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 import { sanitizeModelSpecific } from '../pe-framework/sanitize/model-specific.js'
+import { enumerateTaggedMedia, buildIdentityDeclarations } from '../pe-framework/media/identity.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -113,10 +114,18 @@ export function registerReverseTool(ctx: Context, config: Config) {
       const { provider, model } = resolveRoute(exec as ExecLike)
       const caps = getCapabilities(inferModelFamily(provider, model))
       const effectiveParams = applyCapabilities(caps, { temperature: config.temperature })
-      const blocks: ContentBlock[] = [
+      // 多图身份映射（B4 S 子集）：≥2 张图时在媒体块之前注入身份声明，防止模型混淆哪张图是哪张
+      const media = enumerateTaggedMedia(images.length)
+      const declarations = buildIdentityDeclarations(media, outputLang)
+      const blocks: ContentBlock[] = []
+      if (declarations) {
+        blocks.unshift({ type: 'text', text: declarations })   // 声明块置于媒体块之前
+        logInfo(`[prompt-master] multi-image identity declarations injected (n=${images.length})`)
+      }
+      blocks.push(
         ...images.map((b) => ({ ...b })),
         ...(text ? [{ type: 'text' as const, text }] : []),
-      ]
+      )
       if (images.length > 0) {
         const info = await (ctx.llm as any).resolveModelInfo?.(provider, model, exec.signal)
         if (!info || !info.inputModalities?.includes('image')) {

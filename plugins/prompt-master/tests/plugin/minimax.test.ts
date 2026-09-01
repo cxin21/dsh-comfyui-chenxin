@@ -27,7 +27,11 @@ describe('minimax_scenario', () => {
   })
 
   it('non-dry-run returns prompt + sections + budget with usage-derived tokens', async () => {
-    const ctx = stubCtx({ stream: textStream('rendered prompt') })
+    const ctx = stubCtx({
+      stream: textStream(
+        'subject_definitions: a\nsummary: b\nretention_analysis: c\ndetailed_description: d\noverall_soundscape: e\nnon_diegetic_music: f',
+      ),
+    })
     const v = JSON.parse(String(await runTool(ctx, def(ctx), { scenario_id: 'full_reference', form_fields: { subject: 'cat' } })))
     expect(typeof v.prompt).toBe('string')
     expect(String(v.prompt).length).toBeGreaterThan(0)

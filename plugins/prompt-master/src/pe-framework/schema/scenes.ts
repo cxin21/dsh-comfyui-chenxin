@@ -9,6 +9,39 @@ import { MINIMAX_SCENARIOS, getScenarioById, type MiniMaxScenario } from '../../
 import { normalizeForm } from '../../resolver/minimax/assemble.js'
 import type { H3ShotsInput, H3Shot } from './h3-shots.js'
 import type { AuditGate } from '../types.js'
+import type { OutputContract } from '../continue/contract.js'
+
+/**
+ * T14 Task 3：场景输出契约（声明制——契约只在场景条目声明时生效）。
+ * full_reference 六段 fields 的 patterns 与 dialect/h3.ts buildRef2vaText 实际发出的
+ * 英文段名逐字对齐：subject_definitions / summary / retention_analysis /
+ * detailed_description / overall_soundscape / non_diegetic_music。
+ * director_segments 为分组形态：分隔符 + 期望组数（按表单 segment_count 推导）。
+ */
+export const SCENE_OUTPUT_CONTRACTS: Record<string, OutputContract> = {
+  full_reference: {
+    id: 'minimax-full-reference',
+    fields: [
+      { key: 'subject_definitions', patterns: [/subject_definitions\s*[:：]/i] },
+      { key: 'summary', patterns: [/summary\s*[:：]/i, /摘要\s*[:：]/] },
+      { key: 'retention_analysis', patterns: [/retention_analysis\s*[:：]/i] },
+      { key: 'detailed_description', patterns: [/detailed_description\s*[:：]/i] },
+      { key: 'overall_soundscape', patterns: [/overall_soundscape\s*[:：]/i] },
+      { key: 'non_diegetic_music', patterns: [/non_diegetic_music\s*[:：]/i] },
+    ],
+  },
+  director_segments: {
+    id: 'minimax-director-segments',
+    fields: [],
+    groupSeparator: /={3,}\s*提示词组\s*(\d+)\s*={3,}/,
+    expectedGroups: (ff) => Number(ff?.['segment_count'] ?? 4),
+  },
+}
+
+/** 场景 → 输出契约解析：先按场景 id，再按 outputMode（声明制，未声明 → undefined） */
+export function sceneOutputContract(scenarioId: string, outputMode?: string): OutputContract | undefined {
+  return SCENE_OUTPUT_CONTRACTS[scenarioId] ?? (outputMode ? SCENE_OUTPUT_CONTRACTS[outputMode] : undefined)
+}
 
 export interface SceneMap {
   scenarioId: string

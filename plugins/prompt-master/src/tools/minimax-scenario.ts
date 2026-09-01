@@ -3,6 +3,8 @@ import { listScenarios, getScenarioById, resolveMinimaxScenarioExpand } from '..
 import { countChars } from '../utils/length.js'
 import { complete } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
+import { sceneOutputContract } from '../pe-framework/schema/scenes.js'
+import { continueUntilComplete } from '../pe-framework/continue/engine.js'
 import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -73,10 +75,36 @@ export function registerMinimaxTool(ctx: Context, config: Config) {
       const { provider, model } = resolveRoute(exec as ExecLike)
       const caps = getCapabilities(inferModelFamily(provider, model))
       const effectiveParams = applyCapabilities(caps, { temperature: config.temperature })
-      const { text, usage } = await complete(ctx, {
+      const { text: rawText, usage, finish } = await complete(ctx, {
         provider, model, system: expanded.system, user: expanded.user,
         maxTokens: expanded.maxTokens, temperature: effectiveParams.temperature, signal: exec.signal,
       })
+      // T14 Task 3：场景声明输出契约 → 截断/缺段时走 continueUntilComplete 定向续写
+      const contract = sceneOutputContract(scenario.id, scenario.outputMode)
+      let text = rawText
+      let continueRounds = 0
+      let continueComplete = true
+      if (contract) {
+        const outcome = await continueUntilComplete({
+          contract,
+          initialText: text,
+          finishKind: finish.kind,
+          seed: { system: expanded.system, userText: expanded.user, outputLang: language === 'en' ? 'en' : 'zh' },
+          generate: async (req) => {
+            const g = await complete(ctx, {
+              provider, model, system: req.system ?? expanded.system, user: req.user,
+              maxTokens: expanded.maxTokens, temperature: effectiveParams.temperature, signal: exec.signal,
+            })
+            return { text: g.text, finishKind: g.finish.kind }
+          },
+          signal: exec.signal,
+          onContinue: (n, max) => ctx.logger?.info?.(`[prompt-master] continue round=${n}/${max}`),
+        })
+        text = outcome.text
+        continueRounds = outcome.rounds
+        continueComplete = outcome.complete
+        ctx.logger?.info?.(`[prompt-master] minimax_scenario → continue complete=${outcome.complete} rounds=${continueRounds}`)
+      }
       const char_count = countChars(text)
       return JSON.stringify({
         prompt: text,

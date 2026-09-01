@@ -8,6 +8,7 @@ import { statSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { resolveKnowledgePath } from '../resources/resolve.js'
 import { assertAnimaCatalog } from '../resources/manifest.js'
+import { openOverlayDb, overlayPath as overlayLibraryPath } from '../anima-knowledge/relations.js'
 
 export interface CatalogHit {
   match_type: 'canonical' | 'alias' | 'fuzzy' | 'miss'
@@ -18,8 +19,13 @@ export interface CatalogHit {
 }
 
 export interface CatalogQueryOptions {
-  mode?: 'auto' | 'exact'
+  /** G7：auto/exact 级联之外支持单级直查（canonical/alias/fuzzy） */
+  mode?: 'auto' | 'exact' | 'canonical' | 'alias' | 'fuzzy'
   limit?: number
+  /** G7：records.category 白名单（下划线/空格等价归一） */
+  categories?: string[]
+  /** G7：source 白名单（names.source_id 精确匹配 ∪ records.source_ids 包含匹配） */
+  sources?: string[]
 }
 
 export type MatchKind = 'canonical' | 'alias' | 'fuzzy' | 'miss'
@@ -105,12 +111,44 @@ export function ftsQuery(value: string): string {
     .join(' OR ')
 }
 
-function exactQuery(normalized: string, nameType: 'canonical' | 'alias', limit: number): CatalogHit[] {
+/** G7 过滤子句：categories / sources → WHERE 片段 + 参数（全部参数化，无注入面） */
+function filterClause(categories?: string[], sources?: string[]): { sql: string; params: string[] } {
+  const clauses: string[] = []
+  const params: string[] = []
+  if (categories?.length) {
+    const values = new Set<string>()
+    for (const raw of categories) {
+      const trimmed = raw.trim().toLowerCase()
+      if (!trimmed) continue
+      values.add(trimmed)
+      values.add(trimmed.replaceAll(' ', '_'))
+      values.add(trimmed.replaceAll('_', ' '))
+    }
+    const list = [...values]
+    if (list.length) {
+      clauses.push(`r.category IN (${list.map(() => '?').join(',')})`)
+      params.push(...list)
+    }
+  }
+  if (sources?.length) {
+    const clean = sources.map((s) => s.trim()).filter(Boolean)
+    if (clean.length) {
+      // 每个 source 两个匹配面：names.source_id 精确 ∪ records.source_ids（JSON 数组文本）带引号包含
+      clauses.push(`(n.source_id IN (${clean.map(() => '?').join(',')}) OR (${clean.map(() => 'r.source_ids LIKE ?').join(' OR ')}))`)
+      params.push(...clean)
+      params.push(...clean.map((s) => `%"${s.replaceAll('"', '')}"%`))
+    }
+  }
+  return { sql: clauses.length ? ' AND ' + clauses.join(' AND ') : '', params }
+}
+
+function exactQuery(normalized: string, nameType: 'canonical' | 'alias', limit: number, categories?: string[], sources?: string[]): CatalogHit[] {
+  const filter = filterClause(categories, sources)
   const rows = db()
     .prepare(
-      "SELECT r.record_id, r.prompt_form, r.usage_count, n.value AS matched_name FROM names n JOIN records r ON r.record_id=n.record_id WHERE n.normalized_value=? AND n.name_type=? ORDER BY r.usage_count DESC, r.record_id LIMIT ?",
+      "SELECT r.record_id, r.prompt_form, r.usage_count, n.value AS matched_name FROM names n JOIN records r ON r.record_id=n.record_id WHERE n.normalized_value=? AND n.name_type=?" + filter.sql + " ORDER BY r.usage_count DESC, r.record_id LIMIT ?",
     )
-    .all(normalized, nameType, limit) as Array<{ record_id: string; prompt_form: string; usage_count: number; matched_name: string }>
+    .all(normalized, nameType, ...filter.params, limit) as Array<{ record_id: string; prompt_form: string; usage_count: number; matched_name: string }>
   return rows.map((r) => ({
     match_type: nameType,
     prompt_form: r.prompt_form,
@@ -120,14 +158,15 @@ function exactQuery(normalized: string, nameType: 'canonical' | 'alias', limit: 
   }))
 }
 
-function fuzzyQuery(value: string, limit: number): CatalogHit[] {
+function fuzzyQuery(value: string, limit: number, categories?: string[], sources?: string[]): CatalogHit[] {
   const fts = ftsQuery(value)
   if (!fts) return []
+  const filter = filterClause(categories, sources)
   const rows = db()
     .prepare(
-      "SELECT r.record_id, r.prompt_form, r.usage_count, n.value AS matched_name FROM catalog_fts f JOIN names n ON n.name_id=f.name_id JOIN records r ON r.record_id=f.record_id WHERE catalog_fts MATCH ? ORDER BY bm25(catalog_fts), r.usage_count DESC LIMIT ?",
+      "SELECT r.record_id, r.prompt_form, r.usage_count, n.value AS matched_name FROM catalog_fts f JOIN names n ON n.name_id=f.name_id JOIN records r ON r.record_id=f.record_id WHERE catalog_fts MATCH ?" + filter.sql + " ORDER BY bm25(catalog_fts), r.usage_count DESC LIMIT ?",
     )
-    .all(fts, limit) as Array<{ record_id: string; prompt_form: string; usage_count: number; matched_name: string }>
+    .all(fts, ...filter.params, limit) as Array<{ record_id: string; prompt_form: string; usage_count: number; matched_name: string }>
   return rows.map((r) => ({
     match_type: 'fuzzy',
     prompt_form: r.prompt_form,
@@ -137,18 +176,57 @@ function fuzzyQuery(value: string, limit: number): CatalogHit[] {
   }))
 }
 
-/** 匹配语义对齐 catalog/search.py：auto=canonical→alias→fuzzy 级联；exact=canonical→alias（无 fuzzy） */
+/** G7 overlay accepted-alias：auto/exact 级联全部落空后，读 overlay accepted 提案
+ *  （from_record_id=查询 tag）→ 目标端按 canonical→alias 解析，命中以 alias 级返回。
+ *  canonical 保护：本函数只在 catalog 级联零命中时执行，真实 canonical/alias 命中永不降级。 */
+function overlayAliasHits(normalized: string, limit: number): CatalogHit[] {
+  if (!existsSync(overlayLibraryPath())) return []
+  const odb = openOverlayDb()
+  try {
+    const rows = odb
+      .prepare(
+        "SELECT DISTINCT to_record_id FROM relation_proposals WHERE status='accepted' AND from_record_id=? ORDER BY to_record_id",
+      )
+      .all(normalized) as Array<{ to_record_id: string }>
+    const hits: CatalogHit[] = []
+    for (const row of rows) {
+      const target = normalizeTag(row.to_record_id)
+      if (!target) continue
+      const resolved = exactQuery(target, 'canonical', limit - hits.length).length
+        ? exactQuery(target, 'canonical', limit - hits.length)
+        : exactQuery(target, 'alias', limit - hits.length)
+      for (const h of resolved) {
+        hits.push({ ...h, match_type: 'alias' })
+        if (hits.length >= limit) return hits
+      }
+    }
+    return hits
+  } finally {
+    odb.close()
+  }
+}
+
+/** 匹配语义对齐 catalog/search.py：auto=canonical→alias→fuzzy 级联；exact=canonical→alias（无 fuzzy）；
+ *  G7：canonical/alias/fuzzy 单级直查；auto/exact 级联落空后追加 overlay accepted 别名命中。 */
 export function searchCatalog(tag: string, opts?: CatalogQueryOptions): CatalogHit[] {
   const normalized = normalizeTag(tag)
   const limit = opts?.limit === undefined ? 20 : opts.limit
   if (!normalized || limit < 1) return []
-  const mode = opts?.mode === 'exact' ? 'exact' : 'auto'
+  const modeRaw = opts?.mode ?? 'auto'
+  const single = modeRaw === 'canonical' || modeRaw === 'alias' || modeRaw === 'fuzzy' ? modeRaw : null
+  if (single === 'fuzzy') return fuzzyQuery(tag, limit, opts?.categories, opts?.sources)
+  if (single) return exactQuery(normalized, single, limit, opts?.categories, opts?.sources)
+  const mode = modeRaw === 'exact' ? 'exact' : 'auto'
   const modes = mode === 'exact' ? (['canonical', 'alias'] as const) : (['canonical', 'alias', 'fuzzy'] as const)
+  let cascadeHits: CatalogHit[] = []
   for (const m of modes) {
-    const hits = m === 'fuzzy' ? fuzzyQuery(tag, limit) : exactQuery(normalized, m, limit)
-    if (hits.length) return hits.slice(0, limit)
+    const hits = m === 'fuzzy' ? fuzzyQuery(tag, limit, opts?.categories, opts?.sources) : exactQuery(normalized, m, limit, opts?.categories, opts?.sources)
+    if (hits.length) { cascadeHits = hits.slice(0, limit); break }
   }
-  return []
+  // G7：级联结果之后追加 overlay accepted 别名命中（alias 级；canonical/alias 命中在前，永不降级）
+  if (cascadeHits.length >= limit) return cascadeHits
+  const overlay = overlayAliasHits(normalized, limit - cascadeHits.length)
+  return overlay.length ? [...cascadeHits, ...overlay] : cascadeHits
 }
 
 /** 单标签类别判定（canonical/alias/fuzzy/miss）——测试与前端分流用 */

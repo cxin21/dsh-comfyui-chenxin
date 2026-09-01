@@ -8,6 +8,7 @@ import { registerProfileListTool, type ProfileScope } from '../tools/profile-lis
 import { registerAuthorTool, setAuthorIntentProvider } from '../tools/prompt-author.js'
 import { registerCompileTool } from '../tools/prompt-compile.js'
 import { registerCatalogSearchTool } from '../tools/catalog-search.js'
+import { registerCatalogRelationsTool } from '../tools/catalog-relations.js'
 import { registerAuditTool } from '../tools/prompt-audit.js'
 import { setCustomProfileSource } from '../resolver/profiles/source.js'
 import { setBuiltinFilter } from '../resolver/profiles/index.js'
@@ -62,6 +63,7 @@ export function apply(ctx: Context, config: ConfigShape) {
     disposers.push(ctx.tools.register(registerAuthorTool(ctx, config)))
     disposers.push(ctx.tools.register(registerCompileTool(ctx)))
     disposers.push(ctx.tools.register(registerCatalogSearchTool(ctx, config)))
+    disposers.push(ctx.tools.register(registerCatalogRelationsTool(ctx, config)))
     disposers.push(ctx.tools.register(registerAuditTool(ctx, config)))
     return () => { for (const d of disposers) d() }
   }, 'prompt-master.tools')

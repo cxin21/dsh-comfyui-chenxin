@@ -98,6 +98,7 @@ export function registerMinimaxTool(ctx: Context, config: Config) {
             return { text: g.text, finishKind: g.finish.kind }
           },
           signal: exec.signal,
+          formFields: args.form_fields || {},
           onContinue: (n, max) => ctx.logger?.info?.(`[prompt-master] continue round=${n}/${max}`),
         })
         text = outcome.text

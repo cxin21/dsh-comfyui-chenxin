@@ -160,7 +160,15 @@ export function clearProfileCache(): void {
   cached = null;
 }
 
+/** 内置 Profile 过滤器（enable=false 时使 findProfileById 对该 id 返回 undefined） */
+let builtinFilter: ((id: string) => boolean) | undefined;
+
+export function setBuiltinFilter(filter: ((id: string) => boolean) | undefined): void {
+  builtinFilter = filter;
+}
+
 export function findProfileById(id: string): PEProfile | undefined {
+  if (builtinFilter?.(id)) return undefined;
   return getDefaultBuiltinProfiles().find((p) => p.id === id);
 }
 

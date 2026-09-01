@@ -10,6 +10,7 @@ import { registerCompileTool } from '../tools/prompt-compile.js'
 import { registerCatalogSearchTool } from '../tools/catalog-search.js'
 import { registerAuditTool } from '../tools/prompt-audit.js'
 import { setCustomProfileSource } from '../resolver/profiles/source.js'
+import { setBuiltinFilter } from '../resolver/profiles/index.js'
 import { registerOverridesNamespace } from '../pe-framework/profiles/storage-v2.js'
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
@@ -48,6 +49,9 @@ export function apply(ctx: Context, config: ConfigShape) {
 
   // 内置覆盖层 namespace（Task 7 spec §7.1）→ 注入 profile_list 工具
   const overrides = registerOverridesNamespace(ctx)
+
+  // enable=false 必须同时作用于按 id 引用（resolveExpand/resolveReverse 走 findProfileById）
+  setBuiltinFilter((id) => overrides.all()[id]?.enabled === false)
 
   ctx.effect(() => {
     const disposers: (() => void)[] = []

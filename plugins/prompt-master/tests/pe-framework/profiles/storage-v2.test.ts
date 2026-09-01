@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, afterEach } from 'vitest'
 import { listProfilesMerged, recastImportedProfile, validateImportPayload } from '../../../src/pe-framework/profiles/storage-v2.js'
+import { setBuiltinFilter, findProfileById } from '../../../src/resolver/profiles/index.js'
 
 const builtins = [
   { id: 'pe_a', name: 'A', kind: 'reverse', sort: 1 },
@@ -50,5 +51,22 @@ describe('recastImportedProfile', () => {
     expect(out.id).toMatch(/^pe_custom_/)
     expect(out.id).not.toBe('pe_old')
     expect(out.createdAt).not.toBe(1)
+  })
+})
+
+describe('setBuiltinFilter (findProfileById consults overrides)', () => {
+  afterEach(() => setBuiltinFilter(undefined))
+
+  it('filtered id → findProfileById returns undefined', () => {
+    expect(findProfileById('pe_reverse_descriptive')).toBeDefined()
+    setBuiltinFilter((id) => id === 'pe_reverse_descriptive')
+    expect(findProfileById('pe_reverse_descriptive')).toBeUndefined()
+    expect(findProfileById('pe_reverse_sd')).toBeDefined()
+  })
+
+  it('setBuiltinFilter(undefined) restores lookup', () => {
+    setBuiltinFilter((id) => id === 'pe_reverse_descriptive')
+    setBuiltinFilter(undefined)
+    expect(findProfileById('pe_reverse_descriptive')).toBeDefined()
   })
 })

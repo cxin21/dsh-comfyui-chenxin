@@ -14,9 +14,9 @@ type FinishKind = 'stop' | 'tool-calls' | 'max-tokens' | 'aborted' | 'error'
  * observes rounds via onContinue.
  *
  * Abort semantics: signal.throwIfAborted at round start; abort inside generate
- * propagates via the caller's signal (generate throws → rethrow, with
- * CONTINUE_ABORTED_PARTIAL warning if some continuation text was already
- * merged); post-round signal.aborted check returns the partial result.
+ * propagates via the caller's signal; post-round signal.aborted check returns
+ * the partial result. Generate errors: partial merged text is returned with
+ * CONTINUE_PARTIAL_BEFORE_ERROR (rethrow only if nothing was merged yet).
  */
 export async function continueUntilComplete(params: {
   contract: OutputContract
@@ -27,6 +27,8 @@ export async function continueUntilComplete(params: {
   maxRounds?: number
   signal: AbortSignal
   onContinue?: (round: number, maxRounds: number) => void
+  /** Request form fields, passed through to contract.expectedGroups (spec §3.2.3). */
+  formFields?: Record<string, unknown>
 }): Promise<ContinueOutcome> {
   const max = params.maxRounds ?? 3
   const warnings: string[] = []
@@ -34,7 +36,7 @@ export async function continueUntilComplete(params: {
   let finish = params.finishKind
   let rounds = 0
   while (rounds < max) {
-    const inspection = inspectOutput(text, params.contract)
+    const inspection = inspectOutput(text, params.contract, params.formFields)
     const shouldContinue = !inspection.complete || finish === 'max-tokens'
     if (!shouldContinue) break
     params.signal.throwIfAborted()
@@ -50,7 +52,11 @@ export async function continueUntilComplete(params: {
       piece = gen.text
       finish = gen.finishKind
     } catch (error) {
-      if (text !== params.initialText) warnings.push('CONTINUE_ABORTED_PARTIAL')
+      // generate 抛错时不丢弃已合并的续写文本：有部分结果则部分返回（spec §3.2.3）
+      if (text !== params.initialText) {
+        warnings.push('CONTINUE_PARTIAL_BEFORE_ERROR')
+        return { text, rounds, complete: false, warnings }
+      }
       throw error
     }
     text = mergeContinuedText(text, piece)

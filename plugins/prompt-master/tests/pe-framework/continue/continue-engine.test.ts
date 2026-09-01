@@ -34,6 +34,38 @@ describe('inspectOutput', () => {
   })
 })
 
+describe('inspectOutput groupSeparator (director_segments)', () => {
+  const director: OutputContract = {
+    id: 'minimax-director-segments', fields: [],
+    groupSeparator: /={3,}\s*提示词组\s*(\d+)\s*={3,}/g,
+    expectedGroups: (ff) => Number(ff?.segment_count ?? 4),
+  }
+
+  it('director contract: 3/4 groups → groups:3/4 missing', () => {
+    const text = '前言\n===== 提示词组 1 =====\nA\n===== 提示词组 2 =====\nB\n===== 提示词组 3 =====\nC'
+    const r = inspectOutput(text, director, { segment_count: 4 })
+    expect(r.complete).toBe(false)
+    expect(r.missing.some(m => m.includes('3/4'))).toBe(true)
+  })
+
+  it('director contract: all 4 groups present → complete', () => {
+    const text = '前言\n===== 提示词组 1 =====\nA\n===== 提示词组 2 =====\nB\n===== 提示词组 3 =====\nC\n===== 提示词组 4 =====\nD'
+    expect(inspectOutput(text, director, { segment_count: 4 }).complete).toBe(true)
+  })
+
+  it('empty group body → group:<n>:body missing', () => {
+    const text = '===== 提示词组 1 =====\nA\n===== 提示词组 2 =====\n   '
+    const r = inspectOutput(text, director, { segment_count: 2 })
+    expect(r.missing).toContain('group:2:body')
+    expect(r.complete).toBe(false)
+  })
+
+  it('text starting with separator → leading segment absent, no phantom group', () => {
+    const text = '===== 提示词组 1 =====\nA\n===== 提示词组 2 =====\nB'
+    expect(inspectOutput(text, director, { segment_count: 2 }).complete).toBe(true)
+  })
+})
+
 describe('mergeContinuedText', () => {
   it('model parrots full text → take continued only', () => {
     expect(mergeContinuedText('ABC', 'ABCDEF')).toBe('ABCDEF')
@@ -94,6 +126,31 @@ describe('continueUntilComplete', () => {
     })
     expect(r.complete).toBe(false)
     expect(r.warnings).toContain('CONTINUE_ABORTED_PARTIAL')
+  })
+
+  it('generate throws after mergeable piece → partial result returned (not throw)', async () => {
+    let n = 0
+    const r = await continueUntilComplete({
+      contract: sixSegment, initialText: 'subject_definitions: X\nsummary: Y', finishKind: 'max-tokens', seed,
+      generate: async () => {
+        n++
+        if (n === 1) return { text: 'retention_analysis: Z', finishKind: 'max-tokens' as const }
+        throw new Error('llm exploded mid-continuation')
+      },
+      signal: new AbortController().signal,
+    })
+    expect(r.complete).toBe(false)
+    expect(r.warnings).toContain('CONTINUE_PARTIAL_BEFORE_ERROR')
+    expect(r.text).toContain('retention_analysis: Z')
+    expect(r.rounds).toBe(2)
+  })
+
+  it('generate throws before any merge → rethrows', async () => {
+    await expect(continueUntilComplete({
+      contract: sixSegment, initialText: 'subject_definitions: X', finishKind: 'max-tokens', seed,
+      generate: async () => { throw new Error('boom') },
+      signal: new AbortController().signal,
+    })).rejects.toThrow('boom')
   })
 
   it('max rounds exhausted → INCOMPLETE_AFTER_MAX_ROUNDS', async () => {

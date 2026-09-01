@@ -17,7 +17,8 @@ function stubCtx() {
     agent: { options: {} },
     settings: {
       register(ns: string, schema: unknown) {
-        expect(ns).toBe('prompt-master-custom-profiles')
+        // Task 7 起注册两个 namespace：customProfiles + 内置覆盖层（profile-overrides）
+        expect(['prompt-master-custom-profiles', 'prompt-master-profile-overrides']).toContain(ns)
         expect(schema).toBeTruthy()
         return { get: () => ({ customProfiles: {} }), update: async () => {}, replace: async () => {} }
       },

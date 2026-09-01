@@ -10,6 +10,7 @@ import { registerCompileTool } from '../tools/prompt-compile.js'
 import { registerCatalogSearchTool } from '../tools/catalog-search.js'
 import { registerAuditTool } from '../tools/prompt-audit.js'
 import { setCustomProfileSource } from '../resolver/profiles/source.js'
+import { registerOverridesNamespace } from '../pe-framework/profiles/storage-v2.js'
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
 import { createDefaultIntentProvider } from '../pe-framework/intent/index.js'
@@ -45,12 +46,15 @@ export function apply(ctx: Context, config: ConfigShape) {
   //     必须早于 author 工具注册/调用 → 在 ctx.effect 之前完成
   setAuthorIntentProvider(createDefaultIntentProvider(ctx))
 
+  // 内置覆盖层 namespace（Task 7 spec §7.1）→ 注入 profile_list 工具
+  const overrides = registerOverridesNamespace(ctx)
+
   ctx.effect(() => {
     const disposers: (() => void)[] = []
     disposers.push(ctx.tools.register(registerExpandTool(ctx, config)))
     disposers.push(ctx.tools.register(registerReverseTool(ctx, config)))
     disposers.push(ctx.tools.register(registerMinimaxTool(ctx, config)))
-    disposers.push(ctx.tools.register(registerProfileListTool(ctx, config, { scope: profileScope })))
+    disposers.push(ctx.tools.register(registerProfileListTool(ctx, config, { scope: profileScope, overrides })))
     disposers.push(ctx.tools.register(registerAuthorTool(ctx, config)))
     disposers.push(ctx.tools.register(registerCompileTool(ctx)))
     disposers.push(ctx.tools.register(registerCatalogSearchTool(ctx, config)))

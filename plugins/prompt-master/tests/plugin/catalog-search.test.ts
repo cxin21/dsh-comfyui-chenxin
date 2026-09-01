@@ -29,7 +29,7 @@ describe('catalog_search', () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'zzzzzzzzq' })))
     expect(raw.hits).toEqual([])
     expect(raw.overlay.status).toBe('unavailable')
-    expect(raw.overlay.advisory).toBe('overlay_unavailable')
+    expect(raw.overlay.advisory).toContain('overlay_unavailable')
   })
 
   it('limit respected and clamped to 1..20', async () => {

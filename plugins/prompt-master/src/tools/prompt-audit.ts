@@ -27,7 +27,7 @@ export interface AuditContent {
 /** 纯审计闸门（无 LLM）：按 target 直接 audit + budget → Envelope */
 export function auditContentEnvelope(content: AuditContent): string {
   const target = content.target
-  let gates: AuditGate[]
+  let gates: AuditGate[] = []
   let budget: unknown
   let ok: boolean
   if (target === 'anima') {
@@ -45,10 +45,26 @@ export function auditContentEnvelope(content: AuditContent): string {
     const shotCount = content.shotCount ?? ((content.text.match(/\[Shot \d+\]/g) ?? []).length || 1)
     const references = content.references ?? []
     const shots: H3ShotsInput = { duration_seconds: duration, shots: [{ what: content.text.slice(0, 200) }] }
-    gates = [
-      ...contractGatesH3(stage, { duration_seconds: duration, shots: [{ what: 'x' }] }, references),
-      ...auditH3Full(content.text, { stage, duration, shotCount }, references),
-    ]
+    try {
+      gates = [
+        ...contractGatesH3(stage, { duration_seconds: duration, shots: [{ what: 'x' }] }, references),
+        ...auditH3Full(content.text, { stage, duration, shotCount }, references),
+      ]
+    } catch (error) {
+      // field_order 类结构错误（极端路径，正常时已被 auditH3 内部 gate 化）：不 throw 裸错误，返回引导 gate
+      const message = error instanceof Error ? error.message : String(error)
+      gates = [{
+        rule: 'field_order',
+        target: 'h3',
+        severity: 'critical',
+        detail: `${message}；提示：prompt_audit 接受已成型的六段式 H3 文本（subject_definitions/summary/retention_analysis/detailed_description/overall_soundscape/non_diegetic_music 固定顺序）；裸文本或非六段内容请改用 prompt_author（一句话→完整六段）或 prompt_compile（shots→六段）`,
+        source: 'tools/prompt-audit',
+      }]
+    }
+    // P5：field_order gate 的 detail 统一补引导语（auditH3 内部 gate 化的路径在此兜底）
+    gates = gates.map((g) => g.rule === 'field_order' && !g.detail.includes('prompt_author')
+      ? { ...g, detail: `${g.detail}；提示：裸文本或非六段式内容请改用 prompt_author（一句话→完整六段）或 prompt_compile（shots→六段）` }
+      : g)
     budget = h3BudgetToReport(buildH3Budget(stage, content.text, normalizeRefs(references)))
     ok = gates.every((g) => g.severity !== 'critical')
     void shots

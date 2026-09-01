@@ -36,10 +36,22 @@ describe('prompt_audit (pure audit gate)', () => {
   it('h3 critical gate surfaces (ref2va 2 refs)', () => {
     const raw = JSON.parse(auditContentEnvelope({
       target: 'h3',
-      text: 'subject_definitions: <Subject 1> is A from <Picture 1>.\n\nsummary: x\n\ndetailed_description: [Shot 1] a.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A',
+      text: 'subject_definitions: <Subject 1> is A from <Picture 1>.\n\nsummary: x\n\nretention_analysis: <Subject 1> unchanged.\n\ndetailed_description: [Shot 1] a.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A',
       stage: 'ref2va', duration: 8, shotCount: 1,
       references: [{ who: 'A', image: 'a.png' }, { who: 'B', image: 'b.png' }],
     }))
     expect(raw.audit.gates.some((g: any) => g.rule === 'ref_count' && g.severity === 'critical')).toBe(true)
+  })
+
+  it('P5: missing-field text → field_order guidance gate (not a bare throw, hints prompt_author)', () => {
+    const raw = JSON.parse(auditContentEnvelope({
+      target: 'h3',
+      text: 'subject_definitions: X\n\nsummary: Y\n\ndetailed_description: [Shot 1] a.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A',
+      stage: 't2va', duration: 10, shotCount: 1,
+    }))
+    const g = (raw.audit.gates as Array<{ rule: string; severity: string; detail: string }>).find((x) => x.rule === 'field_order')
+    expect(g).toBeTruthy()
+    expect(g!.severity).toBe('critical')
+    expect(String(g!.detail)).toContain('prompt_author')
   })
 })

@@ -28,7 +28,7 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
       const status = overlayStatus()
       return JSON.stringify({
         hits,
-        overlay: { status, advisory: status === 'available' ? undefined : 'overlay_unavailable' },
+        overlay: { status, advisory: status === 'available' ? undefined : 'overlay_unavailable：关系覆盖层未启用——运行 anima-prompt-v1 relation.submit 初始化后可见 overlay 命中' },
       })
     },
   })

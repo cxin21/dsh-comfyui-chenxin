@@ -159,7 +159,8 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     positive.push(...policy.safetySeed)
     assumptions.push('safety_seed_injected:default_for_non_explicit_request')
   }
-  // 3c: 槽固定 SLOT_ORDER（权重即顺序）
+  // 3c: 槽固定 SLOT_ORDER（权重即顺序）——不跨槽去重：忠实复刻上游 composition.py（无去重），
+  // 跨槽重复由审计稿 duplicate_segment gate 标记（闭环里模型据 `[duplicate_segment]` 自修正）
   SLOT_ORDER.forEach((slotName, slotIndex) => {
     const tags = slotOf(slots, slotName)
     if (!tags || !tags.length) return
@@ -213,8 +214,10 @@ const LIGHTING_BAN = [
   'sunlight', 'moonlight', 'rim light', 'warm lighting', 'cool lighting',
   'golden hour glow', 'soft lighting', 'backlighting', 'god rays',
   'light rays', 'volumetric light', 'spotlight', 'candlelight',
-  'neon light', 'streetlights', 'warm tone', 'cool tone', 'sepia',
+  'warm tone', 'cool tone', 'sepia',
   'light particles', 'backlit',
+  // 注：去掉了 'neon light'/'streetlights' —— 它们是场景光源对象（霓虹灯/街灯是画面内容），
+  // 不是光照渲染 LoRA 触发词；保留的是 true light-effect 词（Anima3 §2 语义）
 ]
 
 const MUTUAL_EXCLUSIONS: Array<[string, string]> = [

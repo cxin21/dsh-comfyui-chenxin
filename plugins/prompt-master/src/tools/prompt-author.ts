@@ -258,7 +258,12 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         trailAdvisories.push('loop_exhausted:true')
       }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
-      return assembleEnvelope(stage, trailAdvisories)
+      return assembleEnvelope(stage, trailAdvisories, {
+        corrections,
+        loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
+        joyExtraFiltered,
+        traceStages: stage.trace?.stages,
+      })
     },
   })
 }

@@ -52,5 +52,32 @@ describe('prompt_compile (target=anima)', () => {
     await expect(runTool(stubCtx(), def(), { target: 'anima', slots: { count_gender: ['1girl'] }, variant: 'bogus' })).rejects.toThrow(/未知 variant/)
   })
 
+  it('P1: cross-slot duplicate preserved (upstream composition.py has no dedup) but duplicate_segment gate fires', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'anima',
+      slots: { count_gender: ['1girl'], character: ['1girl'], appearance: ['red hair'] },
+    })))
+    // 忠实复刻上游：1girl 出现两次（count_gender + character 各一次）
+    const pos = raw.result.positive.split(', ').map((s: string) => s.trim()).filter(Boolean)
+    expect(pos.filter((t: string) => t === '1girl').length).toBe(2)
+    // 审计稿 duplicate_segment gate 标记（闭环里模型据此自修正）
+    expect(raw.audit.gates.some((g: any) => g.rule === 'duplicate_segment')).toBe(true)
+  })
+
+  it('P2: scene-source light words (neon lights/streetlights) NOT banned; true light-effect words still banned', async () => {
+    // neon/streetlights 是场景光源对象，不再触发 lighting_term_banned
+    const scene = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'anima',
+      slots: { scene: ['neon lights', 'streetlights'], count_gender: ['1girl'] },
+    })))
+    expect(scene.audit.gates.some((g: any) => g.rule === 'lighting_term_banned')).toBe(false)
+    // 真实光照词仍禁（现有 L34 测试已覆盖 moonlight/backlighting——此处锚定 rim light）
+    const light = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'anima',
+      slots: { detail_mood: ['rim light'], count_gender: ['1girl'] },
+    })))
+    expect(light.audit.gates.some((g: any) => g.rule === 'lighting_term_banned')).toBe(true)
+  })
+
   afterAll(() => closeCatalog())
 })

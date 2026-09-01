@@ -62,7 +62,9 @@ export async function continueUntilComplete(params: {
     text = mergeContinuedText(text, piece)
     if (params.signal.aborted) { warnings.push('CONTINUE_ABORTED_PARTIAL'); return { text, rounds, complete: false, warnings } }
   }
-  const final = inspectOutput(text, params.contract)
-  if (!final.complete || finish === 'max-tokens') warnings.push('INCOMPLETE_AFTER_MAX_ROUNDS')
-  return { text, rounds, complete: final.complete && finish !== 'max-tokens', warnings }
+  const final = inspectOutput(text, params.contract, params.formFields)
+  // 最终判定以结构完整性为准：max-tokens 只驱动循环内多续写（暗截断防线在 line ~40），
+  // 结构已验证完整时不应再判 false / 告警。
+  if (!final.complete) warnings.push('INCOMPLETE_AFTER_MAX_ROUNDS')
+  return { text, rounds, complete: final.complete, warnings }
 }

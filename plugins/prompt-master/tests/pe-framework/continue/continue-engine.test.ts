@@ -164,4 +164,22 @@ describe('continueUntilComplete', () => {
     expect(r.warnings).toContain('INCOMPLETE_AFTER_MAX_ROUNDS')
     expect(r.rounds).toBe(2)
   })
+
+  it('director contract: max-tokens but all 4 groups after continue → complete, no warnings (final inspect passes formFields)', async () => {
+    const director: OutputContract = {
+      id: 'minimax-director-segments', fields: [],
+      groupSeparator: /={3,}\s*提示词组\s*(\d+)\s*={3,}/g,
+      expectedGroups: (ff) => Number(ff?.segment_count ?? 4),
+    }
+    const fullText = '前言\n===== 提示词组 1 =====\nA\n===== 提示词组 2 =====\nB\n===== 提示词组 3 =====\nC\n===== 提示词组 4 =====\nD'
+    const r = await continueUntilComplete({
+      contract: director, initialText: '前言\n===== 提示词组 1 =====\nA', finishKind: 'max-tokens', seed,
+      generate: async () => ({ text: fullText, finishKind: 'max-tokens' as const }),
+      maxRounds: 1,
+      formFields: { segment_count: 4 },
+      signal: new AbortController().signal,
+    })
+    expect(r.complete).toBe(true)
+    expect(r.warnings).toEqual([])
+  })
 })

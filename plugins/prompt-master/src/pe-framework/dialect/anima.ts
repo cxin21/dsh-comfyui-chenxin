@@ -4,7 +4,7 @@
  * A14 修正：canonical/alias → 直用 catalog.prompt_form；fuzzy/miss → 保留原文 + catalog_miss advisory/assumption（不自动替换）。
  */
 import { SLOT_ORDER } from '../anima.js'
-import { normalizeTag, searchCatalog, overlayStatus, type CatalogHit } from './anima-catalog.js'
+import { normalizeTag, searchCatalog, overlayStatus, queryCatalogInternal, type CatalogHit } from './anima-catalog.js'
 import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
@@ -38,6 +38,21 @@ export interface CompileAnimaResult {
   negative: string
   notes: string[]
   assumptions: string[]
+  /** G2：author 载荷投影（segments/phase_status/metadata 为附加投影，positive/negative 逐字节不变） */
+  segments: AnimaSegment[]
+  phase_status: { policy: 'PASS'; grounding: 'PASS' | 'ADVISORY'; composition: 'PASS'; inspection: 'PASS' | 'ADVISORY' }
+  metadata: { variant: string; subject?: string }
+}
+
+/** G2：segment 溯源条目（对照 cli.py _segments_payload） */
+export interface AnimaSegment {
+  segment_id: string
+  text: string
+  channel: 'positive' | 'negative'
+  origin: 'policy' | 'grounded' | 'user-fuzzy' | 'narrative' | 'exclusion'
+  priority: number
+  slot: string | null
+  citation: AnimaCitation | null
 }
 
 export interface AnimaCitation {
@@ -50,6 +65,21 @@ export interface AnimaCitation {
 }
 
 const GROUNDED = new Set(['canonical', 'alias'])
+
+/** G2：citations.source 溯源（实测真库 schema：sources 无 value 列；golden 的 source 字符串即
+ *  sources.source_id 本身（如 `gelbooru_canonical:4dd8…`），records.source_ids 是 JSON 数组字符串，
+ *  故经 json_each 展开 join。查询失败/无行 → null（不阻断编译）。 */
+const SOURCE_SQL =
+  'SELECT s.source_id AS value FROM sources s JOIN records r ON r.record_id=? JOIN json_each(r.source_ids) je ON je.value=s.source_id LIMIT 1'
+
+function lookupSource(recordId: string): string | null {
+  try {
+    const rows = queryCatalogInternal(SOURCE_SQL, [recordId]) as Array<{ value?: string }>
+    return rows[0]?.value ?? null
+  } catch {
+    return null
+  }
+}
 
 interface Policy {
   variant: string
@@ -122,7 +152,7 @@ export function groundSlotTags(slots: AnimaSlots, search: (tag: string) => Catal
         record_id: top.record_id ?? null,
         canonical: top.prompt_form ?? top.raw ?? null,
         prompt_form: top.prompt_form ?? null,
-        source: null,
+        source: top.record_id ? lookupSource(top.record_id) : null,
         match_type: top.match_type as 'canonical' | 'alias',
       })
     }
@@ -148,15 +178,22 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   const notes: string[] = []
   const assumptions: string[] = []
   const missedKeys = new Set<string>()
+  /** G2：段级溯源投影（与 positive/negative push 同序，join 后逐字节等价——由 fidelity golden 把关） */
+  const segments: AnimaSegment[] = []
+  const pushSeg = (text: string, channel: 'positive' | 'negative', origin: AnimaSegment['origin'], priority: number, slot: string | null = null, citation: AnimaCitation | null = null): void => {
+    segments.push({ segment_id: `seg${segments.length + 1}`, text, channel, origin, priority, slot, citation })
+    if (channel === 'positive') positive.push(text)
+    else negative.push(text)
+  }
 
   // 3a: 策略质量词（quality_prefix 门控）
   if (qualityPrefix) {
-    positive.push(...policy.mandatoryPositive)
-    negative.push(...policy.mandatoryNegative)
+    for (const t of policy.mandatoryPositive) pushSeg(t, 'positive', 'policy', 100)
+    for (const t of policy.mandatoryNegative) pushSeg(t, 'negative', 'policy', 100)
   }
   // 3b: 安全种子（explicit 关断）
   if (!isExplicitRequest(slots)) {
-    positive.push(...policy.safetySeed)
+    for (const t of policy.safetySeed) pushSeg(t, 'positive', 'policy', 99)
     assumptions.push('safety_seed_injected:default_for_non_explicit_request')
   }
   // 3c: 槽固定 SLOT_ORDER（权重即顺序）——不跨槽去重：忠实复刻上游 composition.py（无去重），
@@ -181,17 +218,15 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
           }
         }
       }
-      positive.push(text)
-      void base
-      void tagIndex
+      pushSeg(text, 'positive', citation && citation.match_type && GROUNDED.has(citation.match_type) ? 'grounded' : 'user-fuzzy', base + tagIndex, slotName, citation ?? null)
     })
   })
   // 3d: narrative 最后
   if (slots.narrative && slots.narrative.trim()) {
-    positive.push(slots.narrative.trim())
+    pushSeg(slots.narrative.trim(), 'positive', 'narrative', 2000)
   }
   // 3e: exclusions → negative（原样）
-  negative.push(...(slots.exclusions ?? []).map((e) => String(e)))
+  for (const e of slots.exclusions ?? []) pushSeg(String(e), 'negative', 'exclusion', 900)
 
   // 3f: grounded 引用 notes
   for (const citation of citations.values()) {
@@ -200,11 +235,30 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     }
   }
 
+  // 派生字符串（与 segments 同源）：等价性证明 = fidelity golden 13 用例逐字节比对
+  const positiveText = segments.filter((s) => s.channel === 'positive').map((s) => s.text).join(', ')
+  const negativeText = segments.filter((s) => s.channel === 'negative').map((s) => s.text).join(', ')
+
+  // G2 phase_status：policy/composition 恒 PASS；grounding = 存在 record_id citation；
+  // inspection = 审计 gates 有 important+（本插件 Severity 联合为 critical|important|minor，
+  // 无独立 'conflict' 值）→ ADVISORY。tag_count_out_of_range 例外不计：
+  // 工作区间 12-50 之外的短 brief（含本规范自测用例 count_gender:['1girl']）是常规合法输入，
+  // 该软性计数 advisory（闭环内自修正项）不降级 inspection 阶段。
+  const gates = auditAnima(positiveText, negativeText, { variant, slots, search })
+  const grounding: 'PASS' | 'ADVISORY' = [...citations.values()].some((c) => c.record_id) ? 'PASS' : 'ADVISORY'
+  const inspection: 'PASS' | 'ADVISORY' = gates.some((g) => g.severity === 'critical' || (g.severity === 'important' && g.rule !== 'tag_count_out_of_range')) ? 'ADVISORY' : 'PASS'
+
+  const metadata: CompileAnimaResult['metadata'] = { variant }
+  if (slots.subject !== undefined) metadata.subject = slots.subject
+
   return {
-    positive: positive.join(', '),
-    negative: negative.join(', '),
+    positive: positiveText,
+    negative: negativeText,
     notes,
     assumptions,
+    segments,
+    phase_status: { policy: 'PASS', grounding, composition: 'PASS', inspection },
+    metadata,
   }
 }
 
@@ -367,6 +421,7 @@ export function validateAnimaSlots(slots: unknown): string | undefined {
   for (const k of Object.keys(s)) {
     if (k === 'narrative') { if (typeof s[k] !== 'string') return 'narrative 需为 string'; continue }
     if (k === 'exclusions') { if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return 'exclusions 需为 string[]'; continue }
+    if (k === 'subject') { if (typeof s[k] !== 'string') return 'subject 需为 string'; continue }
     if (ANIMA_BOOL_KEYS.has(k)) { if (typeof s[k] !== 'boolean') return `${k} 需为 boolean`; continue }
     if (!ANIMA_SLOT_KEYS.has(k)) return `未知槽位: ${k}`
     if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return `槽位 ${k} 需为 string[]`

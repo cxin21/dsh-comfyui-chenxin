@@ -79,5 +79,33 @@ describe('prompt_compile (target=anima)', () => {
     expect(light.audit.gates.some((g: any) => g.rule === 'lighting_term_banned')).toBe(true)
   })
 
+  it('G2: segments projection (origin/priority/slot provenance)', async () => {
+    const ctx = stubCtx()
+    const raw = JSON.parse(String(await runTool(ctx, def(), {
+      target: 'anima',
+      slots: { count_gender: ['1girl'], appearance: ['long hair'], narrative: '一段描述', exclusions: ['lowres'] },
+    })))
+    const segs = raw.result.segments as Array<{ text: string; channel: string; origin: string; priority: number; slot?: string }>
+    expect(segs.filter((s) => s.origin === 'policy').length).toBeGreaterThan(0)
+    expect(segs.some((s) => s.origin === 'grounded' && s.slot === 'count_gender')).toBe(true)
+    expect(segs.some((s) => s.origin === 'narrative' && s.channel === 'positive')).toBe(true)
+    expect(segs.some((s) => s.origin === 'exclusion' && s.channel === 'negative')).toBe(true)
+    expect(segs.every((s) => typeof s.priority === 'number')).toBe(true)
+  })
+
+  it('G2: phase_status four stages', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'anima', slots: { count_gender: ['1girl'] },
+    })))
+    expect(raw.result.phase_status).toEqual({ policy: 'PASS', grounding: 'PASS', composition: 'PASS', inspection: 'PASS' })
+  })
+
+  it('G2: metadata carries variant', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'anima', slots: { count_gender: ['1girl'] }, variant: 'aesthetic',
+    })))
+    expect(raw.result.metadata).toEqual({ variant: 'aesthetic' })
+  })
+
   afterAll(() => closeCatalog())
 })

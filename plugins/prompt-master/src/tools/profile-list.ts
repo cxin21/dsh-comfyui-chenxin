@@ -67,6 +67,7 @@ export function registerProfileListTool(_ctx: Context, _config: Config, deps: { 
         if (target) profiles = profiles.filter((p) => profileTargets(p).includes(target as ProfileTarget))
         if (query) {
           const q = query.toLowerCase()
+          // 注：search 语义=合并列表的小写子串过滤（原 searchProfiles 的评分排序不适用 overrides 过滤后列表）
           profiles = profiles.filter((p) => p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.tags.some((t) => t.toLowerCase().includes(q)))
         }
         return JSON.stringify({

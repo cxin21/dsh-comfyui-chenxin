@@ -100,6 +100,20 @@ describe('prompt_compile (target=anima)', () => {
     expect(raw.result.phase_status).toEqual({ policy: 'PASS', grounding: 'PASS', composition: 'PASS', inspection: 'PASS' })
   })
 
+  it('G2: phase_status projected at envelope top level', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'anima', slots: { count_gender: ['1girl'] },
+    })))
+    expect(raw.phase_status).toEqual({ policy: 'PASS', grounding: 'PASS', composition: 'PASS', inspection: 'PASS' })
+  })
+
+  it('G2: h3 envelope has no top-level phase_status', async () => {
+    const raw = JSON.parse(String(await runTool(stubCtx(), def(), {
+      target: 'h3', shots: { duration_seconds: 5, shots: [{ what: '女孩走进便利店', dialogue: ['你好'] }] },
+    })))
+    expect('phase_status' in raw).toBe(false)
+  })
+
   it('G2: metadata carries variant', async () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), def(), {
       target: 'anima', slots: { count_gender: ['1girl'] }, variant: 'aesthetic',

@@ -25,7 +25,7 @@ export interface EnvelopeObservability {
   traceStages?: Array<{ name: string; ms: number }>
 }
 
-export function assembleEnvelope(stage: StageResult, trail?: string[], observability?: EnvelopeObservability): string {
+export function assembleEnvelope(stage: StageResult, trail?: string[], observability?: EnvelopeObservability, dialectTopLevel?: Record<string, unknown>): string {
   const audit = {
     passed: stage.ok,
     gates: stage.gates,
@@ -39,6 +39,8 @@ export function assembleEnvelope(stage: StageResult, trail?: string[], observabi
     advisories: [...stage.advisories, ...(trail ?? [])],
     target_slot_hint: stage.targetSlotHint,
     ...(observability !== undefined ? { observability } : {}),
+    // G2：方言顶层投影（如 anima phase_status）最后合并——方言键不被基础键覆盖，h3 不传则无变化
+    ...(dialectTopLevel ?? {}),
   }
   return serializeReport(envelope as unknown as AuditReport)
 }

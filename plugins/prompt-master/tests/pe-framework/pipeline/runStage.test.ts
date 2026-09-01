@@ -72,6 +72,14 @@ describe('assembleEnvelope', () => {
     expect(s.advisories).toEqual(['a', 'trail'])
   })
 
+  it('dialectTopLevel keys merge into envelope top level', () => {
+    const s = JSON.parse(assembleEnvelope(
+      { ok: true, result: { x: 1 }, gates: [], advisories: [], assumptions: [], targetSlotHint: 't2i.prompt' } as any,
+      [], undefined, { phase_status: { policy: 'PASS' } },
+    ))
+    expect(s.phase_status).toEqual({ policy: 'PASS' })
+  })
+
   it('omits result when ok=false (audit_only semantics)', () => {
     const s = JSON.parse(assembleEnvelope(
       { ok: false, result: {}, gates: [{ rule: 'x', target: 'anima', severity: 'critical', detail: 'd' }], advisories: [], assumptions: [], targetSlotHint: 't2i.prompt' } as any,

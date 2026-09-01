@@ -24,8 +24,8 @@ export interface CompileArgs {
 /** StageResult → Envelope（thin view 组装点）；omitResult 用于 audit_only 语义（不返回提示词正文）。
  *  MF-3：result 省略仅限 audit_only——非 audit_only 即使 ok=false（critical 闸门）也保留 result
  *  （对齐旧 compile 行为：ok:true + audit.passed:false 可见编译产物；确定性编译无「修复重试」路径）。 */
-function stageToEnvelope(stage: StageResult, opts?: { omitResult?: boolean }): string {
-  const env = JSON.parse(assembleEnvelope(stage)) as Record<string, unknown>
+function stageToEnvelope(stage: StageResult, opts?: { omitResult?: boolean; dialectTopLevel?: Record<string, unknown> }): string {
+  const env = JSON.parse(assembleEnvelope(stage, undefined, undefined, opts?.dialectTopLevel)) as Record<string, unknown>
   if (opts?.omitResult) delete env.result
   else if (env.result === undefined) env.result = stage.result
   return serializeReport(env as never)
@@ -41,7 +41,13 @@ export function compileAnimaEnvelope(slots: Record<string, unknown> | undefined,
   }
   const stage = runStage({ target: 'anima', slots, variant, auditOnly: auditOnly === true })
   onStage?.(stage)
-  return stageToEnvelope(stage, { omitResult: auditOnly === true })
+  return stageToEnvelope(stage, {
+    omitResult: auditOnly === true,
+    // G2：anima 四阶段状态投影到 Envelope 顶层（SKILL.md 343-356 要求原样上报）；audit_only 时 result 被 omit，顶层投影仍可见
+    dialectTopLevel: typeof stage.result === 'object' && stage.result !== null && 'phase_status' in stage.result
+      ? { phase_status: (stage.result as { phase_status: unknown }).phase_status }
+      : undefined,
+  })
 }
 
 export function registerCompileTool(ctx?: Context) {

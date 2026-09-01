@@ -5,6 +5,7 @@ import { findProfileById } from '../resolver/profiles/index.js'
 import { sanitizeFinalCaption } from '../resolver/profiles/reverse/router.js'
 import { completeWithBlocks } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
+import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -95,6 +96,8 @@ export function registerReverseTool(ctx: Context, config: Config) {
         return debug
       }
       const { provider, model } = resolveRoute(exec as ExecLike)
+      const caps = getCapabilities(inferModelFamily(provider, model))
+      const effectiveParams = applyCapabilities(caps, { temperature: config.temperature })
       const blocks: ContentBlock[] = [
         ...images.map((b) => ({ ...b })),
         ...(text ? [{ type: 'text' as const, text }] : []),
@@ -110,7 +113,7 @@ export function registerReverseTool(ctx: Context, config: Config) {
         system: reverseResult.system,
         blocks,
         maxTokens: 512,
-        temperature: config.temperature,
+        temperature: effectiveParams.temperature,
         signal: exec.signal,
       })
       const sanitized = sanitizeFinalCaption(raw, {

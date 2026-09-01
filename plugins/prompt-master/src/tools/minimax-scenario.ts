@@ -3,6 +3,7 @@ import { listScenarios, getScenarioById, resolveMinimaxScenarioExpand } from '..
 import { countChars } from '../utils/length.js'
 import { complete } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
+import { inferModelFamily, getCapabilities, applyCapabilities } from '../pe-framework/model-capabilities/index.js'
 import type { Config } from '../plugin/config.js'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -70,9 +71,11 @@ export function registerMinimaxTool(ctx: Context, config: Config) {
         })
       }
       const { provider, model } = resolveRoute(exec as ExecLike)
+      const caps = getCapabilities(inferModelFamily(provider, model))
+      const effectiveParams = applyCapabilities(caps, { temperature: config.temperature })
       const { text, usage } = await complete(ctx, {
         provider, model, system: expanded.system, user: expanded.user,
-        maxTokens: expanded.maxTokens, temperature: config.temperature, signal: exec.signal,
+        maxTokens: expanded.maxTokens, temperature: effectiveParams.temperature, signal: exec.signal,
       })
       const char_count = countChars(text)
       return JSON.stringify({

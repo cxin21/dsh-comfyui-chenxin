@@ -2,7 +2,9 @@
 // 五点结构 + 极致还原检查表 + 单段自然文本
 
 import * as ComfyuiPE from './comfyui.js';
-import { resolveExpandMaxTokens } from '../expand-rules.js';
+// D1：字数表述统一走 CaptionLen.resolveCaptionWordCountHint（PM descriptivePromptEngineering.js:25 委托，
+// 返回档位文案如「150～300」；旧内联 maxTokens×0.75 裸数字系统性偏离上游）
+import { resolveCaptionWordCountHint } from './length.js';
 
 const DESCRIPTIVE_TYPE = 'Descriptive';
 
@@ -17,10 +19,7 @@ function applies(caption: any): boolean {
 }
 
 export function resolveWordCountHint(caption: any): string {
-  const len = caption.len || 'medium';
-  const maxTokens = resolveExpandMaxTokens(len, caption.caption_len_chars);
-  // 近似 1 token ≈ 1 word/1.5 字符
-  return String(Math.round(maxTokens * 0.75));
+  return resolveCaptionWordCountHint(caption);
 }
 
 function isZhCaption(caption: any): boolean {

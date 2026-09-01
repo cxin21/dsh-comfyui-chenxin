@@ -4,7 +4,7 @@ import { resolveExpandSystemMessage, buildExpandUserPrompt, resolveExpandMaxToke
 import { PROMPTS_B } from './torii/prompts.js';
 import { isStructuredTemplateProfile } from './torii/formats.js';
 import { PEProfile, ExpandResult } from '../types.js';
-import * as ComfyuiPE from './reverse/comfyui.js';
+import { buildSystemPrompt as routerBuildSystemPrompt, buildSystemAddons as routerBuildSystemAddons } from './reverse/router.js';
 import { renderTemplate } from '../renderer.js';
 
 function mirrorProfileForExpand(src: PEProfile): PEProfile {
@@ -96,7 +96,9 @@ export function resolveExpandFromReverseMirror(profile: PEProfile, params: any):
     media_target: 'image',
   } as any;
 
-  let system = ComfyuiPE.buildExpertSystemPrefix(cap, 'image') + ComfyuiPE.buildFaithfulReproductionBlock(cap, 'image');
+  // M1：上游 expandReverseMirror.js:125-126 走 CaptionPE.buildSystemPrompt + buildSystemAddons
+  // （按 type 路由 Descriptive/Danbooru/Anima3，并叠加 workflow/长度 addon），非 ComfyUI 双块硬编码
+  let system = routerBuildSystemPrompt(cap, 'image') + routerBuildSystemAddons(cap, 'image');
   system = adaptReversePeSystemForExpand(system, outputLang);
   system = applyExpandLength(system, expandLen, outputLang, expandLenChars);
   system = applyUserExtraPrompt(system, userExtraPrompt, outputLang);
@@ -113,7 +115,7 @@ export function resolveExpandFromReverseMirror(profile: PEProfile, params: any):
   return {
     system,
     user,
-    maxTokens: resolveExpandMaxTokens(expandLen, expandLenChars),
+    maxTokens: resolveExpandMaxTokens(expandLen, expandLenChars, tokenLimits),
     ruleId: profile.id,
   };
 }

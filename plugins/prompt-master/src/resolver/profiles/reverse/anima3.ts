@@ -3,6 +3,9 @@
 // tag 行清洗统一走共享模块 tagLineSanitize.ts（1:1 移植自 PM tagLineSanitize.js），
 // 避免与 router.ts 重复维护两份 cleanTagLineBody 实现。
 import { cleanTagLineBody } from './tagLineSanitize.js';
+// A1：字数档解析统一走 CaptionLen（PM anima3PromptEngineering.js:15 直接委托
+// CaptionLen.resolveAnima3TagCountBand——内联版丢失 custom 分支，此处改为委托 length.ts 的 1:1 移植）
+import { resolveAnima3TagCountBand } from './length.js';
 
 // ANIMA3 主逻辑
 
@@ -11,15 +14,7 @@ function isZh(caption: any): boolean {
 }
 
 function resolveTagCountBand(caption: any): { band: string; tier: string } {
-  const len = caption.len || 'medium';
-  const map: Record<string, { band: string; tier: string }> = {
-    very_short: { band: '10-18', tier: 'minimal' },
-    short: { band: '16-30', tier: 'simple' },
-    medium: { band: '22-38', tier: 'standard' },
-    long: { band: '30-48', tier: 'complex' },
-    very_long: { band: '36-55', tier: 'complex' },
-  };
-  return map[len] || map.medium;
+  return resolveAnima3TagCountBand(caption);
 }
 
 const PRIORITY_ZH =

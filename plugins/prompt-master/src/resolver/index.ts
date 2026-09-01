@@ -24,6 +24,8 @@ import {
   buildOutputConstraints,
 } from './profiles/reverse/router.js';
 import { isReverseCatalogExpandProfile, resolveExpandFromReverseMirror } from './profiles/expand-mirror.js';
+// V1：自定义反推分支的长度块走 CaptionLen（PM promptEngineeringResolver.js:227 CaptionLen.buildCaptionLengthBlock）
+import { buildCaptionLengthBlock } from './profiles/reverse/length.js';
 import { isMinimaxScenarioProfile, resolveMinimaxScenarioExpand, isH3FullReferenceProfile, resolveH3FullReferenceExpand } from './minimax/index.js';
 
 // 给 router 函数起别名避免和上面 expand 解析中的 buildSystemPrompt 冲突
@@ -172,8 +174,10 @@ export function resolveReverse(profile: PEProfile, params: ReverseParams): Rever
   let system = String(profile.systemPrompt || '').trim();
   system = applyOutputLanguage(system, cap.caption_lang || 'zh');
 
-  // 标题块（PM 中用 CaptionLen.buildCaptionLengthBlock）
-  system += '\n\n' + routerBuildSystemPrompt(cap, mediaTarget);
+  // V1：上游此处追加 CaptionLen.buildCaptionLengthBlock(cap)（resolver.js:227）；
+  // port 曾误用 routerBuildSystemPrompt 顶替长度块——恢复长度块。JoyExtra enforcement 块
+  // （resolver.js:228）按既定裁剪方针维持不移植。
+  system += buildCaptionLengthBlock(cap);
 
   const taskLead = zh
     ? '请根据当前媒体内容，严格按系统提示词要求输出反推结果。只输出正文，不要解释。'

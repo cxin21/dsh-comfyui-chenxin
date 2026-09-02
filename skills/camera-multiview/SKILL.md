@@ -19,7 +19,7 @@ Do not call when:
 - The user has no reference images yet — they need a generation step first (use `camera-image`).
 - The user wants a single image, not a multi-view set — use `camera-image`.
 - The user wants video — use `camera-video`.
-- The user wants prose, prompts, or creative direction — those are different skills (e.g. `anima-prompt-v1`).
+- The user wants prose, prompts, or creative direction — those are different: `prompt_author (target=anima)` (prompt-master plugin) or the host.
 
 ## First principle
 

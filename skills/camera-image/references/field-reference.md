@@ -10,7 +10,7 @@ document, never the other way around.
 
 | Key | Type | Required | Maps to | Notes |
 |---|---|---|---|---|
-| `prompt.positive` | string | yes | node 24 `wildcard_text` + `populated_text` | Comma-separated Anima positive. Emitted by `anima-prompt-v1 author`. |
+| `prompt.positive` | string | yes | node 24 `wildcard_text` + `populated_text` | Comma-separated Anima positive. Emitted by `prompt_author (target=anima)` (prompt-master plugin). |
 | `prompt.negative` | string | no | node 25 same pair | Defaults to `""`. Single string, no list. |
 
 Non-string or empty `prompt.positive` is rejected with `validation_failed`.

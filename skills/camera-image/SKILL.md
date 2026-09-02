@@ -1,7 +1,7 @@
 ---
 name: camera-image
 description: "Execute the bundled Anima camera workflow on a local ComfyUI server and save one PNG per run. Two stages — text→image (`t2i`) and image→image (`i2i`, requires `reference_image`). Fixed UI asset (`camera-anima.json`) is sha256-pinned and structurally fingerprinted against `manifest.json`; the user supplies a flat JSON request that writes the request-only widget values. Use this skill for any Anima still-image request that needs the bundled camera / lens / DOF / LoRA / sampling / preset surface. Load this skill immediately on any 'Anima 生图' / '跑一个 camera-image' / '跑 t2i' / '跑 i2i' / '把图改成俯视' / '换相机视角' request; do not improvise with generic image tools."
-whenToUse: "User wants one Anima still image generated on the bundled camera workflow. Use after prompt is authored (or fed by anima-prompt-v1) and before any post-processing."
+whenToUse: "User wants one Anima still image generated on the bundled camera workflow. Use after prompt is authored (e.g. by `prompt_author (target=anima)`, prompt-master plugin) and before any post-processing."
 ---
 
 # Camera Image
@@ -13,7 +13,7 @@ Execute the pinned Anima camera workflow (`camera-anima.json`) on your ComfyUI s
 
 Every run validates → patches → strips → enqueues → waits → downloads exactly one PNG.
 
-If you need to author prompts first, run `anima-prompt-v1 author` and feed the emitted `positive` into `prompt.positive`. If you need a video, use `camera-video`. If you need a multi-view character sheet, use `camera-multiview`.
+If you need to author prompts first, use the prompt-master plugin's `prompt_author (target=anima)` and feed the emitted `positive` into `prompt.positive`. If you need a video, use `camera-video`. If you need a multi-view character sheet, use `camera-multiview`.
 
 ## When to call
 
@@ -27,7 +27,7 @@ Do not call this skill when:
 
 - The user wants video → `camera-video`.
 - The user wants a multi-view character sheet → `camera-multiview`.
-- The user wants prose, prompts, or creative direction → `anima-prompt-v1` (or send the request back to the host).
+- The user wants prose, prompts, or creative direction → `prompt_author (target=anima)` (prompt-master plugin; or send the request back to the host).
 
 ## First principle
 
@@ -97,7 +97,7 @@ The block below shows every field the parser accepts. It is documentation, not a
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `prompt.positive` | string | **yes** | Non-empty; maps to node 24 (wildcard + populated text). Emitted by `anima-prompt-v1 author`. |
+| `prompt.positive` | string | **yes** | Non-empty; maps to node 24 (wildcard + populated text). Emitted by `prompt_author (target=anima)` (prompt-master plugin). |
 | `prompt.negative` | string | no | Default `""`; maps to node 25. |
 | `evidence` | object | no | Free-form journal; passed through verbatim to `summary.json`. Never read by the skill. |
 | `profile_id` | string | no | Default `"camera-anima-v1"` (manifest-pinned). Any other value → reject. |

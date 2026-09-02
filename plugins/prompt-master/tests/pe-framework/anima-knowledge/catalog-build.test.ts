@@ -349,7 +349,7 @@ describe.skipIf(process.env.PM_RUN_REAL !== '1')('real tags.sqlite full rebuild 
     '204MB tags.sqlite → tmp tag-catalog：stats 规模 + fts parity + search 命中',
     { timeout: 300_000 },
     async () => {
-      const sourcePath = join(realPresetRoot(), 'skills', 'anima-prompt-v1', 'knowledge', 'tags.sqlite')
+      const sourcePath = join(realPresetRoot(), 'assets', 'knowledge', 'anima-prompt-v1', 'tags.sqlite')
       expect(existsSync(sourcePath)).toBe(true)
       const dir = join(baseTmp, 'real-out')
       const outputPath = join(dir, 'tag-catalog.sqlite')

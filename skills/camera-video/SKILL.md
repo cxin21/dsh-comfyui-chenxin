@@ -1,7 +1,7 @@
 ---
 name: camera-video
-description: "Execute MiniMax-H3 video generation on ComfyUI and save one video per run. Three stages — text-to-video (`t2v`), single-reference (`i2v`), and multi-reference (`multi-i2v`). The prompt comes from `minimax-h3-prompt`; this skill just runs the fixed MiniMax H3 workflow on your ComfyUI server. Do NOT use for prompt authoring — call `minimax-h3-prompt` first."
-whenToUse: "User wants one MiniMax H3 video rendered. Use after the prompt is authored by `minimax-h3-prompt` and before any post-processing."
+description: "Execute MiniMax-H3 video generation on ComfyUI and save one video per run. Three stages — text-to-video (`t2v`), single-reference (`i2v`), and multi-reference (`multi-i2v`). The prompt comes from `prompt_author (target=h3)` (prompt-master plugin); this skill just runs the fixed MiniMax H3 workflow on your ComfyUI server. Do NOT use for prompt authoring — call `prompt_author (target=h3)` first."
+whenToUse: "User wants one MiniMax H3 video rendered. Use after the prompt is authored by `prompt_author (target=h3)` (prompt-master plugin) and before any post-processing."
 ---
 
 # Camera Video
@@ -20,14 +20,14 @@ Three stages over fixed MiniMax-H3 workflows. Execution runs through comfyui-mcp
 
 Call this skill when:
 
-1. The user has an H3 prompt (typically from `minimax-h3-prompt author`).
+1. The user has an H3 prompt (typically from `prompt_author (target=h3)`, i.e. `result.text`).
 2. The user wants the prompt rendered through MiniMax H3 on their ComfyUI server.
 3. The fixed MiniMax H3 workflow asset ships with this skill (no creative direction needed).
 
 Do not call this skill when:
 
 - The user wants a still image → `camera-image` (Anima) or `camera-multiview` (Flux2-Klein).
-- The user wants an H3 prompt authored or validated → `minimax-h3-prompt`.
+- The user wants an H3 prompt authored or validated → `prompt_author (target=h3)` / `prompt_compile` / `prompt_audit` (prompt-master plugin).
 - The user wants to switch models or change the workflow structure → out of scope.
 
 ## First principle
@@ -71,7 +71,7 @@ For runnable examples see [Examples](#examples).
 
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `prompt` | string | **yes** | — | H3 native prompt (typically `result.text` from `minimax-h3-prompt author`) |
+| `prompt` | string | **yes** | — | H3 native prompt (typically `result.text` from `prompt_author (target=h3)`) |
 | `duration` | float | no | `4.0` | Length in seconds; range `[2, 15]` |
 | `references` | list[string] | conditional | `[]` | Ordered local image paths; `t2v` rejects non-empty, `i2v` requires exactly 1, `multi-i2v` requires exactly 3 |
 
@@ -211,18 +211,14 @@ JSON
     --stage multi-i2v --request req.json --output-dir temp/camera-video/
 ```
 
-### Example 4 — From an `minimax-h3-prompt` output
+### Example 4 — From a `prompt_author (target=h3)` output
 
 ```bash
-# 1. Author the H3 prompt
-<preset>\.venv\Scripts\minimax-h3-prompt.exe author \
-    --stage t2va \
-    --request story.json \
-    --tokenizer-dir <preset>/skills/minimax-h3-prompt/knowledge \
-    > h3-out.json
+# 1. Author the H3 prompt via the prompt-master plugin (target=h3 → result.text)
+#    (no CLI; call the prompt_author tool in-session)
 
-# 2. Extract `result.text` from the envelope (jq)
-PROMPT=$(jq -r '.result.text' h3-out.json)
+# 2. Extract `result.text` from the envelope (in-session), then wrap for camera-video
+PROMPT=$(jq -R -s . h3-out.txt)  # or paste result.text directly
 
 # 3. Wrap it for camera-video
 jq -n --arg p "$PROMPT" '{
@@ -262,4 +258,4 @@ If the wait times out but the prompt is still queued/running, the run returns a 
 - [`camera_video/runtime/`](camera_video/runtime/) — request schema validation, graph build, asset loading
 - [`../../docs/cli-cookbook.md`](../../docs/cli-cookbook.md) — every CLI invocation form
 - [`../../docs/troubleshooting.md`](../../docs/troubleshooting.md) — error recovery
-- [`../minimax-h3-prompt/SKILL.md`](../minimax-h3-prompt/SKILL.md) — author the prompt first
+- prompt-master plugin — `prompt_author (target=h3)` authors the prompt first

@@ -24,32 +24,32 @@ DSH 预设：5 个 prompt + camera 技能 + 共享运行时，让 agent 在本�
 # 一次性：装 Python 3.10+，把 preset 拿到本地，然后：
 git clone https://github.com/cxin21/dsh-comfyui-chenxin.git
 # 从 GitHub Releases (v0.1.0) 下载 3 个数据包（.gz），解压后放回：
-#   skills/anima-prompt-v1/knowledge/tag-catalog.sqlite   （来自 tag-catalog.sqlite.gz）
-#   skills/anima-prompt-v1/knowledge/tags.sqlite          （来自 tags.sqlite.gz）
-#   skills/minimax-h3-prompt/knowledge/tokenizer.json     （来自 tokenizer.json.gz）
+#   assets/knowledge/anima-prompt-v1/tag-catalog.sqlite   （来自 tag-catalog.sqlite.gz）
+#   assets/knowledge/anima-prompt-v1/tags.sqlite          （来自 tags.sqlite.gz）
+#   assets/knowledge/minimax-h3-prompt/tokenizer.json     （来自 tokenizer.json.gz）
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
-# 重启 DSH，会话起来后 loader 会自动注册 5 个 CLI 工具
-# （anima_prompt_v1 / minimax_h3_prompt / camera_image / camera_video / camera_multiview）
+# 重启 DSH，会话起来后 loader 会自动注册 3 个 CLI 工具
+# （camera_image / camera_video / camera_multiview）；提示词创作由 prompt-master 插件承担
 ```
 
 > **大文件不走 git**：三个知识库快照（共 ~993 MB）体积过大，托管在
 > [GitHub Releases](https://github.com/cxin21/dsh-comfyui-chenxin/releases)（tag `v0.1.0`，
 > gzip 压缩后共 ~241 MB）。clone 后按上表放回路径即可，仓库内 `.gitignore` 已排除它们。
 
-`scripts/setup.ps1` 会创建 `<preset>/.venv`、装 `tokenizers`、把 8 个本地包装进 venv、自检 5 个 CLI，全部幂等。详见 `docs/development.md`。
+`scripts/setup.ps1` 会创建 `<preset>/.venv`、装 `tokenizers`、把 6 个本地包装进 venv、自检 3 个 CLI，全部幂等。详见 `docs/development.md`。
 
 ## 这是什么
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  agent ──► loader.js ──► ctx.skills (catalog) + ctx.tools (5 个 CLI)   │
+│  agent ──► loader.js ──► ctx.skills (catalog) + ctx.tools (3 个 CLI)   │
 │                                                                      │
-│  skills/anima-prompt-v1    ← Anima 提示词编译器（slot → tag）         │
-│  skills/minimax-h3-prompt  ← MiniMax H3 提示词编译器（T2VA/I2VA/...） │
-│  skills/camera-image       ← Anima camera workflow（t2i/i2i）        │
-│  skills/camera-video       ← MiniMax H3 视频（t2v/i2v/multi-i2v）    │
-│  skills/camera-multiview   ← Flux2-Klein 多视图角色卡                  │
+│  plugins/prompt-master  ← 提示词创作内核（Anima/H3 编译+审计+管理）    │
+│  assets/knowledge/      ← 知识资产（tag-catalog/tags/tokenizer 等）   │
+│  skills/camera-image    ← Anima camera workflow（t2i/i2i）            │
+│  skills/camera-video    ← MiniMax H3 视频（t2v/i2v/multi-i2v）        │
+│  skills/camera-multiview← Flux2-Klein 多视图角色卡                  │
 │                                                                      │
 │  runtime/chenxin_runtime   ← P1 envelope + 共享 CLI runner + 相机引擎 │
 │  runtime/comfyui_http      ← stdlib HTTP 通道（history/view）          │
@@ -61,10 +61,10 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 ## 给谁用、什么时候调哪个 skill
 
-| 我想做 | 用这个 skill | 然后用 |
+| 我想做 | 用这个 | 然后用 |
 |---|---|---|
-| 写 Anima 提示词（slot → 单行 positive/negative） | `anima-prompt-v1` | `camera-image` |
-| 写 MiniMax H3 视频提示词（T2VA / I2VA / FL2VA / L2VA / Ref2VA） | `minimax-h3-prompt` | `camera-video` |
+| 写 Anima 提示词（slot → 单行 positive/negative） | `prompt_author` (target=anima) / `prompt_compile`（prompt-master 插件） | `camera-image` |
+| 写 MiniMax H3 视频提示词（T2VA / I2VA / FL2VA / L2VA / Ref2VA） | `prompt_author` (target=h3) / `prompt_compile`（prompt-master 插件） | `camera-video` |
 | 跑 Anima 图（text→image / image→image） | `camera-image` | — |
 | 跑 MiniMax H3 视频 | `camera-video` | — |
 | 跑多视图角色卡（Flux2-Klein） | `camera-multiview` | — |
@@ -89,20 +89,16 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 │   ├── development.md                   ← setup / install_local / 调试
 │   └── troubleshooting.md               ← 常见错误与恢复
 ├── temp/                                ← 运行时生成物（可按技能子目录清理）
-│   ├── anima-prompt-v1/                 ← catalog.sqlite / relation-overlay.sqlite
+│   ├── anima-prompt-v1/                 ← relation-overlay.sqlite（catalog_relations）
 │   ├── camera-image/                    ← t2i/i2i 产物 PNG + summary.json
 │   ├── camera-video/                    ← t2v/i2v/multi-i2v 产物 mp4 + summary.json
 │   ├── camera-multiview/                ← 多视图 PNG + summary.json
-│   ├── minimax-h3-prompt/               ← 预留（当前无落盘产物）
 │   └── runtime/.workflow_cache/         ← 引擎缓存（10-deep LRU）
+├── assets/knowledge/                    ← 知识资产（prompt-master 只读消费）
+│   ├── anima-prompt-v1/                 ← tag-catalog.sqlite / tags.sqlite / manifest.json
+│   └── minimax-h3-prompt/               ← tokenizer.json / tokenizer_config.json / chat_template.json
+├── plugins/prompt-master/               ← 提示词创作内核（编译+审计+管理工具）
 ├── skills/
-│   ├── anima-prompt-v1/
-│   │   ├── SKILL.md                     ← LLM 契约
-│   │   └── references/                  ← 实现细节、规则
-│   ├── minimax-h3-prompt/
-│   │   ├── SKILL.md
-│   │   ├── knowledge/                   ← tokenizer snapshot
-│   │   └── references/
 │   ├── camera-image/
 │   │   ├── SKILL.md
 │   │   └── camera_image/runtime/        ← 请求解析 / graph / assets
@@ -150,11 +146,11 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 > 此表是汇总；**每个 skill 的 SKILL.md 里的 failure-modes 表是权威**（个别 error code 映射到不同 exit，例如 camera-multiview 的 `McpError` 映射到 5、`AssetError` 映射到 4）。
 
-`anima-prompt-v1 author` 在没 `--json` 时会切换到纯文本（`POSITIVE: ... / NEGATIVE: ...`），其他 CLI 始终吐 envelope。
+Anima/H3 提示词创作由 prompt-master 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` 工具承担（不走 CLI）；camera-* CLI 只负责执行渲染，始终吐 envelope。
 
 ## 下一步
 
-- **新用户**：先读 [`AGENTS.md`](AGENTS.md)，看任务→skill 路由
-- **agent**：直接通过 host tool 调用 `anima_prompt_v1` / `minimax_h3_prompt` / `camera_image` / `camera_video` / `camera_multiview`（loader 已注册）
+- **新用户**：先读 [`AGENTS.md`](AGENTS.md)，看任务→工具路由
+- **agent**：提示词创作走 prompt-master 工具（`prompt_author` / `prompt_compile` / `prompt_audit` / `catalog_search` / `catalog_relations` / `catalog_build`）；渲染执行走 host tool `camera_image` / `camera_video` / `camera_multiview`（loader 已注册）
 - **开发者 / 调试**：读 [`docs/development.md`](docs/development.md) + [`docs/cli-cookbook.md`](docs/cli-cookbook.md)
 - **已知问题 / 审计**：读 [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md)

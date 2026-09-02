@@ -59,8 +59,8 @@ afterEach(() => {
 
 describe('catalog_build tool', () => {
   it('无参数默认：resolveKnowledgePath 推导源/输出/manifest，构建 + manifest 更新', async () => {
-    // 假 preset 布局：<tmp>/skills/anima-prompt-v1/knowledge/tags.sqlite
-    const knowledge = join(presetTmp, 'skills', 'anima-prompt-v1', 'knowledge')
+    // 假 preset 布局：<tmp>/assets/knowledge/anima-prompt-v1/tags.sqlite（Stage 2 新位置）
+    const knowledge = join(presetTmp, 'assets', 'knowledge', 'anima-prompt-v1')
     mkdirSync(knowledge, { recursive: true })
     seedTagsSource(join(knowledge, 'tags.sqlite'))
     setPresetRoot(presetTmp)
@@ -109,7 +109,7 @@ describe('catalog_build tool', () => {
   })
 
   it('显式 output 与默认一致 → 仍更新默认 manifest（就地重建语义）', async () => {
-    const knowledge = join(presetTmp, 'skills', 'anima-prompt-v1', 'knowledge')
+    const knowledge = join(presetTmp, 'assets', 'knowledge', 'anima-prompt-v1')
     mkdirSync(knowledge, { recursive: true })
     seedTagsSource(join(knowledge, 'tags.sqlite'))
     setPresetRoot(presetTmp)

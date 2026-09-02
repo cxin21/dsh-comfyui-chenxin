@@ -142,8 +142,8 @@ function ensureCustomExpandSystem(system: string, outputLang: string, shortText:
   let s = String(system || '').trim();
   const useEn = resolveUseEnglishOutput(outputLang, shortText);
   const guard = useEn
-    ? ' Expand ONLY the source text labeled「待扩写原文」or「Source text to expand」. Never treat style names as the subject to elaborate.'
-    : ' 仅扩写用户消息中「待扩写原文」一段为绘图正向提示词；不要把风格名、扩写规则本身扩写成说明文。';
+    ? ' Expand ONLY the source text labeled「待扩写原文」or「Source text to expand」in the user message. Never treat style names or expansion rules as the subject to elaborate.'
+    : ' 仅扩写用户消息中「待扩写原文」一段为绘图正向提示词；不要把风格名、扩写规则本身扩写成说明文或散文。';
   if (!/待扩写原文|Source text to expand|用户输入|User input/i.test(s)) s += guard;
   return s;
 }

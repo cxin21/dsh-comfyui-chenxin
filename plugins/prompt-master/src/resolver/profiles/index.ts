@@ -59,6 +59,9 @@ const BUILTIN_REVERSE_PROFILES: PEProfile[] = [
 ];
 
 // ========== 8 种内置扩写 Profile（来自 expand-rules.ts 的 EXPAND_RULES）==========
+// legacy-name collision: PM 3.1.0 内置该 id 为其他语义；本 port 保留 expand 语义（消费方为 expand 路由）
+// （审计 R1：pe_expand_natural 等在 LEGACY_EXPAND_PE_ID_MAP 中是应映射到 pe_expand_descriptive/pe_expand_sd 的旧 id；
+//   port 将其注册为现役 expand profile，legacy 映射对这些 key 不会被触发——id 体系保持不变，此处仅声明语义）
 function buildBuiltinExpandProfiles(): PEProfile[] {
   return EXPAND_RULES.map((r, i) => ({
     id: `pe_${r.id}`,

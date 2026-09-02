@@ -395,7 +395,7 @@ export const COMFYUI_EXTRA_TEMPLATES: Record<string, { zh: string; en: string }>
   },
   comfyui_lora_style: {
     zh: '描述主体、环境、姿态（含四肢与朝向）、互动；删除画风、媒介、渲染方式与质量词（风格 LoRA 训练用）。',
-    en: 'Subject, environment, pose/orion, interaction—strip style/medium/quality (style LoRA).',
+    en: 'Subject, environment, pose/orientation, interaction—strip style/medium/quality (style LoRA).',
   },
   comfyui_fidelity_max: {
     zh: '最高优先级：还原度。逐项扫视检查表，人物必须写头朝向、视线、表情、双手动作、双腿与脚姿态、持物方式；禁止概括性省略。',

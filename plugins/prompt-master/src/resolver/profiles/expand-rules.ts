@@ -2,6 +2,10 @@
 // 8 种扩写 Profile + 篇幅控制 + 输出语言锁定
 
 // === 篇幅预设 ===
+// E1 (审计 2026-08-31-resolver-3.1.0-diff.md §10): 上游 promptExpandRules.js:189-233 每条预设还带 labelUi
+// （如 `标准（约 150～300 字）`），EXPAND_LENGTH_OPTIONS 取 `label: p.labelUi || p.label` 作为 UI 完整文案。
+// 本 port 的数据结构不承载 labelUi（port-only 决定，T4 裁决）：preset 类型无该字段，UI label 保留短词，
+// 完整篇幅语义由 listExpandLengthsForUi 的 description（= hintZh）承载；不影响 prompt 文本（hintZh/hintEn/maxTokens 逐字一致）。
 export const EXPAND_LENGTH_PRESETS: Record<string, {
   label: string; maxTokens: number; hintZh: string; hintEn: string;
 }> = {

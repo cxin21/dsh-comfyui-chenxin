@@ -191,6 +191,49 @@ describe('buildCatalog — tiny tags.sqlite fixture (raw-tags branch)', () => {
   })
 })
 
+describe('rename fallback（仅 Windows 共享冲突 EPERM/EBUSY 回退原地重写；其他错误上抛）', () => {
+  it.each(['EPERM', 'EBUSY'] as const)('rename 抛 %s → copyFileSync 回退：产物完整可读、行在、无 .tmp 残留', (code: 'EPERM' | 'EBUSY') => {
+    const dir = join(baseTmp, 'fallback-' + code)
+    const sourcePath = join(dir, 'tags.sqlite')
+    const outputPath = join(dir, 'tag-catalog.sqlite')
+    makeTagsSource(sourcePath)
+
+    const stats = buildCatalog({
+      sourcePath,
+      outputPath,
+      renameFn: () => {
+        const failed = code === 'EPERM' ? 'operation not permitted' : 'device or resource busy'
+        throw Object.assign(new Error(`${code}: ${failed}, rename`), { code })
+      },
+    })
+    // 回退落盘后统计与普通 build 一致；目标是可读 sqlite（countOf 打开即验证）且行在
+    expect(stats).toEqual({ records: 4, names: 6, ftsRows: 6 })
+    expect(countOf(outputPath, 'records')).toBe(4)
+    expect(countOf(outputPath, 'names')).toBe(6)
+    // 回退走完 cleanup：无临时文件残留
+    expect(existsSync(outputPath + '.tmp')).toBe(false)
+  })
+
+  it('rename 抛非 EPERM/EBUSY（EACCES）→ 直接上抛，不回退、不落盘', () => {
+    const dir = join(baseTmp, 'fallback-eacces')
+    const sourcePath = join(dir, 'tags.sqlite')
+    const outputPath = join(dir, 'tag-catalog.sqlite')
+    makeTagsSource(sourcePath)
+
+    expect(() =>
+      buildCatalog({
+        sourcePath,
+        outputPath,
+        renameFn: () => {
+          throw Object.assign(new Error('EACCES: permission denied, rename'), { code: 'EACCES' })
+        },
+      }),
+    ).toThrow(/EACCES/)
+    // 目标不被半成品污染（rename 失败即中止，不写 output）
+    expect(existsSync(outputPath)).toBe(false)
+  })
+})
+
 describe('classifyCategory / normalize（facets.py 移植）', () => {
   it('来源分类特判映射', () => {
     expect(classifyCategory('x', 'artist')).toBe('artist')

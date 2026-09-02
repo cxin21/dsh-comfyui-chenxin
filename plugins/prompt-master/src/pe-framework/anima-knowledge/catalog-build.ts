@@ -14,10 +14,11 @@
  * - 构建打开自己的只读源连接 + 可写临时输出连接，**绝不触碰** anima-catalog.ts 的
  *   只读缓存句柄；替换落盘后下一次 db() 经 G4 mtime 刷新自动切换到新文件。
  * - 原子性：临时文件完整构建成功后 rename 替换（POSIX / 目标未被占用时）。
- *   Windows 上目标被已打开 SQLite 句柄占用时 rename 报 EPERM（句柄未带
- *   FILE_SHARE_DELETE），回退 copyFileSync 原地重写 —— 构建是同步代码，
+ *   Windows 上目标被已打开 SQLite 句柄占用时 rename 报 EPERM / EBUSY（句柄未带
+ *   FILE_SHARE_DELETE），仅这两个码回退 copyFileSync 原地重写 —— 构建是同步代码，
  *   事件循环内没有并发查询交错，进程内读者不可能观察到半成品；
  *   G4 的 mtime 检查在下次 db() 时关闭陈旧句柄并重开。
+ *   其他 rename 错误（如 ACL 拒绝的 EACCES）直接上抛，不静默降级成原地重写。
  */
 import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
@@ -296,9 +297,17 @@ function copyNormalized(source: DatabaseSync, output: DatabaseSync): void {
   }
 }
 
+export interface BuildCatalogOptions {
+  sourcePath: string
+  outputPath: string
+  manifestPath?: string
+  /** 原子替换注入缝隙（M3 测试）：默认 node:fs renameSync；仅 EPERM/EBUSY 回退原地重写 */
+  renameFn?: (oldPath: string, newPath: string) => void
+}
+
 /** builder.py build 主链 + 原子替换（详见文件头注释，Windows rename 回退说明） */
-export function buildCatalog(options: { sourcePath: string; outputPath: string; manifestPath?: string }): CatalogBuildStats {
-  const { sourcePath, outputPath } = options
+export function buildCatalog(options: BuildCatalogOptions): CatalogBuildStats {
+  const { sourcePath, outputPath, renameFn = renameSync } = options
   if (!existsSync(sourcePath)) throw new Error(`catalog source not found: ${sourcePath}`)
   if (resolve(sourcePath) === resolve(outputPath)) throw new Error('output must not overwrite source')
   mkdirSync(dirname(outputPath), { recursive: true })
@@ -332,10 +341,13 @@ export function buildCatalog(options: { sourcePath: string; outputPath: string; 
   }
   try {
     // os.replace 移植：POSIX 直接替换；Windows 目标被已打开 SQLite 句柄占用（无
-    // FILE_SHARE_DELETE）时 rename 报 EPERM → 回退 copyFileSync 原地重写（同步构建，
-    // 进程内不可能交错读取；G4 mtime 刷新处理陈旧句柄）。
-    renameSync(temporary, outputPath)
+    // FILE_SHARE_DELETE）时 rename 报 EPERM / EBUSY → 仅这两个码回退 copyFileSync
+    // 原地重写（同步构建，进程内不可能交错读取；G4 mtime 刷新处理陈旧句柄）。
+    // 其他 rename 错误（如 ACL 拒绝的 EACCES）直接上抛，不静默降级成原地重写。
+    renameFn(temporary, outputPath)
   } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code
+    if (code !== 'EPERM' && code !== 'EBUSY') throw e
     copyFileSync(temporary, outputPath)
   }
   try {

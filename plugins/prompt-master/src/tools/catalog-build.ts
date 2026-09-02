@@ -33,8 +33,8 @@ export function registerCatalogBuildTool(ctx: Context, _config: Config) {
       '从 tags.sqlite 重建 Anima tag-catalog（临时文件 → FTS5 填充 → VACUUM → 原子替换），' +
       '替换后用 G4 mtime 刷新让 catalog_search 自动读新文件；默认同时重写 manifest.json。',
     parameters: {
-      source: { type: 'string', description: '源 tags.sqlite 路径（默认 resolveKnowledgePath: skills/anima-prompt-v1/knowledge/tags.sqlite）' },
-      output: { type: 'string', description: '输出 tag-catalog.sqlite 路径（默认 resolveKnowledgePath: .../tag-catalog.sqlite）' },
+      source: { type: 'string', description: '源 tags.sqlite 路径（resolveKnowledgePath default，见根路径注入）' },
+      output: { type: 'string', description: '输出 tag-catalog.sqlite 路径（resolveKnowledgePath default，见根路径注入）' },
     },
     output: {
       schema: { type: 'string', description: 'Envelope JSON {ok, stats?, errors?}' },
@@ -44,8 +44,13 @@ export function registerCatalogBuildTool(ctx: Context, _config: Config) {
       const sourcePath = args.source?.trim() ? pathResolve(args.source) : defaultSource()
       const writtenOutput = args.output?.trim() ? pathResolve(args.output) : defaultOutput()
       const outputPath = writtenOutput
-      // manifest 仅当目标是默认 knowledge catalog（就地重建）时更新
-      const manifestPath = pathResolve(outputPath) === pathResolve(defaultOutput()) ? defaultManifest() : undefined
+      // manifest 仅当目标是默认 knowledge catalog（就地重建）时更新；
+      // win32（NTFS 默认不区分大小写）用 case-insensitive 比较，避免大小写差异把自定义 output 误判成默认
+      const sameAsDefault =
+        process.platform === 'win32'
+          ? pathResolve(outputPath).toLowerCase() === pathResolve(defaultOutput()).toLowerCase()
+          : pathResolve(outputPath) === pathResolve(defaultOutput())
+      const manifestPath = sameAsDefault ? defaultManifest() : undefined
       try {
         const stats = buildCatalog({ sourcePath, outputPath, manifestPath })
         logInfo(

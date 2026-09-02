@@ -29,11 +29,11 @@ function stubCtx() {
 }
 
 describe('plugin registration', () => {
-  it('registers exactly the nine tools with native names', () => {
+  it('registers exactly the ten tools with native names', () => {
     const { ctx, registered } = stubCtx()
     apply(ctx, { temperature: 0.7 })
     const names = registered.map((d) => d.name).sort()
-    expect(names).toEqual(['catalog_relations', 'catalog_search', 'minimax_scenario', 'profile_list', 'prompt_audit', 'prompt_author', 'prompt_compile', 'prompt_expand', 'prompt_reverse'])
+    expect(names).toEqual(['catalog_build', 'catalog_relations', 'catalog_search', 'minimax_scenario', 'profile_list', 'prompt_audit', 'prompt_author', 'prompt_compile', 'prompt_expand', 'prompt_reverse'])
   })
 
   it('all outputs declare a string schema', () => {

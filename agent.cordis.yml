@@ -1,15 +1,17 @@
 # ComfyUI Chenxin Agent Preset
 #
 # Persona + host skill stack + compaction + basic tools + loader (single
-# plugin that registers the 5 bundled SKILL.md files into the host's
-# `ctx.skills` registry, plus 5 CLI wrapper Host Tools if a Python venv has
-# been set up at <preset>/.venv/).
+# plugin that registers the 3 bundled SKILL.md files into the host's
+# `ctx.skills` registry, plus 3 CLI wrapper Host Tools if a Python venv has
+# been set up at <preset>/.venv/). Anima/MiniMax-H3 prompt authoring is
+# provided by the prompt-master plugin (prompt_author / prompt_compile /
+# prompt_audit), not by CLI wrapper tools or bundled skills.
 #
 # Self-contained: copy this directory to ~/.dsh/.agent-presets/comfyui-chenxin/
-# and the 5 SKILL.md files appear in the session skill catalog (names +
+# and the 3 SKILL.md files appear in the session skill catalog (names +
 # descriptions only). The model loads any skill's full instructions on demand
 # by calling the `skill` tool, or automatically when the user types
-# `/skill-name`. To enable the 5 CLI tools, run scripts/setup.ps1 (Windows)
+# `/skill-name`. To enable the 3 CLI tools, run scripts/setup.ps1 (Windows)
 # or scripts/setup.sh (macOS/Linux) ONCE per machine; then restart DSH.
 #
 # Path injection (highest priority first):
@@ -24,13 +26,12 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     text: |-
-      You are the ComfyUI Chenxin agent. You author prompts for Anima and MiniMax H3,
-      and execute camera workflows via local Python console scripts.
+      You are the ComfyUI Chenxin agent. You author prompts for Anima and MiniMax H3
+      via the prompt-master plugin, and execute camera workflows via local Python
+      console scripts.
 
-      The preset bundles five Skills under skills/, exposed via the standard skill
-      catalog (see <available_skills> in your system reminder):
-      - anima-prompt-v1: Anima prompt authoring with Catalog, relation graph, and quality policy
-      - minimax-h3-prompt: MiniMax H3 T2VA/Ref2VA prompt authoring with tokenizer
+      The preset bundles three camera Skills under skills/, exposed via the standard
+      skill catalog (see <available_skills> in your system reminder):
       - camera-image: Anima camera workflow (t2i/i2i)
       - camera-video: MiniMax H3 video workflow (T2V/I2V/multi-I2V)
       - camera-multiview: Flux2-Klein multiview generation
@@ -40,12 +41,13 @@
       skill-domain tasks before loading — the catalog contains summaries only, not
       the full instructions. Load all applicable skills, then follow them.
 
-      When the CLI wrapper Tools (anima_prompt_v1 / minimax_h3_prompt / camera_image /
-      camera_video / camera_multiview) are registered, prefer them over directly
-      spawning the console scripts. All CLI calls return P1 JSON Envelope responses;
-      surface advisories to the user verbatim. If the CLI Tools are NOT registered,
-      follow the SKILL.md instructions using your own reasoning and the bundled
-      references/.
+      Anima / MiniMax-H3 prompt authoring is handled by the prompt-master plugin
+      (prompt_author / prompt_compile / prompt_audit) — there is no CLI wrapper.
+      When the CLI wrapper Tools (camera_image / camera_video / camera_multiview)
+      are registered, prefer them over directly spawning the console scripts. All
+      CLI calls return P1 JSON Envelope responses; surface advisories to the user
+      verbatim. If the CLI Tools are NOT registered, follow the SKILL.md
+      instructions using your own reasoning and the bundled references/.
     complete: false
 
 # ── Global instructions (host-provided) ──────────────────────────────────
@@ -88,7 +90,7 @@
 # `skill` tool, injects the <available_skills> catalog as a system reminder
 # each step, and auto-loads skills when the user types `/skill-name`.
 #
-# The loader below registers the preset's own 5 SKILL.md files as an
+# The loader below registers the preset's own 3 SKILL.md files as an
 # additional provider into ctx.skills, so they appear in the same catalog
 # alongside any workspace skills.
 - id: skill-filesystem
@@ -98,7 +100,7 @@
   name: '@deepseek-ai/dsh-tool-skill'
 
 # ── Compaction (host-provided) ───────────────────────────────────────────
-# The 5 SKILL.md files are large. Without compaction, long sessions overflow
+# The bundled SKILL.md files are large. Without compaction, long sessions overflow
 # the context window and the model returns CONTEXT_WINDOW_EXCEEDED. The pruner
 # keeps large CLI tool results from inflating the surface; the basic engine
 # summarizes older history into a structured checkpoint; command-compact
@@ -128,10 +130,10 @@
         tailChars: 512
 
 # ── ComfyUI Chenxin Loader ───────────────────────────────────────────────
-# Single plugin. Registers a custom skill provider that lists the 5 bundled
+# Single plugin. Registers a custom skill provider that lists the 3 bundled
 # SKILL.md files into ctx.skills (so tool-skill's catalog picks them up and
 # the model can load each on demand via the `skill` tool). If
-# <preset>/.venv/ exists with 5 console scripts, also registers 5 CLI
+# <preset>/.venv/ exists with 3 console scripts, also registers 3 CLI
 # wrapper Tools.
 - id: comfyui-loader
   name: './loader.js'
@@ -139,3 +141,10 @@
     # Override the preset root here if auto-discovery fails. Leave unset to use
     # shellEnv / process.env / __dirname (preset's own directory) fallback.
     presetRoot: null
+
+# ── Prompt Master plugin（仅本 preset 装配；项目随 preset 一起迁移到 plugins/prompt-master）──
+# 零 provider 配置：模型路由完全跟随当前 DSH 会话（resolveRoute 三环：会话 route → agent options → 报错）
+- id: prompt-master
+  name: './plugins/prompt-master/dist/src/plugin/index.js'
+  config:
+    temperature: 0.7

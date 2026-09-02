@@ -17,8 +17,6 @@ import sys
 from pathlib import Path
 
 PRESET_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PRESET_ROOT / "skills" / "anima-prompt-v1"))
-sys.path.insert(0, str(PRESET_ROOT / "skills" / "minimax-h3-prompt"))
 sys.path.insert(0, str(PRESET_ROOT / "skills" / "camera-image"))
 sys.path.insert(0, str(PRESET_ROOT / "skills" / "camera-video"))
 sys.path.insert(0, str(PRESET_ROOT / "skills" / "camera-multiview"))
@@ -88,23 +86,6 @@ def first_example_stage(skill_md: Path) -> str | None:
     return stage_match.group(1) if stage_match else None
 
 
-def check_anima() -> None:
-    from anima_prompt_v1.cli import _coerce_brief
-    from anima_prompt_v1.types import ModelPolicy
-
-    payload = first_example(PRESET_ROOT / "skills/anima-prompt-v1/SKILL.md")
-    ModelPolicy.for_variant(payload.get("variant", "base"))
-    _coerce_brief(payload)
-
-
-def check_h3() -> None:
-    from h3_prompt.contracts import parse_request
-
-    payload = first_example(PRESET_ROOT / "skills/minimax-h3-prompt/SKILL.md")
-    stage = "ref2va" if payload.get("references") else "t2va"
-    parse_request(stage, payload)
-
-
 def check_camera_image() -> None:
     from camera_image.runtime.assets import asset_identity
     from camera_image.runtime.request import parse_request
@@ -162,8 +143,6 @@ def check_camera_multiview() -> None:
 
 
 CHECKS = {
-    "anima-prompt-v1": check_anima,
-    "minimax-h3-prompt": check_h3,
     "camera-image": check_camera_image,
     "camera-video": check_camera_video,
     "camera-multiview": check_camera_multiview,

@@ -1,13 +1,13 @@
 # AGENTS.md — Agent 工作守则
 
-每个 agent session 开始时，把这份文件当作运行手册：**任务进来 → 路由到 skill → 调对应 CLI 工具 → 解析 envelope → 把结果交给用户**。
+每个 agent session 开始时，把这份文件当作运行手册：**任务进来 → 路由到 skill → 调对应工具/CLI → 解析 envelope → 把结果交给用户**。
 
 ## 1. 任务路由表
 
 | 用户说 | 你该做的 | 调用的 CLI |
 |---|---|---|
-| 写 Anima 提示词 / 把一段描述变成 Anima tag | 先 `anima-prompt-v1 author` 拿到 `positive` + `negative`，**别直接跑 ComfyUI** | `anima_prompt_v1` |
-| 写 MiniMax H3 视频提示词 / 验证 H3 prompt 长度 | `minimax-h3-prompt author` | `minimax_h3_prompt` |
+| 写 Anima 提示词 / 把一段描述变成 Anima tag | 调用 `prompt_author` (target=`anima`) 拿 `positive` + `negative`，**别直接跑 ComfyUI**；要确定性编译/审计用 `prompt_compile` / `prompt_audit`（prompt-master 插件） | `prompt_author` (target=anima) |
+| 写 MiniMax H3 视频提示词 / 验证 H3 prompt 长度 | 调用 `prompt_author` (target=`h3`) / `prompt_compile` (shots)（prompt-master 插件） | `prompt_author` (target=h3) |
 | 跑 Anima 图（t2i / i2i） | 先 `camera-image describe --summary` 看契约，写 req.json，再 `camera-image run` | `camera_image` |
 | 跑 MiniMax H3 视频 | `camera-video describe --summary` → 写 req.json → `camera-video run` | `camera_video` |
 | 跑多视图角色卡 / 三视图 / 多姿态 | `camera-multiview describe` → 写 req.json → `camera-multiview run` | `camera_multiview` |
@@ -20,12 +20,12 @@
 
 ```text
 1. 调用 <cli> describe [--summary] 看契约（prompt 是哪个 stage、需要什么字段）
-2. 写 <preset>/temp/<skill>/<task>/req.json（或 story.json / brief.json）
-3. 调用 <cli> run / author，--request 指向那个文件；不传 --output-dir 时产物默认落
+2. 写 <preset>/temp/<skill>/<task>/req.json
+3. 调用 <cli> run，--request 指向那个文件；不传 --output-dir 时产物默认落
    <preset>/temp/<skill>/（camera-image → temp/camera-image/，camera-video →
    temp/camera-video/，camera-multiview → temp/camera-multiview/）
 4. 解析 envelope：
-     - ok=true → 把 result 关键字段（prompt / summary.json 路径）给用户
+     - ok=true → 把 result 关键字段（summary.json 路径）给用户
      - ok=false → 看 errors[].code，按 docs/troubleshooting.md 的恢复建议走
 5. advisories 永远透传给用户（advisory 是非阻塞警告，不是错误）
 ```
@@ -33,9 +33,10 @@
 注意：
 - `camera-image run` 默认会**问你 y/N**（group plan / asset verification），自动化场景必须加 `--yes`。
 - `camera-video run` 和 `camera-multiview run` **不接受 `--yes`**（argparse 会直接 exit code 2），它们没有交互式 prompt，会直接 enqueue。不要照搬 `camera-image` 的 flag。
-- 所有 CLI 都接受 `--json`（loader 已经自动加）；`anima-prompt-v1 author` 在没 `--json` 时切换到纯文本输出，**调 CLI 时必须加 `--json`**。
+- 所有 CLI 都接受 `--json`（loader 已经自动加），**调 CLI 时不用自己加 `--json`**。
+- 写 Anima / H3 提示词**不走 CLI**：由 prompt-master 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` 处理，CLI 只负责 camera-* 的执行。
 - `--request` 文件路径用绝对路径或 preset 内相对路径，不要依赖 cwd。
-- **跨 skill 的字段不可移植**：`evidence` 是 `anima-prompt-v1` 的合法字段，但 `camera-video` / `camera-image` 的 request schema **不接受它**（会触发 `validation_failed: unsupported request field(s)`）。每个 skill 的字段独立，先 `describe --summary` 看 `result.request` 的 schema 描述，不要凭印象从其他 skill 抄。
+- **跨 skill 的字段不可移植**：每个 skill 的 request schema 独立，先 `describe --summary` 看 `result.request` 的 schema 描述，不要凭印象从其他 skill 抄。
 
 ## 3. 输出与文件位置
 
@@ -48,16 +49,16 @@ temp/<skill>/<task>/
 ```
 
 约定：
-- agent 写的请求文件放到 `temp/<skill>/<task>/` 下面（skill 名与 CLI 名一致：camera-image / camera-video / camera-multiview / anima-prompt-v1 / minimax-h3-prompt）
+- agent 写的请求文件放到 `temp/<skill>/<task>/` 下面（skill 名与 CLI 名一致：camera-image / camera-video / camera-multiview）
 - camera-* 的产物默认落 `<preset>/temp/<skill>/`（不传 `--output-dir` 时），也可显式 `--output-dir` 覆盖到别处
-- anima 的 `catalog build` 默认写 `temp/anima-prompt-v1/catalog.sqlite`，`relation.*` 默认读写 `temp/anima-prompt-v1/relation-overlay.sqlite`
+- prompt-master 的 `catalog_build` 工具从 `assets/knowledge/anima-prompt-v1/tags.sqlite` 重建 `tag-catalog.sqlite` + manifest；`catalog_relations` 读写 `temp/anima-prompt-v1/relation-overlay.sqlite`
 - 引擎 workflow 缓存（每次 run 写 1 个 json）落在 `temp/runtime/.workflow_cache/`，随 temp 一起清理
 - 不要写到 `skills/<name>/` 下面（那是技能包源码 + 只读 knowledge/，与项目无关；历史遗留的 `out/` 已迁到 `temp/`）
 
 ## 4. 不要做的事
 
 - **不要绕开 skill 自己拼请求**：所有 ComfyUI 工作流都固定在 skill 里的 asset（`camera-anima.json` / `Flux2-Klein人物一键多视图工作流.json`），调用方只写请求表面（prompt / camera / reference path），不写 node ID、widget index、graph 结构。
-- **不要碰 system Python**：所有 8 个本地包只装在 `<preset>/.venv`；如果发现 `import chenxin_runtime` 在裸 `python` 下失败，**那是预期行为**，让用户走 venv（`.\.venv\Scripts\python.exe`）或激活 venv。
+- **不要碰 system Python**：所有 6 个本地包只装在 `<preset>/.venv`；如果发现 `import chenxin_runtime` 在裸 `python` 下失败，**那是预期行为**，让用户走 venv（`.\.venv\Scripts\python.exe`）或激活 venv。
 - **不要在没有 `describe --summary` 的情况下猜字段**：每个 skill 的请求 schema 在 `describe --summary` 的 `result.example` 里都有活样板，直接复制。
 - **不要把 envelope 的 `errors[]` 当 `warnings`**：errors 永远意味着调用失败，需要修复后重试；advisories 是非阻塞警告。
 
@@ -65,12 +66,8 @@ temp/<skill>/<task>/
 
 | Envelope code | 出处 | 怎么修 |
 |---|---|---|
-| `brief_validation_failed` | anima | brief slot 拼错 / 缺字段 → 看 `result.advisories` 定位 |
-| `catalog_read_failed` | anima | 重新跑 `anima-prompt-v1 catalog build` |
-| `h3_audit_failed` | h3 | findings 数组里说哪个门禁失败，按说明修 story |
-| `budget_exceeded` | h3 | 缩短 story / 砍镜头 |
-| `official_envelope_violated` | h3 | reference / video / audio 数量超官方上限 |
-| `tokenizer_integrity_failed` | h3 | 跑 `scripts/setup.ps1` 重新装 tokenizer snapshot |
+| `catalog_build_failed` / `input_file_missing` | prompt-master (catalog) | 知识资产缺失 / 重建失败 → 跑 `catalog_build` 工具重建 |
+| audit critical gates（`field_order` / `cut_timestamps` / `ref_count` / `budget` / 其余 rule） | prompt_author / prompt_compile / prompt_audit | 看 `audit.gates[].rule` + `detail` 修 slots / shots；修正闭环 max 2 次，`loop_exhausted:true` 时人工接手 |
 | `invalid_request` | camera-* | req.json 路径/格式不对 |
 | `input_file_missing` | camera-* | 路径在硬盘上不存在，修复路径 |
 | `group_confirmation_aborted` | camera-image | 自动化场景加 `--yes`，或改 req 减 group |
@@ -100,7 +97,7 @@ temp/<skill>/<task>/
 
 **为什么必须有这条**：CLI 启动到真正 enqueue 之间可能 0–3 秒。这段时间 arg 解析失败 / IO 错 / schema 错都会写到 stderr。如果只看 stdout（enqueue 成功才输出）或等 GPU 涨就以为在跑，**你会在 25 分钟的轮询里等一个从来不存在的任务**。
 
-**长跑任务（>5 分钟）的监控模式**（`minimax-h3-prompt` 多段流水线、批量调用都用得到）：
+**长跑任务（>5 分钟）的监控模式**（`camera-video` multi-i2v 渲染流水线、批量调用都用得到）：
 
 ```text
 1. enqueue 后立即拿 prompt_id（从 stdout JSON envelope 的 result.prompt_id，或从 ComfyUI /queue 抓）
@@ -119,8 +116,6 @@ temp/<skill>/<task>/
 每个 skill 的 `--list-actions` 是动作列表的权威来源（loader 也用它发现 action）：
 
 ```bash
-<preset>\.venv\Scripts\anima-prompt-v1.exe --list-actions
-<preset>\.venv\Scripts\minimax-h3-prompt.exe --list-actions
 <preset>\.venv\Scripts\camera-image.exe --list-actions
 <preset>\.venv\Scripts\camera-video.exe --list-actions
 <preset>\.venv\Scripts\camera-multiview.exe --list-actions

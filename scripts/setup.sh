@@ -37,8 +37,6 @@ for rel in \
   runtime/comfyui_http \
   runtime/comfyui_mcp \
   runtime/chenxin_runtime \
-  skills/anima-prompt-v1 \
-  skills/minimax-h3-prompt \
   skills/camera-image \
   skills/camera-video \
   skills/camera-multiview
@@ -53,14 +51,14 @@ do
 done
 
 # 4. Self-check: every CLI must report its actions
-for script in anima-prompt-v1 minimax-h3-prompt camera-image camera-video camera-multiview; do
+for script in camera-image camera-video camera-multiview; do
   actions="$("$VENV_DIR/bin/$script" --list-actions)"
   echo "[comfyui-chenxin] $script actions: $(echo "$actions" | tr '\n' ' ')"
 done
 
 # 5. Node.js check (required for camera execution via comfyui-mcp)
 if ! command -v npx >/dev/null 2>&1; then
-  echo "WARNING: npx not found on PATH. Prompt authoring works, but camera-* execution requires Node.js." >&2
+  echo "WARNING: npx not found on PATH. camera-* execution requires Node.js." >&2
 fi
 
 echo ""

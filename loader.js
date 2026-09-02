@@ -1,5 +1,5 @@
 // ComfyUI Chenxin preset loader — single plugin that:
-//   1. Registers a custom skill PROVIDER that exposes the 5 bundled SKILL.md
+//   1. Registers a custom skill PROVIDER that exposes the 3 bundled SKILL.md
 //      files to the host's `ctx.skills` registry. Combined with the host's
 //      @deepseek-ai/dsh-tool-skill, this gives the model an on-demand skill
 //      catalog: summaries in the system prompt, full bodies loaded only when
@@ -8,7 +8,7 @@
 //   2. Watches the bundled skills/ directory for changes and calls
 //      `control.invalidate()` so catalog updates land on the next request
 //      without restarting the session.
-//   3. Registers five Host Tools that wrap the bundled console scripts IF a
+//   3. Registers three Host Tools that wrap the bundled console scripts IF a
 //      Python venv has been set up at <preset>/.venv/ (graceful skip otherwise).
 //
 // Virgin contract: each skill's CLI exposes ``--list-actions`` and is the
@@ -20,7 +20,7 @@
 // Skill installation (one-time, per machine):
 //   When a venv is not present, the loader prints setup instructions to the
 //   console. The user runs scripts/setup.ps1 (or scripts/setup.sh) to create
-//   <preset>/.venv/ and pip install the 5 skill packages + the shared
+//   <preset>/.venv/ and pip install the 3 skill packages + the shared
 //   chenxin-runtime. After that, the loader picks up the console scripts on
 //   subsequent activations.
 //
@@ -53,11 +53,9 @@ const cp = require('node:child_process')
 // The loader.js sits in the preset's own directory, so __dirname IS the preset.
 const PRESET_DIR = __dirname
 
-// 5 Skills bundled under <preset>/skills/. The order here defines the order
+// 3 Skills bundled under <preset>/skills/. The order here defines the order
 // the loader registers them and the order actions appear in tool descriptions.
 const SKILLS = [
-  { name: 'anima-prompt-v1', file: 'skills/anima-prompt-v1/SKILL.md' },
-  { name: 'minimax-h3-prompt', file: 'skills/minimax-h3-prompt/SKILL.md' },
   { name: 'camera-image', file: 'skills/camera-image/SKILL.md' },
   { name: 'camera-video', file: 'skills/camera-video/SKILL.md' },
   { name: 'camera-multiview', file: 'skills/camera-multiview/SKILL.md' },
@@ -69,16 +67,6 @@ const SKILLS = [
 // description. Every skill now takes ONE flat `--request <file.json>` object
 // (no envelope/config split); camera-* add `--stage`, `--output-dir`.
 const CONSOLE_SCRIPTS = [
-  {
-    name: 'anima_prompt_v1',
-    script: 'anima-prompt-v1',
-    blurb: 'Author Anima prompts (Base/Aesthetic/Turbo). Load the anima-prompt-v1 skill for the behavior contract first. `author --request <brief.json>` runs the full authoring pipeline in one call; `catalog search|related|browse|stats` look up tag evidence; `relation submit|list|accept|reject` maintain the overlay.',
-  },
-  {
-    name: 'minimax_h3_prompt',
-    script: 'minimax-h3-prompt',
-    blurb: 'Author MiniMax-H3 video prompts across every official mode. Load the minimax-h3-prompt skill for the request shape and full examples first. `author --stage <t2va|i2va|fl2va|l2va|ref2va> [--plan <plan.json>] --request <story.json> --tokenizer-dir <snapshot>` renders the official dialect (alignment preamble for keyframe modes; six ref2va sections or three base fields otherwise), audits it against the H3 gates (4-15 s duration, 7000 char cap, sequential cut timestamps, resolved labels), and reports token + character accounting. Returns a Chinese skeleton with structural tokens translated and prose verbatim. Failure envelopes: h3_audit_failed, budget_exceeded, tokenizer_integrity_failed, official_envelope_violated.',
-  },
   {
     name: 'camera_image',
     script: 'camera-image',
@@ -494,8 +482,8 @@ function registerCliTools(ctx, presetRoot, venvScripts) {
         properties: {
           action: { type: 'string', enum: actions, description: 'The console-script subcommand to invoke.' },
           args: { type: 'array', description: 'Additional CLI arguments appended after the action (each a string), e.g. ["--summary"], ["--config", "c.json"], ["--output-dir", "out/"].', items: { type: 'string' } },
-          stage: { type: 'string', description: 'Optional stage token forwarded as --stage (camera-* describe/run; h3 author/audit).' },
-          request_file: { type: 'string', description: 'Optional JSON request file forwarded as --request (anima author; h3 author/audit/context-plan).' },
+          stage: { type: 'string', description: 'Optional stage token forwarded as --stage (camera-* describe/run).' },
+          request_file: { type: 'string', description: 'Optional JSON request file forwarded as --request (camera-* run).' },
           env: { type: 'object', description: 'Extra environment variables merged into the spawn env.' }
         },
         required: ['action']
@@ -556,7 +544,7 @@ function registerCliTools(ctx, presetRoot, venvScripts) {
 module.exports = {
   name: 'comfyui-chenxin-loader',
   // Hard dependencies: skills (for registering the bundled provider), tools
-  // and subprocess (for the 5 CLI wrapper tools when a venv is present).
+  // and subprocess (for the 3 CLI wrapper tools when a venv is present).
   inject: ['skills', 'tools', 'subprocess'],
   apply(ctx, config) {
     const presetRoot = resolvePresetRoot(ctx, config || {})

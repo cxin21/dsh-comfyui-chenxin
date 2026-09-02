@@ -32,7 +32,7 @@ writing the same artifacts pip would write, directly:
 `tokenizers` (the only third-party Python dep) is still installed by
 `pip` because it is a real PyPI package and pip handles it correctly.
 
-This script is **idempotent and exhaustive**: it always rewrites all 8
+This script is **idempotent and exhaustive**: it always rewrites all 6
 packages' install state to match the source tree. Re-running it brings
 the venv back in sync with the current source — so source upgrades
 (where the package version bumps in pyproject.toml) are picked up
@@ -53,7 +53,7 @@ import re
 import sys
 from pathlib import Path
 
-# Authoritative table of the 8 local packages. Versions and entry points
+# Authoritative table of the 6 local packages. Versions and entry points
 # are kept in sync with each package's pyproject.toml — when you bump a
 # version there, bump it here too.
 PACKAGES: list[dict] = [
@@ -80,22 +80,6 @@ PACKAGES: list[dict] = [
         "version": "1.0.0",
         "cli": None,
         "deps": ["comfyui-http-runtime", "comfyui-mcp-runtime"],
-    },
-    {
-        "name": "anima-prompt-v1",
-        "import_name": "anima_prompt_v1",
-        "src": "skills/anima-prompt-v1",
-        "version": "3.0.0",
-        "cli": ("anima-prompt-v1", "anima_prompt_v1.cli:main"),
-        "deps": ["chenxin-runtime"],
-    },
-    {
-        "name": "minimax-h3-prompt",
-        "import_name": "h3_prompt",
-        "src": "skills/minimax-h3-prompt",
-        "version": "6.0.0",
-        "cli": ("minimax-h3-prompt", "h3_prompt.cli:main"),
-        "deps": ["chenxin-runtime", "tokenizers==0.22.2"],
     },
     {
         "name": "camera-image",

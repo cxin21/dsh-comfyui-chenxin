@@ -3,7 +3,7 @@
 # One-time setup per machine (or after pulling a fresh copy of the preset):
 #   1. Locate or create the Python venv at <preset>/.venv
 #   2. Install third-party PyPI deps (tokenizers) via pip in the venv
-#   3. Install the 8 local packages via scripts/install_local.py
+#   3. Install the 6 local packages via scripts/install_local.py
 #      (bypasses pip's build-isolation path, which has been observed to
 #      fail on some Windows configurations; installs directly via .pth +
 #      distlib launchers)
@@ -19,7 +19,7 @@
 # a deterministic re-write to match the current source tree, and broken
 # half-installations (missing exe, stale finders, ~ leftovers) are cleaned
 # up automatically. After setup finishes, restart the DSH session so the
-# loader picks up the 5 CLI wrapper Host Tools.
+# loader picks up the 3 CLI wrapper Host Tools.
 
 $ErrorActionPreference = 'Stop'
 
@@ -76,7 +76,7 @@ foreach ($pkg in $ThirdParty) {
     }
 }
 
-# ── 4. Install the 8 local packages ─────────────────────────────────────
+# ── 4. Install the 6 local packages ─────────────────────────────────────
 
 if (-not (Test-Path $Installer)) {
     Write-Error "missing installer: $Installer"
@@ -89,8 +89,7 @@ if ($LASTEXITCODE -ne 0) { Write-Error "install_local.py failed"; exit $LASTEXIT
 # ── 5. Self-check every CLI ──────────────────────────────────────────────
 
 $Scripts = Join-Path $VenvDir 'Scripts'
-$Required = @('anima-prompt-v1', 'minimax-h3-prompt',
-              'camera-image', 'camera-video', 'camera-multiview')
+$Required = @('camera-image', 'camera-video', 'camera-multiview')
 $Failed = @()
 foreach ($script in $Required) {
     $exe = Join-Path $Scripts "$script.exe"
@@ -114,7 +113,7 @@ if ($Failed.Count -gt 0) {
 
 $npx = Get-Command npx -ErrorAction SilentlyContinue
 if (-not $npx) {
-    Write-Warning "[comfyui-chenxin] npx not found on PATH. Prompt authoring works, but camera-image / camera-video / camera-multiview execution requires Node.js."
+    Write-Warning "[comfyui-chenxin] npx not found on PATH. camera-image / camera-video / camera-multiview execution requires Node.js."
 }
 
 Write-Host ""

@@ -23,11 +23,6 @@ temp/
 # Large knowledge snapshots — shipped via GitHub Releases, not the repo.
 # Download from https://github.com/cxin21/dsh-comfyui-chenxin/releases
 # (tag v0.1.0) and place them back at these paths before use:
-skills/anima-prompt-v1/knowledge/tag-catalog.sqlite
-skills/anima-prompt-v1/knowledge/tags.sqlite
-skills/minimax-h3-prompt/knowledge/tokenizer.json
-
-# Stage 2 skill-merge: migrated location (assets/knowledge preferred; skills/ removed in Stage 3)
 assets/knowledge/anima-prompt-v1/tag-catalog.sqlite
 assets/knowledge/anima-prompt-v1/tags.sqlite
 assets/knowledge/minimax-h3-prompt/tokenizer.json

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "snapshot_id": "h3-qwen3-vl",
+  "model_id": "MiniMaxAI/MiniMax-H3:text_encoder",
+  "upstream_repository": "https://huggingface.co/MiniMaxAI/MiniMax-H3",
+  "upstream_revision": "939557dc319dd91227e30195a763f272ba7f8765",
+  "acquired_at": "2026-08-12",
+  "tokenizer_class": "Qwen2Tokenizer",
+  "model_hard_limit": 262144,
+  "license": {
+    "id": "MiniMax-H3-Community-License-2026-08-02",
+    "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/939557dc319dd91227e30195a763f272ba7f8765/LICENSE",
+    "redistribution_allowed": true,
+    "conditions": "Redistribution and use are limited to the Applicable Territory defined by the license; LICENSE and NOTICE must accompany the files."
+  },
+  "files": {
+    "LICENSE": "59b99642b95ea21630e311198ddbfffbfe05aadba0c2f5d884cbdf4efcc90f44",
+    "NOTICE": "154fe7fbdf198395d53c57d6786b2fbf7e63a083ff70843c5ef78c0c7303d91a",
+    "chat_template.json": "5c72a170d2a4a1a3bc5adad2e689ae28138a9700e5b8c96c0266331e86c0acce",
+    "tokenizer.json": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+    "tokenizer_config.json": "a07e942ac874baa13758de8d1fbdb186683cc03416b5589e1b6671c6b3057c68"
+  }
+}

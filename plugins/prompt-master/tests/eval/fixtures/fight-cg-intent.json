@@ -1,0 +1,25 @@
+{
+  "v0": {
+    "schema_version": 1,
+    "media": "video",
+    "core": {
+      "concept": "电影写实级 CG 打斗动画：冷兵器刀剑对决",
+      "aspect_ratio": "16:9",
+      "negative": [],
+      "characters": [
+        { "id": "c1", "name": "青年武者", "appearance_anchors": ["黑发", "深色布衣", "长刀"] },
+        { "id": "c2", "name": "银发剑客", "appearance_anchors": ["银白长发", "灰色披风", "反手持刀"] }
+      ]
+    },
+    "media_layer": {
+      "video": {
+        "total_duration_seconds": 15,
+        "shots": [
+          { "beat": "对峙", "who": ["c1", "c2"] },
+          { "beat": "交锋", "who": ["c1", "c2"] },
+          { "beat": "决胜", "who": ["c1"] }
+        ]
+      }
+    }
+  }
+}

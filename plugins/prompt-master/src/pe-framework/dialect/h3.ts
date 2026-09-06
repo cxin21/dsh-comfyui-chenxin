@@ -1,11 +1,13 @@
 /**
  * H3 authoring dialect（TS 移植，逐字符对照 h3_prompt/dialect.py）。
  */
-import { KEYFRAME_STAGES, type Reference, type H3Shot, type StoryRequest, type H3ShotsInput } from '../schema/h3-shots.js'
+import { KEYFRAME_STAGES, type Reference, type H3Shot, type StoryRequest, type H3ShotsInput, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS, MAX_PROMPT_CHARS, MAX_SHOT_FORMULA } from '../schema/h3-shots.js'
 import { registerDialect } from './registry.js'
-import type { DialectContract } from './contract.js'
+import type { DialectContract, DialectLicense } from './contract.js'
 import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js'
-import { buildH3Budget, h3BudgetToReport } from '../audit/budget.js'
+import { buildH3Budget, h3BudgetToReport, STAGE_QUALITY_CAPS } from '../audit/budget.js'
+import { resolveKnowledgePath } from '../resources/resolve.js'
+import { readFileSync } from 'node:fs'
 import { H3_PERSONA, H3_SCHEMA } from '../intent/subagent-provider.js'
 
 const CJK = /[\u4e00-\u9fff]/
@@ -319,6 +321,27 @@ export function normalizeH3Input(
   return { value: mergedShots, stage, references }
 }
 
+/**
+ * H3 许可证声明：读 assets/knowledge/minimax-h3-prompt/manifest.json 的 license 字段（spec §9）。
+ * 读取失败（资产缺失/路径不可用）→ undefined，不阻断注册。
+ */
+function h3License(): DialectLicense | undefined {
+  try {
+    const path = resolveKnowledgePath({ skillDir: 'minimax-h3-prompt', asset: 'manifest.json' })
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as {
+      license?: { id?: string; url?: string; conditions?: string }
+    }
+    if (!raw.license?.id) return undefined
+    return {
+      id: raw.license.id,
+      url: raw.license.url ?? '',
+      ...(raw.license.conditions ? { territory_restrictions: raw.license.conditions } : {}),
+    }
+  } catch {
+    return undefined
+  }
+}
+
 export function registerH3Dialect(): void {
   const contract: DialectContract<H3ShotsInput, { text: string; text_zh: string }> = {
     id: 'h3',
@@ -338,6 +361,29 @@ export function registerH3Dialect(): void {
     budget: (compiled, ctx) => h3BudgetToReport(buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? [])),
     targetSlotHint: 't2v.prompt',
     intent: { persona: H3_PERSONA, schema: H3_SCHEMA },
+    // 方言包声明（spec §9，Task 4）：能力/约束/审美/许可证
+    capabilities: {
+      native_negative: false,          // spec §5.2-3 档 2：H3 无 native negative（正向改写 + advisory）
+      supports_audio: true,            // overall_soundscape / shot.ambient
+      supports_dialogue: true,         // <d>[语言] 文本</d>
+      camera_axes: 3,                  // 运镜在 what 文本中三维描述（dolly/pan/tracking/orbit/crane/handheld）
+      media_targets: ['video'],
+      aspect_ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'],  // 与现有 ASPECT_COMMON / blueprint ASPECT_RATIOS 一致
+      duration_range: [MIN_DURATION_SECONDS, MAX_DURATION_SECONDS],
+      max_shots_formula: MAX_SHOT_FORMULA,
+      max_prompt_chars: MAX_PROMPT_CHARS,
+      budget_quality_cap: Math.max(...Object.values(STAGE_QUALITY_CAPS)),  // 各 stage 上限的上界（ref2va=2400）
+    },
+    constraints: {
+      // 对 contractGatesH3 的薄封装（不迁移代码，audit 层继续直接引用原函数）
+      validate: (input) => contractGatesH3(input.stage, input.shots, input.refs ?? []),
+    },
+    aesthetics: {
+      forbidden_words: [],       // Phase 2 内容化治理
+      few_shot_examples: [],
+      style_hints: [],           // 风格库 Phase 2
+    },
+    license: h3License(),
   }
   registerDialect(contract)
 }

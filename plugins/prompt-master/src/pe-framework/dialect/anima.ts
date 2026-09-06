@@ -451,6 +451,27 @@ export function registerAnimaDialect(): void {
     },
     targetSlotHint: 't2i.prompt',
     intent: { persona: ANIMA_PERSONA, schema: ANIMA_SCHEMA },
+    // 方言包声明（spec §9，Task 4）：能力/约束/审美（license 无官方资产声明）
+    capabilities: {
+      native_negative: true,           // anima 有独立 negative 通道
+      supports_audio: false,           // anima 无音频语法
+      supports_dialogue: false,        // anima 无对白语法
+      camera_axes: 0,                  // anima camera 为离散角度标签（camera[] 槽），非轴运镜
+      media_targets: ['image'],
+      aspect_ratios: ['16:9', '9:16', '1:1', '4:3', '3:4'],  // 与现有 ASPECT_COMMON 一致
+      duration_range: [0, 0],          // image 方言无时长约束（0 = 不适用）
+      max_prompt_chars: 0,             // 无官方字符上限（0 = 不适用）
+      budget_quality_cap: 0,           // 无 budget 子系统（0 = 不适用）
+    },
+    constraints: {
+      // anima 输入校验走 validateAnimaSlots（返回 error 字符串，非 AuditGate[]）；无契约闸门表 → 空
+      validate: () => [],
+    },
+    aesthetics: {
+      forbidden_words: [],       // Phase 2 内容化治理（现有 LIGHTING_BAN 为审计内部私有列表）
+      few_shot_examples: [],
+      style_hints: [],           // 风格库 Phase 2
+    },
   }
   registerDialect(contract)
 }

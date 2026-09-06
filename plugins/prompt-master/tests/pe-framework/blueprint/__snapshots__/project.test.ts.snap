@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`projectToH3 > projection snapshot (spec §8.3 防漂移) 1`] = `"{"duration_seconds":15,"shots":[{"what":"银白长发，灰色披风，反手持刀，对峙，MS，dolly，无字幕纯净画面","who":"<Subject 1>，<Subject 2>","ambient":"风声","music":"低鼓"},{"what":"银白长发，灰色披风，反手持刀，交锋，CU，无字幕纯净画面","who":"<Subject 1>"},{"what":"银白长发，灰色披风，反手持刀，决胜，WS，无字幕纯净画面","who":"<Subject 1>，<Subject 2>"}]}"`;

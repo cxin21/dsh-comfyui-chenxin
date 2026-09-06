@@ -203,7 +203,7 @@ interface NegativeConstraint {
    - **档 2 无 native**（Flux、H3、即梦）→ **正向改写**（"无字幕"→"纯净画面无文字界面"；"无眼镜"→"素颜"）+ advisory 提示，不堆负向词污染画面
    - **档 3 LLM-encoder 模型**（Z-Image/Anima/Krea2）→ 语义正负短语，**只用符号不用权重**（权重被忽略，NegPiP 实测）
    - 内容安全类（severity='hard'）→ 直接过滤/拒绝（沿用现有 joy-extra 硬约束）
-4. **语言中立**：蓝图字段用创作语言（随用户），方言投影时按方言 output_lang 渲染（沿用现有 `buildTextZh` 骨架翻译机制）。
+4. **语言策略（澄清定案）**：投影器是 deterministic 纯函数、**不承担翻译**。蓝图语言跟随**目标方言 output_lang**——H3 蓝图用中文、Anima 蓝图用英文 tag；由分析器/扩展器（LLM）按目标方言语言产出蓝图。保真例外：`core.concept`/`core.narrative` 保留用户创作语言原字面（可双语并存），投影时方言编译层按现有 `buildTextZh` 骨架渲染（H3）。
 5. **角色引用解析**（调研三 drama-skills 范式）：`Shot.who: string[]` 存**角色 id**；方言投影时按 `Character.reference_slots` / 用户 references 顺序映射为 `<Subject N>` 稳定标签。识别锚点（`appearance_anchors` + `distinctive`）必须**可见、可生成、可比较**——不用空泛质量词；`continuity_lock: true` 的角色跨镜头强制注入锚点并审计（防漂移）。
 6. **保真-扩展边界**（设计张力定案）：
    - **不可改写（原字面保留）**：`concept`、`narrative`、用户给出的具体描述词（进入蓝图原样）

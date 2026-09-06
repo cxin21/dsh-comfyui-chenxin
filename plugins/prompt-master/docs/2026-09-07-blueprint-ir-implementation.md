@@ -173,7 +173,15 @@ git commit -m "feat(prompt-master): blueprint IR schema + validateBlueprint (spe
 
 **Interfaces:**
 - Consumes: `StageResult`（`pipeline/types.js`）、`AuditGate`（`types.js`）。
-- Produces: `function computeNextAction(stage: StageResult, opts?: { repairHints?: Array<{ field: string; fix: string }> }): 'retry_input' | 'auto_repair' | 'manual' | 'advisory_only' | 'ok'`；Envelope 顶层加 `next_action` 与可选 `repair_hints`。
+- Produces: `function computeNextAction(stage: StageResult, opts?: { repairHints?: Array<{ field: string; fix: string }>; repaired?: boolean }): 'retry_input' | 'auto_repair' | 'manual' | 'advisory_only' | 'ok'`；Envelope 顶层加 `next_action` 与可选 `repair_hints`。
+
+**判定规则（修正版，消除死分支）**：
+- `stage.ok` 为 true 且无 advisories → `'ok'`
+- `stage.ok` 为 true 但有 advisories → `'advisory_only'`
+- 非 ok 且 `opts.repaired === true`（引擎 Level 1/2 已实际修复过）→ `'auto_repair'`
+- 非 ok 且有 `loop_exhausted:true` advisory → `'manual'`
+- 非 ok 含 critical 契约闸门（rule ∈ {max_shots, parse_request, duration_range, ref_count, field_order, cut_timestamps, char_budget}）→ `'retry_input'`（附 repair_hints）
+- 其余非 ok → `'manual'`（无法自动归因）
 
 - [ ] **Step 1: 写失败测试**
 
@@ -197,7 +205,11 @@ describe('computeNextAction', () => {
     const s = stage(false, [{ rule: 'max_shots', severity: 'critical' }], [])
     expect(computeNextAction(s, { repairHints: [{ field: 'duration_seconds', fix: '改为 15（总时长）' }] })).toBe('retry_input')
   })
-  it('loop_exhausted advisory + critical → manual', () => {
+  it('non-ok but repaired=true → auto_repair', () => {
+    const s = stage(false, [{ rule: 'parse_request', severity: 'critical' }], [])
+    expect(computeNextAction(s, { repaired: true })).toBe('auto_repair')
+  })
+  it('loop_exhausted advisory + non-ok → manual', () => {
     const s = stage(false, [{ rule: 'shot_execution', severity: 'important' }], ['loop_exhausted:true'])
     expect(computeNextAction(s)).toBe('manual')
   })
@@ -211,14 +223,7 @@ Expected: FAIL——`computeNextAction` 不存在。
 
 - [ ] **Step 3: 实现 `computeNextAction` 并接入 Envelope**
 
-在 `envelope.ts` 导出纯函数，判定规则（spec §11）：
-- 有 `loop_exhausted:true` advisory 且非 ok → `'manual'`
-- 非 ok 且含 critical 契约闸门（rule ∈ {max_shots, parse_request, duration_range, ref_count, field_order, cut_timestamps, char_budget}）→ `'retry_input'`（附 repair_hints）
-- 非 ok 且仅 important/minor → `'auto_repair'`
-- ok 且有 advisories → `'advisory_only'`
-- ok 无 advisories → `'ok'`
-
-`assembleEnvelope` 增加 `next_action`（默认由 stage 计算）与透传 `repair_hints`。
+在 `envelope.ts` 导出纯函数，按「判定规则（修正版）」实现（见上）。`assembleEnvelope` 增加 `next_action`（由调用方传 `computeNextAction(stage, { repairHints, repaired })` 的结果）与透传 `repair_hints`；`repaired` 由 author/compile 调用方在 Level 1/2 实际修复后置 true（Task 10）。
 
 - [ ] **Step 4: 跑测试确认通过 + 现有 Envelope 测试不回归**
 
@@ -284,6 +289,7 @@ Expected: FAIL——`getDialectPackage` 不存在。
 - [ ] **Step 3: 实现 `package.ts` + 挂载到 h3/anima 方言**
 
 在 `DialectContract`（`contract.ts`）上增加可选字段 `capabilities?` / `constraints?` / `aesthetics?` / `license?`；h3 方言常量从 `schema/h3-shots.ts`（`MIN_DURATION_SECONDS`/`MAX_DURATION_SECONDS`/`MAX_PROMPT_CHARS`/`MAX_SHOT_FORMULA`）与 `audit/budget.ts`（`STAGE_QUALITY_CAPS`）提取；license 从 `assets/knowledge/minimax-h3-prompt/manifest.json` 的 `license` 字段。`getDialectPackage` 从 `getDialect(target)` 读这些字段。
+**contractGatesH3 落点（澄清）**：现有 `contractGatesH3(stage, shots, refs): AuditGate[]` 在 `audit/rules-h3.ts:247`（被 `dialect/h3.ts:333` 与 `tools/prompt-audit.ts:50` 引用）。**不迁移代码**——`DialectPackage.constraints.validate` 定义为对该函数的薄封装（`validate: (input) => contractGatesH3(input.stage, input.shots, input.refs ?? [])`），方言包在 `h3.ts` 注册时组装；audit 层与 prompt-audit 继续直接引用原函数，零改动、无重复实现。
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -433,6 +439,18 @@ describe('blueprint repo', () => {
     const repo = createBlueprintRepo({ settings: stubSettings() } as any)
     expect(repo.load('missing')).toBeUndefined()
   })
+  it('incremental edit: load → change one field → save (spec §5.3 增量修改前提)', () => {
+    const repo = createBlueprintRepo({ settings: stubSettings() } as any)
+    const bp = { schema_version: 1, media: 'video', core: { concept: '剑客决斗', aspect_ratio: '16:9', negative: [] }, media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } } }
+    repo.save('fight', bp as any)
+    const loaded = repo.load('fight')!
+    loaded.core.aspect_ratio = '9:16'          // 只改一个字段
+    loaded.media_layer.video!.shots = loaded.media_layer.video!.shots.slice(0, 2)  // 删一镜
+    repo.save('fight', loaded)
+    const after = repo.load('fight')!
+    expect(after.core.aspect_ratio).toBe('9:16')
+    expect(after.media_layer.video!.shots).toHaveLength(2)
+  })
 })
 ```
 
@@ -460,18 +478,21 @@ git commit -m "feat(prompt-master): minimal style library v0 (8 styles + conform
 
 ---
 
-### Task 7: 美学扩展引擎（v0→v1 基础美学规则 + 具体性自检）
+### Task 7: 美学扩展引擎（v0→v1 基础美学规则 + 具体性自检 + 电影摄影词库）
 
 **Files:**
 - Create: `src/pe-framework/enrichment/engine.ts`
 - Create: `src/pe-framework/aesthetics/check.ts`
-- Test: `tests/pe-framework/enrichment/engine.test.ts` + `tests/pe-framework/aesthetics/check.test.ts`（新建）
+- Create: `src/pe-framework/aesthetics/lexicon.ts`（电影摄影词库，spec §7.3）
+- Test: `tests/pe-framework/enrichment/engine.test.ts` + `tests/pe-framework/aesthetics/check.test.ts` + `tests/pe-framework/aesthetics/lexicon.test.ts`（新建）
 
 **Interfaces:**
 - Consumes: `BlueprintV1`（Task 2）、`MINIMAL_STYLES`/`applyStyle`（Task 6）、`complete`（`llm/complete.js`，已存在：`complete(ctx, {provider, model, system, user, maxTokens, temperature, signal}) → {text}`）。
 - Produces:
   - `function enrichBlueprint(ctx, route: { provider: string; model: string }, v0: BlueprintV1, opts: { styleId?: string; conformity?: number; missing?: string[] }): Promise<{ blueprint: BlueprintV1; expansions: string[] }>` —— LLM 扩展（具体名词化 + ROI 补全 + 负向补全），返回改写记录 `expansions[]`（spec §5.2-6 可审计）。
   - `function checkConcreteness(bp: BlueprintV1): { pass: boolean; issues: string[] }` —— 禁空泛词扫描（`cinematic/beautiful/amazing/stunning/epic/大气/高级` 等）+ 含可感知名词比例下限。
+  - `function checkFidelity(original: string, bp: BlueprintV1): { pass: boolean; missingEntities: string[] }` —— 保真守卫（spec §6）：用户原文核心实体（中英名词短语）必须出现在蓝图任意字段；缺失即意图丢失，返回缺失实体列表。纯函数。
+  - `const CINEMA_LEXICON: { shots: string[]; lenses: string[]; camera_moves: string[]; lighting: string[]; grading: string[]; composition: string[] }` —— 电影摄影词库（spec §7.3 结构化数据，非 LLM prompt）：景别/焦段/运镜/光线/色彩分级/构图，从调研二词表与现有 `expand_cinematic` profile 提取，每条为可感知名词短语。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -513,26 +534,60 @@ describe('enrichBlueprint', () => {
 })
 ```
 
+```ts
+// tests/pe-framework/aesthetics/lexicon.test.ts
+import { describe, expect, it } from 'vitest'
+import { CINEMA_LEXICON } from '../../../src/pe-framework/aesthetics/lexicon.js'
+
+describe('cinema lexicon', () => {
+  it('has non-empty structured categories with concrete terms', () => {
+    for (const key of ['shots', 'lenses', 'camera_moves', 'lighting', 'grading', 'composition'] as const) {
+      expect(CINEMA_LEXICON[key].length).toBeGreaterThan(3)
+      for (const term of CINEMA_LEXICON[key]) expect(term.length).toBeGreaterThan(1)
+    }
+  })
+})
+```
+
+```ts
+// tests/pe-framework/aesthetics/fidelity.test.ts
+import { describe, expect, it } from 'vitest'
+import { checkFidelity } from '../../../src/pe-framework/aesthetics/check.js'
+
+describe('checkFidelity (保真守卫)', () => {
+  it('passes when user entities survive into blueprint', () => {
+    const r = checkFidelity('银发剑客在黄昏荒原决斗', { schema_version: 1, media: 'video', core: { concept: '银发剑客黄昏荒原决斗', negative: [] } } as any)
+    expect(r.pass).toBe(true)
+  })
+  it('flags when a user entity is dropped', () => {
+    const r = checkFidelity('银发剑客在黄昏荒原决斗', { schema_version: 1, media: 'video', core: { concept: '两个武士打斗', negative: [] } } as any)
+    expect(r.pass).toBe(false)
+    expect(r.missingEntities.join()).toContain('银发剑客')
+  })
+})
+```
+
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `npx vitest run tests/pe-framework/aesthetics/check.test.ts tests/pe-framework/enrichment/engine.test.ts`
+Run: `npx vitest run tests/pe-framework/aesthetics/check.test.ts tests/pe-framework/aesthetics/lexicon.test.ts tests/pe-framework/aesthetics/fidelity.test.ts tests/pe-framework/enrichment/engine.test.ts`
 Expected: FAIL——模块不存在。
 
-- [ ] **Step 3: 实现 `check.ts` 与 `engine.ts`**
+- [ ] **Step 3: 实现 `check.ts` / `lexicon.ts` / `engine.ts`**
 
-`check.ts`：禁词表 + 具体名词判定（含 CJK 长度 + 数字 + 已知词表），纯函数。
-`engine.ts`：构造扩展 persona（spec §7.1 规则文本：具体名词化/禁空泛词/ROI 顺序「光影>主体特征>运镜」/负向推断/角色锚点补全），经 `complete` 让 LLM 只输出**增量 JSON patch**（`{set: {...}, additions: {...}, expansions: [...]}`），应用 patch 到 v0 → v1；`expansions` 从 LLM 返回收集（无则用 `missing` 生成占位记录）。patch 应用失败 → 返回 v0 + `expansions: ['enrichment_failed:fallback_to_v0']`（不抛错）。
+`check.ts`：禁词表 + 具体名词判定（含 CJK 长度 + 数字 + 已知词表）+ `checkFidelity`（抽取原文中英名词短语 → 蓝图字段全文包含性检查），纯函数。
+`lexicon.ts`：`CINEMA_LEXICON` 结构化词库（景别 CU/MCU/MS/FS/WS、焦段 24/35/85/135mm、运镜 dolly/pan/tracking/orbit/crane/handheld、光线 黄金时刻/伦勃朗光/体积光/三点布光、色彩分级 青橙/低饱和/漂白、构图 三分法/对称/负空间/前景引导）。
+`engine.ts`：构造扩展 persona（spec §7.1 规则文本：具体名词化/禁空泛词/ROI 顺序「光影>主体特征>运镜」/负向推断/角色锚点补全），把 `CINEMA_LEXICON` 关键类目注入 persona 作为候选词；经 `complete` 让 LLM 只输出**增量 JSON patch**（`{set: {...}, additions: {...}, expansions: [...]}`），应用 patch 到 v0 → v1；`expansions` 从 LLM 返回收集（无则用 `missing` 生成占位记录）。patch 应用失败 → 返回 v0 + `expansions: ['enrichment_failed:fallback_to_v0']`（不抛错）。v1 产出后**必须过 `checkConcreteness` + `checkFidelity`**——任一失败 → 追加 advisory 进 `expansions`（如 `concreteness_failed:...`）但不阻断（保真缺失记录在 expansions 供上层处理）。
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `npx vitest run tests/pe-framework/enrichment/engine.test.ts tests/pe-framework/aesthetics/check.test.ts`
+Run: `npx vitest run tests/pe-framework/enrichment/engine.test.ts tests/pe-framework/aesthetics/check.test.ts tests/pe-framework/aesthetics/lexicon.test.ts tests/pe-framework/aesthetics/fidelity.test.ts`
 Expected: 全部 PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pe-framework/enrichment/engine.ts src/pe-framework/aesthetics/check.ts tests/pe-framework/enrichment/engine.test.ts tests/pe-framework/aesthetics/check.test.ts
-git commit -m "feat(prompt-master): aesthetics enrichment engine + concreteness check (spec §7 §13)"
+git add src/pe-framework/enrichment/engine.ts src/pe-framework/aesthetics/check.ts src/pe-framework/aesthetics/lexicon.ts tests/pe-framework/enrichment/engine.test.ts tests/pe-framework/aesthetics/check.test.ts tests/pe-framework/aesthetics/lexicon.test.ts tests/pe-framework/aesthetics/fidelity.test.ts
+git commit -m "feat(prompt-master): aesthetics enrichment engine + concreteness/fidelity checks + cinema lexicon (spec §7 §13 §6)"
 ```
 
 ---
@@ -546,8 +601,8 @@ git commit -m "feat(prompt-master): aesthetics enrichment engine + concreteness 
 **Interfaces:**
 - Consumes: `BlueprintV1`/`Character`/`Shot`/`NegativeConstraint`（Task 2）、`H3ShotsInput`（`schema/h3-shots.js`）、`AnimaSlots`（`dialect/anima.js`）。
 - Produces:
-  - `function projectToH3(bp: BlueprintV1, opts?: { lang?: 'zh'|'en' }): H3ShotsInput`
-  - `function projectToAnima(bp: BlueprintV1): AnimaSlots`
+  - `function projectToH3(bp: BlueprintV1): H3ShotsInput` —— **无 lang 参数**：蓝图语言由分析器/扩展器按方言 output_lang 产出（spec §5.2-4 语言策略），投影器不做翻译；H3 蓝图即中文。
+  - `function projectToAnima(bp: BlueprintV1): AnimaSlots` —— Anima 蓝图即英文 tag（由分析器产出）。
   - 负向三档：`native_negative=true` 方言映射到对应字段；无 native（H3）→ 把 `severity:'soft'` 的负向**正向改写**进 `what` 末句（例 `{target:'文字',attribute:'字幕'}` → 首镜 what 追加「无字幕纯净画面」）+ 返回 advisory 标记（`projectAdvisories: string[]` 一并导出）；`hard` 类在投影前由调用方过滤（本函数遇 hard → throw `BlueprintHardNegativeError`）。
   - 角色 `Shot.who`（角色 id）→ `<Subject N>`：按 `Character.reference_slots` 顺序或 references 顺序编号映射；`continuity_lock` 角色锚点强制注入每个涉及镜头的 `what` 首句。
 
@@ -612,10 +667,11 @@ Expected: FAIL——模块不存在。
 
 按 spec §8.1/§8.2 映射表实现纯函数。H3 的 `what` 组装：`beat + 景别/运镜 + 动作 + continuity 锚点首句 + soft 负向改写末句`（复用 `dialect/h3.js` 的 `buildShotLines` 不适用——本函数直接产 `H3ShotsInput`，让现有 compileH3 继续做时间戳/字段渲染）。`projectAdvisories` 导出为独立模块级数组（每次投影重置）或随返回值——采用**返回值**：`projectToH3` 返回 `{ shots: H3ShotsInput; advisories: string[] }`？——注意保持签名简单：`projectToH3` 返回 `H3ShotsInput`，soft 负向改写已内嵌进 `what`；advisory 文案通过导出的 `lastProjectAdvisories(): string[]` 读取（内部数组，投影时清空）。测试只断言主签名。
 
-- [ ] **Step 4: 跑测试确认通过 + 用投影产物跑现有 golden（兼容性验证）**
+- [ ] **Step 4: 跑测试确认通过 + 用投影产物跑现有 golden（兼容性验证）+ 投影器快照**
 
 Run: `npx vitest run tests/pe-framework/blueprint/project.test.ts tests/fidelity/golden-integrity.test.ts`
 Expected: 新用例 PASS；golden 完整性测试不受影响。
+同时在 `project.test.ts` 加**投影快照回归**（spec §8.3 防漂移）：`expect(JSON.stringify(projectToH3(fightBp))).toMatchSnapshot()`——首次跑生成快照，之后每次变更需显式 `vitest -u` 更新，防止投影映射意外漂移。
 
 - [ ] **Step 5: Commit**
 
@@ -662,6 +718,12 @@ describe('analyzeIntent', () => {
     expect(Array.isArray(r.missing)).toBe(true)
     expect(r.clarify_questions).toBeUndefined()
   })
+  it('clarify=ask with missing key dims returns clarify_questions', async () => {
+    const ctx = { llm: { async *stream() { for (const c of textStream(v0Json)) yield c } } } as any
+    const r = await analyzeIntent(ctx, { provider: 'p', model: 'm' }, '一个场景', { clarify: 'ask' })
+    // v0Json 无 style → 关键缺失 → 产出澄清问题
+    expect(r.clarify_questions?.length).toBeGreaterThan(0)
+  })
 })
 ```
 
@@ -672,7 +734,7 @@ Expected: FAIL——模块不存在。
 
 - [ ] **Step 3: 实现 `analyzer.ts` + 蓝图 persona/schema**
 
-复用 `createSubagentIntentProvider(ctx)` 的 one-shot 子代理 seam（继承父路由）；`analyzeIntent` 内部构造 `AuthorIntentRequest` 形状（`{target:'h3', input, persona: BLUEPRINT_PERSONA, schema: BLUEPRINT_SCHEMA, round:0}`）调 provider → 取文本 JSON → `validateBlueprint` → 计算 missing（spec §6：关键维度 = style/media/negative 边界；次要 = 光影/构图/细节）→ 返回。
+复用 `createSubagentIntentProvider(ctx)` 的 one-shot 子代理 seam（继承父路由）；`analyzeIntent` 内部构造 `AuthorIntentRequest` 形状（`{target:'h3', input, persona: BLUEPRINT_PERSONA, schema: BLUEPRINT_SCHEMA, round:0}`）调 provider → 取文本 JSON → `validateBlueprint` → 计算 missing（spec §6：关键维度 = style/media/negative 边界；次要 = 光影/构图/细节）→ `clarify:'ask'` 且有关键缺失时把缺失映射为 `clarify_questions`（每个问题 = 「缺少 <维度>：请选择/补充」）→ **调用 `checkFidelity(input, blueprint)` 把丢失实体并入 `missing`**（保真守卫，spec §6）→ 返回。
 
 - [ ] **Step 4: 跑测试确认通过 + 现有 intent 测试不回归**
 
@@ -697,18 +759,20 @@ git commit -m "feat(prompt-master): intent analyzer → blueprint v0 with missin
 
 **Interfaces:**
 - Consumes: `analyzeIntent`（Task 9）、`enrichBlueprint`（Task 7）、`projectToH3`/`projectToAnima`（Task 8）、`computeNextAction`（Task 3）、现有 `runDraftThroughStage`。
-- Produces: `prompt_author` 新参数 `style_id?: string`、`conformity?: number`、`clarify?: 'ask'|'auto'`；execute 流程改为：`analyzeIntent → enrichBlueprint → project → runStage → 三级修正`：
-  - **Level 1 确定性预修**（零 LLM）：`projectToH3` 前用 `getDialectPackage('h3').constraints` 对 `total_duration_seconds`/shots 数做合法化（duration 越界→取最近合法值并记 `repair_hints`；shots 超 `max_shots`→建议合并/加时长）。纯函数 `preflightRepair(bp): { bp: BlueprintV1; repairs: string[] }`（放 `project.ts`）。
-  - **Level 2 LLM 结构化修复**（≤1 次）：runStage 后 critical 仍在 → 用 `analyzeIntent` 同一 provider 传结构化 findings（`{gates:[{rule,severity,field,position,fix}]}`）让 LLM 只改蓝图失败字段 → 重投影 → 重 runStage。
+- Produces: `prompt_author` 新参数 `style_id?: string`、`conformity?: number`、`clarify?: 'ask'|'auto'`、`blueprint_id?: string`（**增量修改入口**：传蓝图 id 时跳过 analyzeIntent，从 repo load 蓝图直接走扩展→投影，实现「取回旧蓝图改一字段重投影」）；execute 流程改为：`(analyzeIntent 或 repo.load) → enrichBlueprint → project → runStage → 三级修正`：
+  - **Level 1 确定性预修**（零 LLM）：`projectToH3` 前用 `getDialectPackage('h3').constraints` 对 `total_duration_seconds`/shots 数做合法化（duration 越界→取最近合法值并记 `repair_hints`；shots 超 `max_shots`→建议合并/加时长）。纯函数 `preflightRepair(bp): { bp: BlueprintV1; repairs: string[] }`（放 `project.ts`）。Level 1 触发修复 → `repaired = true`。
+  - **Level 2 LLM 结构化修复**（≤1 次）：runStage 后 critical 仍在 → 用 `analyzeIntent` 同一 provider 传结构化 findings（`{gates:[{rule,severity,field,position,fix}]}`）让 LLM 只改蓝图失败字段 → 重投影 → 重 runStage。Level 2 触发 → `repaired = true`。
   - **Level 3**：仍失败 → `next_action='manual'` + `loop_exhausted:true` advisory。
+  - **修正轮次语义（澄清）**：`MAX_CORRECTIONS=2` 保留为「总修正尝试上限」（Level 1 确定性预修不计入——它零 LLM 且必然收敛；Level 2 LLM 修复计入，最多 2 次尝试）；Level 2 实际执行次数 ≤2，超出走 Level 3。
   - Envelope 带 `next_action`、`repair_hints`、`observability.expansions`、`observability.repairs`。
 
 - [ ] **Step 1: 写失败测试（注入 provider 的 e2e）**
 
 ```ts
 // tests/plugin/author-blueprint.e2e.test.ts
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js'
+import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
 import { stubCtx, runTool, textStream } from './helpers.js'
 import type { AuthorIntentFn } from '../../src/tools/prompt-author.js'
 
@@ -725,14 +789,15 @@ const fakeProvider: AuthorIntentFn = async (req: any) => {
 }
 
 describe('prompt_author blueprint pipeline', () => {
+  beforeEach(() => setAuthorIntentProvider(fakeProvider as any))
+  afterEach(() => setAuthorIntentProvider(null))
+
   it('runs analyze→enrich→project→stage and returns ok envelope with next_action', async () => {
-    setAuthorIntentProvider(fakeProvider as any)
     const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
     const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
     const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '三镜头打斗CG', style_id: 'cinematic_real' })))
     expect(v.next_action).toBeDefined()
     expect(v.audit).toBeDefined()
-    setAuthorIntentProvider(null)
   })
 })
 ```
@@ -744,12 +809,52 @@ Expected: FAIL——`prompt_author` 尚未接受 `blueprint` 形状的 intent �
 
 - [ ] **Step 3: 实现蓝图管线接入**
 
-在 `prompt-author.ts`：`AuthorDraft` 扩展可选 `blueprint?: BlueprintV1` + `missing?: string[]`；`normalizeDraftToInput` 增加 `blueprint` 分支（先 `enrichBlueprint` 再 `projectTo*`）；`execute` 参数加 `style_id/conformity/clarify`；三级修正循环替代现有 `while` 修正（保留 `MAX_CORRECTIONS=2` 语义 → Level 2 只跑 1 次，超出走 Level 3）。`preflightRepair` 在投影前调用并收集 `repair_hints`。Envelope 组装含 `next_action`（Task 3 的 `computeNextAction`）。
+在 `prompt-author.ts`：`AuthorDraft` 扩展可选 `blueprint?: BlueprintV1` + `missing?: string[]`；`normalizeDraftToInput` 增加 `blueprint` 分支（先 `enrichBlueprint` 再 `projectTo*`）；`execute` 参数加 `style_id/conformity/clarify/blueprint_id`；`blueprint_id` 传入时从 repo `load` 蓝图、跳过 `analyzeIntent`；三级修正循环替代现有 `while` 修正（修正轮次语义见上——Level 1 不计入 MAX_CORRECTIONS，Level 2 ≤2 次）；`preflightRepair` 在投影前调用并收集 `repair_hints`；`repaired` 在 Level 1/2 任一触发时置 true 传给 `computeNextAction`。Envelope 组装含 `next_action`（Task 3）与 `observability.expansions/repairs`。
 
 - [ ] **Step 4: 跑测试确认通过 + 全量回归**
 
 Run: `npx vitest run tests/plugin/author-blueprint.e2e.test.ts tests/plugin/author-e2e.test.ts tests/plugin/author-shell.test.ts`
 Expected: 新用例 PASS；现有 author e2e/shell 全绿（旧 `slots`/`shots` 直传路径保留向后兼容——`AuthorDraft.blueprint` 缺省时走原逻辑）。
+
+在 `author-blueprint.e2e.test.ts` 增加**增量修改用例**（spec §5.3 交付标准 6）：
+```ts
+// 预存蓝图到 repo（stub settings 作为 repo 后端），再传 blueprint_id 走增量路径
+function settingsRepo() {
+  const store: Record<string, string> = {}
+  return {
+    settings: {
+      get: () => ({ ...store }),
+      async update(p: Record<string, string>) { Object.assign(store, p) },
+      async replace(s: Record<string, string>) { Object.assign(store, s) },
+    },
+  }
+}
+
+describe('prompt_author blueprint_id incremental path', () => {
+  it('reload by blueprint_id skips analyzeIntent (provider not called)', async () => {
+    const { settings } = settingsRepo()
+    const repo = createBlueprintRepo({ settings } as any)
+    repo.save('fight-15s', {
+      schema_version: 1, media: 'video',
+      core: { concept: '三镜头打斗CG', aspect_ratio: '9:16', negative: [] },
+      media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } },
+    } as any)
+
+    let providerCalls = 0
+    const countingProvider: AuthorIntentFn = async (req: any) => { providerCalls++; return {} as any }
+    setAuthorIntentProvider(countingProvider as any)
+
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
+    ctx.settings = settings
+    const def = registerAuthorTool(ctx, { temperature: 0.7 })
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s' })))
+
+    expect(providerCalls).toBe(0)              // 跳过 analyzeIntent
+    expect(v.next_action).toBeDefined()
+    setAuthorIntentProvider(null)
+  })
+})
+```
 
 - [ ] **Step 5: Commit**
 
@@ -852,6 +957,10 @@ git commit -m "test(prompt-master): blueprint eval regression — fight CG case,
 
 `description` 追加：`preflight_only=true 时不编译，仅做方言约束校验（零 LLM），用于先验边界再投 prompt_author。`
 
+- [ ] **Step 3b: intent 子代理瘦身（spec §14）**
+
+在 `src/pe-framework/intent/subagent-provider.ts` 的 `createSubagentIntentProvider` 中：蓝图模式（`AuthorIntentRequest` 带 `blueprint` 目标）时，注入**最小 system**——去掉技能目录/工具说明噪音（子代理 trace 显示它曾纠结「要不要调 skill」），system 只含：`你是一个创作蓝图分析引擎。只输出 JSON，不要调用任何工具，不要输出任何解释。` 实现为 `BLUEPRINT_SUBAGENT_SYSTEM` 常量，蓝图请求走它、旧 slots/shots 请求走原 persona（向后兼容）。断言：新增 `tests/pe-framework/intent/slim-system.test.ts` 检查 `BLUEPRINT_SUBAGENT_SYSTEM` 不含 `skill`/`tool` 关键词。
+
 - [ ] **Step 4: 更新 `AGENTS.md` 错误恢复快速表**
 
 `audit critical gates` 行更新为：`看 Envelope 的 next_action：retry_input→按 repair_hints 改入参；auto_repair→引擎已修，检查 observability.repairs；manual→人工接手（loop_exhausted）。`
@@ -866,8 +975,8 @@ Run: `npx vitest run`
 Expected: 全部 PASS（含 12 个任务新增测试 + 既有 golden/parity 全绿）。
 Commit:
 ```bash
-git add src/tools/prompt-author.ts src/pe-framework/blueprint/analyzer.ts src/tools/prompt-compile.ts AGENTS.md tests/plugin/author-shell.test.ts
-git commit -m "docs(prompt-master): tool routing + duration semantics explicit + AGENTS.md next_action linkage (spec §14 §5.2)"
+git add src/tools/prompt-author.ts src/pe-framework/blueprint/analyzer.ts src/tools/prompt-compile.ts src/pe-framework/intent/subagent-provider.ts AGENTS.md tests/plugin/author-shell.test.ts tests/pe-framework/intent/slim-system.test.ts
+git commit -m "docs(prompt-master): tool routing + duration semantics explicit + intent subagent slim system + AGENTS.md next_action linkage (spec §14 §5.2)"
 ```
 
 ---
@@ -892,6 +1001,17 @@ git commit -m "docs(prompt-master): tool routing + duration semantics explicit +
 
 **占位符扫描**：无 TBD/TODO；所有代码步骤含真实代码。✅
 **类型一致性**：`BlueprintV1`/`Character`/`Shot`/`NegativeConstraint`/`H3ShotsInput`/`AnimaSlots` 在各任务间签名一致；`computeNextAction`、`getDialectPackage`、`analyzeIntent`、`enrichBlueprint`、`projectToH3`、`preflightRepair` 均有定义任务与消费任务匹配。✅
+
+**二轮自审修复记录**（对照用户「是否有遗漏和不明确」逐项补齐）：
+- 保真守卫 `checkFidelity` → Task 7（新测试 fidelity.test.ts）+ Task 9（analyzeIntent 调用）✅
+- 电影摄影词库 `CINEMA_LEXICON` → Task 7（新文件 lexicon.ts + 测试）✅
+- 增量修改工作流 `blueprint_id` 路径 → Task 6 repo 用例 + Task 10 e2e 用例 ✅
+- 语言策略定案（蓝图语言跟随方言 output_lang，投影器零翻译）→ spec §5.2-4 + Task 8 签名去掉 lang 参数 ✅
+- `computeNextAction` auto_repair 死分支 → 改为 `opts.repaired` 事实驱动（Task 3 测试同步）✅
+- intent 子代理瘦身 `BLUEPRINT_SUBAGENT_SYSTEM` → Task 12 Step 3b + slim-system.test.ts ✅
+- 修正轮次语义澄清（Level 1 不计入、Level 2 ≤2、MAX_CORRECTIONS=2 为总上限）→ Task 10 ✅
+- contractGatesH3 落点（薄封装不迁移）→ Task 4 澄清 ✅
+- 投影器快照回归 → Task 8 Step 4（toMatchSnapshot）✅
 
 ## 执行交接
 

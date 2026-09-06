@@ -60,11 +60,11 @@ export interface BlueprintV1 {
   core: {
     concept: string          // 一句话主题（必填，用户原意压缩）
     aspect_ratio?: AspectRatio
-    characters: Character[]  // 角色卡（可空；支撑跨镜头/跨次一致性）
-    scene: Scene             // 场景（环境/时间/光线/氛围）
-    style: StyleRef          // 风格引用（基底/主题/情绪/配色）
-    emotion: string          // 情绪基调（冷峻/温暖/压抑…）
-    composition: string[]    // 构图语言（三分法/对称/负空间/前景引导）
+    characters?: Character[] // 角色卡（可空；支撑跨镜头/跨次一致性；spec §6 蓝图字段可空，缺失维度由分析器显式标记）
+    scene?: Scene            // 场景（环境/时间/光线/氛围）
+    style?: StyleRef         // 风格引用（基底/主题/情绪/配色）
+    emotion?: string         // 情绪基调（冷峻/温暖/压抑…）
+    composition?: string[]   // 构图语言（三分法/对称/负空间/前景引导）
     negative: NegativeConstraint[]  // 负向意图（结构化约束：对象+属性）
     narrative?: string       // 自由叙事文本（保留用户原话）
   }

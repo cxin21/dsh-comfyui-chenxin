@@ -25,4 +25,11 @@ describe('prompt_author shell', () => {
     expect(isDialectReady('sd')).toBe(false)
     expect(isDialectReady('generic')).toBe(false)
   })
+
+  it('description advertises duration semantics + next_action + new params (Task 12 防漂移)', () => {
+    const def = registerAuthorTool(stubCtx() as any, cfg)
+    expect(def.description).toContain('总时长')
+    expect(def.description).toContain('next_action')
+    expect(def.description).toContain('style_id')
+  })
 })

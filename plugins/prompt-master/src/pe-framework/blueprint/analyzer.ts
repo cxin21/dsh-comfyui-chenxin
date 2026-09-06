@@ -22,6 +22,7 @@ export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎（spec §
 2. 保留事实：用户给的具体描述原字面进入蓝图（concept/narrative/角色锚点），不编造情节
 3. 标记缺失：蓝图字段可空；缺维度时字段留空（如无风格 → 不填 core.style）
 4. 多模态：references 传入时保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
+5. 蓝图 media_layer.video.total_duration_seconds 指视频总时长（官方契约 4–15s），不是每镜时长；用户说「3 个分镜每个 5 秒」→ total=15，shots=3。
 
 输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
 `
@@ -87,6 +88,24 @@ function computeMissing(bp: BlueprintV1): string[] {
   return missing
 }
 
+/**
+ * 蓝图 JSON 文本 → 校验后的 { blueprint, missing }（Task 12 供 subagent-provider 蓝图分支复用）：
+ * stripFences → JSON.parse → validateBlueprint（失败 throw）→ computeMissing。
+ */
+export function parseBlueprintJson(text: string): { blueprint: BlueprintV1; missing: string[] } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stripFences(text))
+  } catch (e) {
+    throw new Error(`蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}`)
+  }
+  const checked = validateBlueprint(parsed)
+  if (!checked.ok) {
+    throw new Error(`蓝图校验失败：${checked.errors.join('; ')}`)
+  }
+  return { blueprint: checked.value, missing: computeMissing(checked.value) }
+}
+
 export async function analyzeIntent(
   ctx: Context,
   route: { provider: string; model: string },
@@ -109,20 +128,8 @@ export async function analyzeIntent(
     signal: new AbortController().signal,
   })
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(stripFences(text))
-  } catch (e) {
-    throw new Error(`analyzeIntent 输出非 JSON：${(e as Error)?.message ?? 'parse failed'}`)
-  }
-
-  const checked = validateBlueprint(parsed)
-  if (!checked.ok) {
-    throw new Error(`analyzeIntent 蓝图校验失败：${checked.errors.join('; ')}`)
-  }
-  const blueprint = checked.value
-
-  const missing = computeMissing(blueprint)
+  const { blueprint, missing: baseMissing } = parseBlueprintJson(text)
+  const missing = [...baseMissing]
   // 保真守卫（spec §6）：用户原文核心实体必须出现在蓝图任意字段；丢失实体并入 missing
   const fid = checkFidelity(input, blueprint)
   for (const e of fid.missingEntities) {

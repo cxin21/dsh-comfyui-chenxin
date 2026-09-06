@@ -5,6 +5,14 @@ import type {
 } from '../../tools/prompt-author.js'
 import type { H3ShotsInput } from '../schema/h3-shots.js'
 import type { AnimaSlots } from '../dialect/anima.js'
+import { BLUEPRINT_SCHEMA, parseBlueprintJson } from '../blueprint/analyzer.js'
+
+/**
+ * Task 12 Step 3b（spec §14）：intent 子代理瘦身——蓝图模式注入最小 system，
+ * 去掉技能目录/工具说明噪音（子代理 trace 显示它曾纠结「要不要调 skill」）；
+ * 旧 slots/shots 请求仍走原 persona（向后兼容）。
+ */
+export const BLUEPRINT_SUBAGENT_SYSTEM = '你是一个创作蓝图分析引擎。只输出 JSON，不要调用任何工具，不要输出任何解释。'
 
 /**
  * R2 SubagentIntentProvider：通过 ctx.subagents.start（one-shot seam）创建创作子代理。
@@ -56,8 +64,10 @@ export function createSubagentIntentProvider(
 
   return async function subagentIntent(req: AuthorIntentRequest, exec?: any): Promise<AuthorDraft> {
     // persona/schema 解析（Task 7 方言化）：req（author 按 dialect.intent 注入）> opts（插件配置）> 全局 DEFAULT 兜底
-    const persona = (req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA
-    const schema = (req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA
+    // Task 12 Step 3b：蓝图模式（target='blueprint'）强制 BLUEPRINT_SUBAGENT_SYSTEM + BLUEPRINT_SCHEMA（最小 system，不含技能/工具噪音）
+    const isBlueprint = req.target === 'blueprint'
+    const persona = isBlueprint ? BLUEPRINT_SUBAGENT_SYSTEM : ((req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA)
+    const schema = isBlueprint ? BLUEPRINT_SCHEMA : ((req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA)
     // parent 必须是当前调用 Agent：工具执行上下文（exec.agent）优先，
     // 回退到 apply 绑定的 ownerCtx.agent（仅在插件确实在 agent scope 下 apply 时可用）。
     const parent = exec?.agent ?? ownerCtx?.agent
@@ -135,6 +145,10 @@ export function createSubagentIntentProvider(
 }
 
 function parseIntentJson(text: string, req: AuthorIntentRequest): AuthorDraft {
+  // Task 12 Step 3b：蓝图模式走 analyzer 的蓝图解析（stripFences + validateBlueprint + missing 计算）
+  if (req.target === 'blueprint') {
+    return parseBlueprintJson(text)
+  }
   // 剥离 markdown code fence 与前后非 JSON 杂质（LLM 常见 ```json ... ``` 包裹）
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
   const cleaned = ((fenced && fenced[1] !== undefined) ? fenced[1] : text).trim()

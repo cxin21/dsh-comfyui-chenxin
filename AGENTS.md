@@ -67,7 +67,7 @@ temp/<skill>/<task>/
 | Envelope code | 出处 | 怎么修 |
 |---|---|---|
 | `catalog_build_failed` / `input_file_missing` | prompt-master (catalog) | 知识资产缺失 / 重建失败 → 跑 `catalog_build` 工具重建 |
-| audit critical gates（`field_order` / `cut_timestamps` / `ref_count` / `budget` / 其余 rule） | prompt_author / prompt_compile / prompt_audit | 看 `audit.gates[].rule` + `detail` 修 slots / shots；修正闭环 max 2 次，`loop_exhausted:true` 时人工接手 |
+| audit critical gates（`field_order` / `cut_timestamps` / `ref_count` / `budget` / 其余 rule） | prompt_author / prompt_compile / prompt_audit | 看 Envelope 的 `next_action`：`retry_input`→按 `repair_hints` 改入参；`auto_repair`→引擎已修，检查 `observability.repairs`；`manual`→人工接手（`loop_exhausted`） |
 | `invalid_request` | camera-* | req.json 路径/格式不对 |
 | `input_file_missing` | camera-* | 路径在硬盘上不存在，修复路径 |
 | `group_confirmation_aborted` | camera-image | 自动化场景加 `--yes`，或改 req 减 group |

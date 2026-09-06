@@ -118,7 +118,13 @@ function parseShots(description: string, durationSeconds: number, declaredShotCo
 }
 
 function semanticShot(text: string): string {
-  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).join(' ')
+  // CJK 感知：抽中文二元组 + ASCII 词，中文正文不再判空
+  const norm = text.toLowerCase()
+  const ascii = (norm.match(/[a-z0-9]+/g) ?? []).join(' ')
+  const cjkChars = norm.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) ?? []
+  const bigrams: string[] = []
+  for (let i = 0; i + 1 < cjkChars.length; i++) bigrams.push(cjkChars[i] + cjkChars[i + 1])
+  return [ascii, ...bigrams].filter(Boolean).join(' ')
 }
 
 function auditShotExecution(shots: Shot[]): void {
@@ -233,13 +239,17 @@ function auditL2vaPreamble(preamble: string, durationSeconds: number, shotCount:
 /* ── Stage dispatchers（audit.py audit_* 移植，findings → 归类 rule）── */
 
 function findingsToGates(stage: string, findings: string[], ruleOf?: (msg: string) => string): AuditGate[] {
-  return findings.map((msg) => ({
-    rule: ruleOf ? ruleOf(msg) : 'h3_audit',
-    target: 'h3',
-    severity: 'critical',
-    detail: msg,
-    source: 'audit/rules-h3',
-  }))
+  return findings.map((msg) => {
+    const rule = ruleOf ? ruleOf(msg) : 'h3_audit'
+    return {
+      rule,
+      target: 'h3',
+      // 语义闸门分层（spec §10.1）：shot_execution 是启发式（不可判定），降级 important；确定性闸门保持 critical
+      severity: rule === 'shot_execution' ? 'important' : 'critical',
+      detail: msg,
+      source: 'audit/rules-h3',
+    }
+  })
 }
 
 /* ── T13 F1（Ruling #10）：compile 前置官方契约闸门（对齐 contracts.py parseRequest 语义）── */

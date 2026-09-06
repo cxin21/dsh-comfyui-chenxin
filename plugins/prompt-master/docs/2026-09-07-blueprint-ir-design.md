@@ -123,18 +123,19 @@ interface BlueprintV1 {
   media: 'image' | 'video' | 'mixed'
   core: {
     concept: string          // 一句话主题（必填，用户原意压缩）
+    aspect_ratio?: string    // 画面比例（16:9/9:16/1:1/4:3/3:4；复用现有 ASPECT_COMMON）
     characters: Character[]  // 角色卡（可空；支撑跨镜头/跨次一致性）
     scene: Scene             // 场景（环境/时间/光线/氛围）
     style: StyleRef          // 风格引用（基底/主题/情绪/配色）
     emotion: string          // 情绪基调（冷峻/温暖/压抑…）
     composition: string[]    // 构图语言（三分法/对称/负空间/前景引导）
-    negative: string[]       // 负向意图（不要出现什么）
+    negative: NegativeConstraint[]  // 负向意图（结构化约束：对象+属性）
     narrative?: string       // 自由叙事文本（保留用户原话）
   }
   media_layer: {
     video?: {
       total_duration_seconds?: number  // 视频总时长（H3 官方契约 4–15s，唯一权威值）
-      shots: Shot[]          // 分镜序列（时长/节拍/景别/运镜/动作/对白/音效/音乐）
+      shots: Shot[]          // 分镜序列（结构对齐影视 shot list 标准列，见 Shot）
       pacing?: string        // 节奏（渐强/平缓/骤停）
       audio?: string         // 全局声景（非 diegetic 音乐基调）
     }
@@ -150,11 +151,13 @@ interface BlueprintV1 {
 interface Character {
   id: string
   name?: string
-  appearance_anchors: string[]  // 外观锚点（发型/瞳色/体型/肤色）— 一致性关键
+  appearance_anchors: string[]  // 识别锚点（脸型/发型/瞳色/体型/肤色）— 必须"可见、可生成、可比较"
   outfit?: string
   props?: string[]
-  distinctive?: string          // 标志物/标志性特征
-  reference?: string            // 参考标签（<Picture N>），可空
+  distinctive?: string          // 标志物（胎记/伤疤/纹身/特征配饰）
+  reference_slots?: string[]    // 参考图槽位（正脸/全身/表情 → <Picture N> 绑定）
+  variant?: string              // 变体状态（服装换装/伤势/时段变化）
+  continuity_lock?: boolean     // 连续性锁（该角色跨镜头必须严格一致，禁止漂移）
 }
 
 interface Scene {
@@ -172,14 +175,22 @@ interface StyleRef {
 
 interface Shot {
   beat: string                  // 情节节拍（这镜在干什么）
-  shot_size?: string            // 景别（特写/中景/全景/大远景）
+  shot_size?: string            // 景别（CU/MCU/MS/FS/WS，对齐影视 shot list 标准）
+  camera_angle?: string         // 机位角度（高/低/平/过肩/俯拍）
   camera?: string               // 运镜（dolly/pan/tracking/orbit/crane/handheld）
-  action?: string               // 动作细节（具体名词）
+  action?: string               // 动作细节（具体名词，识别锚点须可生成可比较）
   dialogue?: string             // 对白（可空）
   audio_focus?: string          // 音效焦点
   music?: string                // 音乐情绪
-  duration_seconds?: number     // 分镜时长（视频总时长 = Σ shots 或显式 duration）
-  who?: string[]                // 涉及角色 id
+  duration_seconds?: number     // 分镜时长（视频总时长 = Σ shots 或显式 total）
+  who?: string[]                // 涉及角色 id（→ <Subject N> 稳定标签，见 §5.2-5）
+  remark?: string               // 备注（连续性要求/特效/特殊说明，对齐影视 shot list 备注列）
+}
+
+interface NegativeConstraint {
+  target: string                // 负向对象（"文字"/"现代元素"/"血腥"）
+  attribute?: string            // 属性限定（如 "文字：字幕/水印/LOGO"）
+  severity?: 'soft' | 'hard'    // hard=内容安全类（直接过滤/拒绝）；soft=美学类（折进正向或映射 negative）
 }
 ```
 
@@ -187,11 +198,17 @@ interface Shot {
 
 1. **`duration_seconds` 歧义消除**：蓝图里显式双字段——`media_layer.video.total_duration_seconds`（视频总时长，对应 H3 官方契约 4–15s，唯一权威值）与 `shot.duration_seconds`（每镜时长，仅作切分建议）。方言投影器负责转换：`h3.duration_seconds = total`；分镜时间戳按 `total/Σshot` 或用户显式切分计算。persona/schema/工具描述三处同步注明。
 2. **角色卡锚点**：`appearance_anchors` 是跨镜头一致性的文字锚（发型/瞳色/服装/标志物），投影到 h3 时进入 `what` 描述首句与 `who`，进入 anima 时映射 `character/appearance/clothing`。
-3. **负向意图三态处理**（方言投影器内做，不依赖 LLM）：
-   - 方言有 native negative（anima `exclusions[]`）→ 直接映射
-   - 方言无 native negative（H3）→ 折进正向末句（「无字幕、无拉伸」式），或 advisory 提示
-   - 内容安全类负向 → 直接过滤/拒绝（沿用现有 joy-extra 硬约束）
+3. **负向意图三档适配**（方言投影器内做，不依赖 LLM；调研三支持矩阵）：
+   - **档 1 有 native negative**（SD/SDXL `negative_prompt`、可灵 `negative_prompt`、MJ `--no`）→ 直接映射方言 negative 字段/参数
+   - **档 2 无 native**（Flux、H3、即梦）→ **正向改写**（"无字幕"→"纯净画面无文字界面"；"无眼镜"→"素颜"）+ advisory 提示，不堆负向词污染画面
+   - **档 3 LLM-encoder 模型**（Z-Image/Anima/Krea2）→ 语义正负短语，**只用符号不用权重**（权重被忽略，NegPiP 实测）
+   - 内容安全类（severity='hard'）→ 直接过滤/拒绝（沿用现有 joy-extra 硬约束）
 4. **语言中立**：蓝图字段用创作语言（随用户），方言投影时按方言 output_lang 渲染（沿用现有 `buildTextZh` 骨架翻译机制）。
+5. **角色引用解析**（调研三 drama-skills 范式）：`Shot.who: string[]` 存**角色 id**；方言投影时按 `Character.reference_slots` / 用户 references 顺序映射为 `<Subject N>` 稳定标签。识别锚点（`appearance_anchors` + `distinctive`）必须**可见、可生成、可比较**——不用空泛质量词；`continuity_lock: true` 的角色跨镜头强制注入锚点并审计（防漂移）。
+6. **保真-扩展边界**（设计张力定案）：
+   - **不可改写（原字面保留）**：`concept`、`narrative`、用户给出的具体描述词（进入蓝图原样）
+   - **可扩展改写**：缺失维度的补全（风格/光影/镜头/构图）、空泛词的具体名词化——但用户原词必须出现在 v1 的某字段（保真守卫 §6 强制）
+   - 扩展引擎输出的每个改写点记录在 `observability.expansions[]`（用户可审计"哪里被扩展了"）
 
 ### 5.3 Schema 版本化
 
@@ -209,6 +226,9 @@ interface Shot {
   3. **标记缺失**：蓝图字段可空；分析器显式标记「缺失维度」（如无风格 → style 空 + missing 列表）
   4. **多模态**：references 传入时提取参考物美学特征（Phase 2 完整；Phase 1 至少保留标签稳定）
 - **输出形状**：蓝图 v0 JSON + `missing: string[]`（供扩展引擎与用户可见）。
+- **澄清环节**（agent 会话内，F 问题定案）：`missing` 维度分两级处理——
+  - **关键缺失**（风格/媒介/负向边界，影响产出方向）：可配置 `clarify: 'ask' | 'auto'`；默认 'auto'（交给扩展引擎补全），'ask' 时返回 `clarify_questions` 供 agent 用 `ask_user_question` 追问（对齐 preset AGENTS.md「创意方向未定→停下来问」规则）
+  - **次要缺失**（光影/构图/细节）：直接进扩展引擎补全，不打断
 - **保真守卫**：投影前对比「用户关键词覆盖」——用户原文里的核心实体必须出现在蓝图某字段（缺失即视为意图丢失，advisory 报警）。这是对「分析意图」的质量下限。
 
 ---
@@ -227,13 +247,14 @@ interface Shot {
 | 角色卡锚点补全 | LLM | 同一角色跨镜头时补齐锚点字段 |
 | 质量自检 | 确定性 | 输出前过「具体性检查」（含可感知名词比例、禁词、字段完整度） |
 
-### 7.2 风格库（分层，Phase 2 内容深化）
+### 7.2 风格库（分层；Phase 1 最小可用 → Phase 2 内容深化）
 
 - **基底风格**（媒介/画风）：写实电影、游戏 CG、赛璐璐、厚涂、水彩、概念原画…
 - **主题风格**（场景+配色耦合）：赛博朋克、和风、废土、暗黑史诗、童话…
 - **情绪调色板**：冷峻、温暖、压抑、燃、静谧…
 - 每风格 = `{id, name, base?, theme?, palette?, prompt_fragments: {image, video}, applies_to: ModelId[], negative_hints[]}`。
-- **conformity 参数**（0–1）：0=完全按模板，1=完全自由（LLM 自由度调节），默认 0.6。
+- **Phase 1 最小风格库 v0**（满足用户「按需选择」）：内置 **8 个常用风格**（写实电影/游戏 CG/赛璐璐/厚涂/赛博朋克/和风/废土/暗黑史诗），来源=现有 `expand_cinematic`/`expand_photographer` profile system prompt + 调研二风格参考；用户可在 `prompt_author` 传 `style_id` 或在蓝图 `core.style` 指定。Phase 2 扩充到 50+ 并做内容化治理。
+- **conformity 参数**（0–1）：0=完全按模板，1=完全自由（LLM 自由度调节），默认 0.6（Phase 1 就带，Phase 2 完善语义）。
 - **来源**：调研二的开源风格库参考（comfyui-llm-prompt-enhancer 50+ 风格、midjourney-prompt-generator）；现有 `expand_cinematic`/`expand_photographer` profile 的 system prompt 可作种子。
 
 ### 7.3 电影摄影词库（aesthetics/）
@@ -260,7 +281,7 @@ interface Shot {
 | `shots[].audio_focus` | `shots[].ambient` |
 | `shots[].music` / `media_layer.video.audio` | `shots[].music` / `overall_soundscape` |
 | `shots[].dialogue` | `shots[].dialogue`（`<d>[语言] 文本</d>`） |
-| `core.negative` | 无 native → 折进 `what` 末句 + advisory |
+| `core.negative`（NegativeConstraint[]） | 三档适配：档 1 映射 negative 字段；档 2 正向改写进 `what` 末句 + advisory；档 3 语义正负短语 |
 | `core.style`+`emotion`+`scene.lighting` | 并入各 shot 的 `what`（按 ROI 排序） |
 | references | `shots.references`（原样传递） |
 
@@ -275,7 +296,7 @@ interface Shot {
 | `scene.lighting` + `media_layer.image.lighting_detail` | `detail_mood[]` |
 | `media_layer.image.focal_length/depth_of_field/camera_angle` | `camera[]` |
 | `composition[]` | `detail_mood[]` |
-| `core.negative` | `exclusions[]` |
+| `core.negative`（NegativeConstraint[]） | `exclusions[]`（soft 类映射；hard 类已提前过滤） |
 | `core.narrative` | `narrative` |
 | `core.style.base/theme` | `detail_mood[]`（风格 tag） |
 
@@ -442,8 +463,11 @@ Level 3 advisory 降级：
 
 **范围**：
 - 蓝图 IR schema v1 + 意图分析器 + 美学化扩展引擎（基础美学规则）
-- 方言投影器（anima/h3）+ 负向三态 + 角色卡
+- **蓝图存储/版本化**（复用 settings/custom_profiles 机制；增量修改的前提）
+- **最小风格库 v0**（8 个常用风格 + conformity 参数）——满足「按需选择」
+- 方言投影器（anima/h3）+ 负向三档适配 + 角色卡（识别锚点/参考槽位/连续性锁）
 - CJK 修复 + 语义闸门分层 + Envelope `next_action` + 增量修正（三级）
+- 蓝图 schema 含 `aspect_ratio`（复用 ASPECT_COMMON）
 - 契约级测试 + 事故案例 eval
 
 **交付标准**：
@@ -451,6 +475,8 @@ Level 3 advisory 降级：
 2. 上次会话案例（中文 3 镜打斗）通过审计，无 CJK 误报，duration 语义正确
 3. 现有 golden 测试全绿（方言编译零回归）
 4. LLM 调用 ≤3 次/任务，失败给 `next_action` 指引
+5. 用户可选 8 个风格之一 → 蓝图 `core.style` 生效
+6. 可「取回旧蓝图改一字段重投影」（蓝图存储可用）
 
 **验收**：vitest 全绿 + 真会话复跑（用上次同款用户输入）。
 
@@ -484,5 +510,6 @@ Level 3 advisory 降级：
 
 - 调研一（GitHub 提示词工程框架）：guidance/outlines/xgrammar（约束前置）、DSPy/promptfoo（eval 回归）、instructor（reask 结构化反馈）、LangGPT（结构化 JSON 意图）、h3-prompt-writing/SKILL.md（方言契约文档）、ComfyUI-MiniMax-H3-Guide（编译期校验）
 - 调研二（美学 × 多模型适配）：MJ Prompt Basics 七要素、可灵 3.0 八层框架、H3 官方写作指南、Veo 3 官方指南、ai-shortfilm-prompts（摄影机型号强制）、LAION aesthetic-predictor、Promptist/TIPO/NegOpt、PromptBridge
+- 调研三（意图 IR 行业参照 × 角色一致性 × 负向工程）：StudioBinder shot list 标准列（镜号/景别/机位/运镜/动作/对白/音效/时长/备注）、screenplay/model sheet、drama-skills（五文档流水线 + REF 参考槽位语法 + 识别锚点/连续性锁）、Jellyfish（角色中心化防漂移）、ArcReel/Toonflow（剧本→分镜→视频）、InstantID/PhotoMaker/IPAdapter/AnimateDiff（角色一致性技术谱系）、NegPiP（LLM-encoder 负向只认符号）、Flux 无原生 negative（flux#188）
 - 本地源码：`src/pe-framework/dialect/*`、`src/pe-framework/audit/rules-h3.ts`、`src/pe-framework/pipeline/runStage.ts`、`src/pe-framework/intent/subagent-provider.ts`、`src/pe-framework/continue/engine.ts`、`src/tools/prompt-author.ts`、`src/tools/prompt-compile.ts`、`src/plugin/index.ts`
 - 资产：`assets/knowledge/minimax-h3-prompt/manifest.json`（license）、`assets/knowledge/anima-prompt-v1/`（tag 目录）

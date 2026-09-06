@@ -2,9 +2,11 @@ import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
 // 方言模块副作用注册（Task 6：编排走 runStage 注册表，需保证 anima/h3 已装配）
 import '../pe-framework/dialect/anima.js'
-import '../pe-framework/dialect/h3.js'
+import { normalizeH3Input } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
-import { assembleEnvelope } from '../pe-framework/render/envelope.js'
+import { assembleEnvelope, computeNextAction } from '../pe-framework/render/envelope.js'
+import { getDialectPackage } from '../pe-framework/dialect/package.js'
+import { contractGatesH3 } from '../pe-framework/audit/rules-h3.js'
 import type { StageResult } from '../pe-framework/pipeline/types.js'
 import { serializeReport } from '../pe-framework/audit/report.js'
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
@@ -17,15 +19,19 @@ export interface CompileArgs {
   form_fields?: Record<string, unknown>
   output_lang?: string
   audit_only?: boolean
+  preflight_only?: boolean
   slots?: Record<string, unknown>
   variant?: string
 }
 
 /** StageResult → Envelope（thin view 组装点）；omitResult 用于 audit_only 语义（不返回提示词正文）。
  *  MF-3：result 省略仅限 audit_only——非 audit_only 即使 ok=false（critical 闸门）也保留 result
- *  （对齐旧 compile 行为：ok:true + audit.passed:false 可见编译产物；确定性编译无「修复重试」路径）。 */
+ *  （对齐旧 compile 行为：ok:true + audit.passed:false 可见编译产物；确定性编译无「修复重试」路径）。
+ *  Task 3/5（spec §11）：normal 与 preflight 两条路径都带 next_action——stageToEnvelope 内部对
+ *  stage 调 computeNextAction(stage)（extraGates 在传入前已合并进 stage，故即「merge 后重算」）。 */
 function stageToEnvelope(stage: StageResult, opts?: { omitResult?: boolean; dialectTopLevel?: Record<string, unknown> }): string {
-  const env = JSON.parse(assembleEnvelope(stage, undefined, undefined, opts?.dialectTopLevel)) as Record<string, unknown>
+  const nextAction = { next_action: computeNextAction(stage) }
+  const env = JSON.parse(assembleEnvelope(stage, undefined, undefined, opts?.dialectTopLevel, nextAction)) as Record<string, unknown>
   if (opts?.omitResult) delete env.result
   else if (env.result === undefined) env.result = stage.result
   return serializeReport(env as never)
@@ -56,7 +62,7 @@ export function registerCompileTool(ctx?: Context) {
   return defineTool({
     name: 'prompt_compile',
     description:
-      '确定性编译+审计：target=h3（场景/shots → official dialect 文本+审计）或 target=anima（slots → positive/negative+审计；无 budget）。h3 budget counter=estimate（T12 前）。',
+      '确定性编译+审计：target=h3（场景/shots → official dialect 文本+审计）或 target=anima（slots → positive/negative+审计；无 budget）。h3 budget counter=estimate（T12 前）。preflight_only=true 时不编译，仅做方言约束校验（零 LLM），用于先验边界再投 prompt_author。',
     parameters: {
       target: { type: 'string', default: 'h3', description: '目标方言：h3 / anima' },
       slots: { type: 'object', description: 'anima 槽位 brief（AnimaSlots 形状）', default: {}, additionalProperties: true },
@@ -66,12 +72,13 @@ export function registerCompileTool(ctx?: Context) {
       form_fields: { type: 'object', description: '场景表单字段（随场景而异）', default: {}, additionalProperties: true },
       output_lang: { type: 'string', default: 'zh', description: '输出语言 zh/en/ja' },
       audit_only: { type: 'boolean', default: false, description: '只返回审计结果（不返回提示词正文）' },
+      preflight_only: { type: 'boolean', default: false, description: '只做方言约束校验（零 LLM，不执行 compile/budget）' },
     },
     output: {
-      schema: { type: 'string', description: 'Envelope JSON 字符串 {ok, result?, audit, advisories}' },
+      schema: { type: 'string', description: 'Envelope JSON 字符串 {ok, result?, audit, advisories, next_action}' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; shots?: Record<string, unknown>; scenario_id?: string; form_fields?: Record<string, unknown>; output_lang?: string; audit_only?: boolean; slots?: Record<string, unknown>; variant?: string }, _exec: ToolRunContext) {
+    async execute(args: { target?: string; shots?: Record<string, unknown>; scenario_id?: string; form_fields?: Record<string, unknown>; output_lang?: string; audit_only?: boolean; preflight_only?: boolean; slots?: Record<string, unknown>; variant?: string }, _exec: ToolRunContext) {
       const a = args as unknown as CompileArgs
       const target = String(a.target || 'h3')
       logInfo(`[prompt-master] prompt_compile target=${target}${a.scenario_id ? ` scenario=${String(a.scenario_id).trim()}` : ''}`)
@@ -106,6 +113,36 @@ export function registerCompileTool(ctx?: Context) {
         shots = a.shots as unknown as H3ShotsInput
       }
       if (!shots) throw new Error('需要 scenario_id 或 shots 输入')
+      // Task 5（spec #3 约束前置）：preflight_only=true 只跑方言约束校验（零 LLM），不执行 compile/budget
+      if (a.preflight_only === true) {
+        const normalized = normalizeH3Input({ shots }, { scenarioId, formFields: a.form_fields })
+        const stageName = normalized.stage ?? 't2va'
+        const refs = normalized.references ?? []
+        const pkg = getDialectPackage('h3')
+        const constraintGates = pkg
+          ? pkg.constraints.validate({ stage: stageName, shots, refs })
+          : contractGatesH3(stageName, shots, refs)
+        // 规则归一：contractGatesH3 把「shots 超 max_shots」闸门标为 parse_request；按规则分类
+        // （ruleForMessage：「exceed the maximum」→ max_shots，与文本审计路径一致）归一为 max_shots——
+        // 计划 Task 5 验收要求 preflight 对该违例报 max_shots gate（规则集合同时含 parse_request/max_shots，
+        // 归一不影响 next_action 判定，只对齐 rule 标签）。
+        const gates = [
+          ...extraGates,
+          ...constraintGates.map((g) =>
+            g.rule === 'parse_request' && g.detail.includes('exceed the maximum') ? { ...g, rule: 'max_shots' } : g,
+          ),
+        ]
+        const preflightStage: StageResult = {
+          ok: !gates.some((g) => g.severity === 'critical'),
+          result: {},
+          gates,
+          advisories: [],
+          assumptions: [],
+          targetSlotHint: 't2v.prompt',
+        }
+        logInfo(`[prompt-master] prompt_compile preflight_only → ok=${preflightStage.ok} gates=${gates.length} critical=${gates.filter((g) => g.severity === 'critical').length}`)
+        return stageToEnvelope(preflightStage, { omitResult: true })
+      }
       // stage 推断在 runStage normalize 单点（references > full_reference 场景 > t2va）；references 走 formFields
       let stage = runStage({
         target: 'h3',

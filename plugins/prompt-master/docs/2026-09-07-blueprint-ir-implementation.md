@@ -1013,6 +1013,26 @@ git commit -m "docs(prompt-master): tool routing + duration semantics explicit +
 - contractGatesH3 落点（薄封装不迁移）→ Task 4 澄清 ✅
 - 投影器快照回归 → Task 8 Step 4（toMatchSnapshot）✅
 
+## 执行观察项（Phase 1 进行中，成员上报记录）
+
+> 本节仅记录执行期发现，**不改变已批准的任务语义**；每项在 Phase 1 收尾时评估。
+
+| # | 观察项 | 来源 | 处置建议 |
+|---|---|---|---|
+| O1 | 计划 Task 1 将整条 `shot_execution` rule 降级 important，使确定性的「空镜内容」判定（空 what）也变非阻断——spec §10 语义/确定性分层的粒度取舍 | reviewer t13 | 后续计划修订时评估：把「空镜内容」确定性子类拆回 critical（独立 gate），语义「无新信息」子类保持 important |
+| O2 | 全量 vitest 有 3 个既有失败（anima-catalog / anima-compile / catalog-search 的 overlay-status 断言，期望 'unavailable' 得 'available'），**双重独立证实与本次实现无关**（engineer stash 对照 + reviewer 导入图分析：3 测试均不 import 本次改动文件） | engineer t1 + reviewer t13 | 属既有测试基建/路径注入残留问题，Phase 1 收尾后单独排查（不在本计划范围） |
+| O3 | Task 1 测试示例 `zhShots` 字符串闭合引号笔误（反引号），engineer 按唯一可行解读修正为单引号，计划文档已同步修正 | engineer t1 | 已修复（commit 7f13393），后续任务引用示例时以修正后为准 |
+| O4 | 计划 Task 3 Files 的「Modify prompt-compile.ts（merge extraGates 后重算 next_action）」接线在 t3 契约中被排除（避免与 t5 in-scope 冲突），且 t5 原契约仅覆盖 preflight 分支、t10 仅覆盖 author → normal 编译路径 Envelope 一度无 next_action（assembleEnvelope L96 仅在 nextAction 传入时输出该字段） | engineer t3 范围问题 | 已指派 t5 顺带完成：stageToEnvelope 内调 computeNextAction(stage) 传第 5 参（anima/h3 双路径），compile-preflight.test.ts 加 normal 路径用例 |
+| O5 | 计划 Task 2 自带 4 用例未覆盖 validateBlueprint 的 media 非法值、video.shots 空数组两条校验规则（计划级测试缺口） | reviewer t14 | Phase 1 收尾时补这两条测试（非阻断，校验逻辑本身已实现且正确） |
+| O6 | contractGatesH3 将「shots 超 max_shots」标为 rule='parse_request'（contracts.py parseRequest 族名），与计划 Task 5 验收期望的 rule='max_shots' 不一致；engineer 在 preflight 分支做最小归一化（detail 含 'exceed the maximum' 的 parse_request → max_shots），不改 contractGatesH3（其被 dialect/h3.ts + prompt-audit.ts 消费，改动会触发计划外连锁变更） | engineer t5 + captain 裁决 | **captain 已裁决接受**：归一化满足计划验收、对齐 ruleForMessage 命名、匹配条件精确（仅 shots 超限类）、最小可逆；记入观察项供 Phase 1 收尾评估是否统一 contractGatesH3 标签 |
+| O7 | t6（commit b3bc533）跨 in-scope 修改 t2 的 schema.ts：core.characters/scene/style/emotion/composition 改可选（negative 保持必填）。**captain 已裁决接受**：spec §6「蓝图字段可空+缺失标记」与 §5.1 注释「可空」支持，且计划 Task 6 fixture 只给 {concept, negative} 与严格接口冲突（TS2740）属计划内部不一致，放宽是最小忠实修正、宽松方向 t7-t10 零破坏。注意：t14 已审查 schema 的必填版，本变更后 schema 最终形态需 t18 顺带复核 | engineer t6 + captain 裁决 | t18 审查时顺带复核可选化与 spec §6 一致（negative 仍必填）；t7-t10 fixture 需与可选化兼容 |
+| O8 | spec §8.1 映射表要求 emotion 表达（core.emotion）进 H3 输出，但投影器 what 组装（计划 Step 3）不含 emotion → emotion 无 H3 投影路径（spec/计划映射空白） | reviewer t19 | t10 评估：emotion 是否注入 what 或由 compile 层表达（Phase 1 可接受为 style 通道覆盖，需 t10 确认不丢失） |
+| O9 | spec §8.1 映射表 `media_layer.video.audio → overall_soundscape`：投影器仅映射 audio_focus→ambient，未处理 video.audio 全局声景（投影层丢弃；compileH3 的 soundscapeOf 只从 shots[].ambient 派生） | reviewer t19 | 指派 t10：把 media_layer.video.audio 并入首镜 ambient（无首镜时丢弃并记 advisory），使全局声景经 compileH3 派生进入 overall_soundscape，满足 spec §8.1 |
+| O10 | enrichBlueprint 内 checkFidelity 以 v0.core.concept 为原文参照（计划签名无用户原文参数所致）——原文代理弱于用户原始描述 | reviewer t20 | Phase 1 收尾评估：t10 若可传用户原文给 fidelity 可强化保真检查（当前 v0.concept 已含用户原词压缩，代理可接受） |
+| O11 | 计划 Task 7 词库示例 grading 每类仅 3 词，而计划自带测试要求每类 ≥4——engineer 按 spec §7.3 词表补齐至 ≥4（ECU/ELS/50mm/侧逆光/色温/高光暖调/阴影冷调/画中画均可溯源 spec）；禁词表扩展（电影感/氛围感/唯美）在 spec §7.1「等」+ persona 例意图内。**reviewer 已裁决接受**，两处均为计划自冲突的最小忠实解法 | reviewer t20 | 已接受，无需动作（t20 PASS） |
+| O12 | 计划 Task 9 Step 3 要求 analyzeIntent 经 createSubagentIntentProvider 子代理 seam 调 provider 并 Modify subagent-provider.ts（蓝图 persona/schema），但测试（Step 1）用无 subagents 的 {llm:{stream}} stub ctx——测试与实现指示自相矛盾。engineer 实现走 complete(ctx.llm.stream)（BLUEPRINT_* 在 analyzer.ts 导出），**captain 已裁决接受**（忠实测试形态、功能目标达成）。但 subagent-provider.ts 蓝图分支存在真实缺口（parseIntentJson 仅认 anima/h3，blueprint target 会 throw「未知 target」），已并入 Task 12 Step 3b 补充职责：蓝图模式走 BLUEPRINT_SUBAGENT_SYSTEM + 产出 blueprint + 新旧请求兼容测试 | engineer t9 + captain 裁决 | t12 落实蓝图分支；t21 审查基准需知（engineer 的 complete 路径非偏离） |
+| O13 | t22 F2（clarify 参数）修复后：AuthorIntentRequest.clarify + intentBase 透传已接通（参数抵达 intent 层、analyzer 消费逻辑就绪），但生产 provider（subagent 蓝图模式 / defaultIntent）均未读 req.clarify 产出 clarify_questions（grep 证实）——属计划 Task 9/12 未明示的延伸，**captain 裁决选 A**（接受 Phase 1 管道接通） | reviewer t26 | Phase 1 收尾评估：Phase 2 在 subagent 蓝图模式接 req.clarify → analyzeIntent opts.clarify 产出 clarify_questions 端到端闭环 |
+
 ## 执行交接
 
 Plan 保存于 `docs/2026-09-07-blueprint-ir-implementation.md`。两种执行方式：

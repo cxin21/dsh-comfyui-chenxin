@@ -7,8 +7,12 @@ import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
 import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
-import { assembleEnvelope } from '../pe-framework/render/envelope.js'
+import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
 import type { StageResult } from '../pe-framework/pipeline/types.js'
+import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blueprint/repo.js'
+import { projectToH3, projectToAnima, preflightRepair } from '../pe-framework/blueprint/project.js'
+import { enrichBlueprint } from '../pe-framework/enrichment/engine.js'
+import type { BlueprintV1 } from '../pe-framework/blueprint/schema.js'
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js'
 import type { Config } from '../plugin/config.js'
@@ -26,6 +30,14 @@ export interface AuthorArgs {
   scenario_id?: string
   form_fields?: Record<string, unknown>
   audit_only?: boolean
+  /** Task 10 蓝图管线：风格模板 id（MINIMAL_STYLES，如 cinematic_real） */
+  style_id?: string
+  /** Task 10 蓝图管线：风格注入 conformity（0=全量注入；>0 仅引用） */
+  conformity?: number
+  /** Task 10 蓝图管线：关键维度缺失时的澄清策略 ask|auto */
+  clarify?: 'ask' | 'auto'
+  /** Task 10 蓝图管线：增量修改入口——传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影 */
+  blueprint_id?: string
 }
 
 /** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
@@ -38,6 +50,10 @@ export function isDialectReady(target: Target): boolean {
 export interface AuthorDraft {
   slots?: AnimaSlots
   shots?: H3ShotsInput
+  /** Task 10 蓝图管线：蓝图 v0（意图分析产出）；存在时走 enrich→project 分支 */
+  blueprint?: BlueprintV1
+  /** Task 10 蓝图管线：缺失维度标记（spec §6），传入 enrichBlueprint 作扩展引导 */
+  missing?: string[]
 }
 
 export interface AuthorIntentRequest {
@@ -110,12 +126,15 @@ function normalizeSlots(raw: Record<string, unknown>): AnimaSlots {
 const VARIANT_SET = new Set(['base', 'aesthetic', 'turbo'])
 const MAX_CORRECTIONS = 2
 
-/** draft → PipelineInput 输入段：anima {slots, variant}；h3 {shots, stage, scenarioId, formFields} */
+/** draft → PipelineInput 输入段：anima {slots, variant}；h3 {shots, stage, scenarioId, formFields}
+ *  Task 10 蓝图分支：draft.blueprint 存在时先 projectTo* 再入 runStage（扩展在 execute 完成——LLM 异步） */
 function normalizeDraftToInput(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): { slots?: Record<string, unknown>; variant?: string; shots?: unknown; stage?: string; scenarioId?: string; formFields?: Record<string, unknown> } {
   if (target === 'anima') {
+    if (draft.blueprint) return { slots: projectToAnima(draft.blueprint) as unknown as Record<string, unknown>, variant: opts.variant ?? 'base' }
     if (!draft.slots || typeof draft.slots !== 'object') throw new Error('intent 未产出 slots 结构')
     return { slots: draft.slots as unknown as Record<string, unknown>, variant: opts.variant ?? 'base' }
   }
+  if (draft.blueprint) return { shots: projectToH3(draft.blueprint), stage: opts.stage || undefined, scenarioId: opts.scenarioId, formFields: opts.formFields }
   if (!draft.shots || !Array.isArray(draft.shots.shots) || draft.shots.shots.length === 0) throw new Error('intent 未产出 shots 结构')
   return { shots: draft.shots, stage: opts.stage || undefined, scenarioId: opts.scenarioId, formFields: opts.formFields }
 }
@@ -192,12 +211,16 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       scenario_id: { type: 'string', default: '', description: 'h3 场景 id（如 full_reference；可配合 form_fields）' },
       form_fields: { type: 'object', description: 'h3 场景表单字段（含 references 可选）', default: {}, additionalProperties: true },
       audit_only: { type: 'boolean', default: false, description: '仅审计（不调 LLM）：input 需为结构化 JSON（anima: slots；h3: shots{...}）' },
+      style_id: { type: 'string', default: '', description: '蓝图风格模板 id（MINIMAL_STYLES：cinematic_real/game_cg/cel_shading/thick_paint/cyberpunk/wafuu/wasteland/dark_epic；空=不注入）' },
+      conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
+      clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
+      blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影（取回旧蓝图改一字段重投影）' },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean }, exec: ToolRunContext) {
+    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
       const target = String(a.target || 'anima') as Target
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
@@ -212,7 +235,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         } as never)
       }
       const input = String(a.input ?? '')
-      if (!input.trim()) throw new Error('input 必填')
+      if (!input.trim() && !a.blueprint_id) throw new Error('input 必填')
 
       const scenarioId = String(a.scenario_id ?? '').trim() || undefined
       const runOpts = { stage: a.stage || undefined, scenarioId, formFields: a.form_fields, variant: a.variant }
@@ -240,10 +263,81 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
       const intentCfg = getDialect(target)?.intent
       const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema }
-      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}`)
-      let joyExtraFiltered = false
-      let draft = await provider({ ...intentBase, round: 0 }, exec)
+      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}${a.blueprint_id ? ` blueprint_id=${a.blueprint_id}` : ''}`)
+
+      // Task 10 蓝图管线：blueprint_id → repo.load 跳过 analyzeIntent（增量修改入口）；否则走 intent provider seam
+      let draft: AuthorDraft
+      if (a.blueprint_id) {
+        const settings = (ctx as unknown as { settings?: RepoSettingsScope }).settings
+        if (!settings) throw new Error('blueprint_id 需要 repo 后端（ctx.settings 不可用）')
+        const repo = createBlueprintRepo({ settings })
+        const bp = repo.load(a.blueprint_id)
+        if (!bp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
+        draft = { blueprint: bp }
+      } else {
+        draft = await provider({ ...intentBase, round: 0 }, exec)
+      }
+
+      // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
+      // → Level 2 LLM 结构化修复（≤2 次，计入 MAX_CORRECTIONS）→ Level 3 manual + loop_exhausted
+      if (draft.blueprint) {
+        const route = resolveRoute(exec as ExecLike)
+        const enrichOpts = { styleId: a.style_id, conformity: a.conformity, missing: (draft.missing ?? []).length > 0 ? draft.missing : undefined }
+        const expansions: string[] = []
+        const repairs: string[] = []
+        let repaired = false
+        let joyExtraFiltered = false
+        const trailAdvisories: string[] = []
+
+        const e0 = await enrichBlueprint(ctx, route, draft.blueprint, enrichOpts)
+        expansions.push(...e0.expansions)
+        const l1 = preflightRepair(e0.blueprint)
+        if (l1.repairs.length > 0) { repaired = true; repairs.push(...l1.repairs) }
+        let bp = l1.bp
+        let stage = runDraftThroughStage(target, { blueprint: bp }, runOpts)
+        if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
+
+        let corrections = 0
+        while (!stage.ok && stage.gates.some((g) => g.severity === 'critical') && corrections < MAX_CORRECTIONS) {
+          corrections++
+          repaired = true
+          const feedback = JSON.stringify({
+            gates: stage.gates.filter((g) => g.severity === 'critical').map((g) => ({ rule: g.rule, severity: g.severity, detail: g.detail })),
+          })
+          const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec)
+          if (!d2.blueprint) break // provider 未返回蓝图 → 保留当前 stage，走 Level 3
+          const e2 = await enrichBlueprint(ctx, route, d2.blueprint, enrichOpts)
+          expansions.push(...e2.expansions)
+          const l2 = preflightRepair(e2.blueprint)
+          repairs.push(...l2.repairs)
+          bp = l2.bp
+          stage = runDraftThroughStage(target, { blueprint: bp }, runOpts)
+          if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
+        }
+        if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
+          trailAdvisories.push('loop_exhausted:true') // Level 3：仍失败 → manual + loop_exhausted
+        }
+        const repair_hints: RepairHint[] = repairs.map((r) => ({
+          field: r.startsWith('duration_') ? 'total_duration_seconds' : 'shots',
+          fix: r,
+        }))
+        ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
+        return assembleEnvelope(stage, trailAdvisories, {
+          corrections,
+          loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
+          joyExtraFiltered,
+          traceStages: stage.trace?.stages,
+          expansions,
+          repairs,
+        }, undefined, {
+          next_action: computeNextAction(stage, { repairHints: repair_hints, repaired }),
+          repair_hints,
+        })
+      }
+
+      // 旧 slots/shots 直传路径（向后兼容——AuthorDraft.blueprint 缺省时走原逻辑）
       let stage = runDraftThroughStage(target, draft, runOpts)
+      let joyExtraFiltered = false
       if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       const trailAdvisories: string[] = []
       let corrections = 0

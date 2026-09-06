@@ -94,6 +94,18 @@ export function projectToH3(bp: BlueprintV1): H3ShotsInput {
     }
   })
 
+  // spec §8.1：media_layer.video.audio（全局声景）→ 并入首镜 ambient（compileH3 的 soundscapeOf
+  // 从 shots[].ambient 派生 overall_soundscape）；无首镜则丢弃并记 advisory（O9）
+  const globalAudio = video?.audio
+  if (globalAudio && globalAudio.trim()) {
+    if (shots.length > 0) {
+      const first = shots[0]
+      first.ambient = first.ambient && first.ambient.trim() ? `${first.ambient}；${globalAudio}` : globalAudio
+    } else {
+      projectAdvisories.push('audio_dropped:no_shots')
+    }
+  }
+
   return { duration_seconds, shots }
 }
 

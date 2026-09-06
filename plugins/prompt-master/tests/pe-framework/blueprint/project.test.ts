@@ -129,3 +129,27 @@ describe('preflightRepair', () => {
     expect(repairs.some((x) => x.startsWith('shots_3>max_2:merge_shots_or_extend_duration'))).toBe(true)
   })
 })
+
+describe('projectToH3 global audio (spec §8.1 O9)', () => {
+  it('merges media_layer.video.audio into first-shot ambient', () => {
+    const bp: BlueprintV1 = {
+      schema_version: 1, media: 'video',
+      core: { concept: 'x', negative: [] },
+      media_layer: { video: { total_duration_seconds: 4, audio: '雨声与远处雷声', shots: [{ beat: '对峙', audio_focus: '风声' }] } },
+    }
+    const s = projectToH3(bp)
+    expect(s.shots[0].ambient).toContain('雨声与远处雷声')
+    expect(s.shots[0].ambient).toContain('风声') // 与 audio_focus 用「；」并入
+  })
+  it('drops global audio with advisory when no shots', () => {
+    const bp: BlueprintV1 = {
+      schema_version: 1, media: 'video',
+      core: { concept: 'x', negative: [] },
+      media_layer: { video: { total_duration_seconds: 4, audio: '环境白噪', shots: [] } },
+    }
+    const s = projectToH3(bp)
+    expect(s.shots).toHaveLength(0)
+    const advisories = lastProjectAdvisories()
+    expect(advisories.some((a) => a.includes('audio_dropped:no_shots'))).toBe(true)
+  })
+})

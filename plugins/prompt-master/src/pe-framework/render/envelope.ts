@@ -66,6 +66,10 @@ export interface EnvelopeObservability {
   continueWarnings?: string[]
   /** 各管线阶段耗时（ms）；内核 trace 摘要，供 GUI/模型可见性 */
   traceStages?: Array<{ name: string; ms: number }>
+  /** Task 10 蓝图管线：美学扩展记录（§7.1 改写/自检 advisory） */
+  expansions?: string[]
+  /** Task 10 蓝图管线：Level 1/2 修复记录（如 duration_3→4） */
+  repairs?: string[]
 }
 
 export interface EnvelopeNextAction {

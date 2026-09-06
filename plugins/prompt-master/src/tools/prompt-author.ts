@@ -67,6 +67,8 @@ export interface AuthorIntentRequest {
   /** Task 7 方言化：author 按 getDialect(target).intent 注入（req > opts > DEFAULT 兜底在 provider 内） */
   persona?: string
   schema?: string
+  /** Task 10 蓝图管线：关键维度缺失澄清策略透传（→ analyzeIntent opts.clarify；t22 F2 修复） */
+  clarify?: 'ask' | 'auto'
 }
 
 export type AuthorIntentFn = (req: AuthorIntentRequest, exec?: ExecLike) => Promise<AuthorDraft>
@@ -263,8 +265,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
 
       const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
       // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
+      // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
       const intentCfg = getDialect(target)?.intent
-      const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema }
+      const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}${a.blueprint_id ? ` blueprint_id=${a.blueprint_id}` : ''}`)
 
       // Task 10 蓝图管线：blueprint_id → repo.load 跳过 analyzeIntent（增量修改入口）；否则走 intent provider seam
@@ -323,16 +326,22 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           field: r.startsWith('duration_') ? 'total_duration_seconds' : 'shots',
           fix: r,
         }))
+        // t22 F1：computeNextAction 只读 stage.advisories——把 trailAdvisories（loop_exhausted:true）并入
+        // stage 视图；且循环耗尽时 repaired 失效化（否则 repaired 分支在 manual 判定前短路 → 误报 auto_repair）
+        const loopExhausted = trailAdvisories.includes('loop_exhausted:true')
+        const nextStage: StageResult = loopExhausted
+          ? { ...stage, advisories: [...stage.advisories, ...trailAdvisories] }
+          : stage
         ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
         return assembleEnvelope(stage, trailAdvisories, {
           corrections,
-          loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
+          loopExhausted,
           joyExtraFiltered,
           traceStages: stage.trace?.stages,
           expansions,
           repairs,
         }, undefined, {
-          next_action: computeNextAction(stage, { repairHints: repair_hints, repaired }),
+          next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
           repair_hints,
         })
       }

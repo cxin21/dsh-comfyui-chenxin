@@ -65,3 +65,26 @@ describe('prompt_author blueprint_id incremental path', () => {
     setAuthorIntentProvider(null)
   })
 })
+
+describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁)', () => {
+  // provider 每轮返回同一「不可修复」蓝图（8 镜 × 5s 超 max_shots(5)=2，preflightRepair 只记建议不改结构）
+  const alwaysBrokenProvider: AuthorIntentFn = async (req: any) => ({
+    blueprint: {
+      schema_version: 1, media: 'video',
+      core: { concept: '8镜打斗', negative: [] },
+      media_layer: { video: { total_duration_seconds: 5, shots: Array.from({ length: 8 }, (_, i) => ({ beat: `镜${i + 1}` })) } },
+    } as any, missing: [],
+  })
+
+  it('Level 3: loop exhausted → next_action=manual + loop_exhausted:true (非 auto_repair)', async () => {
+    setAuthorIntentProvider(alwaysBrokenProvider as any)
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '8镜打斗' })))
+    // Level 1 已触发（shots 超限建议）+ Level 2 两轮耗尽仍 critical → 必须 manual，不能因 repaired=true 误报 auto_repair
+    expect(v.next_action).toBe('manual')
+    expect(v.advisories).toContain('loop_exhausted:true')
+    expect(v.observability.repairs.length).toBeGreaterThan(0) // Level 1 修复记录存在
+    setAuthorIntentProvider(null)
+  })
+})

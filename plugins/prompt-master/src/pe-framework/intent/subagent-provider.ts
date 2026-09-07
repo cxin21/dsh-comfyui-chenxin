@@ -15,6 +15,13 @@ import { BLUEPRINT_SCHEMA, parseBlueprintJson } from '../blueprint/analyzer.js'
 export const BLUEPRINT_SUBAGENT_SYSTEM = '你是一个创作蓝图分析引擎。只输出 JSON，不要调用任何工具，不要输出任何解释。'
 
 /**
+ * O13（spec §6 澄清接口）：蓝图关键缺失维度 = style/media/negative 边界（与 analyzer.ts 的
+ * KEY_MISSING_DIMS 同款规则，spec §6 L230「关键缺失（风格/媒介/负向边界，影响产出方向）」）。
+ * 保持与 analyzeIntent 一致，避免 drift。
+ */
+const KEY_CLARIFY_DIMS = ['style', 'media', 'negative']
+
+/**
  * R2 SubagentIntentProvider：通过 ctx.subagents.start（one-shot seam）创建创作子代理。
  * 关键设计：ownerCtx 在 plugin/apply 闭包里**一次性绑定**（子代理 seam 复用）；
  * fn 签名 = AuthorIntentFn = (req, exec?) => Promise<AuthorDraft>（与 prompt-author.ts 的 seam 完全兼容），
@@ -131,9 +138,9 @@ export function createSubagentIntentProvider(
 
       if (opts._testOverride) {
         const o = opts._testOverride(text, req)
-        if (o) return o
+        if (o) return applyBlueprintClarify(o, req)
       }
-      return parseIntentJson(text, req)
+      return applyBlueprintClarify(parseIntentJson(text, req), req)
     } finally {
       try {
         await run.dispose()
@@ -142,6 +149,24 @@ export function createSubagentIntentProvider(
       }
     }
   }
+}
+
+/**
+ * O13（spec §6 澄清接口 / 观察项台账）：蓝图分支读 req.clarify → 按 analyzeIntent 同款规则
+ * （关键维度 = style/media/negative，见 KEY_CLARIFY_DIMS）在关键缺失时产出 clarify_questions，
+ * 随 draft 完整返回给调用方（不吞不丢）。非蓝图 / clarify 非 'ask' / 无关键缺失 → 原样返回
+ * （无 req.clarify 时与现状完全一致，默认不产生 clarify_questions）。
+ */
+function applyBlueprintClarify(draft: AuthorDraft, req: AuthorIntentRequest): AuthorDraft {
+  if (req.target !== 'blueprint' || req.clarify !== 'ask') return draft
+  const missing = (draft as { missing?: string[] }).missing ?? []
+  const keyMissing = missing.filter((m) => KEY_CLARIFY_DIMS.includes(m))
+  if (keyMissing.length === 0) return draft
+  const withQuestions: AuthorDraft & { clarify_questions?: string[] } = {
+    ...draft,
+    clarify_questions: keyMissing.map((dim) => `缺少 <${dim}>：请选择/补充`),
+  }
+  return withQuestions
 }
 
 function parseIntentJson(text: string, req: AuthorIntentRequest): AuthorDraft {

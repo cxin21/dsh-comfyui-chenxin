@@ -152,4 +152,48 @@ describe('createSubagentIntentProvider', () => {
     expect(c).toContain('User Input (target=anima):')
     expect(c).toContain('仅输出 JSON')
   })
+
+  // O13（spec §6 澄清接口 / 观察项台账）：生产 provider 蓝图模式读 req.clarify →
+  // 按 analyzeIntent 同款规则（关键维度 style/media/negative）产出 clarify_questions 完整返回。
+  const blueprintNoStyle = JSON.stringify({
+    schema_version: 1,
+    media: 'video',
+    core: { concept: '打斗 CG', negative: [] }, // 无 style → 关键缺失
+    media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }] } },
+  })
+
+  it('O13: blueprint mode reads req.clarify=ask → key missing dims → clarify_questions (non-empty)', async () => {
+    const fake = makeFakeRun({ outputText: blueprintNoStyle })
+    const fn = createSubagentIntentProvider(makeFakeOwnerCtx(fake.run), { timeoutMs: 2000 })
+    const draft = await fn({ target: 'blueprint', input: '打斗 CG', clarify: 'ask', round: 0 } as any)
+    expect((draft as any).blueprint?.media).toBe('video')
+    const questions = (draft as any).clarify_questions as string[] | undefined
+    expect(Array.isArray(questions)).toBe(true)
+    expect((questions ?? []).length).toBeGreaterThan(0)
+    expect(questions![0]).toContain('style') // 关键维度缺失 → 「缺少 <style>：请选择/补充」
+    expect(fake.disposed).toBe(true)
+  })
+
+  it('O13: blueprint mode without req.clarify → no clarify_questions (status quo)', async () => {
+    const fake = makeFakeRun({ outputText: blueprintNoStyle })
+    const fn = createSubagentIntentProvider(makeFakeOwnerCtx(fake.run), { timeoutMs: 2000 })
+    const draft = await fn({ target: 'blueprint', input: '打斗 CG', round: 0 } as any)
+    expect((draft as any).blueprint?.media).toBe('video')
+    expect((draft as any).clarify_questions).toBeUndefined()
+  })
+
+  it('O13: blueprint mode with clarify=auto → no clarify_questions', async () => {
+    const fake = makeFakeRun({ outputText: blueprintNoStyle })
+    const fn = createSubagentIntentProvider(makeFakeOwnerCtx(fake.run), { timeoutMs: 2000 })
+    const draft = await fn({ target: 'blueprint', input: '打斗 CG', clarify: 'auto', round: 0 } as any)
+    expect((draft as any).blueprint?.media).toBe('video')
+    expect((draft as any).clarify_questions).toBeUndefined()
+  })
+
+  it('O13: non-blueprint target with clarify=ask → no clarify_questions (clarify 仅蓝图分支)', async () => {
+    const fake = makeFakeRun({ outputText: JSON.stringify({ slots: { count_gender: ['1girl'] } }) })
+    const fn = createSubagentIntentProvider(makeFakeOwnerCtx(fake.run), { timeoutMs: 2000 })
+    const draft = await fn({ target: 'anima', input: 'x', clarify: 'ask', round: 0 } as any)
+    expect((draft as any).clarify_questions).toBeUndefined()
+  })
 })

@@ -1,6 +1,7 @@
 /**
- * 最小风格库 v0（spec §7.2 风格库分层）。
- * 8 个风格模板：写实电影/游戏 CG/赛璐璐/厚涂/赛博朋克/和风/废土/暗黑史诗。
+ * 最小风格库（spec §7.2 风格库分层；Phase 1 v0 → Phase 2 内容深化）。
+ * Phase 2 在 8 个基础上新增 spec §7.2 列出的候选基底/主题：水彩、概念原画、童话，共 11 个，
+ * 对齐 spec §17 Phase 2 交付标准「10+ 风格模板可用」。
  * prompt_fragments 为具体名词片段（对齐 spec §7.2 分层：风格库存领域具体名词，不用空泛形容词），
  * 每个风格同时提供 image 与 video 两个通道。
  */
@@ -108,6 +109,40 @@ export const MINIMAL_STYLES: StyleTemplate[] = [
     },
     applies_to: ['anima', 'h3', 'sd'],
     negative_hints: ['明亮高饱和', '卡通质感'],
+  },
+  {
+    id: 'watercolor',
+    name: '水彩',
+    base: '水彩',
+    prompt_fragments: {
+      image: '水彩纸纹理留白，湿润晕染边缘，淡彩透明叠色，铅笔淡稿线条',
+      video: '水彩纸纹理留白，湿润晕染边缘，淡彩透明叠色，铅笔淡稿线条',
+    },
+    applies_to: ['anima', 'h3', 'sd'],
+    negative_hints: ['油画厚涂肌理', '写实锐化边缘'],
+  },
+  {
+    id: 'concept_art',
+    name: '概念原画',
+    base: '概念原画',
+    prompt_fragments: {
+      image: '哑光概念原画，硬边笔刷块面，暗部环境光遮蔽，材质速写纹理',
+      video: '哑光概念原画，硬边笔刷块面，暗部环境光遮蔽，材质速写纹理',
+    },
+    applies_to: ['anima', 'h3', 'sd'],
+    negative_hints: ['照片写实渲染', '商业广告质感'],
+  },
+  {
+    id: 'fairy_tale',
+    name: '童话',
+    theme: '童话',
+    palette: '温暖蜂蜜色',
+    prompt_fragments: {
+      image: '手绘童话绘本线条，蘑菇屋，发光植物，暖黄窗光，柔光光斑',
+      video: '手绘童话绘本线条，蘑菇屋，发光植物，暖黄窗光，柔光光斑',
+    },
+    applies_to: ['anima', 'h3', 'sd'],
+    negative_hints: ['哥特暗黑', '血腥恐怖'],
   },
 ]
 

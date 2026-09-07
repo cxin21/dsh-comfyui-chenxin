@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../../llm/complete.js'
 import type { BlueprintV1 } from '../blueprint/schema.js'
 import { applyStyle } from './style.js'
-import { checkConcreteness, checkFidelity } from '../aesthetics/check.js'
+import { checkConcreteness, checkFidelity, checkShotDensity } from '../aesthetics/check.js'
 import { CINEMA_LEXICON } from '../aesthetics/lexicon.js'
 
 export interface EnrichRoute {
@@ -72,7 +72,13 @@ function buildExpansionPersona(): string {
     '规则：',
     '1. 具体名词化：把空泛形容词改写为可感知名词短语（如「电影感」→「IMAX 胶片机 + Panavision C 系 35mm f4」）。',
     '2. 禁空泛词：输出不得含 cinematic/beautiful/amazing/stunning/epic/大气/高级/电影感 等空泛词。',
-    '3. ROI 补全：按优先级补缺失维度——光影 > 主体特征 > 运镜 > 环境细节 > 风格。',
+    '3. 镜头细节密度（硬性）：每个 video shot 的 action 必须完整覆盖 5 个维度，缺一不可——',
+    '   ① 主体（谁/什么在动，具体名词，≥8 字）',
+    '   ② 环境（场景/空间，具体名词，≥8 字）',
+    '   ③ 光影（时间/光源/明暗，具体名词，≥6 字）',
+    '   ④ 运镜（景别/机位/镜头运动，从候选词库选，或填 shot_size/camera）',
+    '   ⑤ 情绪（氛围/气氛，具体可感，≥4 字）',
+    '   禁止一句话带过（如「两名女剑客持剑对峙」缺环境/光影/情绪即不合格）；用「，」连接各维度描述。',
     '4. 负向推断：从用户语境推断合理负向（如「无现代元素」）→ negative[]（severity: soft）。',
     '5. 角色卡锚点补全：同一角色跨镜头时补齐 appearance_anchors（可见/可生成/可比较）。',
     '6. 保留事实：用户原词必须保留在 v1 的某字段（保真守卫），不编造情节。',
@@ -168,6 +174,8 @@ export async function enrichBlueprint(
     if (!cc.pass) expansions.push(`concreteness_failed:${cc.issues.join(';')}`)
     const completeFields = checkFieldCompleteness(enriched)
     if (completeFields.length > 0) expansions.push(`field_completeness:missing:${completeFields.join(';')}`)
+    const sd = checkShotDensity(enriched)
+    if (!sd.pass) expansions.push(`shot_density:missing:${sd.issues.join(';')}`)
     const fid = checkFidelity(v0.core?.concept ?? '', enriched)
     if (!fid.pass) expansions.push(`fidelity_failed:${fid.missingEntities.join(';')}`)
 

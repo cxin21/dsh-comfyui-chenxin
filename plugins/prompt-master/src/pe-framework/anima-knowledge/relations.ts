@@ -65,13 +65,21 @@ CREATE INDEX IF NOT EXISTS idx_relation_overlay_to ON relation_proposals(to_reco
 let _overlayPathOverride: string | null = process.env.ANIMA_OVERLAY_PATH ?? null
 
 /** cli.py 语义：默认 <preset>/temp/anima-prompt-v1/relation-overlay.sqlite。
- *  由 knowledge 目录推导：resolveKnowledgePath → <root>/skills/anima-prompt-v1/knowledge/tag-catalog.sqlite，
- *  截到 preset 根后拼 temp/。 */
+ *  由 knowledge 目录推导：resolveKnowledgePath → 新布局 <preset>/assets/knowledge/<skillDir>/<asset>
+ *  或旧布局 <preset>/skills/<skillDir>/knowledge/<asset>；截到 preset 根后拼 temp/。
+ *  O2 修复：knowledge 前一节是 'assets'（新布局）时只截 1 层（assets）即达 preset 根；
+ *  旧布局（knowledge 前是 <skillDir>）才截 2 层。原实现一律截 2 层 → 新布局下多截了 preset 根本身，
+ *  根定位到 preset 上层（如 .dsh/.agent-presets/），探测到旧残留文件 → overlayStatus 误报 available。 */
 function defaultOverlayPath(): string {
   const kp = resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' })
   const parts = kp.split(/[\\/]/)
   const knowledgeIdx = parts.lastIndexOf('knowledge')
-  const root = knowledgeIdx > 0 ? parts.slice(0, knowledgeIdx - 2).join('/') : dirname(dirname(dirname(kp)))
+  const root =
+    knowledgeIdx > 1 && parts[knowledgeIdx - 1] === 'assets'
+      ? parts.slice(0, knowledgeIdx - 1).join('/')
+      : knowledgeIdx > 2
+        ? parts.slice(0, knowledgeIdx - 2).join('/')
+        : dirname(dirname(dirname(kp)))
   return join(root, 'temp', 'anima-prompt-v1', 'relation-overlay.sqlite')
 }
 

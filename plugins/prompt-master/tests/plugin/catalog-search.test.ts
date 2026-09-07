@@ -1,10 +1,27 @@
-import { describe, expect, it, afterAll } from 'vitest'
+import { describe, expect, it, afterAll, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { registerCatalogSearchTool } from '../../src/tools/catalog-search.js'
 import { stubCtx, runTool } from './helpers.js'
 import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
 
 const cfg = { temperature: 0.7 }
 const def = () => registerCatalogSearchTool(null as never, cfg as never)
+
+let tmp: string
+
+beforeEach(() => {
+  // O2 隔离：overlay-status 断言不依赖环境残留——注入保证不存在的临时 overlay 路径
+  tmp = mkdtempSync(join(tmpdir(), 'pm-ovl-'))
+  setOverlayPath(join(tmp, 'temp', 'anima-prompt-v1', 'relation-overlay.sqlite'))
+})
+
+afterEach(() => {
+  setOverlayPath('')
+  rmSync(tmp, { recursive: true, force: true })
+})
 
 describe('catalog_search', () => {
   it('canonical tag returns canonical hit with prompt_form', async () => {

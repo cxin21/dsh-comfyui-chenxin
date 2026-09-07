@@ -1,7 +1,24 @@
-import { describe, expect, it, afterAll } from 'vitest'
+import { describe, expect, it, afterAll, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { searchCatalog, classifyTag, overlayView, overlayStatus, OVERLAY_ADVISORY, catalogMeta, closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
 
 describe('anima catalog (anima-catalog.ts)', () => {
+  let tmp: string
+
+  beforeEach(() => {
+    // O2 隔离：overlay-degrade 断言不依赖环境残留——注入保证不存在的临时 overlay 路径
+    tmp = mkdtempSync(join(tmpdir(), 'pm-ovl-'))
+    setOverlayPath(join(tmp, 'temp', 'anima-prompt-v1', 'relation-overlay.sqlite'))
+  })
+
+  afterEach(() => {
+    setOverlayPath('')
+    rmSync(tmp, { recursive: true, force: true })
+  })
+
   it('canonical: silvery hair exact-match returns canonical hit with prompt_form', () => {
     const hits = searchCatalog('silvery hair')
     expect(hits.length).toBeGreaterThan(0)

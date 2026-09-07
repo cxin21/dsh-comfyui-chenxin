@@ -85,6 +85,13 @@ describe('projectToH3', () => {
     expect(s.shots[0].what.length).toBeGreaterThan(0)
     expect(s.shots[0].what).toContain('对峙')
   })
+  it('injects scene.lighting + emotion into every shot what (spec §8.1 ROI)', () => {
+    const s = projectToH3(fightBp)
+    for (const shot of s.shots) {
+      expect(shot.what).toContain('侧逆光')
+      expect(shot.what).toContain('紧张')
+    }
+  })
   it('hard negative → throws BlueprintHardNegativeError', () => {
     expect(() => projectToH3(h3Bp)).toThrow(/hard negative/)
     expect(() => projectToH3(h3Bp)).toThrow(BlueprintHardNegativeError)

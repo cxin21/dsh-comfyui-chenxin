@@ -5,6 +5,9 @@
  * 次要=光影/构图）→ clarify:'ask' 且关键缺失时映射为 clarify_questions（每个问题 =
  * 「缺少 <维度>：请选择/补充」）→ 调 checkFidelity(input, blueprint) 把丢失实体并入 missing（保真守卫）→
  * 返回 {blueprint, missing, clarify_questions?}。
+ * 多模态（Phase 2 完整，spec §6 L227）：refs 传入时提取参考物美学特征进蓝图核心字段
+ * （scene.lighting/core.style.palette/scene.atmosphere 等，LLM 引导非硬编码），ref 标签保持稳定；
+ * 无 refs 时行为与 Phase 1 完全一致。蓝图不承载 references 持久字段（§8.1 澄清）。
  *
  * 注：运行期接入 createSubagentIntentProvider 的 one-shot 子代理 seam 由 Task 10/12 的 author 管线
  * 负责（subagent-provider.ts 蓝图 persona 接线在 Task 12 Step 3b）；本模块独立可测（LLM stream 路径）。
@@ -21,7 +24,7 @@ export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎（spec §
 1. 产出蓝图 v0 JSON（media/core/media_layer），不是方言 slots/shots
 2. 保留事实：用户给的具体描述原字面进入蓝图（concept/narrative/角色锚点），不编造情节
 3. 标记缺失：蓝图字段可空；缺维度时字段留空（如无风格 → 不填 core.style）
-4. 多模态：references 传入时保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
+4. 多模态（Phase 2 完整）：references 传入时提取参考物美学特征进蓝图核心字段——光线→scene.lighting、配色→core.style.palette、氛围→scene.atmosphere、环境→scene.environment、构图→core.composition、情绪→core.emotion（仅映射进蓝图既有核心字段，不新增 schema 字段、不编造参考物没有的特征）；同时保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
 5. 蓝图 media_layer.video.total_duration_seconds 指视频总时长（官方契约 4–15s），不是每镜时长；用户说「3 个分镜每个 5 秒」→ total=15，shots=3。
 
 输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
@@ -54,7 +57,7 @@ export const BLUEPRINT_SCHEMA = `{
 输出规则：
 - 只能输出一个 JSON 对象，不要任何前缀后缀文字
 - 必须用 \\\`\\\`\\\`json fence 或纯 JSON；纯 JSON 优先
-- 用户提供 references 时保持 ref 标签稳定
+- 用户提供 references 时：提取参考物美学特征进蓝图核心字段（scene.lighting/core.style.palette/scene.atmosphere 等），保持 ref 标签稳定（<Picture N> 等）
 `
 
 export interface AnalyzeOptions {
@@ -113,7 +116,9 @@ export async function analyzeIntent(
   opts: AnalyzeOptions = {},
 ): Promise<AnalyzeResult> {
   const user = [
-    ...(opts.refs && opts.refs.length > 0 ? [`references 传入：${JSON.stringify(opts.refs)}（保持 ref 标签稳定）`] : []),
+    ...(opts.refs && opts.refs.length > 0
+      ? [`references 传入：${JSON.stringify(opts.refs)}（提取参考物美学特征进蓝图核心字段：scene.lighting/core.style.palette/scene.atmosphere 等，保持 ref 标签稳定）`]
+      : []),
     `创作意图: ${input}`,
     '按 BLUEPRINT_SCHEMA 产出蓝图 v0 JSON。',
   ].join('\n')

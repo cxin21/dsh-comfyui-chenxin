@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { projectToH3, projectToAnima, projectAdvisories, lastProjectAdvisories, preflightRepair, BlueprintHardNegativeError } from '../../../src/pe-framework/blueprint/project.js'
+import { applyStyle } from '../../../src/pe-framework/enrichment/style.js'
 import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js'
 // 副作用注册 h3 方言包（getDialectPackage 供 preflightRepair 约束）
 import '../../../src/pe-framework/dialect/h3.js'
@@ -90,6 +91,34 @@ describe('projectToH3', () => {
     for (const shot of s.shots) {
       expect(shot.what).toContain('侧逆光')
       expect(shot.what).toContain('紧张')
+    }
+  })
+  it('merges core.style base/theme into every shot what (spec §8.1 core.style→what, any conformity)', () => {
+    const bp: BlueprintV1 = {
+      ...fightBp,
+      core: { ...fightBp.core, style: { base: '写实电影', theme: '暗黑史诗' } },
+    }
+    const s = projectToH3(bp)
+    for (const shot of s.shots) {
+      expect(shot.what).toContain('写实电影')
+      expect(shot.what).toContain('暗黑史诗')
+    }
+  })
+  it('default conformity 0.6: H3 what carries core.style reference AND ~60% style phrases (no reference-only fake tier)', () => {
+    const bp: BlueprintV1 = {
+      ...fightBp,
+      core: { ...fightBp.core, style: { base: '写实电影', theme: '暗黑史诗' } },
+    }
+    const enriched = applyStyle(bp, 'cinematic_real', 0.6)
+    expect(enriched.core.style?.base).toContain('写实')
+    const s = projectToH3(enriched)
+    for (const shot of s.shots) {
+      // 风格引用进 what（第 1 级）
+      expect(shot.what).toContain('写实电影')
+      // 约 60% 风格短语进 what（第 2 级，不再仅引用）——cinematic_real video fragment 5 短语 → round(0.6×5)=3 短语注入
+      expect(shot.what).toContain('IMAX 胶片质感')
+      expect(shot.what).toContain('Panavision C 系 35mm f4')
+      expect(shot.what).toContain('伦勃朗光')
     }
   })
   it('hard negative → throws BlueprintHardNegativeError', () => {

@@ -79,9 +79,18 @@ export function projectToH3(bp: BlueprintV1): H3ShotsInput {
         ? (shot.who ?? []).map((id) => (labels.has(id) ? `<Subject ${labels.get(id)}>` : id)).join('，')
         : undefined
     const beatPart = [shot.beat, shot.shot_size, shot.camera].filter(Boolean).join('，')
-    // 组装：锚点首句 + beat/景别/运镜 + 场景光线（spec §8.1 高 ROI）+ 动作 + 情绪（低 ROI）+ soft 负向改写末句；
+    // 组装：锚点首句 + beat/景别/运镜 + 场景光线（spec §8.1 高 ROI）+ 动作 + 情绪（低 ROI）+
+    // 风格引用 base/theme（spec §8.1 L285 core.style 并入 what，风格为最低 ROI 放末位）+ soft 负向改写末句；
     // action 空时 beat 兜底保证 what 非空
-    let what = [anchors, beatPart, bp.core.scene?.lighting, shot.action, bp.core.emotion].filter(Boolean).join('，')
+    let what = [
+      anchors,
+      beatPart,
+      bp.core.scene?.lighting,
+      shot.action,
+      bp.core.emotion,
+      bp.core.style?.base,
+      bp.core.style?.theme,
+    ].filter(Boolean).join('，')
     for (const n of softNegatives) {
       what = `${what}，${softRewriteOf(n)}`
     }

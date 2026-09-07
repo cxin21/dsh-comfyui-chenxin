@@ -148,10 +148,23 @@ export const MINIMAL_STYLES: StyleTemplate[] = [
 
 /**
  * applyStyle：把风格 fragment 并入 core.style 与 media_layer 对应字段。
- * conformity=0 全按模板（注入 prompt_fragments 到 media_layer）；conformity>0 仅注入 style 引用不注入片段
- * （=1 完全不注入片段；中间值按 v0 确定性地取"仅引用"侧，对齐计划「=0 全按模板，=1 仅引用」两极）。
+ * conformity 三档连续语义（spec §7.2「Phase 2 完善语义」，P2-6 两级修复第 2 级）：
+ *   =0         全量注入 prompt_fragments（现有行为）；
+ *   0<conformity<1  按比例注入前 round(conformity×短语数) 个完整短语（fragment 按中文逗号拆短语，
+ *                至少保留 1 个，杜绝半句话）；
+ *   >=1        仅引用不注入（core.style 仍写入 core.style 字段，片段不注入 media_layer）。
+ * 默认 conformity=0.6 因此走「按比例注入」而非旧「>0 仅引用假档」。
  * 未知 styleId 返回原对象（引用不变）。不修改输入（structuredClone 后改写）。
  */
+
+/** 按中文逗号拆完整短语，返回前 round(ratio×n) 个（至少 1，不截断半句话） */
+function proportionalFragment(fragment: string, conformity: number): string {
+  const phrases = fragment.split('，').map((p) => p.trim()).filter(Boolean)
+  if (phrases.length === 0) return ''
+  const count = Math.max(1, Math.min(phrases.length, Math.round(conformity * phrases.length)))
+  return phrases.slice(0, count).join('，')
+}
+
 export function applyStyle(bp: BlueprintV1, styleId: string, conformity: number): BlueprintV1 {
   const style = MINIMAL_STYLES.find((s) => s.id === styleId)
   if (!style) return bp
@@ -164,21 +177,24 @@ export function applyStyle(bp: BlueprintV1, styleId: string, conformity: number)
     ...(style.palette ? { palette: style.palette } : {}),
   }
 
-  if (conformity === 0) {
-    // 全按模板：注入 prompt_fragments 到 media_layer 对应字段
+  if (conformity < 1) {
+    // 全量（=0）或按比例（0<conformity<1）注入 prompt_fragments 到 media_layer 对应字段
+    const ratio = conformity <= 0 ? 1 : conformity
     if (out.media === 'video' || out.media === 'mixed') {
       const video = out.media_layer.video ?? { shots: [] as Shot[] }
       out.media_layer.video = video
       const fragment = style.prompt_fragments.video
+      const inject = proportionalFragment(fragment, ratio)
       for (const shot of video.shots) {
-        shot.action = shot.action ? `${shot.action}，${fragment}` : fragment
+        shot.action = shot.action ? `${shot.action}，${inject}` : inject
       }
     }
     if (out.media === 'image' || out.media === 'mixed') {
       const image = out.media_layer.image ?? {}
       out.media_layer.image = image
       const fragment = style.prompt_fragments.image
-      image.lighting_detail = image.lighting_detail ? `${image.lighting_detail}，${fragment}` : fragment
+      const inject = proportionalFragment(fragment, ratio)
+      image.lighting_detail = image.lighting_detail ? `${image.lighting_detail}，${inject}` : inject
     }
   }
 

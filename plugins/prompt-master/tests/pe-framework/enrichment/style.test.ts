@@ -54,15 +54,43 @@ describe('minimal style library', () => {
     expect(out.core.style?.base).toContain('写实')
   })
 
-  it('applyStyle at conformity 0 injects fragment into shots', () => {
+  it('applyStyle at conformity 0 injects full fragment into shots', () => {
     const out = applyStyle(bp, 'cinematic_real', 0)
-    expect(out.media_layer.video?.shots[0]?.action).toContain('Panavision')
+    // cinematic_real video fragment 5 短语，全量注入 → 含最后一短语
+    expect(out.media_layer.video?.shots[0]?.action).toContain('青橙色彩分级')
   })
 
-  it('applyStyle at conformity > 0 only references style, does not inject fragment', () => {
+  it('applyStyle at 0<conformity<1 injects proportional complete phrases (3/5 at 0.6)', () => {
     const out = applyStyle(bp, 'cinematic_real', 0.6)
+    // round(0.6×5)=3 → 前 3 个完整短语注入
+    expect(out.media_layer.video?.shots[0]?.action).toContain('IMAX 胶片质感')
+    expect(out.media_layer.video?.shots[0]?.action).toContain('Panavision C 系 35mm f4')
+    expect(out.media_layer.video?.shots[0]?.action).toContain('伦勃朗光')
+    // 第 4/5 短语不注入（比例注入完整短语，不截断、不溢出）
+    expect(out.media_layer.video?.shots[0]?.action).not.toContain('黄昏黄金时刻')
+    expect(out.media_layer.video?.shots[0]?.action).not.toContain('青橙色彩分级')
+    // core.style 仍写入（参考）
+    expect(out.core.style?.base).toContain('写实')
+  })
+
+  it('applyStyle at tiny 0<conformity<1 keeps at least 1 complete phrase', () => {
+    const out = applyStyle(bp, 'cinematic_real', 0.05)
+    expect(out.media_layer.video?.shots[0]?.action).toContain('IMAX 胶片质感')
+    // 绝不产生半句话：注入内容必为完整短语的以「，」分隔的头部
+    const action = out.media_layer.video?.shots[0]?.action ?? ''
+    for (const part of action.split('，')) {
+      const t = part.trim()
+      if (t.length === 0) continue
+      expect(['IMAX 胶片质感', 'Panavision C 系 35mm f4', '伦勃朗光', '黄昏黄金时刻', '青橙色彩分级']).toContain(t)
+    }
+  })
+
+  it('applyStyle at conformity >= 1 only references style, does not inject fragment', () => {
+    const out = applyStyle(bp, 'cinematic_real', 1)
     expect(out.core.style?.base).toContain('写实')
     expect(out.media_layer.video?.shots[0]?.action).toBeUndefined()
+    const out2 = applyStyle(bp, 'cinematic_real', 1.5)
+    expect(out2.media_layer.video?.shots[0]?.action).toBeUndefined()
   })
 
   it('applyStyle unknown id returns unchanged', () => {

@@ -285,6 +285,8 @@ interface NegativeConstraint {
 | `core.style`+`emotion`+`scene.lighting` | 并入各 shot 的 `what`（按 ROI 排序） |
 | references | `shots.references`（原样传递） |
 
+> **参考图澄清（§8.1）**：蓝图**不承载** references 持久字段——参考图是**对话输入**的一部分：用户/agent 直接把图发给 LLM 并说明用途（「图 1 是主角参考」「图 2 是风格参考」），LLM 提取 `<Picture N>` 稳定标签并在提示词中占位；投影层不把 references 写入蓝图结构。运行期 references 由调用方在 `form_fields.references` 提供（H3 ref2va 模式消费），非蓝图投影职责。Phase 1 实现与本澄清一致（`projectToH3` 不接收 references，链路经 form_fields 走通）。
+
 ### 8.2 IR → Anima 映射表
 
 | 蓝图字段 | Anima 输入 |

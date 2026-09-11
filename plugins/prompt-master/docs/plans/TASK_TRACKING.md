@@ -15,6 +15,31 @@
 | **合计** | **25** | **25** | **100%** |
 | Round 2: 遗漏修复（补齐） | 9 | 9 | ✅ 已完成 |
 | **Round 3: 反推清洗链 + 测试体系 + schema 补齐** | 5 | 5 | ✅ 已完成 |
+| **Round 4: 质量飞轮 M1-M4（2026-09-08）** | 11 | 11 | ✅ 已完成 |
+
+---
+
+## Round 4：质量飞轮（证据化评审 → 人工反馈 → 自动优化）
+
+> Spec：`docs/2026-09-08-quality-flywheel-design.md`；实施计划：`docs/plans/2026-09-08-quality-flywheel-implementation.md`
+> 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照），完成时间 2026-09-08
+> 验收：全量 vitest 705 passed / 1 skipped / 0 failed（BASE ca220ace 起 621→705，golden 零破坏）；tsc/build 干净
+
+| Task | 内容 | 状态 | 关键 commit |
+|---|---|---|---|
+| T1 | DialectRubric 契约 + DialectContract.rubric | ✅ | 8a30a0c |
+| T2 | 证据工具桥 evidence.ts | ✅ | 2610327 |
+| T3 | EvidenceCritic critic.ts（F1/F2 修复 9b568a6） | ✅ | 7f26f2a |
+| T4 | anima/h3 rubric 注册 + judge.ts 退役（测试修复 5d43501） | ✅ | 400ec1d |
+| T5 | runStage 评审阶段 + strict 对抗二轮 | ✅ | 27ee8bc |
+| T6 | prompt-author 工具面 + 闭环接线（F1 修复 a873eca） | ✅ | 95d29da |
+| T7 | feedback store node:sqlite（测试修复 4613083） | ✅ | 028a5e8 |
+| T8 | prompt_feedback 工具 + preset 文档同步 | ✅ | 1a5b96d |
+| T9 | scoring harness 纯函数层 | ✅ | 303b6b9 |
+| T10 | 变体迭代与 diff 报告（人审闸门） | ✅ | f81a889 |
+| T11 | 冷启动验收：anima L1=0/L2=0（门槛未达，预期）；harness→mutate→evaluate→render 链路 mock 实测 OK；90 天懒清理实测验证 | ✅ | （无代码） |
+
+遗留（deferred minors，见计划 ledger）：修正轮重评成本开关、revisionProvider 稿内编辑语义、feedback.sqlite 迁出 temp 评估、评审 evidence 回查复核、listFeedback 1000 上限。
 
 ---
 

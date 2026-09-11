@@ -17,6 +17,25 @@
 | **Round 3: 反推清洗链 + 测试体系 + schema 补齐** | 5 | 5 | ✅ 已完成 |
 | **Round 4: 质量飞轮 M1-M4（2026-09-08）** | 11 | 11 | ✅ 已完成 |
 | **Round 5: 二期 enrich+默认评审+一期遗留全量补齐（2026-09-08）** | 9 | 9 | ✅ 已完成 |
+| **Round 6: 三期实战修复（会话 398c261e 暴露的编译/catalog 问题，2026-09-09）** | 5 | 5 | ✅ 已完成 |
+
+---
+
+## Round 6：三期实战修复（F1-F5）
+
+> Spec：`docs/2026-09-09-field-fixes-design.md`；实施计划：`docs/plans/2026-09-09-field-fixes-implementation.md`
+> 输入：真实会话导出（session-398c261e，古风美女/anima 实战）暴露的 4 个质量问题
+> 验收：全量 vitest **831 passed / 1 skipped / 0 failed**（797→831，golden 零破坏）；一期同款输入实战复测 4/4（EN 无兜底段/无重复 1girl、ZH 触发 cjk critical/EN 无 CJK gate）；终审可合入
+
+| Task | 内容 | 状态 | 关键 commit |
+|---|---|---|---|
+| T1 | F3 fuzzy 候选过滤（剔 @/低重合/≤3）+ F2 canonical 候选确定性自动采纳（词级子集守卫+slot 限定） | ✅ | e58c099+fe18838 |
+| T2 | F1 narrative 去重：句级→前缀剥离（fix1）→短语级（fix2，覆盖一期实战形状） | ✅ | e0aca91+e16ae07+e4be1d0 |
+| T3 | F4 cjk_in_positive critical 守门（闭环联动）+ 中文泄漏三层排查（四期候选=enrich persona 中文旅） | ✅ | 1d1567b |
+| T4 | F5 trace 细分（enrich/intent/catalog）+ canonical 替换可观测接线 | ✅ | d326692 |
+| T5 | 实战复测 4/4 + 终审可合入 + 登记 | ✅ | ae87de2+ |
+
+四期候选：enrich persona「source=user 原样保留」与 anima 锁 en 冲突（中文 user 条目穿透 enrich，本期 critical 守门兜底）；grounding 感知去重（短语级残余 false-negative 方向）。
 
 ---
 

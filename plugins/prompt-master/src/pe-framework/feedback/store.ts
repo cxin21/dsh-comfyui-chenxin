@@ -199,6 +199,40 @@ export function getGeneration(dbPath: string, id: string): GenerationRow | undef
   }
 }
 
+/** 只读列出 generations（质量飞轮 §4.2 harness 用，Task 9 授权的最小扩展）。
+ *  按 created_at 降序；条件全可选项，limit 缺省 100（<1 返回空）。 */
+export function listGenerations(
+  dbPath: string,
+  q?: { target?: string; judge_verdict?: string; min_repair_rounds?: number; limit?: number },
+): GenerationRow[] {
+  const clauses: string[] = []
+  const params: (string | number)[] = []
+  if (q?.target !== undefined) {
+    clauses.push('target = ?')
+    params.push(q.target)
+  }
+  if (q?.judge_verdict !== undefined) {
+    clauses.push('judge_verdict = ?')
+    params.push(q.judge_verdict)
+  }
+  if (q?.min_repair_rounds !== undefined) {
+    clauses.push('repair_rounds >= ?')
+    params.push(q.min_repair_rounds)
+  }
+  const where = clauses.length ? ' WHERE ' + clauses.join(' AND ') : ''
+  const limit = q?.limit ?? 100
+  if (limit < 1) return []
+  const db = openDb(dbPath)
+  try {
+    const rows = db
+      .prepare(`SELECT * FROM generations${where} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, limit) as Array<Record<string, unknown>>
+    return rows.map(rowToGeneration)
+  } finally {
+    db.close()
+  }
+}
+
 export function getFeedback(dbPath: string, generationId: string): FeedbackRow | undefined {
   const db = openDb(dbPath)
   try {

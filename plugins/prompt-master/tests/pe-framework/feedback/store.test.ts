@@ -2,8 +2,8 @@
  * Task 7: feedback store（spec §3.2）——generations + feedback 两表，node:sqlite。
  * 行为规格 8 条逐条覆盖（brief：每条至少一个测试）。
  */
-import { describe, it, expect, afterAll } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync, mkdirSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,6 +12,7 @@ import {
   recordGeneration,
   recordFeedback,
   listFeedback,
+  listGenerations,
   getFeedback,
   getGeneration,
   statsFeedback,
@@ -24,7 +25,9 @@ import {
 } from '../../../src/pe-framework/feedback/store.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'feedback-store-'))
-afterAll(() => rmSync(dir, { recursive: true, force: true }))
+// A17：afterEach 统一清理临时目录
+afterEach(() => rmSync(dir, { recursive: true, force: true }))
+beforeEach(() => mkdirSync(dir, { recursive: true }))
 
 function dbPath(name: string): string {
   return join(dir, name + '.sqlite')
@@ -226,6 +229,67 @@ describe('statsFeedback', () => {
     // avgRating 一位小数
     const sAll = statsFeedback(p)
     expect(Number(sAll.avgRating.toFixed(1))).toBe(sAll.avgRating)
+  })
+})
+
+// ---------- 6b. A10 评委校准视图 ----------
+describe('statsFeedback alignment (A10)', () => {
+  const p = dbPath('align')
+
+  it('6 对数据 → pearson 数值正确；<5 对 → null；无 pairs → 全零/null', () => {
+    const judges = [80, 60, 70, 90, 50, 85]
+    const ratings = [4, 2, 3, 5, 1, 4]
+    judges.forEach((j, i) => {
+      const id = 'gen_a' + i
+      recordGeneration(p, gen({ id, target: 'anima', judge_score: j }))
+      recordFeedback(p, { generation_id: id, rating: ratings[i] })
+    })
+    // 干扰项：有 judge 无 feedback、有 feedback 无 judge → 不计入 pairs
+    recordGeneration(p, gen({ id: 'gen_noFb', target: 'anima', judge_score: 99 }))
+    recordGeneration(p, gen({ id: 'gen_noJudge', target: 'anima' }))
+    recordFeedback(p, { generation_id: 'gen_noJudge', rating: 5 })
+
+    const s = statsFeedback(p, 'anima')
+    expect(s.alignment).toBeDefined()
+    expect(s.alignment!.pairs).toBe(6)
+    expect(s.alignment!.avgJudge).toBeCloseTo(72.5, 5)
+    expect(s.alignment!.avgHuman).toBeCloseTo(19 / 6, 5)
+    expect(s.alignment!.pearson).toBeCloseTo(0.99, 2)
+
+    // <5 对 → pearson null
+    const p2 = dbPath('align2')
+    for (let i = 0; i < 4; i++) {
+      recordGeneration(p2, gen({ id: 'gen_b' + i, target: 'h3', judge_score: 50 + i }))
+      recordFeedback(p2, { generation_id: 'gen_b' + i, rating: 2 + i })
+    }
+    const s2 = statsFeedback(p2)
+    expect(s2.alignment!.pairs).toBe(4)
+    expect(s2.alignment!.pearson).toBeNull()
+
+    // 无 pairs → 全零/null
+    const p3 = dbPath('align3')
+    recordGeneration(p3, gen({ id: 'gen_c0' }))
+    recordFeedback(p3, { generation_id: 'gen_c0', rating: 3 })
+    const s3 = statsFeedback(p3)
+    expect(s3.alignment).toEqual({ pairs: 0, avgJudge: 0, avgHuman: 0, pearson: null })
+  })
+})
+
+// ---------- 6c. A15 limit 参数化 ----------
+describe('listGenerations limit (A15)', () => {
+  it('limit=1 只回最新 1 条', () => {
+    const p = dbPath('limit')
+    const ids = ['gen_x1', 'gen_x2', 'gen_x3']
+    // created_at 用当前时间微调（懒 prune 会清掉 >90 天的旧行）
+    ids.forEach((id, i) => recordGeneration(p, gen({ id, target: 'anima', created_at: Date.now() + i })))
+    const rows = listGenerations(p, { limit: 1 })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].id).toBe('gen_x3')
+    recordFeedback(p, { generation_id: 'gen_x2', rating: 3 })
+    recordFeedback(p, { generation_id: 'gen_x3', rating: 4 })
+    const fb = listFeedback(p, { limit: 1 })
+    expect(fb).toHaveLength(1)
+    expect(fb[0].generation_id).toBe('gen_x3')
   })
 })
 

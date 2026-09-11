@@ -15,7 +15,8 @@
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { DatabaseSync } from 'node:sqlite'
-import { join, resolve as pathResolve, sep } from 'node:path'
+import { existsSync, mkdirSync, renameSync } from 'node:fs'
+import { join, resolve as pathResolve, sep, dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import {
   getGeneration,
@@ -23,7 +24,9 @@ import {
   recordFeedback,
   statsFeedback,
   pruneGenerations,
+  rowToFeedback,
 } from '../pe-framework/feedback/store.js'
+import { FEEDBACK_TAG_VOCAB } from '../pe-framework/feedback/vocab.js'
 import { getPresetRoot } from '../pe-framework/resources/resolve.js'
 import type { Config } from '../plugin/config.js'
 
@@ -45,7 +48,7 @@ export interface FeedbackContent {
   limit?: number
 }
 
-// ---------- dbPath 解析（测试注入 + 生产默认 <presetRoot>/temp/runtime/feedback.sqlite） ----------
+// ---------- dbPath 解析（测试注入 + 生产默认 <presetRoot>/data/runtime/feedback.sqlite，spec §10.4-A14） ----------
 
 let _dbPathOverride: string | null = null
 
@@ -69,12 +72,29 @@ function fallbackPresetRoot(): string | undefined {
   }
 }
 
+/**
+ * A14：默认路径从 temp/runtime/ 迁到 data/runtime/。首次解析时若新路径不存在且
+ * 旧路径存在 → mkdir + rename（move）主文件与 -wal/-shm；新路径已存在则不动，
+ * 两者都无则不抛错（openDb 会新建）。仅影响默认路径解析；显式 dbPath 调用方不受影响。
+ */
+export function migrateLegacyFeedbackDb(presetRoot: string): void {
+  const newPath = join(presetRoot, 'data', 'runtime', 'feedback.sqlite')
+  const oldPath = join(presetRoot, 'temp', 'runtime', 'feedback.sqlite')
+  if (existsSync(newPath) || !existsSync(oldPath)) return
+  mkdirSync(dirname(newPath), { recursive: true })
+  renameSync(oldPath, newPath)
+  for (const suffix of ['-wal', '-shm']) {
+    if (existsSync(oldPath + suffix)) renameSync(oldPath + suffix, newPath + suffix)
+  }
+}
+
 export function defaultFeedbackDbPath(): string {
   const root = getPresetRoot()?.replace(/[\\/]+$/, '')
     ?? process.env.DSH_COMFYUI_PRESET_ROOT?.replace(/[\\/]+$/, '')
     ?? fallbackPresetRoot()
   if (!root) throw new Error('prompt_feedback: presetRoot not configured; cannot resolve feedback db path')
-  return join(root, 'temp', 'runtime', 'feedback.sqlite')
+  migrateLegacyFeedbackDb(root)
+  return join(root, 'data', 'runtime', 'feedback.sqlite')
 }
 
 function resolveDbPath(): string {
@@ -146,17 +166,17 @@ function listFeedbackWide(dbPath: string, q?: FeedbackContent): FeedbackWideRow[
       )
       .all(...params, limit) as Array<Record<string, unknown>>
     return rows.map((r) => {
+      // A16：feedback 列映射复用 store.rowToFeedback，删重复代码
+      const base = rowToFeedback(r)
       const row: FeedbackWideRow = {
-        generation_id: String(r.generation_id),
-        rating: Number(r.rating),
-        created_at: Number(r.created_at),
+        generation_id: base.generation_id,
+        rating: base.rating,
+        created_at: base.created_at,
         orphaned: r.target === null || r.target === undefined,
       }
-      if (r.tags_json !== null && r.tags_json !== undefined) row.tags = JSON.parse(String(r.tags_json)) as string[]
-      if (r.notes !== null && r.notes !== undefined) row.notes = String(r.notes)
-      if (r.actual_output_path !== null && r.actual_output_path !== undefined) {
-        row.actual_output_path = String(r.actual_output_path)
-      }
+      if (base.tags !== undefined) row.tags = base.tags
+      if (base.notes !== undefined) row.notes = base.notes
+      if (base.actual_output_path !== undefined) row.actual_output_path = base.actual_output_path
       if (!row.orphaned) {
         row.target = String(r.target)
         if (r.judge_score !== null && r.judge_score !== undefined) row.judge_score = Number(r.judge_score)
@@ -215,7 +235,18 @@ export function feedbackEnvelope(content: FeedbackContent, dbPath: string): stri
       ...(content.actual_output_path !== undefined ? { actual_output_path: content.actual_output_path } : {}),
     })
     if (!r.ok) return errEnv('generation_not_found', `generation ${gid} 不存在（可能已过 90 天保留期被 prune）`)
-    return okEnv({ action, generation_id: gid, rating: content.rating, updated: existing !== undefined })
+    // A7：tags 含词表外条目 → 接受 + advisory tag_not_in_vocab（不强制）
+    const vocab = FEEDBACK_TAG_VOCAB[(gen.target as 'anima' | 'h3') ?? 'anima'] ?? []
+    const outOfVocab = (content.tags ?? []).filter((t) => !vocab.includes(t))
+    const advisories = outOfVocab.length > 0 ? ['tag_not_in_vocab'] : undefined
+    return okEnv({
+      action,
+      generation_id: gid,
+      rating: content.rating,
+      updated: existing !== undefined,
+      ...(advisories ? { advisories } : {}),
+      ...(outOfVocab.length > 0 ? { tags_not_in_vocab: outOfVocab } : {}),
+    })
   }
 
   if (action === 'list') {

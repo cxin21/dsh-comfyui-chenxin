@@ -5,16 +5,33 @@
  * - list = LEFT JOIN 变体：孤儿 feedback（generation 已 prune）仍可见，标 orphaned:true；
  *   非 orphan 行附 judge_score（评委分 vs 人工分联查通道）
  */
-import { describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { describe, expect, it, afterEach } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { apply } from '../../src/plugin/index.js'
-import { feedbackEnvelope } from '../../src/tools/prompt-feedback.js'
-import { recordGeneration, pruneGenerations } from '../../src/pe-framework/feedback/store.js'
+import {
+  feedbackEnvelope,
+  registerFeedbackTool,
+  setFeedbackDbPath,
+  migrateLegacyFeedbackDb,
+} from '../../src/tools/prompt-feedback.js'
+import { recordGeneration, pruneGenerations, getGeneration } from '../../src/pe-framework/feedback/store.js'
 import type { GenerationRow } from '../../src/pe-framework/feedback/store.js'
 
-const dir = mkdtempSync(join(tmpdir(), 'feedback-tool-'))
+let dirs: string[] = []
+function makeDir(prefix: string): string {
+  const d = mkdtempSync(join(tmpdir(), prefix))
+  dirs.push(d)
+  return d
+}
+afterEach(() => {
+  for (const d of dirs) rmSync(d, { recursive: true, force: true })
+  dirs = []
+  setFeedbackDbPath(null)
+})
+
+const dir = makeDir('feedback-tool-')
 
 function dbPath(name: string): string {
   return join(dir, `${name}.sqlite`)
@@ -133,6 +150,66 @@ describe('prompt_feedback tool (spec §3.3)', () => {
     const animaOnly = call(p, { action: 'stats', target: 'anima' })
     expect(animaOnly.stats.count).toBe(1)
     expect(animaOnly.stats.avgRating).toBe(1)
+  })
+
+  it('A7：tags 词表内 → 无 advisory；词表外 → 接受 + tag_not_in_vocab advisory 列出词表外项', () => {
+    const p = dbPath('vocab')
+    const gid = seedGeneration(p, 'anima')
+    const inVocab = call(p, { action: 'record', generation_id: gid, rating: 3, tags: ['构图', '肢体', '与描述不符'] })
+    expect(inVocab.ok).toBe(true)
+    expect(inVocab.advisories).toBeUndefined()
+    const gid2 = seedGeneration(p, 'h3')
+    const outVocab = call(p, { action: 'record', generation_id: gid2, rating: 2, tags: ['角色不一致', '自造词X', '节奏'] })
+    expect(outVocab.ok).toBe(true)
+    expect(outVocab.advisories).toContain('tag_not_in_vocab')
+    expect(JSON.stringify(outVocab)).toContain('自造词X')
+    expect(JSON.stringify(outVocab)).not.toContain('未收录自造词X')
+  })
+
+  it('A17：execute 注入坏 dbPath（父路径是文件）→ ok=false + internal_error', async () => {
+    const parentFile = join(dir, 'parent-is-file.txt')
+    writeFileSync(parentFile, 'not a directory')
+    setFeedbackDbPath(join(parentFile, 'child', 'feedback.sqlite'))
+    const tool = registerFeedbackTool({} as any, {} as any)
+    const out = JSON.parse(await (tool as any).execute({ action: 'stats' }))
+    expect(out.ok).toBe(false)
+    expect(out.errors[0].code).toBe('internal_error')
+  })
+
+  it('A14：默认路径迁移——旧存在新无 → 移动含 wal/shm 且数据可读', () => {
+    const root = makeDir('feedback-migrate-')
+    const oldDir = join(root, 'temp', 'runtime')
+    mkdirSync(oldDir, { recursive: true })
+    const oldPath = join(oldDir, 'feedback.sqlite')
+    recordGeneration(oldPath, {
+      id: 'gen_mig1', created_at: Date.now(), target: 'anima', judge_mode: 'off',
+      input_digest: 'd'.repeat(64), final_output: 'x', enrich: 0,
+    })
+    writeFileSync(oldPath + '-wal', 'wal-bytes')
+    writeFileSync(oldPath + '-shm', 'shm-bytes')
+    migrateLegacyFeedbackDb(root)
+    const newPath = join(root, 'data', 'runtime', 'feedback.sqlite')
+    expect(existsSync(newPath)).toBe(true)
+    expect(existsSync(newPath + '-wal')).toBe(true)
+    expect(existsSync(newPath + '-shm')).toBe(true)
+    expect(existsSync(oldPath)).toBe(false)
+    expect(getGeneration(newPath, 'gen_mig1')?.id).toBe('gen_mig1')
+  })
+
+  it('A14：新路径已存在 → 不动旧文件；两者都无 → 不抛错', () => {
+    const root = makeDir('feedback-migrate2-')
+    const oldDir = join(root, 'temp', 'runtime')
+    mkdirSync(oldDir, { recursive: true })
+    const oldPath = join(oldDir, 'feedback.sqlite')
+    writeFileSync(oldPath, 'old-bytes')
+    const newDir = join(root, 'data', 'runtime')
+    mkdirSync(newDir, { recursive: true })
+    writeFileSync(join(newDir, 'feedback.sqlite'), 'new-bytes')
+    expect(() => migrateLegacyFeedbackDb(root)).not.toThrow()
+    expect(existsSync(oldPath)).toBe(true)
+    expect(existsSync(join(newDir, 'feedback.sqlite'))).toBe(true)
+    const root2 = makeDir('feedback-migrate3-')
+    expect(() => migrateLegacyFeedbackDb(root2)).not.toThrow()
   })
 
   it('未知 action → invalid_params', () => {

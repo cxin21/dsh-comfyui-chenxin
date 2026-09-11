@@ -190,7 +190,8 @@ function rowToGeneration(r: Record<string, unknown>): GenerationRow {
   return g
 }
 
-function rowToFeedback(r: Record<string, unknown>): FeedbackRow {
+/** 二期 spec §10.4-A16：导出行映射，prompt-feedback 工具层复用（删重复代码） */
+export function rowToFeedback(r: Record<string, unknown>): FeedbackRow {
   const f: FeedbackRow = {
     generation_id: String(r.generation_id),
     rating: Number(r.rating),
@@ -296,10 +297,45 @@ export function listFeedback(
   }
 }
 
+/** 二期 spec §10.3-A10：评委校准视图 */
+export interface FeedbackAlignment {
+  /** 有 judge_score 且有人工 rating 的联查行数 */
+  pairs: number
+  avgJudge: number
+  avgHuman: number
+  /** 样本 <5 → null；否则标准 Pearson 相关（-1~1，两位小数） */
+  pearson: number | null
+}
+
+/** Pearson 相关系数；方差为 0（含样本 <2）→ null。两位小数。 */
+function pearson(xs: number[], ys: number[]): number | null {
+  const n = xs.length
+  const mx = xs.reduce((a, b) => a + b, 0) / n
+  const my = ys.reduce((a, b) => a + b, 0) / n
+  let sxy = 0
+  let sxx = 0
+  let syy = 0
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - mx
+    const dy = ys[i] - my
+    sxy += dx * dy
+    sxx += dx * dx
+    syy += dy * dy
+  }
+  if (sxx === 0 || syy === 0) return null
+  return Math.round((sxy / Math.sqrt(sxx * syy)) * 100) / 100
+}
+
 export function statsFeedback(
   dbPath: string,
   target?: string,
-): { count: number; avgRating: number; histogram: number[]; topTags: Array<{ tag: string; n: number }> } {
+): {
+  count: number
+  avgRating: number
+  histogram: number[]
+  topTags: Array<{ tag: string; n: number }>
+  alignment: FeedbackAlignment
+} {
   const db = openDb(dbPath)
   try {
     const clause = target !== undefined ? ' JOIN generations g ON g.id = f.generation_id WHERE g.target = ?' : ''
@@ -313,6 +349,28 @@ export function statsFeedback(
     const tagRows = db
       .prepare(`SELECT f.tags_json AS tags_json FROM feedback f${clause.replace('WHERE', 'WHERE f.tags_json IS NOT NULL AND')}`)
       .all(...params) as Array<Record<string, unknown>>
+    // A10 校准视图：judge_score 与人工 rating 配对行（feedback JOIN generations，恒联查）
+    const pairWhere = target !== undefined ? ' WHERE g.target = ?' : ''
+    const pairParams: (string | number)[] = target !== undefined ? [target] : []
+    const pairRows = db
+      .prepare(
+        `SELECT g.judge_score AS judge_score, f.rating AS rating
+         FROM feedback f JOIN generations g ON g.id = f.generation_id${pairWhere}`,
+      )
+      .all(...pairParams) as Array<Record<string, unknown>>
+    const paired = pairRows
+      .map((r) => ({ judge: r.judge_score, human: Number(r.rating) }))
+      .filter((x): x is { judge: number; human: number } => x.judge !== null && x.judge !== undefined)
+      .map((x) => ({ judge: Number(x.judge), human: x.human }))
+    const alignment: FeedbackAlignment =
+      paired.length === 0
+        ? { pairs: 0, avgJudge: 0, avgHuman: 0, pearson: null }
+        : {
+            pairs: paired.length,
+            avgJudge: paired.reduce((a, b) => a + b.judge, 0) / paired.length,
+            avgHuman: paired.reduce((a, b) => a + b.human, 0) / paired.length,
+            pearson: paired.length < 5 ? null : pearson(paired.map((x) => x.judge), paired.map((x) => x.human)),
+          }
     return {
       count: Number(agg.count),
       avgRating: agg.avg === null ? 0 : Math.round(Number(agg.avg) * 10) / 10,
@@ -322,6 +380,7 @@ export function statsFeedback(
         return h
       }, [0, 0, 0, 0, 0]),
       topTags: countTags(tagRows.map((r) => String(r.tags_json))),
+      alignment,
     }
   } finally {
     db.close()

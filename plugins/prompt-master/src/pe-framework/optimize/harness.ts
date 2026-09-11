@@ -52,13 +52,15 @@ export function scoreGeneration(m: ScoreInput): number {
 
 const L1_CAP = 200
 const L2_CAP = 100
-const FEEDBACK_FETCH = 1000
+// A15（二期 spec §10.4）：不再设 FEEDBACK_FETCH 常量——调用时显式传 limit=5000，
+// store 层缺省维持现值，工具调用方不受影响
+const L1_FETCH = 5000
 
 /** L1：人工反馈反查——rating>=4（正例）与 <=2（负例）；孤儿行（无 generation）跳过。 */
 function loadL1(dbPath: string, target: 'anima' | 'h3'): EvalCase[] {
   const rows = [
-    ...listFeedback(dbPath, { target, min_rating: 4, limit: FEEDBACK_FETCH }),
-    ...listFeedback(dbPath, { target, max_rating: 2, limit: FEEDBACK_FETCH }),
+    ...listFeedback(dbPath, { target, min_rating: 4, limit: L1_FETCH }),
+    ...listFeedback(dbPath, { target, max_rating: 2, limit: L1_FETCH }),
   ]
   // 同一 generation 多条反馈：取最新一条（UPSERT 语义下的最新人工判断）
   const byGen = new Map<string, { rating: number; feedbackAt: number }>()

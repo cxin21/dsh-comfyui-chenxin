@@ -221,7 +221,8 @@ async function runJudgeStage(
       revision: true,
     })
     if ('skipped' in second) {
-      debate.push({ round: 2, reviewer: { findings: [], score: 0 }, reviser })
+      // final review I1：复审 skipped → round 2 整轮不 push（0 分 reviewer 是编造数据，
+      // 会污染 debate 语料）；只留 judge_skipped advisory + round1 记录，消费方零改动。
       advisories.push('judge_skipped')
       return finish(second, debate)
     }

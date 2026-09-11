@@ -210,6 +210,22 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
     expect(r.ok).toBe(true) // 评审 failure 不阻塞出稿；critical 语义不变
   })
 
+  // final review I1：复审 skipped → round 2 整轮不 push（0 分是编造数据，不得污染 debate 语料）
+  it('strict 复审 skipped → debate 只剩 round1（不伪造 reviewer），advisories 含 judge_skipped', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_JSON, 'THROW'])
+    const r = await runStage(baseInput({
+      judge: 'strict', criticProvider: provider, evidenceDeps,
+      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note' }),
+    }))
+    expect(r.judge).toMatchObject({ skipped: true })
+    expect(r.advisories).toContain('judge_skipped')
+    expect(r.debate).toHaveLength(1)
+    expect(r.debate?.[0].round).toBe(1)
+    expect(r.result).toEqual({ positive: 'p2', negative: 'n2' }) // 修正稿照常出稿
+    expect(provider.calls).toBe(2)
+  })
+
   it('规则审计含 critical gate → provider 零调用，judge={skipped,reason:rule_critical}', async () => {
     registerDialect(fakeDialect({
       audit: () => ({ gates: [{ rule: 'budget', target: 'anima', severity: 'critical', detail: '超预算', source: 'test' }] }),

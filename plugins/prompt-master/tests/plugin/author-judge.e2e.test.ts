@@ -3,13 +3,19 @@
  * 六条行为规格，全部 mock criticProvider / evidenceDeps / revisionProvider（不打真连）。
  * 最高约束：缺省（不传 judge_mode）与现版本逐字段一致（除 generation_id），provider 零调用。
  */
-import { describe, expect, it, afterAll } from 'vitest'
+import { describe, expect, it, afterAll, beforeEach } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import {
   registerAuthorTool,
   setAuthorIntentProvider,
   setAuthorJudgeDeps,
+  setAuthorFeedbackDbPath,
   type AuthorIntentRequest,
 } from '../../src/tools/prompt-author.js'
+import { getGeneration, recordFeedback } from '../../src/pe-framework/feedback/store.js'
 import type { CriticFinding, CriticProvider } from '../../src/pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js'
 import { stubCtx, runTool } from './helpers.js'
@@ -186,4 +192,77 @@ describe('规格6 strict：revisionProvider 接线（mock 验证对抗二轮）'
   })
 })
 
-afterAll(() => { setAuthorIntentProvider(null); setAuthorJudgeDeps(null); closeCatalog() })
+// final review C1：author 非 audit_only 成功出口落库 generations（飞轮死链修复）
+describe('final-fix C1：author 落库 generations', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-db-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('fast + pass → generation 记录存在且 judge_score 正确；feedback record 可挂', async () => {
+    const critic = criticOf([PASS_JSON])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    expect(raw.ok).toBe(true)
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen).toBeDefined()
+    expect(gen!.target).toBe('anima')
+    expect(gen!.judge_mode).toBe('fast')
+    expect(gen!.judge_score).toBe(90)
+    expect(gen!.judge_verdict).toBe('pass')
+    expect(gen!.input_digest).toBe(createHash('sha256').update('cat portrait', 'utf8').digest('hex'))
+    expect(String(gen!.final_output)).toContain('1girl, long hair')
+    expect(gen!.debate_json).toBeDefined()
+    // 飞轮回路闭合：该 generation_id 可直接挂人工反馈
+    const fb = recordFeedback(join(dbDir, 'feedback.sqlite'), { generation_id: raw.generation_id, rating: 4 })
+    expect(fb).toEqual({ ok: true })
+  })
+
+  it('judge skipped（LLM 故障）→ 记录存在但不填 judge_score/verdict', async () => {
+    const critic = criticOf(['THROW'])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen).toBeDefined()
+    expect(gen!.judge_score).toBeUndefined()
+    expect(gen!.judge_verdict).toBeUndefined()
+  })
+
+  it('judge_mode=off → 也落库（judge_mode=off，无 judge 字段）', async () => {
+    setAuthorJudgeDeps(null)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen).toBeDefined()
+    expect(gen!.judge_mode).toBe('off')
+    expect(gen!.judge_score).toBeUndefined()
+  })
+
+  it('audit_only → 不落库（读路径无可反馈结果）', async () => {
+    setAuthorJudgeDeps(null)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
+      target: 'anima', audit_only: true,
+      input: JSON.stringify({ count_gender: ['1girl'], appearance: ['long hair'] }),
+    })))
+    expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/)
+    expect(getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)).toBeUndefined()
+  })
+
+  it('落库失败 → 不阻塞出稿，advisories 含 feedback_write_failed', async () => {
+    // 父路径是文件 → mkdirSync/openDb 必失败
+    const blocker = join(dbDir, 'not-a-dir')
+    writeFileSync(blocker, 'x', 'utf8')
+    setAuthorFeedbackDbPath(join(blocker, 'feedback.sqlite'))
+    setAuthorJudgeDeps(null)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    expect(raw.ok).toBe(true)
+    expect(String(raw.result.positive)).toContain('1girl')
+    expect(raw.advisories).toContain('feedback_write_failed')
+  })
+})
+
+afterAll(() => { setAuthorIntentProvider(null); setAuthorJudgeDeps(null); setAuthorFeedbackDbPath(null); closeCatalog() })

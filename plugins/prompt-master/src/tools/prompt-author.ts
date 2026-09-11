@@ -23,6 +23,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
+import { recordGeneration } from '../pe-framework/feedback/store.js'
+import { defaultFeedbackDbPath } from './prompt-feedback.js'
+import { createHash } from 'node:crypto'
 
 export interface AuthorArgs {
   target: Target
@@ -167,6 +170,67 @@ interface JudgeStageOpts {
 /** generation_id（spec §3.1）：唯一允许的缺省新增 Envelope 字段——gen_<Date.now()>_<random36> */
 export function makeGenerationId(): string {
   return `gen_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+/* ── final review C1：generations 落库（质量飞轮 §3.2）── */
+
+/** 测试/特殊部署注入 db 路径（与 prompt-feedback 的 setFeedbackDbPath 同款 seam）；null 恢复默认解析 */
+let _feedbackDbPathOverride: string | null = null
+export function setAuthorFeedbackDbPath(p: string | null): void {
+  _feedbackDbPathOverride = p
+}
+
+function resolveFeedbackDbPath(): string | undefined {
+  try {
+    return _feedbackDbPathOverride ?? defaultFeedbackDbPath()
+  } catch {
+    return undefined // presetRoot 未配置 → 不落库（增强层，不阻塞出稿）
+  }
+}
+
+/** StageResult.result → final_output 文本（编译产物整体 JSON，≤32KB 由 store 层裁剪） */
+function finalOutputText(stage: StageResult): string {
+  try {
+    return JSON.stringify(stage.result) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 非 audit_only 成功出口统一落库（spec §6：反馈增强层，try/catch 全包——
+ * 写失败只 push `feedback_write_failed` advisory，绝不阻塞出稿）。
+ */
+function recordGenerationSafe(args: {
+  id: string
+  target: Target
+  variant?: string
+  judgeMode: 'off' | 'fast' | 'strict'
+  input: string
+  stage: StageResult
+  repairRounds: number
+  advisories: string[]
+}): void {
+  try {
+    const dbPath = resolveFeedbackDbPath()
+    if (!dbPath) return
+    const j = args.stage.judge
+    const judged = j !== undefined && 'verdict' in j
+    recordGeneration(dbPath, {
+      id: args.id,
+      created_at: Date.now(),
+      target: args.target,
+      ...(args.variant !== undefined ? { variant: args.variant } : {}),
+      judge_mode: args.judgeMode,
+      input_digest: createHash('sha256').update(args.input, 'utf8').digest('hex'),
+      final_output: finalOutputText(args.stage),
+      ...(judged ? { judge_score: (j as { score: number }).score, judge_verdict: (j as { verdict: string }).verdict } : {}),
+      ...(args.stage.debate !== undefined ? { debate_json: JSON.stringify(args.stage.debate) } : {}),
+      repair_rounds: args.repairRounds,
+    })
+  } catch {
+    args.advisories.push('feedback_write_failed')
+  }
 }
 
 /** StageResult → Envelope 顶层评审投影：字段仅在评审实际发生时出现 */
@@ -435,6 +499,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           ? { ...stage, advisories: [...stage.advisories, ...trailAdvisories] }
           : stage
         ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
+        const generationId = makeGenerationId()
+        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: corrections, advisories: trailAdvisories })
         return assembleEnvelope(stage, trailAdvisories, {
           corrections,
           loopExhausted,
@@ -443,7 +509,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           expansions,
           repairs,
         }, {
-          generation_id: makeGenerationId(),
+          generation_id: generationId,
           ...judgeTopLevel(stage),
         }, {
           next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
@@ -473,13 +539,15 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         trailAdvisories.push('loop_exhausted:true')
       }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
+      const generationId = makeGenerationId()
+      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: corrections, advisories: trailAdvisories })
       return assembleEnvelope(stage, trailAdvisories, {
         corrections,
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
         joyExtraFiltered,
         traceStages: stage.trace?.stages,
       }, {
-        generation_id: makeGenerationId(),
+        generation_id: generationId,
         ...judgeTopLevel(stage),
       })
     },

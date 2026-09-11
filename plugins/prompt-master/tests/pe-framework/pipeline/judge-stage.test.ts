@@ -181,6 +181,16 @@ describe('分支5 strict + 首评 needs_revision → 修正稿复审 pass', () =
     expect(r.judge).toMatchObject({ verdict: 'needs_revision' })
     expect(provider.calls).toBe(1)
   })
+
+  // Task 6 顺手项回归：strict_degraded 只在首评 needs_revision 时标注——首评 pass 不追加噪音
+  it('strict 缺 revisionProvider 但首评 pass → 不标 strict_degraded', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([PASS_JSON])
+    const r = await runStage(baseInput({ judge: 'strict', criticProvider: provider, evidenceDeps }))
+    expect(r.advisories).not.toContain('strict_degraded')
+    expect(r.judge).toMatchObject({ verdict: 'pass' })
+    expect(provider.calls).toBe(1)
+  })
 })
 
 describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短路', () => {
@@ -215,6 +225,15 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
     registerDialect(fakeDialect())
     const provider = providerOf([PASS_JSON])
     const r = await runStage(baseInput({ judge: 'fast', criticProvider: provider, evidenceDeps: {} }))
+    expect(r.advisories).toContain('evidence_partial')
+    expect(r.judge).toMatchObject({ verdict: 'pass' })
+  })
+
+  // Task 6 顺手项回归：evidenceDeps 整个未传（undefined）→ 同样标 evidence_partial
+  it('evidenceDeps 整个未传 → evidence_partial advisory，评审照常', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([PASS_JSON])
+    const r = await runStage({ ...baseInput({ criticProvider: provider }), judge: 'fast' })
     expect(r.advisories).toContain('evidence_partial')
     expect(r.judge).toMatchObject({ verdict: 'pass' })
   })

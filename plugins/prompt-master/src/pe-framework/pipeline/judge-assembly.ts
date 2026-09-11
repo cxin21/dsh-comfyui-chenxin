@@ -27,6 +27,7 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
   const deps: EvidenceDeps = {}
 
   try {
+    // catalog 适配器仅 anima；h3 rubric 未声明 catalog；未来若声明需按 target 分流
     deps.catalog = (query: string) => {
       const hits = searchCatalog(query)
       if (!Array.isArray(hits)) return []

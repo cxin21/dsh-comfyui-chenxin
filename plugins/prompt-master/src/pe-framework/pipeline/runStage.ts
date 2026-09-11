@@ -131,8 +131,8 @@ async function runJudgeStage(
   const tJudge0 = performance.now()
   const advisories = [...base.advisories]
 
-  // 证据工具部分缺省 → advisory（bridge 自动剔除不可用键）
-  if (input.evidenceDeps && rubric.evidenceTools.some((t) => typeof input.evidenceDeps![t] !== 'function')) {
+  // 证据工具部分缺省（含整个 evidenceDeps 未传）→ advisory（bridge 自动剔除不可用键）
+  if (!input.evidenceDeps || rubric.evidenceTools.some((t) => typeof input.evidenceDeps![t] !== 'function')) {
     advisories.push('evidence_partial')
   }
   const bridge = createEvidenceBridge({
@@ -194,11 +194,13 @@ async function runJudgeStage(
   }
   debate.push({ round: 1, reviewer: reviewerOf(outcome) })
 
-  // strict 缺修正稿生产者 → 退化为 fast（并标注）
   const revisionProvider = judgeMode === 'strict' ? input.revisionProvider : undefined
-  if (judgeMode === 'strict' && !revisionProvider) advisories.push('strict_degraded')
 
   // 分支5/6：strict 且首评 needs_revision → 一轮修正稿 + revision 复审（深层循环属调用方现有闭环）
+  if (outcome.verdict === 'needs_revision') {
+    // strict 缺修正稿生产者 → 退化为 fast；仅在实际需要修正时标注（首评 pass 不追加噪音）
+    if (judgeMode === 'strict' && !revisionProvider) advisories.push('strict_degraded')
+  }
   if (outcome.verdict === 'needs_revision' && revisionProvider) {
     const firstFindings = outcome.findings as CriticFinding[]
     const rev = await revisionProvider(compiledCur, firstFindings)

@@ -7,6 +7,9 @@ import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
 import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
+import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
+import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
+import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
 import type { StageResult } from '../pe-framework/pipeline/types.js'
 import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blueprint/repo.js'
@@ -38,6 +41,8 @@ export interface AuthorArgs {
   clarify?: 'ask' | 'auto'
   /** Task 10 蓝图管线：增量修改入口——传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影 */
   blueprint_id?: string
+  /** Task 6（spec §2.4/§3.1）：评审模式；缺省 'off' 零行为变化；audit_only=true 时忽略并保持旧行为 */
+  judge_mode?: 'off' | 'fast' | 'strict'
 }
 
 /** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
@@ -128,6 +133,79 @@ function normalizeSlots(raw: Record<string, unknown>): AnimaSlots {
 const VARIANT_SET = new Set(['base', 'aesthetic', 'turbo'])
 const MAX_CORRECTIONS = 2
 
+/* ── Task 6 评审接线（spec §2.4/§3.1）：注入点 + 生产装配 ── */
+
+/** strict 修正稿生产者（与 PipelineInput.revisionProvider 同形） */
+export type AuthorRevisionProvider = (compiled: unknown, findings: CriticFinding[]) => Promise<{ compiled: unknown; changes: string[]; revisionNote: string }>
+
+/** 评审依赖注入 seam：生产缺省走 createProduction* 装配；e2e/单测经此注入 mock */
+export interface AuthorJudgeDeps {
+  criticProvider?: CriticProvider
+  evidenceDeps?: EvidenceDeps
+  revisionProvider?: AuthorRevisionProvider
+}
+
+let _judgeDeps: AuthorJudgeDeps | null = null
+
+export function setAuthorJudgeDeps(deps: AuthorJudgeDeps | null): void {
+  _judgeDeps = deps
+}
+
+export function getAuthorJudgeDeps(): AuthorJudgeDeps | null {
+  return _judgeDeps
+}
+
+/** runStage 评审透传段（judge=off 时为 undefined → 同步旧路径零变化） */
+interface JudgeStageOpts {
+  judge: 'fast' | 'strict'
+  criticProvider: CriticProvider
+  evidenceDeps: EvidenceDeps
+  originalIntent: string
+  revisionProvider?: AuthorRevisionProvider
+}
+
+/** generation_id（spec §3.1）：唯一允许的缺省新增 Envelope 字段——gen_<Date.now()>_<random36> */
+export function makeGenerationId(): string {
+  return `gen_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+/** StageResult → Envelope 顶层评审投影：字段仅在评审实际发生时出现 */
+function judgeTopLevel(stage: StageResult): Record<string, unknown> {
+  return {
+    ...(stage.judge !== undefined ? { judge: stage.judge } : {}),
+    ...(stage.debate !== undefined ? { debate: stage.debate } : {}),
+    ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
+  }
+}
+
+/**
+ * strict 生产 revisionProvider（工具层最小实现，基于现有修正机制）：
+ * 首轮 findings 投影为 feedback → 复用 intent provider 取修正结构 → 经方言 normalize/compile 产修正稿。
+ * changes 取各 finding 的 requiredFix；revisionNote 即 feedback 全文（复审 user 段透传）。
+ */
+function makeRevisionProvider(args: {
+  target: Target
+  provider: AuthorIntentFn
+  intentBase: Omit<AuthorIntentRequest, 'round' | 'feedback'>
+  runOpts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }
+  exec: ToolRunContext
+}): AuthorRevisionProvider {
+  return async (_compiled, findings) => {
+    const feedback = findings.map((f) => `[${f.severity}] ${f.requiredFix}`).join('\n')
+    const draft = await args.provider({ ...args.intentBase, round: 1, feedback }, args.exec)
+    const input = normalizeDraftToInput(args.target, draft, args.runOpts)
+    const d = getDialect(args.target)
+    if (!d) throw new Error(`方言 ${args.target} 未注册（revisionProvider 内部）`)
+    const normalized = d.normalize(
+      { target: args.target, slots: input.slots, variant: input.variant, shots: input.shots, stage: input.stage, scenarioId: input.scenarioId, formFields: input.formFields, auditOnly: false },
+      { stage: input.stage, scenarioId: input.scenarioId, formFields: input.formFields },
+    )
+    if (normalized.error !== undefined) throw new Error(normalized.error)
+    const revised = d.compile(normalized.value as never, { variant: input.variant, stage: normalized.stage ?? input.stage })
+    return { compiled: revised, changes: findings.map((f) => f.requiredFix), revisionNote: feedback }
+  }
+}
+
 /** draft → PipelineInput 输入段：anima {slots, variant}；h3 {shots, stage, scenarioId, formFields}
  *  Task 10 蓝图分支：draft.blueprint 存在时先 projectTo* 再入 runStage（扩展在 execute 完成——LLM 异步） */
 function normalizeDraftToInput(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): { slots?: Record<string, unknown>; variant?: string; shots?: unknown; stage?: string; scenarioId?: string; formFields?: Record<string, unknown> } {
@@ -169,10 +247,11 @@ function applyScenarioGates(stage: StageResult, opts: { scenarioId?: string; for
   }
 }
 
-/** draft → runStage → applyScenarioGates（author 每轮统一入口；audit 不通过不在此处理——闭环在 execute） */
-function runDraftThroughStage(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): StageResult {
+/** draft → runStage → applyScenarioGates（author 每轮统一入口；audit 不通过不在此处理——闭环在 execute）
+ *  Task 6：judgeOpts 传入时 runStage 走评审（Promise，必须 await）；off/缺省时同步旧路径零变化 */
+async function runDraftThroughStage(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }, judgeOpts?: JudgeStageOpts): Promise<StageResult> {
   const input = normalizeDraftToInput(target, draft, opts)
-  const stageResult = runStage({ target: target as Target, ...input })
+  const stageResult = await runStage({ target: target as Target, ...input, ...judgeOpts })
   return applyScenarioGates(stageResult, { scenarioId: opts.scenarioId, formFields: opts.formFields, refsCount: referencesCount(draft, opts.formFields) })
 }
 
@@ -219,12 +298,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
       clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
       blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影（取回旧蓝图改一字段重投影）' },
+      judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'off', description: 'LLM 评审模式（spec §2.4）：off=不评审（缺省）；fast=单轮评审；strict=评审+对抗修正一轮。audit_only=true 时忽略' },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string }, exec: ToolRunContext) {
+    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict' }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
       const target = String(a.target || 'anima') as Target
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
@@ -258,9 +338,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         } catch {
           throw new Error('audit_only 需要结构化 JSON 输入（anima: slots；h3: shots{...}）')
         }
-        const stage = runDraftThroughStage(target, draft, runOpts)
+        const stage = await runDraftThroughStage(target, draft, runOpts)
         if (target === 'anima') applyAnimaJoyExtraFilter(stage, a.form_fields)
-        return assembleEnvelope(stage, [])
+        // Task 6：audit_only 不触发评审；generation_id 仍生成（唯一允许的缺省新增字段）
+        return assembleEnvelope(stage, [], undefined, { generation_id: makeGenerationId() })
       }
 
       const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
@@ -268,6 +349,21 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
       const intentCfg = getDialect(target)?.intent
       const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
+
+      // Task 6 评审接线（spec §2.4/§3.1）：judge_mode=off → judgeOpts=undefined，runStage 同步旧路径零变化
+      const judgeMode = a.judge_mode ?? 'off'
+      let judgeOpts: JudgeStageOpts | undefined
+      if (judgeMode !== 'off') {
+        judgeOpts = {
+          judge: judgeMode,
+          criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx),
+          evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
+          originalIntent: input,
+        }
+        if (judgeMode === 'strict') {
+          judgeOpts.revisionProvider = _judgeDeps?.revisionProvider ?? makeRevisionProvider({ target, provider, intentBase, runOpts, exec })
+        }
+      }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}${a.blueprint_id ? ` blueprint_id=${a.blueprint_id}` : ''}`)
 
       // Task 10 蓝图管线：blueprint_id → repo.load 跳过 analyzeIntent（增量修改入口）；否则走 intent provider seam
@@ -299,15 +395,17 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const l1 = preflightRepair(e0.blueprint)
         if (l1.repairs.length > 0) { repaired = true; repairs.push(...l1.repairs) }
         let bp = l1.bp
-        let stage = runDraftThroughStage(target, { blueprint: bp }, runOpts)
+        let stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts)
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
 
         let corrections = 0
-        while (!stage.ok && stage.gates.some((g) => g.severity === 'critical') && corrections < MAX_CORRECTIONS) {
+        while (((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (stage.judgeFeedback?.length ?? 0) > 0) && corrections < MAX_CORRECTIONS) {
           corrections++
           repaired = true
+          // Task 6：feedback = 规则 critical gate + judgeFeedback（needs_revision 终态投影）
           const feedback = JSON.stringify({
             gates: stage.gates.filter((g) => g.severity === 'critical').map((g) => ({ rule: g.rule, severity: g.severity, detail: g.detail })),
+            ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
           })
           const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec)
           if (!d2.blueprint) break // provider 未返回蓝图 → 保留当前 stage，走 Level 3
@@ -316,7 +414,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           const l2 = preflightRepair(e2.blueprint)
           repairs.push(...l2.repairs)
           bp = l2.bp
-          stage = runDraftThroughStage(target, { blueprint: bp }, runOpts)
+          stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts)
           if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
         }
         if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
@@ -340,23 +438,31 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           traceStages: stage.trace?.stages,
           expansions,
           repairs,
-        }, undefined, {
+        }, {
+          generation_id: makeGenerationId(),
+          ...judgeTopLevel(stage),
+        }, {
           next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
           repair_hints,
         })
       }
 
       // 旧 slots/shots 直传路径（向后兼容——AuthorDraft.blueprint 缺省时走原逻辑）
-      let stage = runDraftThroughStage(target, draft, runOpts)
+      let stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts)
       let joyExtraFiltered = false
       if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       const trailAdvisories: string[] = []
       let corrections = 0
-      while (!stage.ok && stage.gates.some((g) => g.severity === 'critical') && corrections < MAX_CORRECTIONS) {
+      // Task 6：闭环条件在规则 critical 之上追加 judgeFeedback（needs_revision 终态）；
+      // feedback 拼接 = 规则 gate 的 `[rule] detail` 行 + judgeFeedback 行；max-2 / loop_exhausted 语义不变
+      while (((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (stage.judgeFeedback?.length ?? 0) > 0) && corrections < MAX_CORRECTIONS) {
         corrections++
-        const feedback = stage.gates.filter((g) => g.severity === 'critical').map((g) => `[${g.rule}] ${g.detail}`).join('\n')
+        const feedback = [
+          ...stage.gates.filter((g) => g.severity === 'critical').map((g) => `[${g.rule}] ${g.detail}`),
+          ...(stage.judgeFeedback ?? []),
+        ].join('\n')
         draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
-        stage = runDraftThroughStage(target, draft, runOpts)
+        stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts)
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       }
       if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
@@ -368,6 +474,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
         joyExtraFiltered,
         traceStages: stage.trace?.stages,
+      }, {
+        generation_id: makeGenerationId(),
+        ...judgeTopLevel(stage),
       })
     },
   })

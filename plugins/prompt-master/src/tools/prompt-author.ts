@@ -551,6 +551,25 @@ function applyAnimaJoyExtraFilter(stage: StageResult, formFields?: Record<string
   return filtered
 }
 
+/**
+ * F5（三期 Task 4）：canonical 替换可观测提取——来自 compile result 的 T1 字段
+ * （anima 的 substitutions/corrections；其他方言无此字段 → 0/空数组，字段始终存在便于消费方）。
+ * 独立新字段，不与 observability.corrections（修正闭环轮次）语义混淆。
+ */
+function canonicalObservabilityOf(stage: StageResult): { canonicalSubstitutions: number; substitutions: string[] } {
+  const r = stage.result as { corrections?: unknown; substitutions?: unknown }
+  return {
+    canonicalSubstitutions: typeof r.corrections === 'number' ? r.corrections : 0,
+    substitutions: Array.isArray(r.substitutions) ? r.substitutions.filter((s): s is string => typeof s === 'string') : [],
+  }
+}
+
+/** F5：trace 耗时子条目（enrich/intent/catalog）——catalog ms 来自 anima compile result 的 catalogMs 字段 */
+function catalogTraceEntry(stage: StageResult, out: Array<{ name: string; ms: number }>): void {
+  const ms = (stage.result as { catalogMs?: unknown }).catalogMs
+  if (typeof ms === 'number') out.push({ name: 'catalog', ms })
+}
+
 export function registerAuthorTool(ctx: Context, config: Config) {
   return defineTool({
     name: 'prompt_author',
@@ -633,7 +652,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const enrichAdvisories: string[] = []
       let enrichFlag: 0 | 1 = 0
       let enrichmentTop: Record<string, unknown> | undefined
+      const traceExtra: Array<{ name: string; ms: number }> = [] // F5：enrich/intent/catalog 耗时子条目
       if (a.enrich !== false && !a.blueprint_id) {
+        const tEnrich0 = performance.now()
         const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx)
         const eRes = await runEnrich({
           target: target as EnrichTarget,
@@ -653,6 +674,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           enrichFlag = 0
           enrichmentTop = { skipped: true, reason: eRes.reason }
         }
+        traceExtra.push({ name: 'enrich', ms: performance.now() - tEnrich0 })
       }
 
       const intentBase = { target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
@@ -676,6 +698,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const repairJudgeOpts = a.judgeRepair === false ? undefined : judgeOpts
 
       // Task 10 蓝图管线：blueprint_id → repo.load 跳过 analyzeIntent（增量修改入口）；否则走 intent provider seam
+      const tIntent0 = performance.now()
       let draft: AuthorDraft
       if (a.blueprint_id) {
         const settings = (ctx as unknown as { settings?: RepoSettingsScope }).settings
@@ -687,6 +710,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       } else {
         draft = await provider({ ...intentBase, round: 0 }, exec)
       }
+      traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
 
       // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
       // → Level 2 LLM 结构化修复（≤2 次，计入 MAX_CORRECTIONS）→ Level 3 manual + loop_exhausted
@@ -747,13 +771,19 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           : stage
         ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
         const generationId = makeGenerationId()
-        const blueprintAdvisories = [...enrichAdvisories, ...trailAdvisories]
+        // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
+        const canon = canonicalObservabilityOf(stage)
+        const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
+        catalogTraceEntry(stage, traceExtra)
+        const blueprintAdvisories = [...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
         recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: blueprintAdvisories, enrich: enrichFlag })
         return assembleEnvelope(projStage, blueprintAdvisories, {
           corrections,
           loopExhausted,
           joyExtraFiltered,
-          traceStages: stage.trace?.stages,
+          traceStages: [...(stage.trace?.stages ?? []), ...traceExtra],
+          canonicalSubstitutions: canon.canonicalSubstitutions,
+          substitutions: canon.substitutions,
           expansions,
           repairs,
         }, {
@@ -795,13 +825,19 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
         : stage
       const generationId = makeGenerationId()
-      const finalAdvisories = [...enrichAdvisories, ...trailAdvisories]
+      // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
+      const canon = canonicalObservabilityOf(stage)
+      const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
+      catalogTraceEntry(stage, traceExtra)
+      const finalAdvisories = [...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
       recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: finalAdvisories, enrich: enrichFlag })
       return assembleEnvelope(projStage, finalAdvisories, {
         corrections,
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
         joyExtraFiltered,
-        traceStages: stage.trace?.stages,
+        traceStages: [...(stage.trace?.stages ?? []), ...traceExtra],
+        canonicalSubstitutions: canon.canonicalSubstitutions,
+        substitutions: canon.substitutions,
       }, {
         generation_id: generationId,
         ...judgeTopLevel(projStage),

@@ -70,6 +70,10 @@ export interface EnvelopeObservability {
   expansions?: string[]
   /** Task 10 蓝图管线：Level 1/2 修复记录（如 duration_3→4） */
   repairs?: string[]
+  /** F5（三期 Task 4）：canonical 替换计数——独立新字段，不与 corrections（修正闭环轮次）混淆 */
+  canonicalSubstitutions?: number
+  /** F5：canonical 替换对（`原片段→新tag`，来自 compile result T1 字段）；无替换为空数组 */
+  substitutions?: string[]
 }
 
 export interface EnvelopeNextAction {

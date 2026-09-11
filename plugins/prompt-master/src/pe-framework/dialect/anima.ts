@@ -48,6 +48,8 @@ export interface CompileAnimaResult {
   substitutions: string[]
   /** F2：替换计数（observability.corrections 的来源） */
   corrections: number
+  /** F5（三期 Task 4）：catalog 后处理（applyCanonicalSubstitutions）耗时 ms；纯可观测 */
+  catalogMs: number
 }
 
 /** G2：segment 溯源条目（对照 cli.py _segments_payload） */
@@ -296,7 +298,9 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   // 该软性计数 advisory（闭环内自修正项）不降级 inspection 阶段。
   // F2（三期 Task 1）：audit 之后确定性后处理——catalog_miss 的 canonical/alias 候选自动采纳；
   // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM
+  const tCatalog0 = performance.now()
   const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search })
+  const catalogMs = performance.now() - tCatalog0
   if (subst.corrections > 0) {
     positiveText = subst.positive
     // segments 投影同步（文本级替换；citation 保持 miss 溯源）
@@ -329,6 +333,7 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     metadata,
     substitutions: subst.replacements,
     corrections: subst.corrections,
+    catalogMs,
   }
 }
 

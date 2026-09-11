@@ -1,4 +1,4 @@
-﻿# Prompt Master MCP Server — 任务追踪与质量看板
+# Prompt Master MCP Server — 任务追踪与质量看板
 
 > **用法：** 每完成一个 Task，将其状态从 `[ ]` 改为 `[x]`，更新 `完成时间`，填写 `质量检查结果`。  
 > 每个 Task 包含：源码对照检查点（确保与 PromptMaster 一致）+ 对抗性审查点（找出隐藏问题）。
@@ -18,6 +18,27 @@
 | **Round 4: 质量飞轮 M1-M4（2026-09-08）** | 11 | 11 | ✅ 已完成 |
 | **Round 5: 二期 enrich+默认评审+一期遗留全量补齐（2026-09-08）** | 9 | 9 | ✅ 已完成 |
 | **Round 6: 三期实战修复（会话 398c261e 暴露的编译/catalog 问题，2026-09-09）** | 5 | 5 | ✅ 已完成 |
+| **Round 7: 全量遗留清零（文档清账+grounding 去重+语言层+健壮性/卫生/观测包，2026-09-09）** | 6 | 6 | ✅ 已完成 |
+
+---
+
+## Round 7：全量遗留清零
+
+> 计划：`docs/plans/2026-09-09-round7-cleanup-implementation.md`
+> 执行：Subagent-Driven；验收：全量 vitest **854 passed / 1 skipped / 0 failed**（831→854，golden 零破坏）；tsc/build 干净；终审 PASS
+> F4 severity=important→critical 的实现勘误已回写三期设计文档；CJK 三层排查结论已入库 `docs/2026-09-09-cjk-leak-investigation.md`
+
+| Task | 内容 | 状态 | 关键 commit |
+|---|---|---|---|
+| T1 | 文档清账：F4 severity 回写 + CJK 排查入库 + AGENTS.md 基线 831 + usage 参数表 | ✅ | 7fd1d8d |
+| T2 | F1 grounding 感知二次去重（覆盖集=替换后段面∪槽位原文侧，消除双 moon gate 残余） | ✅ | 7ee32a5 |
+| T3 | 语言层：enrich persona 中文旅关闭（语义保留+按 outputLang 改写）+ detectLanguage 假名优先 | ✅ | dc1b703 |
+| T4 | critic 复审健壮性收口：firstScore 防御/reason 非空/冲突校验/revision 不传 ruleGates/judgeTopLevel 收紧 | ✅ | 48b8d7c |
+| T5 | 卫生包：同秒覆盖回归/POSIX/后缀上限/enrich skipped trace 钉测/catalog 隔离 | ✅ | 12441b9 |
+| T6 | 观测边界：blueprint enrich advisory + cjk 行为级闭环锚定 + catalog 分流防护 | ✅ | b664488 |
+| T7 | 终审 PASS + 本登记 | ✅ | （本提交） |
+
+终审确认：跨任务回归无冲突（T2×T3、T4×T6）；ledger minors 全部复核维持 deferred（Low）；全 preset grep 无未被覆盖的 judge off/enrich false 假设调用方。
 
 ---
 

@@ -171,6 +171,26 @@ function joinSentences(parts: string[]): string {
   return out
 }
 
+/** F1 fix2：短语级去重——无句末标点且含逗号的 tag 串形态句（一期实战形状）按逗号切短语段逐段
+ *  覆盖判定：被覆盖短语丢弃，未覆盖短语以 `, ` 重接（保留原文文本，不做词序/大小写改写）；
+ *  全部被覆盖 → 返回 null（段不追加）；含句末标点的句子返回原文（句级规则不变，保护散文） */
+function dedupTagPhrases(s: string, covered: ReadonlySet<string>): string | null {
+  if (/[。！？.!?]/.test(s) || !s.includes(',')) {
+    // 句级规则不变：整句覆盖判定（无 ≥2 字符词元的纯标点/单字符句视为被覆盖）
+    const toks = tokensOf(s)
+    return toks.size > 0 && !tokensCoveredBy(covered, toks) ? s : null
+  }
+  const kept = s
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => {
+      if (!p) return false
+      const toks = tokensOf(p)
+      return toks.size > 0 && !tokensCoveredBy(covered, toks)
+    })
+  return kept.length ? kept.join(', ') : null
+}
+
 /** grounding.py ground 移植：canonical/alias → Citation；fuzzy/miss → match_type 'miss'（原文保留主体在 compile 层） */
 export function groundSlotTags(slots: AnimaSlots, search: (tag: string) => CatalogHit[]): Map<string, AnimaCitation> {
   const citations = new Map<string, AnimaCitation>()
@@ -269,12 +289,11 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集
     const covered = new Set<string>()
     for (const seg of positive) for (const t of tokensOf(seg)) covered.add(t)
-    // 按句切分（。！？.!?，保留句末标点）：只追加实词集合未被覆盖的句子；
-    // 全覆盖 → 不追加该 narrative 段；无 ≥2 字符词元的纯标点/单字符句视为被覆盖
-    const kept = splitSentences(trimmed).filter((s) => {
-      const toks = tokensOf(stripNarrativePrefix(s))
-      return toks.size > 0 && !tokensCoveredBy(covered, toks)
-    })
+    // 按句切分（。！？.!?，保留句末标点）：句级覆盖判定；无句末标点且含逗号的 tag 串句再按
+    // 短语级判定（fix2）；全部被覆盖 → 不追加该 narrative 段；纯标点/单字符句视为被覆盖
+    const kept = splitSentences(trimmed)
+      .map((s) => dedupTagPhrases(stripNarrativePrefix(s), covered))
+      .filter((s): s is string => s !== null && s.length > 0)
     if (kept.length) pushSeg(joinSentences(kept), 'positive', 'narrative', 2000)
   }
   // 3e: exclusions → negative（原样）

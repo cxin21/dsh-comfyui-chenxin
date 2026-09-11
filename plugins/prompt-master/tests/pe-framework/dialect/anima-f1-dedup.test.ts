@@ -93,6 +93,46 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
     expect(r.positive.endsWith('weeping willows by the pond')).toBe(true)
   })
 
+  it('规格9 fix2 一期实战形状：无句号逗号短语串与槽位短语级重复 → narrative 不追加、1girl 只出现一次', () => {
+    const r = compileAnima(
+      {
+        count_gender: ['1girl'],
+        scene: ['Jiangnan classical garden', 'beside a moon gate', 'weeping willows by the pond', 'peach blossom petals drifting on the water', 'soft dusk light', 'thin mist around the covered bridge'],
+        narrative: 'Scene details: 1girl, gentle and graceful ancient Chinese beauty, hanfu, standing, Jiangnan classical garden, beside a moon gate, weeping willows by the pond, peach blossom petals drifting on the water, soft dusk light, thin mist around the covered bridge',
+      },
+      { variant: 'base', search: nullSearch },
+    )
+    // T5 同款断言：前缀剥离 + 被覆盖短语丢弃 → positive 无 'Scene details:'、1girl 只出现一次；
+    // 新短语（hanfu 等）按规则2 保留（未被覆盖）
+    expect(r.positive).not.toContain('Scene details:')
+    expect((r.positive.match(/1girl/g) || []).length).toBe(1)
+    const segs = r.segments.filter((s) => s.origin === 'narrative')
+    expect(segs).toHaveLength(1)
+    expect(segs[0].text).toBe('gentle and graceful ancient Chinese beauty, hanfu, standing')
+  })
+
+  it('规格10 fix2 混合：部分短语重复部分新短语 → 只追加新短语（保留原文，逗号重接）', () => {
+    const r = compileAnima(
+      { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate, a lantern glows' },
+      { variant: 'base', search: nullSearch },
+    )
+    const segs = r.segments.filter((s) => s.origin === 'narrative')
+    expect(segs).toHaveLength(1)
+    expect(segs[0].text).toBe('a lantern glows')
+    expect(r.positive.endsWith('a lantern glows')).toBe(true)
+  })
+
+  it('规格11 fix2 散文句回归：含句末标点的句子维持句级规则，不受短语级切分影响', () => {
+    const r = compileAnima(
+      { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate stands. a lantern glows, softly lit.' },
+      { variant: 'base', search: nullSearch },
+    )
+    const segs = r.segments.filter((s) => s.origin === 'narrative')
+    expect(segs).toHaveLength(1)
+    // 句级规则不变：含句末标点的句子整句判定（未全被覆盖则整句保留，不做短语级切分丢弃）
+    expect(segs[0].text).toBe('moon gate stands. a lantern glows, softly lit.')
+  })
+
   it('规格8 Minor-1：小数点不切句（`.` 前后均为数字），尾片段不静默丢弃', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'score 1.5 is high. a lantern glows' },

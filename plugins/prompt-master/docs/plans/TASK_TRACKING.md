@@ -26,6 +26,24 @@
 > 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照），完成时间 2026-09-08
 > 验收：全量 vitest 711 passed / 1 skipped / 0 failed（BASE ca220ace 起 621→711，golden 零破坏）；tsc/build 干净；终审 C1/I1 修复波 90c0b73 已 scoped 复审通过
 
+| Task | 内容 | 状态 | 关键 commit |
+|---|---|---|---|
+| T1 | DialectRubric 契约 + DialectContract.rubric | ✅ | 8a30a0c |
+| T2 | 证据工具桥 evidence.ts | ✅ | 2610327 |
+| T3 | EvidenceCritic critic.ts（F1/F2 修复 9b568a6） | ✅ | 7f26f2a |
+| T4 | anima/h3 rubric 注册 + judge.ts 退役（测试修复 5d43501） | ✅ | 400ec1d |
+| T5 | runStage 评审阶段 + strict 对抗二轮 | ✅ | 27ee8bc |
+| T6 | prompt-author 工具面 + 闭环接线（F1 修复 a873eca） | ✅ | 95d29da |
+| T7 | feedback store node:sqlite（测试修复 4613083） | ✅ | 028a5e8 |
+| T8 | prompt_feedback 工具 + preset 文档同步 | ✅ | 1a5b96d |
+| T9 | scoring harness 纯函数层 | ✅ | 303b6b9 |
+| T10 | 变体迭代与 diff 报告（人审闸门） | ✅ | f81a889 |
+| T11 | 冷启动验收：anima L1=0/L2=0（门槛未达，预期）；harness→mutate→evaluate→render 链路 mock 实测 OK；90 天懒清理实测验证 | ✅ | （无代码） |
+
+---
+
+## Round 5：enrich 扩写层 + 默认评审 + 一期遗留全量补齐（A1-A17）
+
 > Spec：`docs/2026-09-08-enrich-default-judge-design.md`；实施计划：`docs/plans/2026-09-08-enrich-phase2-implementation.md`
 > 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照 + 终审修复波）
 > 验收：全量 vitest **797 passed / 1 skipped / 0 failed**（711→797，golden 零破坏）；tsc/build 干净；缺省行为=judge fast + enrich 双开
@@ -45,27 +63,7 @@
 
 终审遗留（deferred，均不阻塞）：detectLanguage 混合日文归 zh、patch 后审计上下文偏松、loop 同秒覆盖无回归测试等——见 SDD ledger（工作区已删，历史在 git）。
 
----
-
-> Spec：`docs/2026-09-08-quality-flywheel-design.md`；实施计划：`docs/plans/2026-09-08-quality-flywheel-implementation.md`
-> 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照），完成时间 2026-09-08
-> 验收：全量 vitest 711 passed / 1 skipped / 0 failed（BASE ca220ace 起 621→711，golden 零破坏）；tsc/build 干净；终审 C1/I1 修复波 90c0b73 已 scoped 复审通过
-
-| Task | 内容 | 状态 | 关键 commit |
-|---|---|---|---|
-| T1 | DialectRubric 契约 + DialectContract.rubric | ✅ | 8a30a0c |
-| T2 | 证据工具桥 evidence.ts | ✅ | 2610327 |
-| T3 | EvidenceCritic critic.ts（F1/F2 修复 9b568a6） | ✅ | 7f26f2a |
-| T4 | anima/h3 rubric 注册 + judge.ts 退役（测试修复 5d43501） | ✅ | 400ec1d |
-| T5 | runStage 评审阶段 + strict 对抗二轮 | ✅ | 27ee8bc |
-| T6 | prompt-author 工具面 + 闭环接线（F1 修复 a873eca） | ✅ | 95d29da |
-| T7 | feedback store node:sqlite（测试修复 4613083） | ✅ | 028a5e8 |
-| T8 | prompt_feedback 工具 + preset 文档同步 | ✅ | 1a5b96d |
-| T9 | scoring harness 纯函数层 | ✅ | 303b6b9 |
-| T10 | 变体迭代与 diff 报告（人审闸门） | ✅ | f81a889 |
-| T11 | 冷启动验收：anima L1=0/L2=0（门槛未达，预期）；harness→mutate→evaluate→render 链路 mock 实测 OK；90 天懒清理实测验证 | ✅ | （无代码） |
-
-遗留（deferred minors，见计划 ledger）：修正轮重评成本开关、revisionProvider 稿内编辑语义、feedback.sqlite 迁出 temp 评估、评审 evidence 回查复核、listFeedback 1000 上限。
+---遗留（deferred minors，见计划 ledger）：修正轮重评成本开关、revisionProvider 稿内编辑语义、feedback.sqlite 迁出 temp 评估、评审 evidence 回查复核、listFeedback 1000 上限。
 
 ---
 

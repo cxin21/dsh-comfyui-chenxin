@@ -98,6 +98,12 @@ describe('runEnrich outputLang', () => {
     if ('brief' in en) expect(en.brief.outputLang).toBe('en')
     else expect.unreachable()
   })
+
+  it('h3 未指定：日本語输入（纯假名，detectLanguage ja 分支）→ ja（T5 carry④）', async () => {
+    const ja = await runEnrich({ target: 'h3', userInput: 'さくらがあめのよるをはしる', provider: providerReturning(validBriefJson()) })
+    if ('brief' in ja) expect(ja.brief.outputLang).toBe('ja')
+    else expect.unreachable()
+  })
 })
 
 /* 规格 5：persona / user 组装 */

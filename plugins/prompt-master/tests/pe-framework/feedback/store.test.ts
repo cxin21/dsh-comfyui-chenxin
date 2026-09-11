@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, afterAll } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -37,6 +38,7 @@ function gen(overrides: Partial<GenerationRow> = {}): GenerationRow {
     judge_mode: 'fast',
     input_digest: 'a'.repeat(64),
     final_output: 'masterpiece, 1girl',
+    enrich: 0,
     ...overrides,
   }
 }
@@ -65,6 +67,7 @@ describe('recordGeneration / getGeneration roundtrip', () => {
       judge_verdict: 'pass',
       debate_json: JSON.stringify({ findings: [{ severity: 'minor', note: 'x' }] }),
       repair_rounds: 1,
+      enrich: 1,
     })
     recordGeneration(p, g)
     const got = getGeneration(p, g.id)
@@ -274,7 +277,33 @@ describe('pruneGenerations', () => {
   })
 })
 
-// ---------- 8. 隐私 ----------
+// ---------- 8. enrich flag（二期 spec §11.3） ----------
+describe('enrich 列', () => {
+  it('enrich=1/0 往返', () => {
+    const p = dbPath('enrich')
+    const g1 = gen({ enrich: 1 })
+    recordGeneration(p, g1)
+    const g0 = gen({ enrich: 0 })
+    recordGeneration(p, g0)
+    expect(getGeneration(p, g1.id)!.enrich).toBe(1)
+    expect(getGeneration(p, g0.id)!.enrich).toBe(0)
+  })
+
+  it('旧库（无 enrich 列）打开时自动 ALTER 成功', () => {
+    const p = dbPath('legacy')
+    const db = new DatabaseSync(p)
+    db.exec(`CREATE TABLE generations (
+      id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, target TEXT NOT NULL, variant TEXT,
+      judge_mode TEXT NOT NULL, input_digest TEXT NOT NULL, final_output TEXT NOT NULL,
+      judge_score REAL, judge_verdict TEXT, debate_json TEXT, repair_rounds INTEGER)`)
+    db.close()
+    const g = gen({ enrich: 1 })
+    expect(() => recordGeneration(p, g)).not.toThrow()
+    expect(getGeneration(p, g.id)).toEqual(g)
+  })
+})
+
+// ---------- 9. 隐私 ----------
 describe('privacy shape', () => {
   it('GenerationRow / FeedbackRow carry no raw input / image / api key fields', () => {
     // 全字段齐备的行（可选字段全填），硬编码白名单 = GenerationRow 的全部键，不过滤
@@ -288,6 +317,7 @@ describe('privacy shape', () => {
     expect(Object.keys(g).sort()).toEqual([
       'created_at',
       'debate_json',
+      'enrich',
       'final_output',
       'id',
       'input_digest',

@@ -37,6 +37,7 @@ function gen(overrides: Partial<GenerationRow> = {}): GenerationRow {
     judge_mode: 'fast',
     input_digest: 'b'.repeat(64),
     final_output: 'masterpiece, 1girl',
+    enrich: 0,
     ...overrides,
   }
 }

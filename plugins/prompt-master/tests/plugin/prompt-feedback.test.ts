@@ -31,6 +31,7 @@ function seedGeneration(p: string, target: string, judgeScore?: number): string 
     judge_mode: 'off',
     input_digest: `digest_${seq}`,
     final_output: `output ${seq}`,
+    enrich: 0,
     ...(judgeScore !== undefined ? { judge_score: judgeScore } : {}),
   }
   recordGeneration(p, row)

@@ -1,0 +1,235 @@
+/**
+ * Task 6（二期，spec §2.1 / §2.4 / §4 / §11.3 / §11.4）：prompt_author 接线 enrich 扩写层 e2e。
+ * 七条行为规格，全部 mock enrich provider / intent provider（不打真连）。
+ * 最高约束：缺省（不传 enrich）与本任务前逐字段一致（无 enrichment 字段、intent 吃原文、enrich 零调用）。
+ */
+import { describe, expect, it, afterAll, beforeEach } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import {
+  registerAuthorTool,
+  setAuthorIntentProvider,
+  setAuthorFeedbackDbPath,
+  setAuthorEnrichProvider,
+  type AuthorIntentRequest,
+} from '../../src/tools/prompt-author.js'
+import { getGeneration } from '../../src/pe-framework/feedback/store.js'
+import type { CriticProvider } from '../../src/pe-framework/eval/critic.js'
+import { stubCtx, runTool } from './helpers.js'
+import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+
+const cfg = { temperature: 0.7 }
+const GOOD_SLOTS = { slots: { count_gender: ['1girl'], appearance: ['long hair'] } }
+
+function tool() {
+  return registerAuthorTool(stubCtx() as never, cfg as never)
+}
+
+/** mock enrich provider：按调用次序返回预置 JSON；THROW 表示抛错 */
+function enrichOf(responses: string[]) {
+  const fn = (async () => {
+    fn.calls++
+    const next = responses[Math.min(fn.calls - 1, responses.length - 1)]
+    if (next === 'THROW') throw new Error('enrich llm down')
+    return next
+  }) as unknown as CriticProvider & { calls: number }
+  fn.calls = 0
+  return fn
+}
+
+function briefJson(over: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    outputLang: 'en',
+    subject: [{ text: 'silver hair girl', source: 'user' }],
+    scene: [{ text: 'rainy neon street', source: 'enriched' }],
+    composition: [{ text: 'medium shot', source: 'enriched' }],
+    lighting: [{ text: 'rim light', source: 'enriched' }],
+    color: [{ text: 'teal and orange', source: 'enriched' }],
+    style: [{ text: 'cinematic', source: 'enriched' }],
+    mood: [{ text: 'melancholic', source: 'enriched' }],
+    nameAnchors: [],
+    ...over,
+  })
+}
+
+/* 规格1：缺省（不传 enrich）零行为变化 */
+describe('规格1 缺省零行为变化', () => {
+  it('不传 enrich → 无 enrichment 字段、intent 吃原文、enrich provider 零调用、落库 enrich=0', async () => {
+    const enrich = enrichOf([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    expect(raw.ok).toBe(true)
+    expect(raw.result.positive).toBe('masterpiece, best quality, score_7, safe, 1girl, long hair')
+    expect(raw.enrichment).toBeUndefined()
+    expect(raw.advisories).not.toContain('enrich_skipped')
+    expect(enrich.calls).toBe(0)
+    expect(intentCalls).toHaveLength(1)
+    expect(intentCalls[0].input).toBe('cat portrait')
+    expect(typeof raw.generation_id).toBe('string')
+  })
+})
+
+/* 规格2：enrich=true + 正常 → brief 成为 intent 权威输入 */
+describe('规格2 enrich=true 正常路径', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('brief 文本替换 intent 输入（含权威指令与字段样例）；envelope 带 enrichment.brief；落库 enrich=1', async () => {
+    const enrich = enrichOf([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '猫の肖像', enrich: true })))
+    expect(raw.ok).toBe(true)
+    expect(enrich.calls).toBe(1)
+    // intent 权威输入替换：brief 字段样例 + 权威指令
+    expect(intentCalls[0].input).toContain('brief 是权威输入')
+    expect(intentCalls[0].input).toContain("source=user 字段不可改")
+    expect(intentCalls[0].input).toContain('[user] silver hair girl')
+    expect(intentCalls[0].input).toContain('[enriched] rainy neon street')
+    // envelope 顶层 enrichment 段
+    expect(raw.enrichment).toBeDefined()
+    expect(raw.enrichment.skipped).toBeUndefined()
+    expect(raw.enrichment.brief).toMatchObject({
+      outputLang: 'en',
+      subject: [{ text: 'silver hair girl', source: 'user' }],
+      nameAnchors: [],
+    })
+    // 落库 enrich=1（digest 仍是用户原始输入的 sha256）
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen).toBeDefined()
+    expect(gen!.enrich).toBe(1)
+    expect(gen!.input_digest).toBe(createHash('sha256').update('猫の肖像', 'utf8').digest('hex'))
+  })
+})
+
+/* 规格3：enrich 降级 → 照常出稿 */
+describe('规格3 enrich 降级', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('enrich provider 抛错 → intent 吃原始输入、enrichment.skipped、advisory enrich_skipped、落库 enrich=0', async () => {
+    const enrich = enrichOf(['THROW'])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: true })))
+    expect(raw.ok).toBe(true)
+    expect(String(raw.result.positive)).toContain('1girl')
+    expect(enrich.calls).toBe(1)
+    expect(intentCalls[0].input).toBe('cat portrait')
+    expect(raw.enrichment).toEqual({ skipped: true, reason: 'enrich_llm_error' })
+    expect(raw.advisories).toContain('enrich_skipped')
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen).toBeDefined()
+    expect(gen!.enrich).toBe(0)
+  })
+})
+
+/* 规格4：audit_only=true 跳过 enrich（沿一期裁定） */
+describe('规格4 audit_only 跳过 enrich', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('enrich=true + audit_only → enrich provider 零调用、无 enrichment 字段、不落库', async () => {
+    const enrich = enrichOf([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
+      target: 'anima', audit_only: true, enrich: true,
+      input: JSON.stringify({ count_gender: ['1girl'], appearance: ['long hair'] }),
+    })))
+    expect(raw.ok).toBe(true)
+    expect(enrich.calls).toBe(0)
+    expect(raw.enrichment).toBeUndefined()
+    expect(getGeneration(join(dbDir, 'feedback.sqlite'), String(raw.generation_id))).toBeUndefined()
+  })
+})
+
+/* 规格5：outputLang 透传 + anima 显式 zh 纠正（T5 carry①） */
+describe('规格5 outputLang 语言归一化', () => {
+  it("anima 显式 outputLang='zh' → brief.outputLang 纠正为 'en' + advisory enrich_lang_forced", async () => {
+    const enrich = enrichOf([briefJson({ outputLang: 'zh' })])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '雨中的少女', enrich: true, outputLang: 'zh' })))
+    expect(raw.ok).toBe(true)
+    expect(raw.enrichment.brief.outputLang).toBe('en')
+    expect(raw.advisories).toContain('enrich_lang_forced')
+    // outputLang 透传：enrich provider 收到显式指定（由引擎内部强制纠正）
+    expect(enrich.calls).toBe(1)
+  })
+
+  it("h3 显式 outputLang='ja' → 透传生效，无 enrich_lang_forced", async () => {
+    const enrich = enrichOf([briefJson({ outputLang: 'ja' })])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => ({ shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches.' }] } }) as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', enrich: true, outputLang: 'ja' })))
+    expect(raw.ok).toBe(true)
+    expect(raw.enrichment.brief.outputLang).toBe('ja')
+    expect(raw.advisories).not.toContain('enrich_lang_forced')
+  })
+})
+
+/* 规格6：nameAnchors 透传（spec §11.4：锚点经 brief 固化进 intent prompt，critic 无需单独传参） */
+describe('规格6 nameAnchors 透传 + 接线层修剪（T5 carry③）', () => {
+  it('锚点进 intent prompt（固定映射指令）且 envelope enrichment 段可见；>10 条或单条 >100 字符 → 丢弃多余 + advisory name_anchors_trimmed', async () => {
+    const anchors = [
+      { original: '小明', anchored: 'XiaoMing' },
+      ...Array.from({ length: 9 }, (_, i) => ({ original: `角色${i}`, anchored: `Char${i}` })),
+      { original: '超长名' + 'x'.repeat(100), anchored: 'TooLong' }, // 第 11 条：超 100 字符 → 丢弃
+      { original: '第12个', anchored: 'Twelfth' }, // 第 12 条：超 10 条上限 → 丢弃
+    ]
+    const enrich = enrichOf([briefJson({ nameAnchors: anchors })])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return { shots: { duration_seconds: 6, shots: [{ what: 'XiaoMing runs in the rain.' }] } } as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: '小明在雨夜奔跑', enrich: true })))
+    expect(raw.ok).toBe(true)
+    // intent prompt：固定映射指令 + 锚点条目
+    expect(intentCalls[0].input).toContain('角色名固定映射，全程一致')
+    expect(intentCalls[0].input).toContain('小明 → XiaoMing')
+    expect(intentCalls[0].input).not.toContain('Twelfth')
+    // envelope：修剪后 10 条
+    expect(raw.enrichment.brief.nameAnchors).toHaveLength(10)
+    expect(raw.enrichment.brief.nameAnchors[0]).toEqual({ original: '小明', anchored: 'XiaoMing' })
+    expect(raw.advisories).toContain('name_anchors_trimmed')
+  })
+})
+
+/* 规格7：enrich flag 落库（store 层在 store.test.ts；此处补 author 出口缺省 0 已在规格1/3 覆盖） */
+describe('规格7 enrich=false 显式传参 → 落库 enrich=0', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('enrich=false → 行为与缺省一致，enrich provider 零调用，落库 enrich=0', async () => {
+    const enrich = enrichOf([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: false })))
+    expect(raw.ok).toBe(true)
+    expect(raw.enrichment).toBeUndefined()
+    expect(enrich.calls).toBe(0)
+    expect(intentCalls[0].input).toBe('cat portrait')
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen!.enrich).toBe(0)
+  })
+})
+
+afterAll(() => { setAuthorIntentProvider(null); setAuthorEnrichProvider(null); setAuthorFeedbackDbPath(null); closeCatalog() })

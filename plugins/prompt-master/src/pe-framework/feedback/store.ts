@@ -24,6 +24,8 @@ export interface GenerationRow {
   judge_verdict?: string // 'pass' | 'needs_revision'；skipped 不存 verdict
   debate_json?: string
   repair_rounds?: number
+  /** 二期 spec §11.3：是否经 enrich 扩写（0|1）；旧库行读回缺省 0 */
+  enrich: 0 | 1
 }
 
 export interface FeedbackRow {
@@ -51,7 +53,8 @@ CREATE TABLE IF NOT EXISTS generations (
     judge_score REAL,
     judge_verdict TEXT,
     debate_json TEXT,
-    repair_rounds INTEGER
+    repair_rounds INTEGER,
+    enrich INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_generations_created ON generations(created_at);
 CREATE TABLE IF NOT EXISTS feedback (
@@ -66,11 +69,20 @@ CREATE TABLE IF NOT EXISTS feedback (
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
 `
 
+/** 旧库兼容（二期 spec §11.3）：enrich 列晚于初版 schema 加入——缺列时 ALTER（旧行 DEFAULT 0）。 */
+function ensureEnrichColumn(db: DatabaseSync): void {
+  const cols = db.prepare('PRAGMA table_info(generations)').all() as Array<Record<string, unknown>>
+  if (!cols.some((c) => String(c['name']) === 'enrich')) {
+    db.exec('ALTER TABLE generations ADD COLUMN enrich INTEGER NOT NULL DEFAULT 0')
+  }
+}
+
 /** 读写模式打开（relations.ts openOverlayDb 同款：mkdir -p + 建 schema，调用方负责 close） */
 function openDb(dbPath: string): DatabaseSync {
   mkdirSync(dirname(dbPath), { recursive: true })
   const db = new DatabaseSync(dbPath)
   db.exec(SCHEMA)
+  ensureEnrichColumn(db)
   return db
 }
 
@@ -110,8 +122,8 @@ export function recordGeneration(dbPath: string, g: GenerationRow): void {
     db.prepare(
       `INSERT INTO generations
        (id, created_at, target, variant, judge_mode, input_digest, final_output,
-        judge_score, judge_verdict, debate_json, repair_rounds)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        judge_score, judge_verdict, debate_json, repair_rounds, enrich)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       g.id,
       g.created_at,
@@ -124,6 +136,7 @@ export function recordGeneration(dbPath: string, g: GenerationRow): void {
       g.judge_verdict ?? null,
       g.debate_json === undefined ? null : trimDebateJson(g.debate_json),
       g.repair_rounds ?? null,
+      g.enrich,
     )
   } finally {
     db.close()
@@ -166,6 +179,8 @@ function rowToGeneration(r: Record<string, unknown>): GenerationRow {
     judge_mode: String(r.judge_mode),
     input_digest: String(r.input_digest),
     final_output: String(r.final_output),
+    // enrich 列（spec §11.3）：NULL（异常旧行）兜底 0
+    enrich: (r.enrich === null || r.enrich === undefined ? 0 : Number(r.enrich)) as 0 | 1,
   }
   if (r.variant !== null && r.variant !== undefined) g.variant = String(r.variant)
   if (r.judge_score !== null && r.judge_score !== undefined) g.judge_score = Number(r.judge_score)

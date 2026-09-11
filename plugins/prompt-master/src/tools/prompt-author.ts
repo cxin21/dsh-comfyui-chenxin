@@ -25,6 +25,8 @@ import { complete } from '../llm/complete.js'
 import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 import { recordGeneration } from '../pe-framework/feedback/store.js'
+import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
+import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
 import { defaultFeedbackDbPath } from './prompt-feedback.js'
 import { createHash } from 'node:crypto'
 
@@ -49,6 +51,10 @@ export interface AuthorArgs {
   judge_mode?: 'off' | 'fast' | 'strict'
   /** T4（spec §10.4-A12）：修正轮评审成本开关；缺省 true（现状每修正轮重评）；false=修正轮 runStage 不带 judgeOpts（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动） */
   judgeRepair?: boolean
+  /** 二期（spec §2.4）：enrich 扩写层开关；本任务默认 false（默认切换是 T9）；audit_only/blueprint_id 时忽略 */
+  enrich?: boolean
+  /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh 纠正 + advisory enrich_lang_forced） */
+  outputLang?: 'en' | 'zh' | 'ja'
 }
 
 /** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
@@ -166,6 +172,47 @@ export function getAuthorJudgeDeps(): AuthorJudgeDeps | null {
   return _judgeDeps
 }
 
+/* ── 二期 T6（spec §2.1/§4/§11.3/§11.4）：enrich 接线 ── */
+
+/** enrich provider 注入 seam：生产缺省 createProductionCriticProvider（createSubagentCriticProvider 同款带超时包装，T5 carry②）；e2e/单测经此注入 mock */
+let _enrichProvider: CriticProvider | null = null
+
+export function setAuthorEnrichProvider(p: CriticProvider | null): void {
+  _enrichProvider = p
+}
+
+/** nameAnchors 硬上限（T5 carry③，接线层强制）：条目 ≤10、单条 original/anchored ≤100 字符 */
+const NAME_ANCHORS_MAX = 10
+const NAME_ANCHOR_LEN_MAX = 100
+
+/** 超限条目直接丢弃（不截断文本），发生丢弃 → trimmed=true（调用方标 advisory name_anchors_trimmed） */
+function trimNameAnchors(brief: EnrichedBrief): boolean {
+  const kept = brief.nameAnchors
+    .filter((a) => a.original.length <= NAME_ANCHOR_LEN_MAX && a.anchored.length <= NAME_ANCHOR_LEN_MAX)
+    .slice(0, NAME_ANCHORS_MAX)
+  const trimmed = kept.length !== brief.nameAnchors.length
+  brief.nameAnchors = kept
+  return trimmed
+}
+
+const BRIEF_DIMENSIONS = ['subject', 'scene', 'composition', 'lighting', 'color', 'style', 'mood'] as const
+
+/** brief → intent 权威输入文本：七维度逐条列出（标注 source）+ 权威指令 + 角色名固定映射（spec §2.1/§4/§11.4） */
+export function briefToIntentText(brief: EnrichedBrief): string {
+  const lines: string[] = [
+    '以下为 enrich 扩写后的七维度结构化 brief（brief 是权威输入，source=user 字段不可改，须原样保留；source=enriched 字段可按画面需要取舍）：',
+  ]
+  for (const dim of BRIEF_DIMENSIONS) {
+    for (const it of brief[dim]) lines.push(`- ${dim} [${it.source}] ${it.text}`)
+  }
+  lines.push(`- outputLang: ${brief.outputLang}`)
+  if (brief.nameAnchors.length > 0) {
+    lines.push('角色名固定映射，全程一致（不得改名、不得音译变体）：')
+    for (const a of brief.nameAnchors) lines.push(`- ${a.original} → ${a.anchored}`)
+  }
+  return lines.join('\n')
+}
+
 /** runStage 评审透传段（judge=off 时为 undefined → 同步旧路径零变化） */
 interface JudgeStageOpts {
   judge: 'fast' | 'strict'
@@ -218,6 +265,8 @@ function recordGenerationSafe(args: {
   stage: StageResult
   repairRounds: number
   advisories: string[]
+  /** 二期 spec §11.3：enrich 扩写标记（0|1） */
+  enrich: 0 | 1
 }): void {
   try {
     const dbPath = resolveFeedbackDbPath()
@@ -235,6 +284,7 @@ function recordGenerationSafe(args: {
       ...(judged ? { judge_score: (j as { score: number }).score, judge_verdict: (j as { verdict: string }).verdict } : {}),
       ...(args.stage.debate !== undefined ? { debate_json: JSON.stringify(args.stage.debate) } : {}),
       repair_rounds: args.repairRounds,
+      enrich: args.enrich,
     })
   } catch {
     args.advisories.push('feedback_write_failed')
@@ -532,12 +582,14 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影（取回旧蓝图改一字段重投影）' },
       judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'off', description: 'LLM 评审模式（spec §2.4）：off=不评审（缺省）；fast=单轮评审；strict=评审+对抗修正一轮。audit_only=true 时忽略' },
       judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
+      enrich: { type: 'boolean', default: false, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；缺省 false（默认切换是 T9）。audit_only/blueprint_id 时忽略' },
+      outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh 被纠正 + advisory enrich_lang_forced）' },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean }, exec: ToolRunContext) {
+    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja' }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
       const target = String(a.target || 'anima') as Target
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
@@ -581,7 +633,37 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
       // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
       const intentCfg = getDialect(target)?.intent
-      const intentBase = { target, input, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
+
+      // 二期 T6（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线（本任务默认 false，T9 切 true）。
+      // audit_only 已提前返回；blueprint_id 路径跳过 intent（无生句子输入）→ 不 enrich。
+      // 降级铁律：runEnrich 永不抛出；skipped → intent 吃原始输入 + advisory enrich_skipped，照常出稿。
+      let intentInput = input
+      const enrichAdvisories: string[] = []
+      let enrichFlag: 0 | 1 = 0
+      let enrichmentTop: Record<string, unknown> | undefined
+      if (a.enrich === true && !a.blueprint_id) {
+        const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx)
+        const eRes = await runEnrich({
+          target: target as EnrichTarget,
+          userInput: input,
+          outputLang: a.outputLang,
+          provider: enrichProvider,
+        })
+        if ('brief' in eRes) {
+          const brief = eRes.brief
+          if (target === 'anima' && a.outputLang === 'zh') enrichAdvisories.push('enrich_lang_forced') // T5 carry①：brief.outputLang 已被引擎强制 'en'
+          if (trimNameAnchors(brief)) enrichAdvisories.push('name_anchors_trimmed') // T5 carry③：条目 ≤10、单条 ≤100 字符
+          intentInput = briefToIntentText(brief)
+          enrichFlag = 1
+          enrichmentTop = { brief }
+        } else {
+          enrichAdvisories.push('enrich_skipped')
+          enrichFlag = 0
+          enrichmentTop = { skipped: true, reason: eRes.reason }
+        }
+      }
+
+      const intentBase = { target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
 
       // Task 6 评审接线（spec §2.4/§3.1）：judge_mode=off → judgeOpts=undefined，runStage 同步旧路径零变化
       const judgeMode = a.judge_mode ?? 'off'
@@ -673,8 +755,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           : stage
         ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
         const generationId = makeGenerationId()
-        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: trailAdvisories })
-        return assembleEnvelope(projStage, trailAdvisories, {
+        const blueprintAdvisories = [...enrichAdvisories, ...trailAdvisories]
+        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: blueprintAdvisories, enrich: enrichFlag })
+        return assembleEnvelope(projStage, blueprintAdvisories, {
           corrections,
           loopExhausted,
           joyExtraFiltered,
@@ -684,6 +767,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         }, {
           generation_id: generationId,
           ...judgeTopLevel(projStage),
+          ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
         }, {
           next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
           repair_hints,
@@ -719,8 +803,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
         : stage
       const generationId = makeGenerationId()
-      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: trailAdvisories })
-      return assembleEnvelope(projStage, trailAdvisories, {
+      const finalAdvisories = [...enrichAdvisories, ...trailAdvisories]
+      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: finalAdvisories, enrich: enrichFlag })
+      return assembleEnvelope(projStage, finalAdvisories, {
         corrections,
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
         joyExtraFiltered,
@@ -728,6 +813,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       }, {
         generation_id: generationId,
         ...judgeTopLevel(projStage),
+        ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
       })
     },
   })

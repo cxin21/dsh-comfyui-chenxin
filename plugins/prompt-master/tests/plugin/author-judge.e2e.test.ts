@@ -113,6 +113,28 @@ describe('规格4 judge LLM 全挂 → 降级出稿', () => {
   })
 })
 
+describe('规格7 fast + 规则 critical → judge skipped(rule_critical) 不投影（review F1, spec §2.5）', () => {
+  it('Envelope 无 judge/debate/judgeFeedback 字段；advisories 无 judge_skipped；闭环仍由 gates 驱动（loop_exhausted 照常）', async () => {
+    const critic = criticOf([PASS_JSON])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return { shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches.' }] } } as never })
+    // i2va + 无 references → ref_count 规则 critical → runStage 返回 judge={skipped:true,reason:'rule_critical'}
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', stage: 'i2va', judge_mode: 'fast' })))
+    expect(raw.ok).toBe(false)
+    // 跳过评审不是评审结果：judge 字段缺省
+    expect(raw.judge).toBeUndefined()
+    expect(raw.debate).toBeUndefined()
+    expect(raw.judgeFeedback).toBeUndefined()
+    // 评审根本没发生：critic 零调用；advisories 与现状一致（无 judge_skipped，rule critical 照常闭环）
+    expect(critic.calls).toBe(0)
+    expect(raw.advisories).not.toContain('judge_skipped')
+    expect(raw.advisories).toContain('loop_exhausted:true')
+    expect(raw.observability.corrections).toBe(2)
+    expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/)
+  })
+})
+
 describe('规格5 audit_only=true 不触发评审', () => {
   it('judge_mode=fast + audit_only → critic 零调用，judge/debate 缺省，generation_id 仍生成', async () => {
     const critic = criticOf([PASS_JSON])

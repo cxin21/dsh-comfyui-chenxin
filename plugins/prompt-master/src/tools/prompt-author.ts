@@ -171,8 +171,12 @@ export function makeGenerationId(): string {
 
 /** StageResult → Envelope 顶层评审投影：字段仅在评审实际发生时出现 */
 function judgeTopLevel(stage: StageResult): Record<string, unknown> {
+  const j = stage.judge
+  // F1（review fix1，控制器裁决方案 a，spec §2.5）：规则 critical 跳过评审不是评审结果——不投影 judge
+  // （闭环仍由 gates 驱动）；其他 skipped reason（如 LLM 故障）保持投影（judge_skipped advisory 可见）。
+  const ruleCriticalSkip = j !== undefined && 'skipped' in j && j.skipped === true && (j as { reason?: string }).reason === 'rule_critical'
   return {
-    ...(stage.judge !== undefined ? { judge: stage.judge } : {}),
+    ...(j !== undefined && !ruleCriticalSkip ? { judge: j } : {}),
     ...(stage.debate !== undefined ? { debate: stage.debate } : {}),
     ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
   }

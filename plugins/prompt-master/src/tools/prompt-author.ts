@@ -26,6 +26,7 @@ import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 import { recordGeneration } from '../pe-framework/feedback/store.js'
 import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
+import { tokensOf } from '../pe-framework/tokens.js'
 import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
 import { defaultFeedbackDbPath } from './prompt-feedback.js'
 import { createHash } from 'node:crypto'
@@ -306,18 +307,9 @@ function judgeTopLevel(stage: StageResult): Record<string, unknown> {
 
 /* ── T4（spec §10.2-A3/A4, §10.4-A13）：makeRevisionProvider v2 —— 稿内编辑 + praise 锚点 + 结构化 rebuttals ── */
 
-/** 与 eval/critic.ts tokensOf 同款词元集（实词交集判定；CJK/假名取 2 字符 bigram） */
+/** 与 eval/critic.ts tokensOf 同款词元集（F1 三期 Task 2：改为引用公共 util pe-framework/tokens.ts） */
 function patchTokens(s: string): Set<string> {
-  const out = new Set<string>()
-  for (const m of String(s).toLowerCase().matchAll(/[a-z0-9\u4e00-\u9fff\u3040-\u30ff\uff66-\uff9f]+/g)) {
-    const run = m[0]
-    if (/[a-z0-9]/.test(run[0]) && /[a-z0-9]/.test(run[run.length - 1])) {
-      if (run.length >= 2) out.add(run)
-    } else {
-      for (let i = 0; i + 1 < run.length; i++) out.add(run.slice(i, i + 2))
-    }
-  }
-  return out
+  return tokensOf(s)
 }
 
 function patchIntersects(a: string, b: string): boolean {

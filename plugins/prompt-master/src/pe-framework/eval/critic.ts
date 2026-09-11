@@ -12,6 +12,7 @@
 import type { DialectRubric } from './rubrics/contract.js'
 import type { EvidenceBridge, EvidenceResult, EvidenceToolId } from './evidence.js'
 import type { AuditGate } from '../types.js'
+import { tokensOf } from '../tokens.js'
 
 export type CriticFinding = {
   /** 首轮内稳定编号 f1…fN（LLM 不产 id，parse 后由代码编号；复审/rebuttal/回查引用此 id） */
@@ -82,20 +83,7 @@ function bridgeToolsOf(bridge: EvidenceBridge | undefined): EvidenceToolId[] | n
 }
 
 /* ── A1 关键词交集判定（spec §10.5）：两侧各取 ≥2 字符的词/词元集合（规范化小写），交集非空即通过 ── */
-
-function tokensOf(s: string): Set<string> {
-  const out = new Set<string>()
-  for (const m of s.toLowerCase().matchAll(/[a-z0-9\u4e00-\u9fff\u3040-\u30ff\uff66-\uff9f]+/g)) {
-    const run = m[0]
-    if (/[a-z0-9]/.test(run[0]) && /[a-z0-9]/.test(run[run.length - 1])) {
-      if (run.length >= 2) out.add(run)
-    } else {
-      // CJK/假名连串：无空格分词 → 以 2 字符词元（bigram）为最小单元，单字符不成词元
-      for (let i = 0; i + 1 < run.length; i++) out.add(run.slice(i, i + 2))
-    }
-  }
-  return out
-}
+/* F1（三期 Task 2）：tokensOf 抽公共 util（pe-framework/tokens.ts），dialect 去重共用同一实现 */
 
 function evidenceIntersects(summary: string, claimed: string): boolean {
   const a = tokensOf(summary)

@@ -4,6 +4,7 @@
  * A14 修正：canonical/alias → 直用 catalog.prompt_form；fuzzy/miss → 保留原文 + catalog_miss advisory/assumption（不自动替换）。
  */
 import { SLOT_ORDER } from '../anima.js'
+import { tokensCoveredBy, tokensOf } from '../tokens.js'
 import { normalizeTag, searchCatalog, overlayStatus, queryCatalogInternal, type CatalogHit } from './anima-catalog.js'
 import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
@@ -137,6 +138,27 @@ export function slotOf(slots: AnimaSlots, key: string): string[] | undefined {
   return (slots as Record<string, string[] | undefined>)[key]
 }
 
+/** F1：narrative 按句切分（。！？.!?），句末标点保留在前句尾部；空串/纯标点片段剔除 */
+function splitSentences(text: string): string[] {
+  return (text.match(/[^。！？.!?]*[。！？.!?]+|[^。！？.!?]+/g) ?? [])
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** F1：切分后句子重拼接——拉丁句末标点后接拉丁/数字开头时补一个空格，CJK 相邻不加空格（还原排版） */
+function joinSentences(parts: string[]): string {
+  let out = ''
+  for (const p of parts) {
+    if (!out) {
+      out = p
+    } else {
+      if (/[a-z0-9,.!?]$/i.test(out) && /^[a-z0-9]/i.test(p)) out += ' '
+      out += p
+    }
+  }
+  return out
+}
+
 /** grounding.py ground 移植：canonical/alias → Citation；fuzzy/miss → match_type 'miss'（原文保留主体在 compile 层） */
 export function groundSlotTags(slots: AnimaSlots, search: (tag: string) => CatalogHit[]): Map<string, AnimaCitation> {
   const citations = new Map<string, AnimaCitation>()
@@ -229,9 +251,19 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       pushSeg(text, 'positive', citation && citation.match_type && GROUNDED.has(citation.match_type) ? 'grounded' : 'user-fuzzy', base + tagIndex, slotName, citation ?? null)
     })
   })
-  // 3d: narrative 最后
+  // 3d: narrative 最后（F1 三期 Task 2：与已有槽位段实词去重——确定性，零 LLM，发生在 audit 之前）
   if (slots.narrative && slots.narrative.trim()) {
-    pushSeg(slots.narrative.trim(), 'positive', 'narrative', 2000)
+    const trimmed = slots.narrative.trim()
+    // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集
+    const covered = new Set<string>()
+    for (const seg of positive) for (const t of tokensOf(seg)) covered.add(t)
+    // 按句切分（。！？.!?，保留句末标点）：只追加实词集合未被覆盖的句子；
+    // 全覆盖 → 不追加该 narrative 段；无 ≥2 字符词元的纯标点/单字符句视为被覆盖
+    const kept = splitSentences(trimmed).filter((s) => {
+      const toks = tokensOf(s)
+      return toks.size > 0 && !tokensCoveredBy(covered, toks)
+    })
+    if (kept.length) pushSeg(joinSentences(kept), 'positive', 'narrative', 2000)
   }
   // 3e: exclusions → negative（原样）
   for (const e of slots.exclusions ?? []) pushSeg(String(e), 'negative', 'exclusion', 900)

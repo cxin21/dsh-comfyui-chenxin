@@ -48,7 +48,7 @@ export interface CompileAnimaResult {
   substitutions: string[]
   /** F2：替换计数（observability.corrections 的来源） */
   corrections: number
-  /** F5（三期 Task 4）：catalog 后处理（applyCanonicalSubstitutions）耗时 ms；纯可观测 */
+  /** F5（三期 Task 4）：catalog 后处理耗时 ms（R7-T2 起窗口含第二轮 narrative 去重，纯可观测） */
   catalogMs: number
 }
 
@@ -191,6 +191,21 @@ function dedupTagPhrases(s: string, covered: ReadonlySet<string>): string | null
   return kept.length ? kept.join(', ') : null
 }
 
+/** R7-T2（Round 7 Task 2）：两轮 narrative 短语去重统一封装——第一轮=compile 装配层（audit 前），
+ *  第二轮=grounding 替换之后（audit 后）的段级清理。对每段输入文本：按句切分 → dedupTagPhrases
+ *  （句级/短语级覆盖判定 + 叙述前缀剥离，散文句保护内置）→ 未覆盖内容 joinSentences 重建；
+ *  整段全覆盖 → 该段丢弃。判定逻辑零新增，仅编排复用。 */
+function dedupNarrativeSegments(texts: string[], covered: ReadonlySet<string>): string[] {
+  const out: string[] = []
+  for (const text of texts) {
+    const kept = splitSentences(text)
+      .map((s) => dedupTagPhrases(stripNarrativePrefix(s), covered))
+      .filter((s): s is string => s !== null && s.length > 0)
+    if (kept.length) out.push(joinSentences(kept))
+  }
+  return out
+}
+
 /** grounding.py ground 移植：canonical/alias → Citation；fuzzy/miss → match_type 'miss'（原文保留主体在 compile 层） */
 export function groundSlotTags(slots: AnimaSlots, search: (tag: string) => CatalogHit[]): Map<string, AnimaCitation> {
   const citations = new Map<string, AnimaCitation>()
@@ -285,16 +300,12 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   })
   // 3d: narrative 最后（F1 三期 Task 2：与已有槽位段实词去重——确定性，零 LLM，发生在 audit 之前）
   if (slots.narrative && slots.narrative.trim()) {
-    const trimmed = slots.narrative.trim()
-    // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集
+    // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集；
+    // 全部被覆盖 → 不追加该 narrative 段（第一轮，与 R7-T2 第二轮共用 dedupNarrativeSegments）
     const covered = new Set<string>()
     for (const seg of positive) for (const t of tokensOf(seg)) covered.add(t)
-    // 按句切分（。！？.!?，保留句末标点）：句级覆盖判定；无句末标点且含逗号的 tag 串句再按
-    // 短语级判定（fix2）；全部被覆盖 → 不追加该 narrative 段；纯标点/单字符句视为被覆盖
-    const kept = splitSentences(trimmed)
-      .map((s) => dedupTagPhrases(stripNarrativePrefix(s), covered))
-      .filter((s): s is string => s !== null && s.length > 0)
-    if (kept.length) pushSeg(joinSentences(kept), 'positive', 'narrative', 2000)
+    const kept = dedupNarrativeSegments([slots.narrative.trim()], covered)
+    if (kept.length) pushSeg(kept[0], 'positive', 'narrative', 2000)
   }
   // 3e: exclusions → negative（原样）
   for (const e of slots.exclusions ?? []) pushSeg(String(e), 'negative', 'exclusion', 900)
@@ -316,10 +327,10 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   // 工作区间 12-50 之外的短 brief（含本规范自测用例 count_gender:['1girl']）是常规合法输入，
   // 该软性计数 advisory（闭环内自修正项）不降级 inspection 阶段。
   // F2（三期 Task 1）：audit 之后确定性后处理——catalog_miss 的 canonical/alias 候选自动采纳；
-  // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM
+  // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM。
+  // R7-T2：catalogMs 计时窗口扩展到含第二轮 narrative 去重的整个 audit 后处理阶段（纯可观测）
   const tCatalog0 = performance.now()
   const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search })
-  const catalogMs = performance.now() - tCatalog0
   if (subst.corrections > 0) {
     positiveText = subst.positive
     // segments 投影同步（文本级替换；citation 保持 miss 溯源）
@@ -335,7 +346,43 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       if (aidx >= 0) assumptions.splice(aidx, 1)
     }
   }
-  const gates = subst.gates
+  let gates = subst.gates
+  // R7-T2（Round 7 Task 2，F1 残余）：第二轮 narrative 短语去重——第一轮覆盖判定发生在 grounding
+  // 替换（装配期 prompt_form 替换 / F2 audit 后替换）之前，替换改变段面 token 集后短语级残余漏网
+  // （三期审计 B1 实证：双 `moon gate`）。覆盖集 = 替换后全部非 narrative positive 段词元并集
+  // ∪ 槽位原文 tag 词元——grounding 把槽位文本换成 canonical 形态后，原文侧词元（beside/thin/mist/…）
+  // 从段面消失，不补入原文侧则 narrative 中与「替换前原文」相同的短语漏判。全覆盖 → 整段移除，
+  // 部分覆盖 → 用保留短语重建段文本；有清理则重跑 audit（gates 以最终重跑为准）。判定复用
+  // dedupNarrativeSegments（与第一轮同一封装），幂等：覆盖集不受第二轮清理影响，重跑无变化。
+  const narrSegs = segments.filter((s) => s.channel === 'positive' && s.origin === 'narrative')
+  if (narrSegs.length) {
+    const covered = new Set<string>()
+    for (const seg of segments) {
+      if (seg.channel !== 'positive' || seg.origin === 'narrative') continue
+      for (const t of tokensOf(seg.text)) covered.add(t)
+    }
+    for (const key of SLOT_ORDER) {
+      for (const raw of slotOf(slots, key) ?? []) for (const t of tokensOf(String(raw))) covered.add(t)
+    }
+    const texts = narrSegs.map((s) => s.text)
+    const kept = dedupNarrativeSegments(texts, covered)
+    if (kept.length !== texts.length || kept.some((t, i) => t !== texts[i])) {
+      // 按序回写：保留段重建文本，整段全覆盖的 narrative 段移除（segment_id 保持派生序，不重编号）
+      const removed = new Set(narrSegs.slice(kept.length))
+      let k = 0
+      for (const seg of narrSegs) {
+        if (removed.has(seg)) continue
+        seg.text = kept[k++]
+      }
+      for (let i = segments.length - 1; i >= 0; i--) {
+        if (removed.has(segments[i])) segments.splice(i, 1)
+      }
+      positiveText = segments.filter((s) => s.channel === 'positive').map((s) => s.text).join(', ')
+      // 重跑 audit 用替换后的槽位视图（subst.effectiveSlots），gates 以最终重跑为准
+      gates = auditAnima(positiveText, negativeText, { variant, slots: subst.effectiveSlots, search })
+    }
+  }
+  const catalogMs = performance.now() - tCatalog0
   const grounding: 'PASS' | 'ADVISORY' = [...citations.values()].some((c) => c.record_id) ? 'PASS' : 'ADVISORY'
   const inspection: 'PASS' | 'ADVISORY' = gates.some((g) => g.severity === 'critical' || (g.severity === 'important' && g.rule !== 'tag_count_out_of_range')) ? 'ADVISORY' : 'PASS'
 
@@ -506,6 +553,9 @@ export interface CanonicalSubstitutionResult {
   advisories: string[]
   /** 替换后重跑的 audit gates（无替换时为当次 audit gates） */
   gates: AuditGate[]
+  /** R7-T2：替换生效后的槽位视图（原文片段已换 canonical tag；无 slots 时 undefined）——
+   *  供 compile 层在后续段级清理后以同一视图重跑 audit，避免重复推导 */
+  effectiveSlots?: AnimaSlots
 }
 
 /**
@@ -559,7 +609,7 @@ export function applyCanonicalSubstitutions(
     return piece
   })
   if (!replacements.length) {
-    return { positive, corrections: 0, replacements, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search }) }
+    return { positive, corrections: 0, replacements, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search }), effectiveSlots: opts?.slots }
   }
   const newPositive = out.join(', ')
   // 重跑 audit 用替换后的槽位视图（原文片段已换成 canonical tag → 对应 miss gate 消失）
@@ -580,6 +630,7 @@ export function applyCanonicalSubstitutions(
     replacements,
     advisories,
     gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, search }),
+    effectiveSlots,
   }
 }
 

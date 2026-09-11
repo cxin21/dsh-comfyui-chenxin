@@ -41,6 +41,8 @@ export interface JudgeReviewInput {
   stage?: CriticStage
   /** stage='revision' 必带 */
   firstFindings?: CriticFinding[]
+  /** stage='revision' 时由调用方（Task 5 装配）传入修正说明 */
+  revisionNote?: string
 }
 
 /* ── stripFences（自 eval/judge.ts 抄，纯函数） ── */
@@ -125,9 +127,13 @@ function buildUser(input: JudgeReviewInput): string {
     `可用证据工具：${input.bridge.list().join(', ') || '（无）'}`,
   ]
   if (input.stage === 'revision') {
+    const note = typeof input.revisionNote === 'string' && input.revisionNote.trim().length > 0
+      ? input.revisionNote
+      : '未提供'
     parts.push(
       '',
-      '## revision 轮：以下是首轮评审 findings，请核对编译产物的修正说明与首轮问题是否已解决，并按同一 schema 重新评审。',
+      '## revision 轮：以下是首轮评审 findings 与本轮修正说明，请核对首轮问题是否已解决，并按同一 schema 重新评审。',
+      `修正说明：${note}`,
       '首轮 findings：',
       JSON.stringify(input.firstFindings ?? []),
     )
@@ -155,19 +161,19 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
     const parsed = parseOutcome(raw)
     if (!parsed) return skipped('invalid_schema_or_parse')
 
-    // 规格 4：证据铁律——缺 evidence 三键任一的条目丢弃
-    const findings = parsed.findings.filter(hasValidEvidence)
+    // 规格 3（防御归一）：只作用于 LLM 原生 verdict=pass——pass 但 score < passThreshold 或含 blocker → needs_revision
+    const findings = parsed.findings.filter(hasValidEvidence) as CriticFinding[]
     let verdict = parsed.verdict
-
-    // 规格 4：全丢后 findings 为空且原 verdict 是 needs_revision → 改判 pass（无有效证据不得打回）
-    if (verdict === 'needs_revision' && findings.length === 0) {
-      verdict = 'pass'
-    }
-
-    // 规格 3：防御归一——LLM 判 pass 但 score < passThreshold 或含 blocker → needs_revision
-    const hasBlocker = (findings as CriticFinding[]).some((f) => f.severity === 'blocker')
+    const hasBlocker = findings.some((f) => f.severity === 'blocker')
     if (verdict === 'pass' && (parsed.score < input.rubric.passThreshold || hasBlocker)) {
       verdict = 'needs_revision'
+    }
+
+    // 规格 4（证据铁律，终局）：缺 evidence 三键任一的条目丢弃；
+    // 全丢后 findings 为空且 verdict 是 needs_revision → 改判 pass（无有效证据不得打回）。
+    // 终局生效：对 LLM 原生 pass / needs_revision（含规格 3 改判）都适用，其后不再有改判。
+    if (verdict === 'needs_revision' && findings.length === 0) {
+      verdict = 'pass'
     }
 
     return { verdict, score: parsed.score, findings: findings as CriticFinding[], praise: parsed.praise }

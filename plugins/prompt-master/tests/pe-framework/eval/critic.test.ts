@@ -128,6 +128,22 @@ describe('judgeReview', () => {
     expect((r as any).findings).toHaveLength(2)
   })
 
+  it('规格4-F1：needs_revision + 零有效 findings + score=50 → 终局改判 pass（规格4 对 needs_revision 终局生效，不再被规格3 低分改回）', async () => {
+    const provider: CriticProvider = async () => ok('needs_revision', { score: 50, findings: [] })
+    const r = await judgeReview({ ...baseInput(), provider })
+    expect(r).toMatchObject({ verdict: 'pass', score: 50 })
+    expect((r as any).findings).toHaveLength(0)
+  })
+
+  it('规格4-F1b：needs_revision + 零有效 findings + findings 含 blocker（已丢弃）→ 仍改判 pass', async () => {
+    const provider: CriticProvider = async () => ok('needs_revision', {
+      score: 50,
+      findings: [finding({ severity: 'blocker', evidence: { tool: 'catalog', query: 'x' } })], // 无效证据，被丢弃
+    })
+    const r = await judgeReview({ ...baseInput(), provider })
+    expect(r).toMatchObject({ verdict: 'pass' })
+  })
+
   it('规格5a：provider 抛错 → skipped，绝不抛出', async () => {
     const provider: CriticProvider = async () => { throw new Error('boom') }
     const r = await judgeReview({ ...baseInput(), provider })
@@ -163,6 +179,43 @@ describe('judgeReview', () => {
     expect(req.user).toContain('revision')
     expect(req.user).toContain('tag 顺序错')
     expect(req.user).toContain(JSON.stringify(firstFindings))
+  })
+
+  it('规格6b：revision 提供 revisionNote → 注入 user payload', async () => {
+    const provider = vi.fn().mockResolvedValue(ok('pass'))
+    await judgeReview({
+      ...baseInput(),
+      provider,
+      stage: 'revision',
+      firstFindings: [finding()] as any,
+      revisionNote: '已把 1girl 前移并补齐质量 tag',
+    })
+    const req = provider.mock.calls[0][0]
+    expect(req.user).toContain('已把 1girl 前移并补齐质量 tag')
+  })
+
+  it('规格6c：revision 缺省 revisionNote → payload 明确写「修正说明：未提供」，并保留 firstFindings + compiled', async () => {
+    const provider = vi.fn().mockResolvedValue(ok('pass'))
+    await judgeReview({
+      ...baseInput(),
+      provider,
+      stage: 'revision',
+      firstFindings: [finding()] as any,
+    })
+    const req = provider.mock.calls[0][0]
+    expect(req.user).toContain('修正说明：未提供')
+    expect(req.user).toContain('tag 顺序错')
+    expect(req.user).toContain('1girl, smile')
+    // 不再引导核对不存在的「修正说明」字段
+    expect(req.user).not.toContain('核对编译产物的修正说明')
+  })
+
+  it('first 模式不受 revisionNote 影响：user 不含修正说明节', async () => {
+    const provider = vi.fn().mockResolvedValue(ok('pass'))
+    await judgeReview({ ...baseInput(), provider, revisionNote: '不应出现' })
+    const req = provider.mock.calls[0][0]
+    expect(req.user).not.toContain('不应出现')
+    expect(req.user).not.toContain('修正说明')
   })
 
   it('装配：createSubagentCriticProvider 用 ctx.subagents.start 装配，生命周期 start→result→dispose，文本 strip fence 后可解析', async () => {

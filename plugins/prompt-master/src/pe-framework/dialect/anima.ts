@@ -138,11 +138,21 @@ export function slotOf(slots: AnimaSlots, key: string): string[] | undefined {
   return (slots as Record<string, string[] | undefined>)[key]
 }
 
-/** F1：narrative 按句切分（。！？.!?），句末标点保留在前句尾部；空串/纯标点片段剔除 */
+/** F1：narrative 按句切分（。！？!? 恒切；`.` 仅在前后不均为数字时切——小数 1.5 不切分，`\.\d`
+ *  作为片段内字符被消耗，可跨小数继续匹配），句末标点保留在前句尾部；空串/纯标点片段剔除；
+ *  无标点尾片段由第二分支保留（不静默丢弃） */
 function splitSentences(text: string): string[] {
-  return (text.match(/[^。！？.!?]*[。！？.!?]+|[^。！？.!?]+/g) ?? [])
+  return (text.match(/(?:[^。！？.!?]|\.\d)*(?:[。！？!?]+|(?<!\d)\.(?!\d))+|(?:[^。！？.!?]|\.\d)+/g) ?? [])
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+/** F1 fix1（review Important-1）：去重入口剥离已知叙述前缀（确定性正常化，零 LLM）——
+ *  一期真实数据形状 `Scene details: …` 的 scene/details 词元会污染覆盖判定，使去重永不触发 */
+const NARRATIVE_PREFIX_RE = /^(?:scene\s+details|scene)\s*:\s*/i
+
+function stripNarrativePrefix(s: string): string {
+  return s.replace(NARRATIVE_PREFIX_RE, '')
 }
 
 /** F1：切分后句子重拼接——拉丁句末标点后接拉丁/数字开头时补一个空格，CJK 相邻不加空格（还原排版） */
@@ -260,7 +270,7 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     // 按句切分（。！？.!?，保留句末标点）：只追加实词集合未被覆盖的句子；
     // 全覆盖 → 不追加该 narrative 段；无 ≥2 字符词元的纯标点/单字符句视为被覆盖
     const kept = splitSentences(trimmed).filter((s) => {
-      const toks = tokensOf(s)
+      const toks = tokensOf(stripNarrativePrefix(s))
       return toks.size > 0 && !tokensCoveredBy(covered, toks)
     })
     if (kept.length) pushSeg(joinSentences(kept), 'positive', 'narrative', 2000)

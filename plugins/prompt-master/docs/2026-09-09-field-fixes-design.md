@@ -7,7 +7,7 @@
 
 现象：positive = 槽位短语串 + 末尾 narrative 兜底段（priority 2000、slot=null、origin=narrative），内容完全重复，审计打十几个 `duplicate_segment` important 但不触发修正（important ≠ critical），带病出稿。
 
-修复（编译层，确定性）：`compileAnima` 装配 positive 时，若 narrative 段的实词集合被已有槽位段集合覆盖（复用 T2 的实词交集判定逻辑，抽公共 util），则**不追加**该 narrative 段；部分覆盖时按句切分、只追加未被覆盖的句子。零 LLM。
+修复（编译层，确定性）：`compileAnima` 装配 positive 时，若 narrative 段的实词集合被已有槽位段集合覆盖（实词词元语义取自 T1 critic/prompt-author 的 `tokensOf`，三期已抽公共 util `src/pe-framework/tokens.ts`，另含 `tokensCoveredBy` 包含判定），则**不追加**该 narrative 段；部分覆盖时按句切分、只追加未被覆盖的句子。零 LLM。
 
 ## F2（P0）catalog_miss 的 canonical 候选自动采纳
 

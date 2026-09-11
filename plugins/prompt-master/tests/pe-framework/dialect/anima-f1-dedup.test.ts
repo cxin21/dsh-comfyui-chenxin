@@ -83,4 +83,24 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
     )
     expect(r3.segments.some((s) => s.origin === 'narrative')).toBe(false)
   })
+
+  it('规格7 一期会话同款形状：`Scene details:` 前缀剥离后去重仍触发', () => {
+    const r = compileAnima(
+      { count_gender: ['1girl'], scene: ['moon gate', 'weeping willows by the pond'], narrative: 'Scene details: moon gate, weeping willows by the pond' },
+      { variant: 'base', search: nullSearch },
+    )
+    expect(r.segments.some((s) => s.origin === 'narrative')).toBe(false)
+    expect(r.positive.endsWith('weeping willows by the pond')).toBe(true)
+  })
+
+  it('规格8 Minor-1：小数点不切句（`.` 前后均为数字），尾片段不静默丢弃', () => {
+    const r = compileAnima(
+      { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'score 1.5 is high. a lantern glows' },
+      { variant: 'base', search: nullSearch },
+    )
+    const segs = r.segments.filter((s) => s.origin === 'narrative')
+    expect(segs).toHaveLength(1)
+    // '1.5' 未被切成 'score 1' / '5 is high' 两个片段；无标点尾片段 'a lantern glows' 保留
+    expect(segs[0].text).toBe('score 1.5 is high. a lantern glows')
+  })
 })

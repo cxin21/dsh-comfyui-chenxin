@@ -10,7 +10,7 @@
  * 降级铁律（spec §2.5）：本模块任何故障路径都返回 { skipped: true, reason }，绝不抛出。
  */
 import type { DialectRubric } from './rubrics/contract.js'
-import type { EvidenceBridge } from './evidence.js'
+import type { EvidenceBridge, EvidenceResult, EvidenceToolId } from './evidence.js'
 import type { AuditGate } from '../types.js'
 
 export type CriticFinding = {
@@ -19,15 +19,15 @@ export type CriticFinding = {
   severity: 'blocker' | 'major' | 'minor'
   dimension: string
   problem: string
-  /** evidenceOptional 维度的 finding 可无证据（此时带 evidenceAssumed: true） */
-  evidence?: { tool: string; query: string; result: string }
+  /** evidenceOptional 维度的 finding 可无证据（此时带 evidenceAssumed: true）；verified 由回查复核写入 */
+  evidence?: { tool: string; query: string; result: string; verified?: boolean }
   requiredFix: string
-  /** 证据可选维度放行标记（spec §10.2-A5） */
+  /** 证据可选维度放行标记（spec §10.2-A5；bridge 缺工具的维度自动获得，spec §10.1-A1 规格7） */
   evidenceAssumed?: boolean
 }
 
 export type CriticOutcome =
-  | { verdict: 'pass' | 'needs_revision'; score: number; findings: CriticFinding[]; praise: string[] }
+  | { verdict: 'pass' | 'needs_revision'; score: number; findings: CriticFinding[]; praise: string[]; /** 回查未能执行/执行失败：findings 未经验证（runStage 转 evidence_unverified advisory；spec §10.1-A1 规格5） */ evidenceUnverified?: boolean }
   | { skipped: true; reason: string }
 
 /** 评审 LLM 注入点：Task 5 用 subagent seam 装配，测试用 mock */
@@ -38,7 +38,8 @@ export type CriticStage = 'first' | 'revision'
 export interface JudgeReviewInput {
   target: 'anima' | 'h3'
   rubric: DialectRubric
-  bridge: EvidenceBridge
+  /** 可选（spec §10.1-A1 规格8）：未传 = 跳过证据回查（findings 全保留 + evidenceUnverified 标志），既有 off 评审调用方零改动 */
+  bridge?: EvidenceBridge
   compiled: unknown
   ruleGates: AuditGate[]
   originalIntent: string
@@ -60,24 +61,65 @@ function skipped(reason: string): CriticOutcome {
   return { skipped: true, reason }
 }
 
+/** bridge 工具列表安全读取：bridge 未传或 list 抛错 → null（= bridge 整体不可用，spec §10.1-A1 规格5） */
+function bridgeToolsOf(bridge: EvidenceBridge | undefined): EvidenceToolId[] | null {
+  if (bridge === undefined) return null
+  try {
+    return bridge.list()
+  } catch {
+    return null
+  }
+}
+
+/* ── A1 关键词交集判定（spec §10.5）：两侧各取 ≥2 字符的词/词元集合（规范化小写），交集非空即通过 ── */
+
+function tokensOf(s: string): Set<string> {
+  const out = new Set<string>()
+  for (const m of s.toLowerCase().matchAll(/[a-z0-9\u4e00-\u9fff\u3040-\u30ff\uff66-\uff9f]+/g)) {
+    const run = m[0]
+    if (/[a-z0-9]/.test(run[0]) && /[a-z0-9]/.test(run[run.length - 1])) {
+      if (run.length >= 2) out.add(run)
+    } else {
+      // CJK/假名连串：无空格分词 → 以 2 字符词元（bigram）为最小单元，单字符不成词元
+      for (let i = 0; i + 1 < run.length; i++) out.add(run.slice(i, i + 2))
+    }
+  }
+  return out
+}
+
+function evidenceIntersects(summary: string, claimed: string): boolean {
+  const a = tokensOf(summary)
+  for (const t of tokensOf(claimed)) {
+    if (a.has(t)) return true
+  }
+  return false
+}
+
 /**
- * 证据铁律过滤（spec §10.2-A5）：evidence 三键（tool/query/result）任一缺失（含空串）的 finding 丢弃；
- * 例外：finding.dimension 对应维度 evidenceOptional===true → 无证据也放行，加 evidenceAssumed: true。
+ * 证据铁律过滤（spec §10.2-A5 + §10.1-A1 规格7）：evidence 三键（tool/query/result）任一缺失（含空串）
+ * 的 finding 丢弃；例外放行（加 evidenceAssumed: true）：
+ * - finding.dimension 对应维度 evidenceOptional===true；
+ * - bridge 缺 rubric 声明的某工具（available 集合不含）→ 声明该工具的维度自动视为 evidenceOptional；
+ * - finding 携带 evidence 但其 tool 不在 available 集合 → 放行（无工具可回查，不因无法验证而丢弃）。
  * 返回 null 表示该 finding 无效（丢弃）。首个有效 id 由调用方在过滤后统一编号。
  */
-function toValidFinding(f: unknown, rubric: DialectRubric): CriticFinding | null {
+function toValidFinding(f: unknown, rubric: DialectRubric, available: ReadonlySet<EvidenceToolId>): CriticFinding | null {
   const ev = (f as { evidence?: unknown })?.evidence
   if (typeof ev === 'object' && ev !== null) {
     const e = ev as Record<string, unknown>
     if (typeof e['tool'] === 'string' && e['tool'].length > 0
       && typeof e['query'] === 'string' && e['query'].length > 0
       && typeof e['result'] === 'string' && e['result'].length > 0) {
+      if (!available.has(e['tool'] as EvidenceToolId)) {
+        return { ...(f as CriticFinding), evidenceAssumed: true }
+      }
       return { ...(f as CriticFinding) }
     }
   }
   const dim = (f as { dimension?: unknown })?.dimension
   const dimDef = typeof dim === 'string' ? rubric.dimensions.find((d) => d.id === dim) : undefined
-  if (dimDef?.evidenceOptional === true) {
+  const bridgeMissingTool = rubric.evidenceTools.some((t) => !available.has(t))
+  if (dimDef?.evidenceOptional === true || bridgeMissingTool) {
     return { ...(f as CriticFinding), evidenceAssumed: true }
   }
   return null
@@ -156,6 +198,8 @@ ${dimScoreLines}
 }
 
 function buildUser(input: JudgeReviewInput): string {
+  // bridge 未传 / list 抛错（整体不可用）→ 工具列表空（不阻断 provider 调用；回查阶段再标 evidenceUnverified）
+  const tools = bridgeToolsOf(input.bridge)
   const parts: string[] = [
     `target=${input.target}`,
     '',
@@ -164,7 +208,7 @@ function buildUser(input: JudgeReviewInput): string {
     '',
     `用户原意：${input.originalIntent}`,
     '',
-    `可用证据工具：${input.bridge.list().join(', ') || '（无）'}`,
+    `可用证据工具：${(tools ?? []).join(', ') || '（无）'}`,
   ]
   if (input.stage === 'revision') {
     const note = typeof input.revisionNote === 'string' && input.revisionNote.trim().length > 0
@@ -209,10 +253,40 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
     )
 
     // 证据铁律（含 A5 evidenceOptional 放行）→ 有效 findings 按序编号 f1…fN
-    const findings = parsed.findings
-      .map((f) => toValidFinding(f, input.rubric))
+    let findings = parsed.findings
+      .map((f) => toValidFinding(f, input.rubric, new Set(bridgeToolsOf(input.bridge) ?? [])))
       .filter((f): f is CriticFinding => f !== null)
       .map((f, i) => ({ ...f, id: `f${i + 1}` }))
+
+    // A1 证据回查复核（spec §10.1-A1）：发生在归一（规格3/规格4）之前。
+    // 对每条携带 evidence 且非 evidenceAssumed 的 finding 调 bridge.query(tool, query)：
+    // ok=false → 丢；summary 与声称 result 实词交集为空（编造）→ 丢；命中 → evidence.verified=true。
+    // 单条 query 抛错 → 保留 + evidenceUnverified 全局标志；bridge 整体不可用（未传/list 抛错）→
+    // 跳过全部回查，findings 全保留 + evidenceUnverified。
+    let evidenceUnverified = false
+    if (bridgeToolsOf(input.bridge) === null) {
+      evidenceUnverified = true
+    } else {
+      const kept: CriticFinding[] = []
+      for (const f of findings) {
+        if (f.evidence === undefined || f.evidenceAssumed === true) {
+          kept.push(f)
+          continue
+        }
+        let res: EvidenceResult
+        try {
+          res = await input.bridge!.query(f.evidence.tool as EvidenceToolId, f.evidence.query)
+        } catch {
+          evidenceUnverified = true
+          kept.push(f)
+          continue
+        }
+        if (!res.ok) continue
+        if (!evidenceIntersects(res.summary, f.evidence.result)) continue
+        kept.push({ ...f, evidence: { ...f.evidence, verified: true } })
+      }
+      findings = kept
+    }
 
     // 规格 3（防御归一）：只作用于 LLM 原生 verdict=pass——pass 但加权分 < passThreshold 或含 blocker → needs_revision
     let verdict = parsed.verdict
@@ -228,7 +302,13 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
       verdict = 'pass'
     }
 
-    return { verdict, score, findings, praise: parsed.praise }
+    return {
+      verdict,
+      score,
+      findings,
+      praise: parsed.praise,
+      ...(evidenceUnverified ? { evidenceUnverified: true as const } : {}),
+    }
   } catch (err) {
     return skipped(`critic_error:${err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120)}`)
   }

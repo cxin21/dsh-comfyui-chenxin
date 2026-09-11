@@ -185,6 +185,13 @@ async function runJudgeStage(
 
   const debate: DebateRound[] = []
 
+  /** A1（spec §10.1-A1 规格5）：评审回查未验证 → evidence_unverified advisory 透传（不重复 push） */
+  const noteUnverified = (o: CriticOutcome): void => {
+    if (!('skipped' in o) && o.evidenceUnverified === true && !advisories.includes('evidence_unverified')) {
+      advisories.push('evidence_unverified')
+    }
+  }
+
   // 首评
   let outcome: CriticOutcome = await review({ compiled: compiledCur, ruleGates: gates })
   if ('skipped' in outcome) {
@@ -193,6 +200,7 @@ async function runJudgeStage(
     return finish(outcome, [])
   }
   debate.push({ round: 1, reviewer: reviewerOf(outcome) })
+  noteUnverified(outcome)
 
   const revisionProvider = judgeMode === 'strict' ? input.revisionProvider : undefined
 
@@ -227,6 +235,7 @@ async function runJudgeStage(
       return finish(second, debate)
     }
     debate.push({ round: 2, reviewer: reviewerOf(second), reviser })
+    noteUnverified(second)
     outcome = second
   }
 

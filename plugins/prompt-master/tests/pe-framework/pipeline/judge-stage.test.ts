@@ -255,6 +255,50 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
   })
 })
 
+describe('A1 证据回查复核（spec §10.1-A1）：runJudgeStage 管线交互', () => {
+  beforeEach(() => __resetDialectsForTests())
+
+  it('回查命中 → judge.findings[0].evidence.verified=true，透传 judge/debate', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_JSON])
+    const r = await runStage(baseInput({ judge: 'fast', criticProvider: provider, evidenceDeps }))
+    expect((r.judge as any).findings[0].evidence.verified).toBe(true)
+    expect(r.advisories).not.toContain('evidence_unverified')
+  })
+
+  it('evidence dep 缺失（bridge.list 缺工具）→ finding evidenceAssumed 放行 + evidence_partial 只 push 一次，评审照常', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_JSON])
+    const r = await runStage(baseInput({ judge: 'fast', criticProvider: provider, evidenceDeps: {} }))
+    expect(r.advisories.filter((a) => a === 'evidence_partial')).toHaveLength(1)
+    expect(r.judge).toMatchObject({ verdict: 'needs_revision' })
+    expect((r.judge as any).findings[0].evidenceAssumed).toBe(true)
+  })
+
+  it('evidence dep 抛错 → bridge.query ok=false → finding 丢弃；全丢后 needs_revision 按规格终局 pass', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_JSON])
+    const r = await runStage(baseInput({
+      judge: 'fast', criticProvider: provider,
+      evidenceDeps: { catalog: () => { throw new Error('dep down') } },
+    }))
+    expect(r.judge).toMatchObject({ verdict: 'pass' })
+    expect((r.judge as any).findings).toHaveLength(0)
+    expect(r.judgeFeedback).toBeUndefined()
+  })
+
+  it('bridge 整体不可用（list 抛错）→ findings 全保留 + evidence_unverified advisory 透传', async () => {
+    registerDialect(fakeDialect({
+      rubric: { ...RUBRIC, evidenceTools: { some: () => false, filter: () => { throw new Error('list down') } } as unknown as typeof RUBRIC.evidenceTools },
+    }))
+    const provider = providerOf([NEEDS_JSON])
+    const r = await runStage(baseInput({ judge: 'fast', criticProvider: provider, evidenceDeps }))
+    expect(r.advisories).toContain('evidence_unverified')
+    expect(r.judge).toMatchObject({ verdict: 'needs_revision' })
+    expect((r.judge as any).findings).toHaveLength(1)
+  })
+})
+
 describe('judge-assembly 生产装配（不打真连，只验适配器形状）', () => {
   it('createProductionEvidenceDeps：catalog/tokenizer/aesthetics 适配器产出桥层可摘要的形状', async () => {
     const { createProductionEvidenceDeps } = await import('../../../src/pe-framework/pipeline/judge-assembly.js')

@@ -46,7 +46,7 @@ function finding(over: Partial<Record<string, unknown>> = {}): Record<string, un
     severity: 'major',
     dimension: 'tag-order',
     problem: 'tag 顺序错',
-    evidence: { tool: 'catalog', query: '1girl', result: 'hit(3)' },
+    evidence: { tool: 'catalog', query: '1girl', result: '1girl hit(3)' },
     requiredFix: '把 1girl 放最前',
     ...over,
   }
@@ -130,7 +130,7 @@ describe('judgeReview', () => {
   it('规格4b：有 evidence 的 finding 保留，verdict=needs_revision 维持', async () => {
     const provider: CriticProvider = async () => ok('needs_revision', {
       findings: [
-        finding({ evidence: { tool: 'tokenizer', query: 'x', result: 'tokens=42' } }),
+        finding({ evidence: { tool: 'tokenizer', query: 'tokens', result: 'tokens=42' } }),
         finding(),
       ],
     })
@@ -322,6 +322,127 @@ describe('A5 evidenceOptional（spec §10.2-A5）', () => {
     expect(req.persona).toContain('该维度 finding 无证据也可输出')
     expect(req.schema).toContain('"structure"')
     expect(req.schema).toContain('"aesthetics"')
+  })
+})
+
+describe('A1 证据回查复核（spec §10.1-A1）', () => {
+  function bridgeOf(list: () => EvidenceToolId[], queryImpl: (tool: EvidenceToolId, q: string) => Promise<EvidenceResult>): EvidenceBridge & { query: ReturnType<typeof vi.fn>; list: ReturnType<typeof vi.fn> } {
+    return { list: vi.fn(list), query: vi.fn(queryImpl) }
+  }
+  const fullList = () => ['catalog', 'tokenizer'] as EvidenceToolId[]
+  const hitBridge = () => bridgeOf(fullList, async (tool, q) => ({ tool, query: q, summary: `catalog confirms ${q} canonical`, ok: true }))
+
+  it('规格1+4：携带 evidence 且非 evidenceAssumed → query(tool,query) 回查命中 → finding 保留 + evidence.verified=true', async () => {
+    const bridge = hitBridge()
+    const r = await judgeReview({ ...baseInput(), bridge, provider: async () => ok('pass') })
+    expect(bridge.query).toHaveBeenCalledWith('catalog', '1girl')
+    const findings = (r as any).findings
+    expect(findings).toHaveLength(1)
+    expect(findings[0].evidence.verified).toBe(true)
+  })
+
+  it('evidenceAssumed 的 finding 天然跳过回查（无 query 调用）', async () => {
+    const bridge = hitBridge()
+    const provider: CriticProvider = async () => JSON.stringify({
+      verdict: 'needs_revision',
+      dimensionScores: { structure: 50, aesthetics: 40 },
+      findings: [{ severity: 'minor', dimension: 'aesthetics', problem: '色彩词弱', requiredFix: '补具体色' }],
+      praise: [],
+    })
+    await judgeReview({ ...baseInput(), rubric: RUBRIC_OPT, bridge, provider })
+    expect(bridge.query).not.toHaveBeenCalled()
+  })
+
+  it('规格2：回查 ok=false → 该 finding 丢弃；全丢后 needs_revision 按规格6 终局改判 pass', async () => {
+    const bridge = bridgeOf(fullList, async (tool, q) => ({ tool, query: q, summary: 'tool unavailable', ok: false }))
+    const r = await judgeReview({ ...baseInput(), bridge, provider: async () => ok('needs_revision', { dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 } }) })
+    expect(r).toMatchObject({ verdict: 'pass' })
+    expect((r as any).findings).toHaveLength(0)
+    expect((r as any).evidenceUnverified).toBeUndefined()
+  })
+
+  it('规格2b：一条 ok=false 一条命中 → 只保留命中条', async () => {
+    const bridge = bridgeOf(fullList, async (tool, q) =>
+      q === 'bad' ? { tool, query: q, summary: 'tool unavailable', ok: false } : { tool, query: q, summary: `confirms ${q}`, ok: true })
+    const provider: CriticProvider = async () => ok('needs_revision', {
+      dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 },
+      findings: [
+        finding({ evidence: { tool: 'catalog', query: 'bad', result: 'never matches' } }),
+        finding({ dimension: 'cross-shot-consistency', problem: '角色矛盾' }), // query 1girl 命中
+      ],
+    })
+    const r = await judgeReview({ ...baseInput(), bridge, provider })
+    expect(r).toMatchObject({ verdict: 'needs_revision' })
+    expect((r as any).findings).toHaveLength(1)
+    expect((r as any).findings[0].evidence.verified).toBe(true)
+  })
+
+  it('规格3：回查成功但 summary 与声称 result 实词交集为空（编造）→ 丢该 finding', async () => {
+    const bridge = bridgeOf(fullList, async (tool, q) => ({ tool, query: q, summary: 'totally unrelated content here', ok: true }))
+    const r = await judgeReview({ ...baseInput(), bridge, provider: async () => ok('needs_revision', { dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 } }) })
+    expect(r).toMatchObject({ verdict: 'pass' })
+    expect((r as any).findings).toHaveLength(0)
+  })
+
+  it('规格5a：单条 bridge.query 抛错 → 该 finding 保留 + outcome.evidenceUnverified=true', async () => {
+    const bridge = bridgeOf(fullList, async () => { throw new Error('query down') })
+    const r = await judgeReview({ ...baseInput(), bridge, provider: async () => ok('needs_revision') })
+    expect(r).toMatchObject({ verdict: 'needs_revision', evidenceUnverified: true })
+    expect((r as any).findings).toHaveLength(1)
+  })
+
+  it('规格5b/8：bridge 未传（可选参数）→ 跳过全部回查，findings 全保留 + evidenceUnverified=true', async () => {
+    const { bridge: _b, ...noBridge } = baseInput()
+    const r = await judgeReview({ ...noBridge, provider: async () => ok('needs_revision') })
+    expect(r).toMatchObject({ verdict: 'needs_revision', evidenceUnverified: true })
+    expect((r as any).findings).toHaveLength(1)
+  })
+
+  it('规格5c：bridge.list() 抛错 → 整体不可用：跳过回查 findings 全保留 + evidenceUnverified=true，user 仍可构造', async () => {
+    const bridge = bridgeOf(() => { throw new Error('list down') }, async (tool, q) => ({ tool, query: q, summary: 'x', ok: true }))
+    const provider = vi.fn().mockResolvedValue(ok('needs_revision'))
+    const r = await judgeReview({ ...baseInput(), bridge, provider })
+    expect(r).toMatchObject({ verdict: 'needs_revision', evidenceUnverified: true })
+    expect((r as any).findings).toHaveLength(1)
+    expect(provider.mock.calls[0][0].user).toContain('（无）')
+    expect(bridge.query).not.toHaveBeenCalled()
+  })
+
+  it('carry-id：回查丢弃不重编号——存活的 finding 保留其原 id（f2），被丢的保持无 id 语义', async () => {
+    const bridge = bridgeOf(fullList, async (tool, q) =>
+      q === 'bad' ? { tool, query: q, summary: 'unrelated', ok: true } : { tool, query: q, summary: `confirms ${q}`, ok: true })
+    const provider: CriticProvider = async () => ok('needs_revision', {
+      dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 },
+      findings: [
+        finding({ evidence: { tool: 'catalog', query: 'bad', result: 'fabricated claim' } }),
+        finding({ dimension: 'cross-shot-consistency', problem: '角色矛盾' }),
+      ],
+    })
+    const r = await judgeReview({ ...baseInput(), bridge, provider })
+    const findings = (r as any).findings
+    expect(findings).toHaveLength(1)
+    expect(findings[0].id).toBe('f2')
+  })
+
+  it('规格7（carry）：bridge 缺 rubric 声明的工具 → 该 finding 视为 evidenceOptional：无证据放行 + evidenceAssumed，声明工具的 evidence 不回查', async () => {
+    const bridge = hitBridge()
+    bridge.list.mockReturnValue(['catalog'] as EvidenceToolId[]) // tokenizer 缺
+    const provider: CriticProvider = async () => ok('needs_revision', {
+      dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 },
+      findings: [
+        finding(),                                                                          // tool=catalog 在 → 走回查命中
+        finding({ dimension: 'cross-shot-consistency', evidence: { tool: 'tokenizer', query: 'x', result: 'whatever' } }),
+        finding({ dimension: 'cross-shot-consistency', evidence: undefined }),               // 无证据：bridge 缺工具 → 放行
+      ],
+    })
+    const r = await judgeReview({ ...baseInput(), bridge, provider })
+    const findings = (r as any).findings
+    expect(r).toMatchObject({ verdict: 'needs_revision' })
+    expect(findings).toHaveLength(3)
+    expect(findings[0].evidenceAssumed).toBeUndefined()
+    expect(findings[0].evidence.verified).toBe(true)
+    expect(findings[1].evidenceAssumed).toBe(true)
+    expect(findings[2].evidenceAssumed).toBe(true)
   })
 })
 

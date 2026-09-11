@@ -158,22 +158,57 @@ function exactQuery(normalized: string, nameType: 'canonical' | 'alias', limit: 
   }))
 }
 
+/* ── F3（三期 Task 1）：fuzzy 候选噪声过滤（确定性，零 LLM）──
+ * 真实会话暴露 fuzzy 候选混入 `@willowsoft`/`@classicalbluess`/`skinny` 等噪声：
+ * ① 剔除 '@' 开头的用户名型候选；② 剔除与原查询字符 Jaccard 重合率 < 0.4 的候选。
+ * 过滤后不足 limit 就少给，不凑数；在 fuzzyQuery 输出前统一生效（所有消费点受益）。 */
+
+/** 字符重合率阈值（Jaccard：|q∩c| / |q∪c|，空白不计） */
+export const FUZZY_CANDIDATE_MIN_OVERLAP = 0.4
+
+/** 候选与原查询的字符重合率（归一化去空格后的字符多重集 Jaccard；任一侧为空 → 0）。
+ *  用多重集而非集合：`rim light` vs `rimworld` 集合版恰在 0.4 边界漏过，多重集版 0.33 被剔。 */
+export function charOverlap(query: string, candidate: string): number {
+  const q = normalizeTag(query).replace(/\s+/g, '').split('').sort()
+  const c = normalizeTag(candidate).replace(/\s+/g, '').split('').sort()
+  if (!q.length || !c.length) return 0
+  let inter = 0
+  let j = 0
+  for (const ch of q) {
+    while (j < c.length && c[j] < ch) j++
+    if (j < c.length && c[j] === ch) { inter++; j++ }
+  }
+  return inter / (q.length + c.length - inter)
+}
+
+/** F3 过滤：剔 '@' 开头候选与重合率 <0.4 候选；不凑数 */
+export function filterFuzzyCandidates(query: string, hits: CatalogHit[]): CatalogHit[] {
+  return hits.filter((h) => {
+    const display = h.prompt_form ?? h.raw ?? ''
+    if (!display) return false
+    if (display.trim().startsWith('@')) return false
+    return charOverlap(query, display) >= FUZZY_CANDIDATE_MIN_OVERLAP
+  })
+}
+
 function fuzzyQuery(value: string, limit: number, categories?: string[], sources?: string[]): CatalogHit[] {
   const fts = ftsQuery(value)
   if (!fts) return []
   const filter = filterClause(categories, sources)
-  const rows = db()
-    .prepare(
-      "SELECT r.record_id, r.prompt_form, r.usage_count, n.value AS matched_name FROM catalog_fts f JOIN names n ON n.name_id=f.name_id JOIN records r ON r.record_id=f.record_id WHERE catalog_fts MATCH ?" + filter.sql + " ORDER BY bm25(catalog_fts), r.usage_count DESC LIMIT ?",
-    )
-    .all(fts, ...filter.params, limit) as Array<{ record_id: string; prompt_form: string; usage_count: number; matched_name: string }>
-  return rows.map((r) => ({
+  const sql =
+    "SELECT r.record_id, r.prompt_form, r.usage_count, n.value AS matched_name FROM catalog_fts f JOIN names n ON n.name_id=f.name_id JOIN records r ON r.record_id=f.record_id WHERE catalog_fts MATCH ?" + filter.sql + " ORDER BY bm25(catalog_fts), r.usage_count DESC LIMIT ?"
+  // F3：输出前噪声过滤（'@' 用户名型 + 字符重合率 <0.4）。SQL LIMIT 先于过滤截断会挤掉有效候选，
+  // 故单次 4× 超额取数再过滤、截回 limit；仍不足就少给，不凑数（不做迭代重取——FTS 全量打分成本高）。
+  const project = (r: { record_id: string; prompt_form: string; usage_count: number; matched_name: string }): CatalogHit => ({
     match_type: 'fuzzy',
     prompt_form: r.prompt_form,
     record_id: r.record_id,
     usage_count: r.usage_count,
     raw: r.matched_name,
-  }))
+  })
+  const fetchLimit = Math.min(limit * 4, 100000)
+  const rows = db().prepare(sql).all(fts, ...filter.params, fetchLimit) as Array<{ record_id: string; prompt_form: string; usage_count: number; matched_name: string }>
+  return filterFuzzyCandidates(value, rows.map(project)).slice(0, limit)
 }
 
 /** G7 overlay accepted-alias：auto/exact 级联全部落空后，读 overlay accepted 提案

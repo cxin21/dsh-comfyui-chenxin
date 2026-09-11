@@ -43,6 +43,10 @@ export interface CompileAnimaResult {
   segments: AnimaSegment[]
   phase_status: { policy: 'PASS'; grounding: 'PASS' | 'ADVISORY'; composition: 'PASS'; inspection: 'PASS' | 'ADVISORY' }
   metadata: { variant: string; subject?: string }
+  /** F2（三期 Task 1）：canonical 候选自动采纳的替换对（`原片段→新tag`）；无替换为空 */
+  substitutions: string[]
+  /** F2：替换计数（observability.corrections 的来源） */
+  corrections: number
 }
 
 /** G2：segment 溯源条目（对照 cli.py _segments_payload） */
@@ -142,7 +146,7 @@ export function groundSlotTags(slots: AnimaSlots, search: (tag: string) => Catal
       if (!text.trim()) continue
       const nkey = normalizeTag(text)
       if (citations.has(nkey)) continue
-      const hits = search(text) // 默认 limit 1（T8 searchCatalog 缺省 20 → 调用方传 {limit:1}）
+      const hits = search(text) // 只取 top hit（compileAnima 缺省 limit 5，F2 候选复用同一 search）
       const top = hits[0]
       if (!top || !top.match_type || !GROUNDED.has(top.match_type)) {
         citations.set(nkey, { text, record_id: null, canonical: null, prompt_form: null, source: null, match_type: 'miss' })
@@ -161,7 +165,7 @@ export function groundSlotTags(slots: AnimaSlots, search: (tag: string) => Catal
   return citations
 }
 
-/** 取 fuzzy 候选（详细 advisory 用）：顶层 fuzzy hits 的 prompt_form（≤3） */
+/** 取 fuzzy 候选（详细 advisory 用）：顶层 fuzzy hits 的 prompt_form（≤3；F3 过滤在 catalog 层已生效） */
 export function fuzzyCandidates(tag: string, search: (tag: string) => CatalogHit[]): string[] {
   return search(tag).filter((h) => h.match_type === 'fuzzy').slice(0, 3).map((h) => h.prompt_form ?? h.raw ?? '').filter(Boolean)
 }
@@ -169,13 +173,16 @@ export function fuzzyCandidates(tag: string, search: (tag: string) => CatalogHit
 /** composition.py _build 移植：策略→安全→槽(权重)→narrative→exclusions 组装 */
 export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): CompileAnimaResult {
   const variant = opts?.variant ?? 'base'
-  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 1 }))
+  // F2（三期 Task 1）：缺省 limit 1→5 —— groundSlotTags 只取 top hit（语义不变），
+  // 同时让 canonical 采纳后处理拿到完整 fuzzy 候选列（≤3）
+  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
   const policy = POLICIES[variant] ?? POLICIES.base
   const qualityPrefix = slots.qualityPrefix ?? true
   const citations = groundSlotTags(slots, search)
 
   let positive: string[] = []
   let negative: string[] = []
+  let positiveText = ''
   const notes: string[] = []
   const assumptions: string[] = []
   const missedKeys = new Set<string>()
@@ -237,7 +244,7 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   }
 
   // 派生字符串（与 segments 同源）：等价性证明 = fidelity golden 13 用例逐字节比对
-  const positiveText = segments.filter((s) => s.channel === 'positive').map((s) => s.text).join(', ')
+  positiveText = segments.filter((s) => s.channel === 'positive').map((s) => s.text).join(', ')
   const negativeText = segments.filter((s) => s.channel === 'negative').map((s) => s.text).join(', ')
 
   // G2 phase_status：policy/composition 恒 PASS；grounding = 存在 record_id citation；
@@ -245,7 +252,25 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   // 无独立 'conflict' 值）→ ADVISORY。tag_count_out_of_range 例外不计：
   // 工作区间 12-50 之外的短 brief（含本规范自测用例 count_gender:['1girl']）是常规合法输入，
   // 该软性计数 advisory（闭环内自修正项）不降级 inspection 阶段。
-  const gates = auditAnima(positiveText, negativeText, { variant, slots, search })
+  // F2（三期 Task 1）：audit 之后确定性后处理——catalog_miss 的 canonical/alias 候选自动采纳；
+  // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM
+  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search })
+  if (subst.corrections > 0) {
+    positiveText = subst.positive
+    // segments 投影同步（文本级替换；citation 保持 miss 溯源）
+    for (const pair of subst.replacements) {
+      const idx = pair.lastIndexOf('→')
+      const from = pair.slice(0, idx)
+      const to = pair.slice(idx + 1)
+      for (const seg of segments) {
+        if (seg.channel === 'positive' && seg.text === from) seg.text = to
+      }
+      // 被替换片段的 miss assumption 撤除
+      const aidx = assumptions.indexOf(`catalog_miss:${from}`)
+      if (aidx >= 0) assumptions.splice(aidx, 1)
+    }
+  }
+  const gates = subst.gates
   const grounding: 'PASS' | 'ADVISORY' = [...citations.values()].some((c) => c.record_id) ? 'PASS' : 'ADVISORY'
   const inspection: 'PASS' | 'ADVISORY' = gates.some((g) => g.severity === 'critical' || (g.severity === 'important' && g.rule !== 'tag_count_out_of_range')) ? 'ADVISORY' : 'PASS'
 
@@ -260,6 +285,8 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     segments,
     phase_status: { policy: 'PASS', grounding, composition: 'PASS', inspection },
     metadata,
+    substitutions: subst.replacements,
+    corrections: subst.corrections,
   }
 }
 
@@ -390,6 +417,96 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
       : undefined,
   }))
   return gates
+}
+
+/* ── F2（三期 Task 1）：catalog_miss 的 canonical/alias 候选确定性自动采纳（零 LLM）── */
+
+export interface CanonicalSubstitutionResult {
+  /** 替换后的 positive（无替换时与入参逐字节相同） */
+  positive: string
+  /** 替换计数（observability.corrections 来源） */
+  corrections: number
+  /** 替换对（`原片段→新tag`） */
+  replacements: string[]
+  /** advisory（`canonical_substitution:原片段→新tag`） */
+  advisories: string[]
+  /** 替换后重跑的 audit gates（无替换时为当次 audit gates） */
+  gates: AuditGate[]
+}
+
+/**
+ * audit 之后的确定性后处理：对 positive 中每个 catalog_miss 片段（top hit 非 canonical/alias），
+ * 取 F3 过滤后的 fuzzy 候选逐个 searchCatalog 验证，第一个 canonical/alias 命中者替换该片段；
+ * 有替换则重跑 audit（gates 以重跑为准）。无命中 → 保留原文（现行为）。幂等：替换结果本身
+ * 是 canonical/alias，重跑不再产生新替换。采纳范围：slots 在场时限槽位原文 tag（narrative 散文句
+ * 不动）；无 slots 直调时限非句型片段。候选还须是 miss 片段的词级子集（防同前缀噪声误采纳）。
+ */
+export function applyCanonicalSubstitutions(
+  positive: string,
+  negative: string,
+  opts?: CompileAnimaOptions & { slots?: AnimaSlots },
+): CanonicalSubstitutionResult {
+  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
+  const variant = opts?.variant ?? 'base'
+  const replacements: string[] = []
+  const advisories: string[] = []
+  // slots 在场时只采纳「槽位原文 tag」片段 —— narrative 散文句/派生片段不做标签替换（防止 prose 变异）
+  const slotTags = new Set<string>()
+  if (opts?.slots) {
+    for (const key of SLOT_ORDER) {
+      for (const raw of slotOf(opts.slots, key) ?? []) slotTags.add(String(raw))
+    }
+  }
+  const pieces = positive.split(', ').map((s) => s.trim()).filter(Boolean)
+  const seen = new Set<string>()
+  const out = pieces.map((piece) => {
+    const key = normalizeTag(piece)
+    if (!key || seen.has(key)) return piece
+    seen.add(key)
+    // 句型保护（无 slots 直调时）：narrative 散文句（含句末标点）不参与标签替换
+    if (/[.。!！?？]/.test(piece)) return piece
+    if (slotTags.size && !slotTags.has(piece)) return piece
+    const top = search(piece)[0]
+    if (top && top.match_type && GROUNDED.has(top.match_type)) return piece
+    for (const cand of fuzzyCandidates(piece, search)) {
+      // 采纳守卫（比建议层更严）：候选必须是 miss 片段的词级子集（如 'moon gate' ⊆ 'beside a moon gate'）。
+      // 字符重合率挡不住 `rim light→rimuriel` 这类同前缀噪声，词级子集才保证替换语义不漂移。
+      const pieceTokens = new Set(normalizeTag(piece).split(' ').filter(Boolean))
+      const candTokens = normalizeTag(cand).split(' ').filter(Boolean)
+      if (!candTokens.length || !candTokens.every((t) => pieceTokens.has(t))) continue
+      const verified = search(cand)[0]
+      if (verified && verified.match_type && GROUNDED.has(verified.match_type)) {
+        const to = verified.prompt_form ?? cand
+        replacements.push(`${piece}→${to}`)
+        advisories.push(`canonical_substitution:${piece}→${to}`)
+        return to
+      }
+    }
+    return piece
+  })
+  if (!replacements.length) {
+    return { positive, corrections: 0, replacements, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search }) }
+  }
+  const newPositive = out.join(', ')
+  // 重跑 audit 用替换后的槽位视图（原文片段已换成 canonical tag → 对应 miss gate 消失）
+  let effectiveSlots = opts?.slots
+  if (opts?.slots) {
+    const fromSet = new Set(replacements.map((p) => p.slice(0, p.lastIndexOf('→'))))
+    const toMap = new Map(replacements.map((p) => [p.slice(0, p.lastIndexOf('→')), p.slice(p.lastIndexOf('→') + 1)] as const))
+    effectiveSlots = { ...opts.slots }
+    for (const key of SLOT_ORDER) {
+      const tags = slotOf(opts.slots, key)
+      if (!tags?.some((t) => fromSet.has(String(t)))) continue
+      ;(effectiveSlots as Record<string, unknown>)[key] = tags.map((t) => toMap.get(String(t)) ?? String(t))
+    }
+  }
+  return {
+    positive: newPositive,
+    corrections: replacements.length,
+    replacements,
+    advisories,
+    gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, search }),
+  }
 }
 
 /** relation_overlay 降级挂载（先查 overlayStatus，缺失 → advisory；void 契约） */

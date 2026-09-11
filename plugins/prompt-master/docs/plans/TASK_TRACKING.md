@@ -63,7 +63,9 @@
 
 终审遗留（deferred，均不阻塞）：detectLanguage 混合日文归 zh、patch 后审计上下文偏松、loop 同秒覆盖无回归测试等——见 SDD ledger（工作区已删，历史在 git）。
 
----遗留（deferred minors，见计划 ledger）：修正轮重评成本开关、revisionProvider 稿内编辑语义、feedback.sqlite 迁出 temp 评估、评审 evidence 回查复核、listFeedback 1000 上限。
+---
+
+遗留（deferred minors，见计划 ledger）：修正轮重评成本开关、revisionProvider 稿内编辑语义、feedback.sqlite 迁出 temp 评估、评审 evidence 回查复核、listFeedback 1000 上限。
 
 ---
 

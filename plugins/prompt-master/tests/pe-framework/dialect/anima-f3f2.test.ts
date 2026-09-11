@@ -84,6 +84,35 @@ describe('F2: catalog_miss 的 canonical/alias 候选确定性自动采纳', () 
     expect(second.positive).toBe(first.positive)
   })
 
+  it('守卫①：slots 在场时 narrative 含句号的散文片段不参与替换（slotTags 限定）', () => {
+    // 候选取单 token 'moon' 且位于句中（非句尾 token，避开词级子集对句尾标点的拦截）→ 红相仅由句型/slotTags 守卫决定
+    const prose = 'she rests under a moon glow. softly'
+    const search = mockSearch({
+      '1girl': [hit('canonical', '1girl')],
+      'courtyard': [hit('canonical', 'courtyard')],
+      [prose]: [hit('fuzzy', 'moon')],
+      'moon': [hit('canonical', 'moon')],
+    })
+    const slots = { count_gender: ['1girl'], scene: ['courtyard'], narrative: prose }
+    const positive = `masterpiece, 1girl, courtyard, ${prose}`
+    const res = applyCanonicalSubstitutions(positive, '', { variant: 'base', slots, search })
+    expect(res.corrections).toBe(0)
+    expect(res.positive).toBe(positive)
+    expect(res.positive).toContain(prose)
+  })
+
+  it('守卫②：无 slots 直调时含句末标点的句型片段不参与标签替换', () => {
+    const prose = 'the moon glows. it is bright'
+    const search = mockSearch({
+      [prose]: [hit('fuzzy', 'moon')],
+      'moon': [hit('canonical', 'moon')],
+    })
+    const positive = `masterpiece, ${prose}`
+    const res = applyCanonicalSubstitutions(positive, '', { search })
+    expect(res.corrections).toBe(0)
+    expect(res.positive).toBe(positive)
+  })
+
   it('compileAnima 集成：替换生效、corrections 暴露、被替换 miss 的 assumption 撤除', () => {
     const search = mockSearch({
       '1girl': [hit('canonical', '1girl')],

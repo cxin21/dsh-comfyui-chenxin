@@ -3,10 +3,10 @@
  * 行为规格 4 条逐条覆盖（brief）：冷启动闸门 / mock 迭代 / 报告落盘 / 失败不删报告。
  * live 模式用注入 mock provider/runWith 验证装配路径，不真调 LLM。
  */
-import { describe, it, expect, afterAll } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { describe, it, expect, afterAll, vi } from 'vitest'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 import {
   recordGeneration,
@@ -107,9 +107,9 @@ describe('runIterations mock', () => {
     expect(r.ready).toBe(true)
     expect(r.candidateId).toMatch(/^cand_/)
     expect(r.reportPath).toBeTruthy()
-    // 文件名模式 <target>-<timestamp>.md
+    // 文件名模式 <target>-<timestamp>.md（路径分隔符用 join 构造，不硬编码 \\，POSIX 也成立）
     expect(r.reportPath!.endsWith('.md')).toBe(true)
-    expect(r.reportPath!.startsWith(o.outDir + '\\anima-')).toBe(true)
+    expect(r.reportPath!.startsWith(join(o.outDir, 'anima-'))).toBe(true)
     const text = readFileSync(r.reportPath!, 'utf8')
     expect(text).toContain('mock diff')
     expect(text).toContain('casesRun=3') // limit 生效
@@ -172,5 +172,64 @@ describe('失败行为', () => {
       'provider boom',
     )
     expect(existsSync(ok.reportPath!)).toBe(true)
+  })
+})
+
+// ---------- 5. Round7 T5 卫生包：同秒覆盖回归 + 后缀重试上限 ----------
+describe('同秒同名报告不覆盖（回归钉住）', () => {
+  /** 与 src writeReport 的 timestamp() 同格式的时刻串（YYYYMMDD-HHMMSS）。 */
+  function nowTs(): string {
+    const d = new Date()
+    const q = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}${q(d.getMonth() + 1)}${q(d.getDate())}-${q(d.getHours())}${q(d.getMinutes())}${q(d.getSeconds())}`
+  }
+
+  it('预写同名报告（OLD）→ runOptimizeLoop 保留旧文件，新报告落随机后缀新文件（防回退）', async () => {
+    const p = makeReadyDb('collide')
+    const o = opts({ dbPath: p, outDir: join(dir, 'out-collide') })
+    // 测试取时刻与循环落盘可能跨秒边界：跨秒时循环落的是新秒基名（正常路径，非覆盖），
+    // 未命中同名碰撞就重试，直到命中 writeReport 的 existsSync 分支
+    for (let i = 0; i < 10; i++) {
+      mkdirSync(o.outDir, { recursive: true })
+      const collidePath = join(o.outDir, `anima-${nowTs()}.md`)
+      writeFileSync(collidePath, 'OLD', 'utf8')
+      const r = await runOptimizeLoop(o)
+      // 命中碰撞的判据：reportPath 带 4 位随机后缀（跨秒未命中时落的是新秒基名，无后缀 → 重试）
+      const base = basename(r.reportPath!)
+      if (!/^anima-\d{8}-\d{6}-[0-9a-z]{4}\.md$/.test(base)) continue
+      expect(readFileSync(collidePath, 'utf8')).toBe('OLD') // 旧报告内容未被覆盖
+      return
+    }
+    throw new Error('10 次尝试均未命中同秒同名碰撞（不应发生）')
+  })
+
+  it('随机后缀重试超上限 → 显式抛错，不静默覆盖既有报告', async () => {
+    const p = makeReadyDb('cap')
+    const o = opts({ dbPath: p, outDir: join(dir, 'out-cap') })
+    const fixedRand = 0.123456789
+    const suffix = fixedRand.toString(36).slice(2, 6)
+    // 固定 Math.random：每次后缀重试都生成同一后缀 → 必撞同一已存在文件名 → 必然触及重试上限
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(fixedRand)
+    try {
+      for (let i = 0; i < 10; i++) {
+        mkdirSync(o.outDir, { recursive: true })
+        const ts = nowTs() // 基名与后缀名必须同一秒，一次计算
+        writeFileSync(join(o.outDir, `anima-${ts}.md`), 'OLD', 'utf8')
+        const sfxPath = join(o.outDir, `anima-${ts}-${suffix}.md`)
+        writeFileSync(sfxPath, 'OLD', 'utf8')
+        try {
+          await runOptimizeLoop(o)
+        } catch (e) {
+          expect((e as Error).message).toMatch(/随机后缀重试/)
+          return
+        }
+        // 成功返回：跨秒未命中（sfxPath 未被动 → 重试）或被静默覆盖（→ 断言失败）
+        if (readFileSync(sfxPath, 'utf8') === 'OLD') continue
+        throw new Error('后缀重试应设上限抛错：既有报告被静默覆盖')
+      }
+      throw new Error('10 次尝试均未命中同秒同名碰撞（不应发生）')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

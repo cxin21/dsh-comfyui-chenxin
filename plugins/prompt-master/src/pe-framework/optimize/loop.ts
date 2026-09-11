@@ -55,12 +55,24 @@ function timestamp(): string {
   )
 }
 
+/** 报告名随机后缀重试上限（Round7 T5）：达到上限仍冲突 → 显式抛错，绝不静默覆盖既有报告。 */
+const MAX_SUFFIX_RETRIES = 5
+
 function writeReport(outDir: string, target: string, markdown: string): string {
   mkdirSync(outDir, { recursive: true })
   const ts = timestamp()
   let path = join(outDir, `${target}-${ts}.md`)
-  // 同秒多次产出时加随机后缀，避免覆盖既有报告（已产出报告不删除）
-  if (existsSync(path)) path = join(outDir, `${target}-${ts}-${Math.random().toString(36).slice(2, 6)}.md`)
+  // 同秒多次产出时加随机后缀，避免覆盖既有报告（已产出报告不删除）。
+  // 后缀重试设显式上限（Round7 T5）：极端连撞（如同秒被外部塞入大量同名文件）达到上限
+  // 仍冲突则抛错上抛（离线 CLI 失败允许抛语义），不静默覆盖。
+  let retries = 0
+  while (existsSync(path) && retries < MAX_SUFFIX_RETRIES) {
+    path = join(outDir, `${target}-${ts}-${Math.random().toString(36).slice(2, 6)}.md`)
+    retries += 1
+  }
+  if (existsSync(path)) {
+    throw new Error(`writeReport: 随机后缀重试 ${MAX_SUFFIX_RETRIES} 次仍冲突，拒绝覆盖既有报告（${outDir}）`)
+  }
   writeFileSync(path, markdown, 'utf8')
   return path
 }

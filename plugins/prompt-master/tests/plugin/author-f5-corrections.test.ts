@@ -91,7 +91,9 @@ describe('F5 trace 耗时细分 + corrections 接线', () => {
     setCatalogPath(buildFixtureCatalog()) // presetRoot 指向 tmp 后默认 catalog 不可解析 → 统一走 fixture
   })
   afterEach(() => {
-    setCatalogPath('')
+    // 隔离改良（Round7 T5）：不再 setCatalogPath('')——空串清除语义是 anima-catalog 的
+    // 实现细节（'' 回落 ANIMA_CATALOG_PATH env 优先级）；隔离完全由 beforeEach 重新
+    // mkdtemp + setCatalogPath(新 fixture) 重指完成，不依赖空串恢复，消除共享状态顺序依赖。
     closeCatalog()
     setPresetRoot(undefined)
     setAuthorFeedbackDbPath(null)
@@ -116,6 +118,20 @@ describe('F5 trace 耗时细分 + corrections 接线', () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'off', enrich: false }))) as Raw
     expect(raw.ok).toBe(true)
     expect(stageNames(raw)).not.toContain('enrich')
+    expect(stageNames(raw)).toContain('intent')
+  })
+
+  it('Round7 T5 回归钉住：enrich provider 返回 skipped 形态 → traceStages 仍含 enrich 条目（耗时真实发生，二期 T4 报告行为）', async () => {
+    // '{}' 可 parse 但 schema 不合 → runEnrich 返回 { skipped: true, reason: 'enrich_invalid_schema' }
+    setAuthorEnrichProvider(async () => '{}')
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'off' }))) as Raw
+    expect(raw.ok).toBe(true)
+    expect(raw.advisories).toContain('enrich_skipped') // 确认走的是 skipped 路径（而非 enrich 恰好成功）
+    // 钉住：skipped 不丢 enrich 计时条目——扩写调用真实发生过，耗时可观测（含 intent 条目照常）
+    const enrich = (raw.observability?.traceStages ?? []).find((s) => s.name === 'enrich')
+    expect(enrich).toBeDefined()
+    expect(enrich!.ms).toBeGreaterThanOrEqual(0)
     expect(stageNames(raw)).toContain('intent')
   })
 

@@ -196,6 +196,17 @@ describe('规格5 outputLang 语言归一化', () => {
     expect(enrich.calls).toBe(1)
   })
 
+  it("anima 显式 outputLang='ja' → brief.outputLang 纠正为 'en' + advisory enrich_lang_forced（终审 I-2）", async () => {
+    const enrich = enrichOf([briefJson({ outputLang: 'ja' })])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '雨中的少女', enrich: true, outputLang: 'ja', judge_mode: 'off' })))
+    expect(raw.ok).toBe(true)
+    expect(raw.enrichment.brief.outputLang).toBe('en')
+    expect(raw.advisories).toContain('enrich_lang_forced')
+    expect(enrich.calls).toBe(1)
+  })
+
   it("h3 显式 outputLang='ja' → 透传生效，无 enrich_lang_forced", async () => {
     const enrich = enrichOf([briefJson({ outputLang: 'ja' })])
     setAuthorEnrichProvider(enrich)

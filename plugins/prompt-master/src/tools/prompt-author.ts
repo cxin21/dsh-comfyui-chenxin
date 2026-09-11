@@ -53,7 +53,7 @@ export interface AuthorArgs {
   judgeRepair?: boolean
   /** 二期（spec §2.4）：enrich 扩写层开关；T9 起缺省 true（显式 false 关闭）；audit_only/blueprint_id 时忽略 */
   enrich?: boolean
-  /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh 纠正 + advisory enrich_lang_forced） */
+  /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 纠正 + advisory enrich_lang_forced） */
   outputLang?: 'en' | 'zh' | 'ja'
 }
 
@@ -583,7 +583,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'fast', description: 'LLM 评审模式（spec §2.4）：fast=单轮评审（缺省）；strict=评审+对抗修正一轮；off=不评审（显式关闭，回退旧路径）。audit_only=true 时忽略' },
       judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
       enrich: { type: 'boolean', default: true, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。audit_only/blueprint_id 时忽略' },
-      outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh 被纠正 + advisory enrich_lang_forced）' },
+      outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 被纠正 + advisory enrich_lang_forced）' },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
@@ -651,7 +651,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         })
         if ('brief' in eRes) {
           const brief = eRes.brief
-          if (target === 'anima' && a.outputLang === 'zh') enrichAdvisories.push('enrich_lang_forced') // T5 carry①：brief.outputLang 已被引擎强制 'en'
+          if (target === 'anima' && a.outputLang !== undefined && a.outputLang !== 'en') enrichAdvisories.push('enrich_lang_forced') // T5 carry① + 终审 I-2：anima 恒锁 'en'（zh/ja 都纠正），brief.outputLang 已被引擎强制 'en'
           if (trimNameAnchors(brief)) enrichAdvisories.push('name_anchors_trimmed') // T5 carry③：条目 ≤10、单条 ≤100 字符
           intentInput = briefToIntentText(brief)
           enrichFlag = 1

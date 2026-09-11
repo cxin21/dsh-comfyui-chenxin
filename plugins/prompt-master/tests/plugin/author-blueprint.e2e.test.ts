@@ -23,7 +23,7 @@ describe('prompt_author blueprint pipeline', () => {
   it('runs analyze→enrich→project→stage and returns ok envelope with next_action', async () => {
     const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
     const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '三镜头打斗CG', style_id: 'cinematic_real' })))
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '三镜头打斗CG', style_id: 'cinematic_real', judge_mode: 'off' })))
     expect(v.next_action).toBeDefined()
     expect(v.audit).toBeDefined()
   })
@@ -58,7 +58,7 @@ describe('prompt_author blueprint_id incremental path', () => {
     const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
     ctx.settings = settings
     const def = registerAuthorTool(ctx, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s' })))
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s', judge_mode: 'off' })))
 
     expect(providerCalls).toBe(0)              // 跳过 analyzeIntent
     expect(v.next_action).toBeDefined()
@@ -80,7 +80,7 @@ describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁)', () => {
     setAuthorIntentProvider(alwaysBrokenProvider as any)
     const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
     const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '8镜打斗' })))
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '8镜打斗', judge_mode: 'off' })))
     // Level 1 已触发（shots 超限建议）+ Level 2 两轮耗尽仍 critical → 必须 manual，不能因 repaired=true 误报 auto_repair
     expect(v.next_action).toBe('manual')
     expect(v.advisories).toContain('loop_exhausted:true')

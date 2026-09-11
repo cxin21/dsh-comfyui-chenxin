@@ -47,11 +47,11 @@ export interface AuthorArgs {
   clarify?: 'ask' | 'auto'
   /** Task 10 蓝图管线：增量修改入口——传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影 */
   blueprint_id?: string
-  /** Task 6（spec §2.4/§3.1）：评审模式；缺省 'off' 零行为变化；audit_only=true 时忽略并保持旧行为 */
+  /** Task 6（spec §2.4/§3.1）：评审模式；T9 起缺省 'fast'（显式 'off' 回退旧路径）；audit_only=true 时忽略并保持旧行为 */
   judge_mode?: 'off' | 'fast' | 'strict'
   /** T4（spec §10.4-A12）：修正轮评审成本开关；缺省 true（现状每修正轮重评）；false=修正轮 runStage 不带 judgeOpts（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动） */
   judgeRepair?: boolean
-  /** 二期（spec §2.4）：enrich 扩写层开关；本任务默认 false（默认切换是 T9）；audit_only/blueprint_id 时忽略 */
+  /** 二期（spec §2.4）：enrich 扩写层开关；T9 起缺省 true（显式 false 关闭）；audit_only/blueprint_id 时忽略 */
   enrich?: boolean
   /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh 纠正 + advisory enrich_lang_forced） */
   outputLang?: 'en' | 'zh' | 'ja'
@@ -580,9 +580,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
       clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
       blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影（取回旧蓝图改一字段重投影）' },
-      judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'off', description: 'LLM 评审模式（spec §2.4）：off=不评审（缺省）；fast=单轮评审；strict=评审+对抗修正一轮。audit_only=true 时忽略' },
+      judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'fast', description: 'LLM 评审模式（spec §2.4）：fast=单轮评审（缺省）；strict=评审+对抗修正一轮；off=不评审（显式关闭，回退旧路径）。audit_only=true 时忽略' },
       judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
-      enrich: { type: 'boolean', default: false, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；缺省 false（默认切换是 T9）。audit_only/blueprint_id 时忽略' },
+      enrich: { type: 'boolean', default: true, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。audit_only/blueprint_id 时忽略' },
       outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh 被纠正 + advisory enrich_lang_forced）' },
     },
     output: {
@@ -634,14 +634,14 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
       const intentCfg = getDialect(target)?.intent
 
-      // 二期 T6（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线（本任务默认 false，T9 切 true）。
+      // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
       // audit_only 已提前返回；blueprint_id 路径跳过 intent（无生句子输入）→ 不 enrich。
       // 降级铁律：runEnrich 永不抛出；skipped → intent 吃原始输入 + advisory enrich_skipped，照常出稿。
       let intentInput = input
       const enrichAdvisories: string[] = []
       let enrichFlag: 0 | 1 = 0
       let enrichmentTop: Record<string, unknown> | undefined
-      if (a.enrich === true && !a.blueprint_id) {
+      if (a.enrich !== false && !a.blueprint_id) {
         const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx)
         const eRes = await runEnrich({
           target: target as EnrichTarget,
@@ -665,8 +665,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
 
       const intentBase = { target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
 
-      // Task 6 评审接线（spec §2.4/§3.1）：judge_mode=off → judgeOpts=undefined，runStage 同步旧路径零变化
-      const judgeMode = a.judge_mode ?? 'off'
+      // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化
+      const judgeMode = a.judge_mode ?? 'fast'
       let judgeOpts: JudgeStageOpts | undefined
       if (judgeMode !== 'off') {
         judgeOpts = {

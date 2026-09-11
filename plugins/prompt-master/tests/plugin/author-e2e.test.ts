@@ -23,7 +23,7 @@ describe('prompt_author full pipeline (P4)', () => {
   it('anima full chain: intent → compile → audit → Envelope with t2i.prompt hint', async () => {
     const { fn, calls } = providerFor([GOOD_SLOTS])
     setAuthorIntentProvider(fn)
-    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'anima', input: 'cat portrait' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'anima', input: 'cat portrait', judge_mode: 'off', enrich: false })))
     expect(calls()).toBe(1)
     expect(raw.ok).toBe(true)
     expect(raw.result.positive).toBe('masterpiece, best quality, score_7, safe, 1girl, long hair')
@@ -34,7 +34,7 @@ describe('prompt_author full pipeline (P4)', () => {
   it('h3 full chain: intent shots → compile → audit → Envelope with t2v.prompt + budget', async () => {
     const { fn } = providerFor([GOOD_SHOTS])
     setAuthorIntentProvider(fn)
-    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'cat stretch' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'cat stretch', judge_mode: 'off', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(raw.result.text).toContain('integrated_multimodal_description: [Shot 1] A cat stretches.')
     expect(raw.target_slot_hint).toBe('t2v.prompt')
@@ -60,12 +60,12 @@ describe('prompt_author full pipeline (P4)', () => {
 
   it('LLM/provider failure propagates as thrown error', async () => {
     setAuthorIntentProvider(async () => { throw new Error('llm down') })
-    await expect(runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x' })).rejects.toThrow('llm down')
+    await expect(runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x', judge_mode: 'off', enrich: false })).rejects.toThrow('llm down')
   })
 
   it('unknown variant errors at compile stage', async () => {
     setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'] } }))
-    await expect(runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'anima', input: 'x', variant: 'bogus' })).rejects.toThrow(/未知 variant/)
+    await expect(runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'anima', input: 'x', variant: 'bogus', judge_mode: 'off', enrich: false })).rejects.toThrow(/未知 variant/)
   })
 
   afterAll(() => { setAuthorIntentProvider(null); closeCatalog() })

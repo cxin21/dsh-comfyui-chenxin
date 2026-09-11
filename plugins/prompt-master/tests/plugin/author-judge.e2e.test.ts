@@ -1,7 +1,7 @@
 /**
  * Task 6（spec §2.4 / §3.1 / §2.3）：prompt_author 评审工具面 e2e。
  * 六条行为规格，全部 mock criticProvider / evidenceDeps / revisionProvider（不打真连）。
- * 最高约束：缺省（不传 judge_mode）与现版本逐字段一致（除 generation_id），provider 零调用。
+ * 最高约束（T9 后）：显式 `judge_mode:'off', enrich:false` 与一期缺省逐字段一致（除 generation_id）；评审用例一律补 enrich:false 隔离（enrich 缺省已开，见 author-enrich.e2e）。
  */
 import { describe, expect, it, afterAll, beforeEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
@@ -57,19 +57,21 @@ const mockEvidence: EvidenceDeps = {
   aesthetics: (q) => ({ concreteness: 'pass', query_len: q.length }),
 }
 
-describe('Task6 prompt_author 评审工具面：规格1 缺省零行为变化', () => {
-  it('不传 judge_mode → 行为与现版本一致（除 generation_id），critic provider 零调用', async () => {
+describe('Task6 规格1（T9 迁移）显式关闭回退：judge_mode:off + enrich:false 与一期缺省逐字段一致', () => {
+  it('显式 judge_mode:off + enrich:false → 行为与现版本一致（除 generation_id），critic/enrich provider 零调用', async () => {
     const critic = criticOf([PASS_JSON])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'off', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(raw.result.positive).toBe('masterpiece, best quality, score_7, safe, 1girl, long hair')
     expect(critic.calls).toBe(0)
     expect(raw.judge).toBeUndefined()
     expect(raw.debate).toBeUndefined()
     expect(raw.judgeFeedback).toBeUndefined()
+    expect(raw.enrichment).toBeUndefined()
+    expect(intentCalls[0].input).toBe('cat portrait')
     expect(typeof raw.generation_id).toBe('string')
     expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/)
   })
@@ -80,7 +82,7 @@ describe('规格2 fast + 评审 pass', () => {
     const critic = criticOf([PASS_JSON])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(raw.judge).toMatchObject({ verdict: 'pass' })
     expect(raw.debate).toHaveLength(1)
@@ -94,7 +96,7 @@ describe('规格3 fast + needs_revision 终态 → 工具层 max-2 闭环消费 
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', enrich: false })))
     // 首轮 + 2 轮修正 = intent 3 次调用；评审在每轮 runStage 内发生 = critic 3 次
     expect(intentCalls).toHaveLength(3)
     expect(critic.calls).toBe(3)
@@ -114,7 +116,7 @@ describe('规格4 judge LLM 全挂 → 降级出稿', () => {
     const critic = criticOf(['THROW'])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(raw.judge).toMatchObject({ skipped: true })
     expect(raw.advisories).toContain('judge_skipped')
@@ -129,7 +131,7 @@ describe('规格7 fast + 规则 critical → judge skipped(rule_critical) 不投
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return { shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches.' }] } } as never })
     // i2va + 无 references → ref_count 规则 critical → runStage 返回 judge={skipped:true,reason:'rule_critical'}
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', stage: 'i2va', judge_mode: 'fast' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', stage: 'i2va', judge_mode: 'fast', enrich: false })))
     expect(raw.ok).toBe(false)
     // 跳过评审不是评审结果：judge 字段缺省
     expect(raw.judge).toBeUndefined()
@@ -183,7 +185,7 @@ describe('规格6 strict：revisionProvider 接线（mock 验证对抗二轮）'
     }
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence, revisionProvider })
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(critic.calls).toBe(2)
     expect(raw.judge).toMatchObject({ verdict: 'pass' })
@@ -212,7 +214,7 @@ describe('final-fix C1：author 落库 generations', () => {
     const critic = criticOf([PASS_JSON])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', enrich: false })))
     expect(raw.ok).toBe(true)
     const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
     expect(gen).toBeDefined()
@@ -232,7 +234,7 @@ describe('final-fix C1：author 落库 generations', () => {
     const critic = criticOf(['THROW'])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', enrich: false })))
     const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
     expect(gen).toBeDefined()
     expect(gen!.judge_score).toBeUndefined()
@@ -242,7 +244,7 @@ describe('final-fix C1：author 落库 generations', () => {
   it('judge_mode=off → 也落库（judge_mode=off，无 judge 字段）', async () => {
     setAuthorJudgeDeps(null)
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'off', enrich: false })))
     const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
     expect(gen).toBeDefined()
     expect(gen!.judge_mode).toBe('off')
@@ -266,7 +268,7 @@ describe('final-fix C1：author 落库 generations', () => {
     setAuthorFeedbackDbPath(join(blocker, 'feedback.sqlite'))
     setAuthorJudgeDeps(null)
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'off', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(String(raw.result.positive)).toContain('1girl')
     expect(raw.advisories).toContain('feedback_write_failed')
@@ -292,7 +294,7 @@ describe('T4 规格1 praise 锚点 + 规格3 patch 失败回退整稿重拆', ()
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence }) // 不注入 revisionProvider → 生产 makeRevisionProvider
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict', enrich: false })))
     expect(raw.judge).toMatchObject({ verdict: 'pass' })
     // patch 定位不到字段（night sky 与 1girl/long hair 零交集）→ 回退整稿重拆（intent 第 2 次调用）
     expect(intentCalls).toHaveLength(2)
@@ -311,7 +313,7 @@ describe('T4 规格3 稿内编辑成功（anima 槽字段 patch，不重拆）',
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict', enrich: false })))
     // patch 成功 → 不重拆（intent 只有 round 0 一次调用）
     expect(intentCalls).toHaveLength(1)
     expect(String(raw.result.positive)).toContain('把质量词前移到主体前')
@@ -335,7 +337,7 @@ describe('T4 规格2 结构化 rebuttals（requiredFix 已在稿内 → 带证�
     const critic = criticOf([NEEDS, REV_ACCEPT])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     setAuthorIntentProvider(async () => SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict', enrich: false })))
     const reb = raw.debate[1].reviser.rebuttals
     expect(reb).toHaveLength(1)
     expect(reb[0].finding_id).toBe('f1')
@@ -360,7 +362,7 @@ describe('T4 规格3 h3 镜头段 patch', () => {
     const critic = criticOf([NEEDS_H3, REV_CLOSE_F1])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     setAuthorIntentProvider(async () => ({ shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches' }] } }) as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', judge_mode: 'strict' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', judge_mode: 'strict', enrich: false })))
     expect(String(raw.result.text)).toContain('[Shot 1] The cat yawns and blinks slowly.')
     expect(raw.debate[1].reviser.changes[0]).toBe('patch:shot 1 (finding f1)')
     expect(raw.judge).toMatchObject({ verdict: 'pass' })
@@ -373,7 +375,7 @@ describe('T4 规格4 judgeRepair=false 修正轮跳过评审', () => {
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', judgeRepair: false })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', enrich: false, judgeRepair: false })))
     expect(critic.calls).toBe(1) // 修正轮 provider 零调用
     expect(intentCalls).toHaveLength(2) // 首轮 + 1 轮修正（judgeFeedback 首轮投影驱动）
     expect(raw.observability.corrections).toBe(1)

@@ -25,7 +25,7 @@ describe('prompt_author correction loop (P4)', () => {
   it('bad → critical → corrected on 2nd intent round → passed', async () => {
     const { fn, rounds } = loopProvider()
     setAuthorIntentProvider(fn)
-    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x', judge_mode: 'off', enrich: false })))
     expect(rounds()).toEqual([0, 1]) // round0 bad (2 refs) → 1 correction (3 refs) → good
     expect(raw.ok).toBe(true)
     expect(raw.audit.passed).toBe(true)
@@ -45,7 +45,7 @@ describe('prompt_author correction loop (P4)', () => {
         },
       }
     })
-    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x', judge_mode: 'off', enrich: false })))
     expect(calls).toBe(3) // round0 + 2 corrections
     expect(raw.ok).toBe(false)
     expect(raw.advisories).toContain('loop_exhausted:true')
@@ -68,7 +68,7 @@ describe('prompt_author correction loop (P4)', () => {
         references: [{ kind: 'picture', who: 'Neko', image: 'n.png' }, { kind: 'picture', who: 'Mei', image: 'm.png' }],
       },
     }))
-    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'h3', input: 'x', judge_mode: 'off', enrich: false })))
     expect(raw.ok).toBe(false)
     expect(raw.audit.gates.some((g: any) => g.rule === 'ref_count' && g.severity === 'critical')).toBe(true)
   })
@@ -78,7 +78,7 @@ describe('prompt_author correction loop (P4)', () => {
       shots: { duration_seconds: 10, shots: [{ what: 'a snow house', who: 'Snow' }] },
     }))
     const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-      target: 'h3', input: 'x', scenario_id: 'full_reference',
+      target: 'h3', input: 'x', scenario_id: 'full_reference', judge_mode: 'off', enrich: false,
       form_fields: { subject: 'snow house', duration_seconds: '10' },
     })))
     expect(raw.advisories).toContain('references_unmapped')

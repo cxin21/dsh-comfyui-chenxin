@@ -1,7 +1,7 @@
 /**
  * Task 6（二期，spec §2.1 / §2.4 / §4 / §11.3 / §11.4）：prompt_author 接线 enrich 扩写层 e2e。
  * 七条行为规格，全部 mock enrich provider / intent provider（不打真连）。
- * 最高约束：缺省（不传 enrich）与本任务前逐字段一致（无 enrichment 字段、intent 吃原文、enrich 零调用）。
+ * 最高约束（T9 后）：显式 `judge_mode:'off', enrich:false` 与一期缺省逐字段一致；缺省=fast+enrich 见 T9 describe。
  */
 import { describe, expect, it, afterAll, beforeEach } from 'vitest'
 import { mkdtempSync } from 'node:fs'
@@ -13,10 +13,12 @@ import {
   setAuthorIntentProvider,
   setAuthorFeedbackDbPath,
   setAuthorEnrichProvider,
+  setAuthorJudgeDeps,
   type AuthorIntentRequest,
 } from '../../src/tools/prompt-author.js'
 import { getGeneration } from '../../src/pe-framework/feedback/store.js'
 import type { CriticProvider } from '../../src/pe-framework/eval/critic.js'
+import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js'
 import { stubCtx, runTool } from './helpers.js'
 import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
 
@@ -39,6 +41,28 @@ function enrichOf(responses: string[]) {
   return fn
 }
 
+/** mock criticProvider（T9 缺省断言用）：按调用次序返回预置 JSON */
+function criticOf(responses: string[]) {
+  const fn = (async () => {
+    fn.calls++
+    const next = responses[Math.min(fn.calls - 1, responses.length - 1)]
+    if (next === 'THROW') throw new Error('judge llm down')
+    return next
+  }) as unknown as CriticProvider & { calls: number }
+  fn.calls = 0
+  return fn
+}
+
+const PASS_JSON = JSON.stringify({
+  verdict: 'pass',
+  dimensionScores: { 'tag-order': 90, contradiction: 90, 'tag-evidence': 90, 'negative-template': 90, aesthetics: 90 },
+  findings: [], praise: [],
+})
+const mockEvidence: EvidenceDeps = {
+  catalog: (q) => [{ tag: q, kind: 'canonical', count: 1 }],
+  aesthetics: (q) => ({ concreteness: 'pass', query_len: q.length }),
+}
+
 function briefJson(over: Record<string, unknown> = {}): string {
   return JSON.stringify({
     outputLang: 'en',
@@ -54,14 +78,14 @@ function briefJson(over: Record<string, unknown> = {}): string {
   })
 }
 
-/* 规格1：缺省（不传 enrich）零行为变化 */
-describe('规格1 缺省零行为变化', () => {
-  it('不传 enrich → 无 enrichment 字段、intent 吃原文、enrich provider 零调用、落库 enrich=0', async () => {
+/* 规格1（T9 迁移）：一期「缺省零变化」→ 改显式关闭参数，原断言全保留（off 回退语义） */
+describe('规格1 显式关闭回退（judge_mode:off + enrich:false）', () => {
+  it('显式 judge_mode:off + enrich:false → 无 enrichment/judge 字段、intent 吃原文、enrich/critic provider 零调用、落库 enrich=0', async () => {
     const enrich = enrichOf([briefJson()])
     setAuthorEnrichProvider(enrich)
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'off', enrich: false })))
     expect(raw.ok).toBe(true)
     expect(raw.result.positive).toBe('masterpiece, best quality, score_7, safe, 1girl, long hair')
     expect(raw.enrichment).toBeUndefined()
@@ -86,7 +110,7 @@ describe('规格2 enrich=true 正常路径', () => {
     setAuthorEnrichProvider(enrich)
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '猫の肖像', enrich: true })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '猫の肖像', enrich: true, judge_mode: 'off' })))
     expect(raw.ok).toBe(true)
     expect(enrich.calls).toBe(1)
     // intent 权威输入替换：brief 字段样例 + 权威指令
@@ -123,7 +147,7 @@ describe('规格3 enrich 降级', () => {
     setAuthorEnrichProvider(enrich)
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: true })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: true, judge_mode: 'off' })))
     expect(raw.ok).toBe(true)
     expect(String(raw.result.positive)).toContain('1girl')
     expect(enrich.calls).toBe(1)
@@ -164,7 +188,7 @@ describe('规格5 outputLang 语言归一化', () => {
     const enrich = enrichOf([briefJson({ outputLang: 'zh' })])
     setAuthorEnrichProvider(enrich)
     setAuthorIntentProvider(async () => GOOD_SLOTS as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '雨中的少女', enrich: true, outputLang: 'zh' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '雨中的少女', enrich: true, outputLang: 'zh', judge_mode: 'off' })))
     expect(raw.ok).toBe(true)
     expect(raw.enrichment.brief.outputLang).toBe('en')
     expect(raw.advisories).toContain('enrich_lang_forced')
@@ -176,7 +200,7 @@ describe('规格5 outputLang 语言归一化', () => {
     const enrich = enrichOf([briefJson({ outputLang: 'ja' })])
     setAuthorEnrichProvider(enrich)
     setAuthorIntentProvider(async () => ({ shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches.' }] } }) as never)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', enrich: true, outputLang: 'ja' })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', enrich: true, outputLang: 'ja', judge_mode: 'off' })))
     expect(raw.ok).toBe(true)
     expect(raw.enrichment.brief.outputLang).toBe('ja')
     expect(raw.advisories).not.toContain('enrich_lang_forced')
@@ -196,7 +220,7 @@ describe('规格6 nameAnchors 透传 + 接线层修剪（T5 carry③）', () => 
     setAuthorEnrichProvider(enrich)
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return { shots: { duration_seconds: 6, shots: [{ what: 'XiaoMing runs in the rain.' }] } } as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: '小明在雨夜奔跑', enrich: true })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: '小明在雨夜奔跑', enrich: true, judge_mode: 'off' })))
     expect(raw.ok).toBe(true)
     // intent prompt：固定映射指令 + 锚点条目
     expect(intentCalls[0].input).toContain('角色名固定映射，全程一致')
@@ -217,12 +241,12 @@ describe('规格7 enrich=false 显式传参 → 落库 enrich=0', () => {
     setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
   })
 
-  it('enrich=false → 行为与缺省一致，enrich provider 零调用，落库 enrich=0', async () => {
+  it('enrich=false → 行为与显式关闭一致，enrich provider 零调用，落库 enrich=0', async () => {
     const enrich = enrichOf([briefJson()])
     setAuthorEnrichProvider(enrich)
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: false })))
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: false, judge_mode: 'off' })))
     expect(raw.ok).toBe(true)
     expect(raw.enrichment).toBeUndefined()
     expect(enrich.calls).toBe(0)
@@ -232,4 +256,35 @@ describe('规格7 enrich=false 显式传参 → 落库 enrich=0', () => {
   })
 })
 
-afterAll(() => { setAuthorIntentProvider(null); setAuthorEnrichProvider(null); setAuthorFeedbackDbPath(null); closeCatalog() })
+/* T9（spec §3 / §2.4）：缺省 = fast + enrich —— 不传任何参数 → enrich/judge provider 均被调、envelope 带 enrichment 与 judge */
+describe('T9 缺省=fast+enrich', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-default-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('不传任何参数 → enrich provider 被调 1 次、critic provider 被调 1 次（fast 首评）、envelope 带 enrichment.brief 与 judge、落库 judge_mode=fast/enrich=1', async () => {
+    const enrich = enrichOf([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    const critic = criticOf([PASS_JSON])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait' })))
+    expect(raw.ok).toBe(true)
+    expect(enrich.calls).toBe(1)
+    expect(critic.calls).toBe(1)
+    expect(intentCalls).toHaveLength(1)
+    expect(intentCalls[0].input).toContain('brief 是权威输入') // enrich 后 brief 成为 intent 权威输入
+    expect(raw.enrichment).toBeDefined()
+    expect(raw.enrichment.brief).toMatchObject({ outputLang: 'en', subject: [{ text: 'silver hair girl', source: 'user' }] })
+    expect(raw.judge).toMatchObject({ verdict: 'pass' })
+    const gen = getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)
+    expect(gen).toBeDefined()
+    expect(gen!.judge_mode).toBe('fast')
+    expect(gen!.enrich).toBe(1)
+  })
+})
+
+afterAll(() => { setAuthorIntentProvider(null); setAuthorEnrichProvider(null); setAuthorJudgeDeps(null); setAuthorFeedbackDbPath(null); closeCatalog() })

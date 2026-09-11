@@ -29,6 +29,8 @@
 
 排查+修复：①先复现（当前 dist、中文输入、enrich 默认开）确认 enrich 归一化是否覆盖此路径；②确定性守门兜底：anima audit 新增 `cjk_in_positive` gate（important，detail 列出 CJK 片段），并纳入修正闭环 feedback（要求换 catalog canonical 英文）——即使上游漏翻，出稿前必被拦。
 
+实现勘误：cjk_in_positive 实现为 **critical**（闭环触发条件只认 critical，important 无法兑现『纳入修正闭环』；中文 token 对 anima 是无效输出），经审查确认成立（见 TASK_TRACKING Round 6）。
+
 ## F5（P2）dialect 阶段耗时可观测
 
 traceStages 的 dialect 10.5s 无法细分。enrich/intent/候选检索各计耗时并入 `traceStages`（`enrich`、`intent`、`catalog` 子条目），零行为变更。

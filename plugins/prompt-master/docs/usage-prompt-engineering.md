@@ -7,7 +7,7 @@
 
 | 工具 | 定位 | 有无 LLM | 典型入参 | 产出 |
 |---|---|---|---|---|
-| `prompt_author` | **主入口**：全链路编排（意图→结构→编译→审计→渲染），含修正闭环 | 有（intent 拆结构；可注入） | `target=anima/h3` + `input`（+variant/stage/scenario_id/form_fields/audit_only） | Envelope `{ok, result, audit, advisories, target_slot_hint}` |
+| `prompt_author` | **主入口**：全链路编排（意图→结构→编译→审计→渲染），含修正闭环 | 有（intent 拆结构；可注入） | `target=anima/h3` + `input`（+variant/stage/scenario_id/form_fields/audit_only/judge_mode/enrich/outputLang；`judge_mode`=fast 默认/strict/off，`enrich` 默认 true，`outputLang`=en/zh/ja 且 anima 恒锁 en） | Envelope `{ok, result, audit, advisories, target_slot_hint}` + `generation_id`（反馈回写）+ `enrichment`（七维度 brief） |
 | `prompt_compile` | 确定性编译+审计（不拆意图） | 无 | `target=h3/anima` + `shots/slots`（或 scenario_id+form_fields） | Envelope（h3 含精确 token budget；anima 无 budget） |
 | `prompt_audit` | 独立审计闸门 | 无 | `target` + 已有内容（h3: text+meta；anima: positive/negative(可附 slots)） | 审计报告 Envelope |
 | `prompt_expand` | 意图层（扩写完整提示词） | 有 | `text` + `profile`（默认 `pe_expand_natural`）/ `dry_run` | 扩写正文 / dry_run JSON |

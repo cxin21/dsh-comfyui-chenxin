@@ -28,7 +28,7 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 
 ## 验证命令
 
-- 全量测试：`npx vitest run`（当前基线 621 passed / 1 skipped / 0 failed）
+- 全量测试：`npx vitest run`（当前基线 831 passed / 1 skipped / 0 failed）
 - 类型检查：`npx tsc --noEmit`
 - 构建：`npm run build`（tsc 产出 dist）
 

@@ -11,6 +11,7 @@ import { registerCatalogSearchTool } from '../tools/catalog-search.js'
 import { registerCatalogRelationsTool } from '../tools/catalog-relations.js'
 import { registerCatalogBuildTool } from '../tools/catalog-build.js'
 import { registerAuditTool } from '../tools/prompt-audit.js'
+import { registerFeedbackTool } from '../tools/prompt-feedback.js'
 import { setCustomProfileSource } from '../resolver/profiles/source.js'
 import { setBuiltinFilter } from '../resolver/profiles/index.js'
 import { registerOverridesNamespace } from '../pe-framework/profiles/storage-v2.js'
@@ -67,6 +68,7 @@ export function apply(ctx: Context, config: ConfigShape) {
     disposers.push(ctx.tools.register(registerCatalogRelationsTool(ctx, config)))
     disposers.push(ctx.tools.register(registerCatalogBuildTool(ctx, config)))
     disposers.push(ctx.tools.register(registerAuditTool(ctx, config)))
+    disposers.push(ctx.tools.register(registerFeedbackTool(ctx, config)))
     return () => { for (const d of disposers) d() }
   }, 'prompt-master.tools')
 }

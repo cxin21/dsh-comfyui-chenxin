@@ -43,7 +43,8 @@ function buildUser(input: { target: EnrichTarget; userInput: string }): string {
     '用户原始输入：',
     input.userInput,
     '',
-    '要求：source=user 仅用于用户显式指定的内容（原样保留，不改写）；其余全部标 source=enriched。',
+    // Round7 T3：与 persona 的语义级保留规则同步——字面「原样保留，不改写」会让中文 user 条目穿透英文 brief
+    '要求：source=user 仅用于用户显式指定的内容（语义与指代保留、不得增删要素，语言必须改写为 outputLang 对应语言）；其余全部标 source=enriched。',
     '每维度 ≤6 条、单条 ≤200 字符。outputLang 按目标方言给出（anima 恒为 en）。',
   ].join('\n')
 }

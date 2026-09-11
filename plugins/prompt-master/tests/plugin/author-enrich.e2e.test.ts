@@ -298,4 +298,42 @@ describe('T9 缺省=fast+enrich', () => {
   })
 })
 
+/* Round7 T3（brief C）：persona 语言层修正 — anima + 中文 user 条目 + mock enrich 返回英文翻译 brief */
+describe('Round7 T3 persona 语言层修正', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('anima + 中文输入 + enrich 返回英文翻译 brief → envelope enrichment.brief 为英文；enrich prompt 含「语言必须改写为 outputLang」指令；英文 brief 流程不回归', async () => {
+    const enrichReq: { persona: string; user: string } = { persona: '', user: '' }
+    const enrich: CriticProvider = async (req) => {
+      enrichReq.persona = req.persona
+      enrichReq.user = req.user
+      // mock enrich LLM 遵从 persona：把中文 user 条目译成英文（source=user 语义级保留）
+      return briefJson({ subject: [{ text: 'a girl running through a rainy night street', source: 'user' }] })
+    }
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '雨夜街道上奔跑的少女', enrich: true, judge_mode: 'off' })))
+    expect(raw.ok).toBe(true)
+    // persona 指令级验证：语义级保留 + 语言改写指令在位（且不再字面「原样保留」）；画面/视觉子串保持（T6 carry）
+    expect(enrichReq.persona).toContain('语言必须改写为 outputLang')
+    expect(enrichReq.persona).toContain('语义与指代必须保留')
+    expect(enrichReq.persona).toContain('不得增删要素')
+    expect(enrichReq.persona).not.toContain('原样保留')
+    expect(enrichReq.persona).toContain('画面')
+    expect(enrichReq.persona).toContain('视觉')
+    expect(enrichReq.user).not.toContain('不改写')
+    // envelope：brief 语言为英文（anima outputLang 代码强制 en + 英文 user 条目原样透传）
+    expect(raw.enrichment.brief.outputLang).toBe('en')
+    expect(raw.enrichment.brief.subject[0]).toEqual({ text: 'a girl running through a rainy night street', source: 'user' })
+    // 现有英文 brief 流程不回归：intent 吃英文 brief 权威输入
+    expect(intentCalls[0].input).toContain('brief 是权威输入')
+    expect(intentCalls[0].input).toContain('[user] a girl running through a rainy night street')
+  })
+})
+
 afterAll(() => { setAuthorIntentProvider(null); setAuthorEnrichProvider(null); setAuthorJudgeDeps(null); setAuthorFeedbackDbPath(null); closeCatalog() })

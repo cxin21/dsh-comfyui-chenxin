@@ -125,6 +125,25 @@ describe('runEnrich persona', () => {
     await runEnrich({ target: 'anima', userInput: '一只戴帽子的猫', provider: capturing(providerReturning(validBriefJson())) })
     expect(captured[0].user).toContain('一只戴帽子的猫')
   })
+
+  it('Round7 T3：两方言 persona 含 source=user 语义级保留 + 语言改写指令（不再字面「原样保留」），user 段同步', async () => {
+    captured.length = 0
+    await runEnrich({ target: 'anima', userInput: 'u1', provider: capturing(providerReturning(validBriefJson())) })
+    await runEnrich({ target: 'h3', userInput: 'u2', provider: capturing(providerReturning(validBriefJson())) })
+    expect(captured).toHaveLength(2)
+    for (const req of captured) {
+      // 语义级保留规则在位：语义指代不变 + 不得增删要素 + 语言必须改写为 outputLang
+      expect(req.persona).toContain('语义与指代必须保留')
+      expect(req.persona).toContain('不得增删要素')
+      expect(req.persona).toContain('语言必须改写为 outputLang')
+      // 不冲突硬约束保留（只放宽语言维度）
+      expect(req.persona).toContain('不得与用户显式指定的内容冲突')
+      // 字面级「原样保留」退出 persona（改写为语义级）
+      expect(req.persona).not.toContain('原样保留')
+      // user 段同步：不再出现与 persona 矛盾的「不改写」字面指令
+      expect(req.user).not.toContain('不改写')
+    }
+  })
 })
 
 /* 规格 4 + 7：nameAnchors 透传、user 来源保真 */

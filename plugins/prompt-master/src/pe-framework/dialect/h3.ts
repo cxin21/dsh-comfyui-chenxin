@@ -35,8 +35,9 @@ export function shotCutTimes(durationSeconds: number, shotCount: number): (numbe
 }
 
 export function detectLanguage(text: string): string {
-  if (CJK.test(text)) return '中文'
+  // Round7 T3：假名优先于汉字判定——含任何假名（ひらがな/カタカナ）即日文，混合日文「雨の夜の江南园林」不再误判中文
   if (KANA.test(text)) return '日本語'
+  if (CJK.test(text)) return '中文'
   return 'English'
 }
 

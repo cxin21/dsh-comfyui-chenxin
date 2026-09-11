@@ -252,7 +252,7 @@ function buildRevisionUser(input: JudgeReviewInput): string {
   ].join('\n')
 }
 
-/** revision 契约级校验：形状不合 / 引用不存在的 finding id → null（调用方转 skipped invalid_revision_schema） */
+/** revision 契约级校验：形状不合 / 引用不存在的 finding id / closed∩unresolved 同 id 冲突 / rebuttal reason 空 → null（调用方转 skipped invalid_revision_schema） */
 function parseRevisionOutcome(raw: string, firstFindings: CriticFinding[]): { closed: string[]; unresolved: string[]; rebuttals: RevisionRebuttal[] } | null {
   let obj: any
   try {
@@ -264,6 +264,10 @@ function parseRevisionOutcome(raw: string, firstFindings: CriticFinding[]): { cl
   if (obj.verdict !== 'pass' && obj.verdict !== 'needs_revision') return null
   const isIdArr = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string' && x.length > 0)
   if (!isIdArr(obj.closedFindingIds) || !isIdArr(obj.unresolved)) return null
+  // Round7 T4 规格3：同一 finding id 同时出现在 closedFindingIds 与 unresolved → 整体无效
+  // （「resolved 语义以 closed 为准」的隐式行为废弃——冲突即契约违规）
+  const closedSet = new Set<string>(obj.closedFindingIds)
+  if (obj.unresolved.some((id: string) => closedSet.has(id))) return null
   if (!Array.isArray(obj.rebuttalVerdicts)) return null
   const rebuttals: RevisionRebuttal[] = []
   for (const r of obj.rebuttalVerdicts) {
@@ -271,7 +275,8 @@ function parseRevisionOutcome(raw: string, firstFindings: CriticFinding[]): { cl
     if (typeof o !== 'object' || o === null) return null
     if (typeof o['finding_id'] !== 'string' || o['finding_id'].length === 0) return null
     if (typeof o['accepted'] !== 'boolean') return null
-    if (typeof o['reason'] !== 'string') return null
+    // Round7 T4 规格2：reason 从「string」提升为「非空 string」（trim 后非空），与 finding_id 同严格度
+    if (typeof o['reason'] !== 'string' || o['reason'].trim().length === 0) return null
     rebuttals.push({ finding_id: o['finding_id'], accepted: o['accepted'], reason: o['reason'] })
   }
   // T1 carry：finding id 是证据过滤后编号，复审只可引用存活 findings（悬空引用 → 整体 skipped）
@@ -286,8 +291,12 @@ function parseRevisionOutcome(raw: string, firstFindings: CriticFinding[]): { cl
  * A2 revision 轮（spec §10.1-A2）：独立契约复审。verdict 由契约数据推导（契约即裁决，规格5 不再过
  * 规格3/规格4 首轮归一）；score 透传首轮（firstScore）；findings=未关闭且未被反驳接受的存活 finding
  * 原样保留（id 不变，供 T4 消费）；praise 继承首轮；不触发证据回查（规格6，bridge 可省略）。
+ * Round7 T4 规格1：firstScore 缺省 → skipped missing_first_score（复审必须基于首轮分，
+ * 不再静默 score:0 编造零分——装配缺口的防御契约，provider 调用前失败）。
  */
 async function judgeRevision(input: JudgeReviewInput): Promise<CriticOutcome> {
+  if (input.firstScore === undefined) return skipped('missing_first_score')
+  const firstScore: number = input.firstScore
   const firstFindings = input.firstFindings ?? []
   const raw = await input.provider({
     persona: buildRevisionPersona(),
@@ -304,7 +313,7 @@ async function judgeRevision(input: JudgeReviewInput): Promise<CriticOutcome> {
     : ('pass' as const)
   return {
     verdict,
-    score: input.firstScore ?? 0,
+    score: firstScore,
     findings: survivors,
     praise: input.firstPraise ?? [],
     rebuttalVerdicts: parsed.rebuttals,

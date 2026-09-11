@@ -400,6 +400,32 @@ describe('A1 证据回查复核（spec §10.1-A1）：runJudgeStage 管线交互
   })
 })
 
+describe('Round7 T4：revision 复审不消费 ruleGates（gate 语义只在首轮）', () => {
+  beforeEach(() => __resetDialectsForTests())
+
+  it('修正稿复审的 ruleGates 传 []——修正稿自身审计出 critical 也照常复审（provider 第 2 次调用发生），critical 语义仅由 gates/ok 承载', async () => {
+    let auditCalls = 0
+    registerDialect(fakeDialect({
+      audit: () => {
+        auditCalls++
+        return auditCalls === 1
+          ? { gates: [] }
+          : { gates: [{ rule: 'budget', target: 'anima', severity: 'critical', detail: '超预算', source: 'test' }] }
+      },
+    }))
+    const provider = providerOf([NEEDS_JSON, REV_CLOSE_JSON])
+    const r = await runStage(baseInput({
+      judge: 'strict', criticProvider: provider, evidenceDeps,
+      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [] }),
+    }))
+    // 新契约：复审照常发生（不因修正稿新 critical gate 短路）
+    expect(provider.calls).toBe(2)
+    expect(r.judge).toMatchObject({ verdict: 'pass', score: 50 })
+    // gates 语义不变：修正稿 critical 照常落 ok=false（闭环仍由 gates 驱动）
+    expect(r.ok).toBe(false)
+  })
+})
+
 describe('judge-assembly 生产装配（不打真连，只验适配器形状）', () => {
   it('createProductionEvidenceDeps：catalog/tokenizer/aesthetics 适配器产出桥层可摘要的形状', async () => {
     const { createProductionEvidenceDeps } = await import('../../../src/pe-framework/pipeline/judge-assembly.js')

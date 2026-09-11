@@ -18,6 +18,7 @@ import {
 import { getGeneration, recordFeedback } from '../../src/pe-framework/feedback/store.js'
 import type { CriticFinding, CriticProvider } from '../../src/pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js'
+import type { StageResult } from '../../src/pe-framework/pipeline/types.js'
 import { stubCtx, runTool } from './helpers.js'
 import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
 
@@ -143,6 +144,25 @@ describe('规格7 fast + 规则 critical → judge skipped(rule_critical) 不投
     expect(raw.advisories).toContain('loop_exhausted:true')
     expect(raw.observability.corrections).toBe(2)
     expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/)
+  })
+})
+
+describe('Round7 T4 规格5：judgeTopLevel 投影联动收紧（ruleCriticalSkip 防御契约，构造直调）', () => {
+  it('ruleCriticalSkip 时 judge/debate/judgeFeedback 三字段均不投影（杜绝 judge 缺省却带 debate 的不一致 envelope）；其他 skipped reason 保持 judge 投影', async () => {
+    // 直调构造：runStage 的 ruleCritical 分支本就早退（debate=[]/judgeFeedback=undefined），
+    // 投影联动只能在该分支的防御契约层面构造验证
+    const { judgeTopLevel } = await import('../../src/tools/prompt-author.js')
+    const base = { ok: true, result: {}, gates: [], advisories: [], assumptions: [], targetSlotHint: 't2i.prompt' }
+    const suppressed = judgeTopLevel({
+      ...base,
+      judge: { skipped: true, reason: 'rule_critical' },
+      debate: [{ round: 1, reviewer: { findings: [], score: 0 } }],
+      judgeFeedback: ['[major] fix'],
+    } as StageResult)
+    expect(suppressed).toEqual({})
+    // 对照：非 ruleCritical 的 skipped（如 LLM 故障）保持投影（judge_skipped advisory 可见）
+    const llmDown = judgeTopLevel({ ...base, judge: { skipped: true, reason: 'critic_error:boom' } } as StageResult)
+    expect(llmDown).toEqual({ judge: { skipped: true, reason: 'critic_error:boom' } })
   })
 })
 

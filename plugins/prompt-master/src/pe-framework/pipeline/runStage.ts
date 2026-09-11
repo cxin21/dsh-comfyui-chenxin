@@ -157,13 +157,16 @@ async function runJudgeStage(
   // firstScore/firstPraise 透传首轮；first 轮保持全量评审 + 回查。
   const review = (opts: { compiled?: unknown; ruleGates?: typeof gates; revision?: boolean; firstFindings?: CriticFinding[]; firstScore?: number; firstPraise?: string[]; revisionNote?: string }) => {
     if (opts.revision === true) {
+      // Round7 T4 规格4：复审不消费 ruleGates（契约：gate 语义只在首轮；复审 skipped 时本就不消费）。
+      // 传 [] 而非当前 gates——修正稿自身新出现的 critical gate 不得短路复审（critical 闭环语义
+      // 由 finish 的 ok=gates 承载，与复审无关）。
       return judgeReview({
         target: input.target as 'anima' | 'h3',
         rubric,
         originalIntent: input.originalIntent ?? '',
         provider,
         stage: 'revision',
-        ruleGates: gates,
+        ruleGates: [],
         firstFindings: opts.firstFindings,
         firstScore: opts.firstScore,
         firstPraise: opts.firstPraise,

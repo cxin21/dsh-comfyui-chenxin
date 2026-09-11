@@ -329,6 +329,30 @@ describe('judgeReview', () => {
       }
     })
 
+    it('Round7 T4 规格1：firstScore 缺省 → skipped reason=missing_first_score（复审必须基于首轮分，不再静默 score:0；provider 零调用）', async () => {
+      const provider = vi.fn()
+      const { firstScore: _fs, ...inp } = revInput()
+      const r = await judgeReview({ ...inp, provider })
+      expect(r).toEqual({ skipped: true, reason: 'missing_first_score' })
+      expect(provider).not.toHaveBeenCalled()
+    })
+
+    it('Round7 T4 规格2：rebuttal reason 空串/纯空白 → 整体 skipped invalid_revision_schema（与 finding_id 同严格度）', async () => {
+      for (const reason of ['', '   ']) {
+        const r = await judgeReview(revInput({
+          provider: async () => rev({ rebuttalVerdicts: [{ finding_id: 'f1', accepted: true, reason }] }),
+        }))
+        expect(r).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+      }
+    })
+
+    it('Round7 T4 规格3：同一 finding id 同时出现在 closedFindingIds 与 unresolved → 整体 skipped invalid_revision_schema（resolved 以 closed 为准的隐式行为废弃）', async () => {
+      const r = await judgeReview(revInput({
+        provider: async () => rev({ closedFindingIds: ['f1', 'f2'], unresolved: ['f2', 'f3'] }),
+      }))
+      expect(r).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+    })
+
     it('规格6：revision 轮不触发证据回查（无新 evidence 产出、bridge.query 零调用、无 evidenceUnverified 标志）', async () => {
       const bridge = fakeBridge()
       const r = await judgeReview(revInput({ bridge, provider: async () => rev() }))

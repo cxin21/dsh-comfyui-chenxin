@@ -46,8 +46,10 @@ describe('lazy init', () => {
   it('creates db file and tables on first call', () => {
     const p = dbPath('init')
     expect(() => recordGeneration(p, gen())).not.toThrow()
-    // 二次调用（表已存在）也正常
-    expect(() => recordFeedback(p, { generation_id: gen({}).id, rating: 3 })).toBeTruthy
+    // 二次调用（表已存在）走第二条写路径：真实执行 recordFeedback 并断言结果
+    const g2 = gen()
+    recordGeneration(p, g2)
+    expect(recordFeedback(p, { generation_id: g2.id, rating: 3 })).toEqual({ ok: true })
     // 直接再查不炸
     expect(listFeedback(p)).toEqual(listFeedback(p))
   })
@@ -275,14 +277,29 @@ describe('pruneGenerations', () => {
 // ---------- 8. 隐私 ----------
 describe('privacy shape', () => {
   it('GenerationRow / FeedbackRow carry no raw input / image / api key fields', () => {
-    const g = gen()
-    expect(Object.keys(g).sort()).toEqual(
-      ['created_at', 'debate_json', 'final_output', 'id', 'input_digest', 'judge_mode', 'judge_score', 'judge_verdict', 'repair_rounds', 'target', 'variant'].filter(
-        (k) => k in g,
-      ).sort(),
-    )
-    // input 只以 digest 形式存在
-    expect(g.input_digest).toMatch(/^[0-9a-f]{0,128}$/)
+    // 全字段齐备的行（可选字段全填），硬编码白名单 = GenerationRow 的全部键，不过滤
+    const g = gen({
+      variant: 'cinematic',
+      judge_score: 80,
+      judge_verdict: 'pass',
+      debate_json: '{}',
+      repair_rounds: 0,
+    })
+    expect(Object.keys(g).sort()).toEqual([
+      'created_at',
+      'debate_json',
+      'final_output',
+      'id',
+      'input_digest',
+      'judge_mode',
+      'judge_score',
+      'judge_verdict',
+      'repair_rounds',
+      'target',
+      'variant',
+    ])
+    // input 只以 digest 形式存在：64 位小写 hex
+    expect(g.input_digest).toMatch(/^[0-9a-f]{64}$/)
     const f: FeedbackRow = { generation_id: 'x', rating: 3, created_at: 1 }
     expect(Object.keys(f)).toEqual(['generation_id', 'rating', 'created_at'])
   })

@@ -9,6 +9,7 @@ import { buildH3Budget, h3BudgetToReport, STAGE_QUALITY_CAPS } from '../audit/bu
 import { resolveKnowledgePath } from '../resources/resolve.js'
 import { readFileSync } from 'node:fs'
 import { H3_PERSONA, H3_SCHEMA } from '../intent/subagent-provider.js'
+import { H3_RUBRIC } from '../eval/rubrics/h3.js'
 
 const CJK = /[\u4e00-\u9fff]/
 const KANA = /[\u3040-\u30ff]/
@@ -360,6 +361,7 @@ export function registerH3Dialect(): void {
     },
     budget: (compiled, ctx) => h3BudgetToReport(buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? [])),
     targetSlotHint: 't2v.prompt',
+    rubric: H3_RUBRIC,
     intent: { persona: H3_PERSONA, schema: H3_SCHEMA },
     // 方言包声明（spec §9，Task 4）：能力/约束/审美/许可证
     capabilities: {

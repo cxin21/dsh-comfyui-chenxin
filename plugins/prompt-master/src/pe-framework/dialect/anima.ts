@@ -8,6 +8,7 @@ import { normalizeTag, searchCatalog, overlayStatus, queryCatalogInternal, type 
 import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
+import { ANIMA_RUBRIC } from '../eval/rubrics/anima.js'
 import type { AuditGate } from '../types.js'
 
 export interface AnimaSlots {
@@ -450,6 +451,7 @@ export function registerAnimaDialect(): void {
       return { gates: auditAnima(compiled.positive, compiled.negative, { variant, slots }) }
     },
     targetSlotHint: 't2i.prompt',
+    rubric: ANIMA_RUBRIC,
     intent: { persona: ANIMA_PERSONA, schema: ANIMA_SCHEMA },
     // 方言包声明（spec §9，Task 4）：能力/约束/审美（license 无官方资产声明）
     capabilities: {

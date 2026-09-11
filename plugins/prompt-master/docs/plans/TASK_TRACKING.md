@@ -23,7 +23,7 @@
 
 > Spec：`docs/2026-09-08-quality-flywheel-design.md`；实施计划：`docs/plans/2026-09-08-quality-flywheel-implementation.md`
 > 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照），完成时间 2026-09-08
-> 验收：全量 vitest 705 passed / 1 skipped / 0 failed（BASE ca220ace 起 621→705，golden 零破坏）；tsc/build 干净
+> 验收：全量 vitest 711 passed / 1 skipped / 0 failed（BASE ca220ace 起 621→711，golden 零破坏）；tsc/build 干净；终审 C1/I1 修复波 90c0b73 已 scoped 复审通过
 
 | Task | 内容 | 状态 | 关键 commit |
 |---|---|---|---|

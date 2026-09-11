@@ -408,6 +408,14 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
       gates.push({ rule: 'mutual_exclusion', target: 'anima', severity: 'important', detail: `mutually exclusive tags: ${first} + ${second}`, source: 'dialect/anima' })
     }
   }
+  // F4（三期 Task 3）：CJK 泄漏守门——anima tag 库无 CJK 条目，中文/假名片段对出图无效（硬伤）。
+  // severity = critical：修正闭环只在 critical gate 上触发（important 不进闭环），CJK 必须强制修正。
+  // 判定边界：CJK 统一表意文字（含扩展A/兼容）连续 ≥2 字符为一段（单字符放宽防误报，如型号「R2」相邻数字）；
+  // 假名（平/片/半角片）≥1 即触发（孤假名在英文 prompt 中只可能是泄漏，无合法 tag 形态）。
+  const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2,}|[\u3040-\u30ff\uff66-\uff9f]+/g
+  for (const m of positive.matchAll(CJK_RE)) {
+    gates.push({ rule: 'cjk_in_positive', target: 'anima', severity: 'critical', detail: `cjk fragment in positive (invalid for anima tag library): ${m[0]}`, source: 'dialect/anima' })
+  }
   // tag count（F1：segment 语义——调用方按「槽标签逐项 + narrative 整段计 1」提供 contentCount；
   // 缺省才回退 token 拆分估算，仅脱机近似、不进 golden 路径）
   const contentCount =

@@ -309,14 +309,22 @@ describe('T4 规格1 praise 锚点 + 规格3 patch 失败回退整稿重拆', ()
 
 describe('T4 规格3 稿内编辑成功（anima 槽字段 patch，不重拆）', () => {
   it('finding 定位到 1girl 所在槽 → requiredFix 追加为该槽 tag，intent provider 不再调用，changes 记录所改字段', async () => {
-    const critic = criticOf([NEEDS_JSON, REV_CLOSE_F1])
+    // F4：requiredFix 用英文——patch 会把 requiredFix 注入 positive 槽位，CJK 文本会被
+    // cjk_in_positive（critical）守门拦下并触发重拆闭环，patch 路径需 CJK-free 输入才能测到
+    const NEEDS_FIX_EN = {
+      severity: 'major', dimension: 'tag-order', problem: 'tag order wrong',
+      evidence: { tool: 'catalog', query: '1girl', result: 'canonical,n=120' },
+      requiredFix: 'move quality tags before subject',
+    }
+    const NEEDS_JSON_EN = JSON.stringify({ verdict: 'needs_revision', dimensionScores: dimScores(50), findings: [NEEDS_FIX_EN], praise: [] })
+    const critic = criticOf([NEEDS_JSON_EN, REV_CLOSE_F1])
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
     const intentCalls: AuthorIntentRequest[] = []
     setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
     const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict', enrich: false })))
     // patch 成功 → 不重拆（intent 只有 round 0 一次调用）
     expect(intentCalls).toHaveLength(1)
-    expect(String(raw.result.positive)).toContain('把质量词前移到主体前')
+    expect(String(raw.result.positive)).toContain('move quality tags before subject')
     expect(raw.debate[1].reviser.changes[0]).toContain('patch:slot count_gender')
     expect(raw.debate[1].reviser.changes.join('\n')).not.toContain('fallback')
     expect(raw.judge).toMatchObject({ verdict: 'pass' })

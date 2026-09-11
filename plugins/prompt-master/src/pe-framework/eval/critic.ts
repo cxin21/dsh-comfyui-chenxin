@@ -4,8 +4,8 @@
  * 设计：
  * - 评审 LLM 通过 CriticProvider 注入（Task 5 用 createSubagentCriticProvider 装配，测试用 mock）；
  * - persona 由 rubric.dimensions[].instruction + severityRules 拼接；schema 为 CriticOutcome JSON Schema
- *   （dimension 枚举注入 rubric.dimensions[].id）；user 携带 compiled + originalIntent（revision 时另带
- *   首轮 findings 与修正说明）。
+ *   （dimension 枚举注入 rubric.dimensions[].id）；user 携带 compiled + originalIntent。revision 轮走
+ *   独立契约（A2，spec §10.1-A2）：只验 findings 关闭 + 反驳裁决，非全量重评。
  *
  * 降级铁律（spec §2.5）：本模块任何故障路径都返回 { skipped: true, reason }，绝不抛出。
  */
@@ -28,7 +28,12 @@ export type CriticFinding = {
 
 export type CriticOutcome =
   | { verdict: 'pass' | 'needs_revision'; score: number; findings: CriticFinding[]; praise: string[]; /** 回查未能执行/执行失败：findings 未经验证（runStage 转 evidence_unverified advisory；spec §10.1-A1 规格5） */ evidenceUnverified?: boolean }
+  /** A2（spec §10.1-A2）revision 轮独立契约产出：无 dimensionScores，score 透传首轮；rebuttalVerdicts 供 runStage 映射 debate round2.reviser.rebuttals */
+  | { verdict: 'pass' | 'needs_revision'; score: number; findings: CriticFinding[]; praise: string[]; rebuttalVerdicts: RevisionRebuttal[] }
   | { skipped: true; reason: string }
+
+/** A2 复审反驳裁决条目 */
+export type RevisionRebuttal = { finding_id: string; accepted: boolean; reason: string }
 
 /** 评审 LLM 注入点：Task 5 用 subagent seam 装配，测试用 mock */
 export type CriticProvider = (req: { persona: string; schema: string; user: string }) => Promise<string>
@@ -38,9 +43,10 @@ export type CriticStage = 'first' | 'revision'
 export interface JudgeReviewInput {
   target: 'anima' | 'h3'
   rubric: DialectRubric
-  /** 可选（spec §10.1-A1 规格8）：未传 = 跳过证据回查（findings 全保留 + evidenceUnverified 标志），既有 off 评审调用方零改动 */
+  /** 可选（spec §10.1-A1 规格8）：未传 = 跳过证据回查（findings 全保留 + evidenceUnverified 标志），既有 off 评审调用方零改动；revision 轮不消费（A2 规格6） */
   bridge?: EvidenceBridge
-  compiled: unknown
+  /** first 轮必带；revision 轮独立契约不消费 compiled（A2 规格3：复审 user 只含 findings/修正说明/裁决任务） */
+  compiled?: unknown
   ruleGates: AuditGate[]
   originalIntent: string
   provider: CriticProvider
@@ -49,6 +55,10 @@ export interface JudgeReviewInput {
   firstFindings?: CriticFinding[]
   /** stage='revision' 时由调用方（Task 5 装配）传入修正说明 */
   revisionNote?: string
+  /** stage='revision' 必带：首轮加权分（A2：复审不改分，score 透传首轮） */
+  firstScore?: number
+  /** stage='revision' 时继承首轮 praise（A2 CriticOutcome 映射） */
+  firstPraise?: string[]
 }
 
 /* ── stripFences（自 eval/judge.ts 抄，纯函数） ── */
@@ -210,19 +220,107 @@ function buildUser(input: JudgeReviewInput): string {
     '',
     `可用证据工具：${(tools ?? []).join(', ') || '（无）'}`,
   ]
-  if (input.stage === 'revision') {
-    const note = typeof input.revisionNote === 'string' && input.revisionNote.trim().length > 0
-      ? input.revisionNote
-      : '未提供'
-    parts.push(
-      '',
-      '## revision 轮：以下是首轮评审 findings 与本轮修正说明，请核对首轮问题是否已解决，并按同一 schema 重新评审。',
-      `修正说明：${note}`,
-      '首轮 findings：',
-      JSON.stringify(input.firstFindings ?? []),
-    )
-  }
   return parts.join('\n')
+}
+
+/* ── A2 revision 独立契约（spec §10.1-A2, §2.3）：只验 findings 关闭 + 反驳裁决，非全量重评 ── */
+
+function buildRevisionPersona(): string {
+  return [
+    '你是一位资深的提示词质量评审评委（EvidenceCritic）。',
+    '本轮是修订稿复审：你不做全量重评、不打维度分，只做两件事：',
+    '1. 逐条核对首轮 findings 是否已在修正稿中关闭；',
+    '2. 对修订者提出的反驳逐条裁决是否成立（accepted=true 表示反驳成立，该 finding 视为被推翻）。',
+    '输出：只输出一个 JSON（可带 ```json fence），形状见 schema；不要任何额外文字或解释。',
+  ].join('\n')
+}
+
+function buildRevisionSchema(): string {
+  return `{
+  "verdict": "pass" | "needs_revision",
+  "closedFindingIds": ["已关闭的首轮 finding id", ...],
+  "unresolved": ["未关闭的首轮 finding id", ...],
+  "rebuttalVerdicts": [{ "finding_id": "f1", "accepted": true, "reason": "裁决理由" }]
+}`
+}
+
+function buildRevisionUser(input: JudgeReviewInput): string {
+  const note = typeof input.revisionNote === 'string' && input.revisionNote.trim().length > 0
+    ? input.revisionNote
+    : '未提供'
+  const items = (input.firstFindings ?? []).map((f) => ({ id: f.id, problem: f.problem, requiredFix: f.requiredFix }))
+  return [
+    `target=${input.target}`,
+    '',
+    '## revision 轮：只验证首轮 findings 的关闭情况并裁决反驳，不做全量重评。',
+    '任务：',
+    '- closedFindingIds：已在修正稿中关闭的首轮 finding id；',
+    '- unresolved：尚未关闭的首轮 finding id；',
+    '- rebuttalVerdicts：对每条反驳给出 accepted 布尔与 reason 理由。',
+    '',
+    `修正说明：${note}`,
+    '首轮 findings：',
+    JSON.stringify(items),
+  ].join('\n')
+}
+
+/** revision 契约级校验：形状不合 / 引用不存在的 finding id → null（调用方转 skipped invalid_revision_schema） */
+function parseRevisionOutcome(raw: string, firstFindings: CriticFinding[]): { closed: string[]; unresolved: string[]; rebuttals: RevisionRebuttal[] } | null {
+  let obj: any
+  try {
+    obj = JSON.parse(stripFences(raw))
+  } catch {
+    return null
+  }
+  if (typeof obj !== 'object' || obj === null) return null
+  if (obj.verdict !== 'pass' && obj.verdict !== 'needs_revision') return null
+  const isIdArr = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string' && x.length > 0)
+  if (!isIdArr(obj.closedFindingIds) || !isIdArr(obj.unresolved)) return null
+  if (!Array.isArray(obj.rebuttalVerdicts)) return null
+  const rebuttals: RevisionRebuttal[] = []
+  for (const r of obj.rebuttalVerdicts) {
+    const o = r as Record<string, unknown> | null
+    if (typeof o !== 'object' || o === null) return null
+    if (typeof o['finding_id'] !== 'string' || o['finding_id'].length === 0) return null
+    if (typeof o['accepted'] !== 'boolean') return null
+    if (typeof o['reason'] !== 'string') return null
+    rebuttals.push({ finding_id: o['finding_id'], accepted: o['accepted'], reason: o['reason'] })
+  }
+  // T1 carry：finding id 是证据过滤后编号，复审只可引用存活 findings（悬空引用 → 整体 skipped）
+  const known = new Set(firstFindings.map((f) => f.id))
+  for (const id of [...obj.closedFindingIds, ...obj.unresolved, ...rebuttals.map((r) => r.finding_id)]) {
+    if (!known.has(id)) return null
+  }
+  return { closed: obj.closedFindingIds, unresolved: obj.unresolved, rebuttals }
+}
+
+/**
+ * A2 revision 轮（spec §10.1-A2）：独立契约复审。verdict 由契约数据推导（契约即裁决，规格5 不再过
+ * 规格3/规格4 首轮归一）；score 透传首轮（firstScore）；findings=未关闭且未被反驳接受的存活 finding
+ * 原样保留（id 不变，供 T4 消费）；praise 继承首轮；不触发证据回查（规格6，bridge 可省略）。
+ */
+async function judgeRevision(input: JudgeReviewInput): Promise<CriticOutcome> {
+  const firstFindings = input.firstFindings ?? []
+  const raw = await input.provider({
+    persona: buildRevisionPersona(),
+    schema: buildRevisionSchema(),
+    user: buildRevisionUser(input),
+  })
+  const parsed = parseRevisionOutcome(raw, firstFindings)
+  if (!parsed) return skipped('invalid_revision_schema')
+  const accepted = new Set(parsed.rebuttals.filter((r) => r.accepted).map((r) => r.finding_id))
+  const closed = new Set(parsed.closed)
+  const survivors = firstFindings.filter((f) => !closed.has(f.id) && !accepted.has(f.id))
+  const verdict = survivors.some((f) => f.severity === 'blocker' || f.severity === 'major')
+    ? ('needs_revision' as const)
+    : ('pass' as const)
+  return {
+    verdict,
+    score: input.firstScore ?? 0,
+    findings: survivors,
+    praise: input.firstPraise ?? [],
+    rebuttalVerdicts: parsed.rebuttals,
+  }
 }
 
 /** 评审 LLM 装配说明：createSubagentCriticProvider 见文件尾部（Task 5 装配用）。 */
@@ -232,6 +330,11 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
     // 规格 1：规则审计 critical 短路——provider 零调用
     if (input.ruleGates.some((g) => g?.severity === 'critical')) {
       return skipped('rule_critical')
+    }
+
+    // A2：revision 轮走独立契约路径（不走全量评审 schema / 回查 / 归一）
+    if (input.stage === 'revision') {
+      return await judgeRevision(input)
     }
 
     const req = {

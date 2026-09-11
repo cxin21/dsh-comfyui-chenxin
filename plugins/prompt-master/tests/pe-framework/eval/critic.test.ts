@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { judgeReview, createSubagentCriticProvider } from '../../../src/pe-framework/eval/critic.js'
-import type { CriticProvider } from '../../../src/pe-framework/eval/critic.js'
+import type { CriticProvider, CriticFinding } from '../../../src/pe-framework/eval/critic.js'
 import type { DialectRubric } from '../../../src/pe-framework/eval/rubrics/contract.js'
 import type { EvidenceBridge, EvidenceToolId, EvidenceResult } from '../../../src/pe-framework/eval/evidence.js'
 import type { AuditGate } from '../../../src/pe-framework/types.js'
@@ -213,49 +213,128 @@ describe('judgeReview', () => {
     }
   })
 
-  it('规格6：revision 模式——user 含 firstFindings 与修正说明，逻辑同 first', async () => {
-    const provider = vi.fn().mockResolvedValue(ok('pass'))
-    const firstFindings = [finding()]
-    const r = await judgeReview({
+  describe('A2 revision 独立契约（spec §10.1-A2, §2.3）：只验 findings 关闭 + 反驳裁决，非全量重评', () => {
+    const firstFindings: CriticFinding[] = [
+      { id: 'f1', severity: 'blocker', dimension: 'tag-order', problem: 'tag 顺序错', requiredFix: '把 1girl 放最前' },
+      { id: 'f2', severity: 'major', dimension: 'cross-shot-consistency', problem: '角色矛盾', requiredFix: '统一描述' },
+      { id: 'f3', severity: 'minor', dimension: 'tag-order', problem: '风格词弱', requiredFix: '补具体风格词' },
+    ]
+    const revInput = (over: Record<string, unknown> = {}) => ({
       ...baseInput(),
-      provider,
-      stage: 'revision',
-      firstFindings: firstFindings as any,
+      stage: 'revision' as const,
+      firstFindings,
+      firstScore: 40,
+      firstPraise: ['结构清晰'],
+      revisionNote: '已修复 f1/f2',
+      provider: undefined as unknown as CriticProvider,
+      ...over,
     })
-    expect(r).toMatchObject({ verdict: 'pass' })
-    const req = provider.mock.calls[0][0]
-    expect(req.user).toContain('revision')
-    expect(req.user).toContain('tag 顺序错')
-    expect(req.user).toContain(JSON.stringify(firstFindings))
-  })
+    const rev = (over: Record<string, unknown> = {}) => JSON.stringify({
+      verdict: 'pass', closedFindingIds: ['f1', 'f2'], unresolved: [], rebuttalVerdicts: [], ...over,
+    })
 
-  it('规格6b：revision 提供 revisionNote → 注入 user payload', async () => {
-    const provider = vi.fn().mockResolvedValue(ok('pass'))
-    await judgeReview({
-      ...baseInput(),
-      provider,
-      stage: 'revision',
-      firstFindings: [finding()] as any,
-      revisionNote: '已把 1girl 前移并补齐质量 tag',
+    it('规格3：revision user 只含首轮 findings（id+problem+requiredFix）、修正说明与裁决任务；断言负向——无「重新评审」「dimensionScores」/编译产物/原意/证据工具', async () => {
+      const provider = vi.fn().mockResolvedValue(rev())
+      await judgeReview(revInput({ provider }))
+      const req = provider.mock.calls[0][0]
+      expect(req.user).toContain('tag 顺序错')
+      expect(req.user).toContain('"requiredFix":"把 1girl 放最前"')
+      expect(req.user).toContain('已修复 f1/f2')
+      expect(req.user).toContain('closedFindingIds')
+      expect(req.user).toContain('rebuttalVerdicts')
+      expect(req.user).not.toContain('重新评审')
+      expect(req.user).not.toContain('dimensionScores')
+      expect(req.user).not.toContain('1girl, smile')          // 编译产物不进 revision user
+      expect(req.user).not.toContain('一个微笑的女孩')          // originalIntent 不进
+      expect(req.user).not.toContain('可用证据工具')            // 回查线索不进（规格6）
+      expect(req.schema).not.toContain('dimensionScores')     // 独立 schema 无维度分
+      expect(req.schema).toContain('closedFindingIds')
     })
-    const req = provider.mock.calls[0][0]
-    expect(req.user).toContain('已把 1girl 前移并补齐质量 tag')
-  })
 
-  it('规格6c：revision 缺省 revisionNote → payload 明确写「修正说明：未提供」，并保留 firstFindings + compiled', async () => {
-    const provider = vi.fn().mockResolvedValue(ok('pass'))
-    await judgeReview({
-      ...baseInput(),
-      provider,
-      stage: 'revision',
-      firstFindings: [finding()] as any,
+    it('规格6c：revision 缺省 revisionNote → payload 明确写「修正说明：未提供」', async () => {
+      const provider = vi.fn().mockResolvedValue(rev())
+      const { revisionNote: _n, ...inp } = revInput()
+      await judgeReview({ ...inp, provider })
+      expect(provider.mock.calls[0][0].user).toContain('修正说明：未提供')
     })
-    const req = provider.mock.calls[0][0]
-    expect(req.user).toContain('修正说明：未提供')
-    expect(req.user).toContain('tag 顺序错')
-    expect(req.user).toContain('1girl, smile')
-    // 不再引导核对不存在的「修正说明」字段
-    expect(req.user).not.toContain('核对编译产物的修正说明')
+
+    it('规格2：verdict=pass 条件 = 全部首轮 blocker/major 关闭或反驳被接受；score 透传首轮分；praise 继承首轮', async () => {
+      const r = await judgeReview(revInput({ provider: async () => rev() }))
+      expect(r).toMatchObject({ verdict: 'pass', score: 40, praise: ['结构清晰'], rebuttalVerdicts: [] })
+      // minor f3 未在关闭清单 → 原样保留（pass 条件只看 blocker/major）
+      expect((r as any).findings).toHaveLength(1)
+      expect((r as any).findings[0].id).toBe('f3')
+    })
+
+    it('规格2b：未关闭的 blocker/major 被反驳接受（accepted=true）→ pass；该 finding 不再保留', async () => {
+      const r = await judgeReview(revInput({
+        provider: async () => rev({
+          closedFindingIds: ['f1'], unresolved: ['f2', 'f3'],
+          rebuttalVerdicts: [{ finding_id: 'f2', accepted: true, reason: '跨镜头引用实为同一角色' }],
+        }),
+      }))
+      expect(r).toMatchObject({ verdict: 'pass' })
+      expect((r as any).findings).toHaveLength(1)
+      expect((r as any).findings[0].id).toBe('f3')
+    })
+
+    it('规格2c：有未关闭且未被反驳接受的 blocker/major → needs_revision；findings=存活 finding 原样保留（id 不变）；minor 存活不阻断', async () => {
+      const r = await judgeReview(revInput({
+        provider: async () => rev({
+          closedFindingIds: ['f1'], unresolved: ['f2', 'f3'],
+          rebuttalVerdicts: [{ finding_id: 'f2', accepted: false, reason: '反驳不成立' }],
+        }),
+      }))
+      expect(r).toMatchObject({ verdict: 'needs_revision', score: 40 })
+      const findings = (r as any).findings
+      expect(findings).toHaveLength(2)
+      expect(findings[0]).toMatchObject({ id: 'f2', severity: 'major', problem: '角色矛盾' })
+      expect(findings[1]).toMatchObject({ id: 'f3', severity: 'minor' })
+    })
+
+    it('规格2d：仅剩 minor 未关闭 → pass（pass 条件只看 blocker/major）', async () => {
+      const r = await judgeReview(revInput({
+        provider: async () => rev({ closedFindingIds: ['f1', 'f2'], unresolved: ['f3'] }),
+      }))
+      expect(r).toMatchObject({ verdict: 'pass' })
+      expect((r as any).findings).toHaveLength(1)
+      expect((r as any).findings[0].id).toBe('f3')
+    })
+
+    it('规格5：revision verdict 由契约数据推导（契约即裁决），不再过规格3/规格4 归一——无 dimensionScores 不触发 invalid_dimensions；首轮阈值不作用', async () => {
+      // provider 自称 pass + 存活 blocker → 推导 needs_revision
+      const r1 = await judgeReview(revInput({ provider: async () => rev({ closedFindingIds: [], unresolved: ['f1'] }) }))
+      expect(r1).toMatchObject({ verdict: 'needs_revision' })
+      // provider 自称 needs_revision + 全关闭 → 推导 pass
+      const r2 = await judgeReview(revInput({ provider: async () => rev({ verdict: 'needs_revision' }) }))
+      expect(r2).toMatchObject({ verdict: 'pass' })
+    })
+
+    it('校验：字段缺失/类型错 → 整体 skipped reason=invalid_revision_schema', async () => {
+      const bads: unknown[] = [
+        'not json',
+        { verdict: 'pass' },                                                                                                        // 缺三字段
+        { verdict: 'maybe', closedFindingIds: [], unresolved: [], rebuttalVerdicts: [] },                                            // verdict 非法
+        { verdict: 'pass', closedFindingIds: 'f1', unresolved: [], rebuttalVerdicts: [] },                                           // 非数组
+        { verdict: 'pass', closedFindingIds: [''], unresolved: [], rebuttalVerdicts: [] },                                           // 空 id
+        { verdict: 'pass', closedFindingIds: [], unresolved: [], rebuttalVerdicts: [{ finding_id: 'f1', accepted: 'yes', reason: 'x' }] }, // accepted 非布尔
+        { verdict: 'pass', closedFindingIds: [], unresolved: [], rebuttalVerdicts: [{ finding_id: 'f1', accepted: true }] },          // 缺 reason
+        { verdict: 'pass', closedFindingIds: ['f9'], unresolved: [], rebuttalVerdicts: [] },                                         // 引用不存在 id
+        { verdict: 'pass', closedFindingIds: [], unresolved: ['f9'], rebuttalVerdicts: [] },                                         // unresolved 悬空引用
+        { verdict: 'pass', closedFindingIds: [], unresolved: [], rebuttalVerdicts: [{ finding_id: 'f9', accepted: true, reason: 'x' }] }, // rebuttal 悬空引用
+      ]
+      for (const bad of bads) {
+        const r = await judgeReview(revInput({ provider: async () => (typeof bad === 'string' ? bad : JSON.stringify(bad)) }))
+        expect(r).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+      }
+    })
+
+    it('规格6：revision 轮不触发证据回查（无新 evidence 产出、bridge.query 零调用、无 evidenceUnverified 标志）', async () => {
+      const bridge = fakeBridge()
+      const r = await judgeReview(revInput({ bridge, provider: async () => rev() }))
+      expect(bridge.query).not.toHaveBeenCalled()
+      expect((r as any).evidenceUnverified).toBeUndefined()
+    })
   })
 
   it('first 模式不受 revisionNote 影响：user 不含修正说明节', async () => {

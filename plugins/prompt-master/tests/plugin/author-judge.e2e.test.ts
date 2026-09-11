@@ -164,8 +164,12 @@ describe('规格5 audit_only=true 不触发评审', () => {
 })
 
 describe('规格6 strict：revisionProvider 接线（mock 验证对抗二轮）', () => {
-  it('首评 needs_revision → revisionProvider 修正稿 → 复审 pass，debate 两轮含 reviser', async () => {
-    const critic = criticOf([NEEDS_JSON, PASS_JSON])
+  it('首评 needs_revision → revisionProvider 修正稿 → 复审（A2 独立契约）全关闭 → pass，debate 两轮含 reviser', async () => {
+    // A2 迁移（spec §10.1-A2）：复审 round2 不再是全量评审 JSON，而是关闭/反驳裁决契约
+    const REV_PASS_JSON = JSON.stringify({
+      verdict: 'pass', closedFindingIds: ['f1'], unresolved: [], rebuttalVerdicts: [],
+    })
+    const critic = criticOf([NEEDS_JSON, REV_PASS_JSON])
     let revisionInput: { compiled: unknown; findings: unknown[] } | null = null
     const revisionProvider = async (compiled: unknown, findings: CriticFinding[]) => {
       revisionInput = { compiled, findings }

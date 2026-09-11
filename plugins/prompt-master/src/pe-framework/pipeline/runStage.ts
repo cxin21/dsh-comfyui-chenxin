@@ -4,7 +4,7 @@ import { targetSlotHint } from '../render/envelope.js'
 import type { CriticFinding, CriticOutcome } from '../eval/critic.js'
 import { judgeReview } from '../eval/critic.js'
 import { createEvidenceBridge } from '../eval/evidence.js'
-import type { DebateRound, PipelineInput, PipelineTrace, StageResult, CriticRebuttal } from './types.js'
+import type { DebateRound, PipelineInput, PipelineTrace, StageResult } from './types.js'
 
 /**
  * 唯一管线内核：按注册表调度，零目标业务分支、零日志。
@@ -101,25 +101,6 @@ function reviewerOf(outcome: Extract<CriticOutcome, { verdict: string }>): Debat
   return { findings: outcome.findings as CriticFinding[], score: outcome.score }
 }
 
-/** rebuttals 从修正稿解析：优先 rev.rebuttals，其次 revisionNote 内嵌 JSON，缺失 → 空数组 */
-function parseRebuttals(rev: { compiled: unknown; changes: string[]; revisionNote: string }): CriticRebuttal[] {
-  const isRebuttal = (v: unknown): v is CriticRebuttal => {
-    const o = v as Record<string, unknown> | null
-    return typeof o === 'object' && o !== null
-      && typeof o['finding_id'] === 'string' && o['finding_id'].length > 0
-      && typeof o['rebuttal'] === 'string' && o['rebuttal'].length > 0
-      && typeof o['evidence'] === 'string' && o['evidence'].length > 0
-  }
-  const pick = (v: unknown): CriticRebuttal[] => (Array.isArray(v) ? v.filter(isRebuttal) : [])
-  const direct = pick((rev as { rebuttals?: unknown }).rebuttals)
-  if (direct.length > 0) return direct
-  try {
-    return pick((JSON.parse(rev.revisionNote) as { rebuttals?: unknown })?.rebuttals)
-  } catch {
-    return []
-  }
-}
-
 async function runJudgeStage(
   input: PipelineInput,
   judgeMode: 'fast' | 'strict',
@@ -172,22 +153,40 @@ async function runJudgeStage(
 
   const provider = input.criticProvider
     ?? (async () => { throw new Error('criticProvider 未注入') })
-  const review = (opts: { compiled: unknown; ruleGates: typeof gates; firstFindings?: CriticFinding[]; revisionNote?: string; revision?: boolean }) =>
-    judgeReview({
+  // A2（spec §10.1-A2）：revision 轮走 critic 独立契约——bridge 可省略（不触发回查，规格6），
+  // firstScore/firstPraise 透传首轮；first 轮保持全量评审 + 回查。
+  const review = (opts: { compiled?: unknown; ruleGates?: typeof gates; revision?: boolean; firstFindings?: CriticFinding[]; firstScore?: number; firstPraise?: string[]; revisionNote?: string }) => {
+    if (opts.revision === true) {
+      return judgeReview({
+        target: input.target as 'anima' | 'h3',
+        rubric,
+        originalIntent: input.originalIntent ?? '',
+        provider,
+        stage: 'revision',
+        ruleGates: gates,
+        firstFindings: opts.firstFindings,
+        firstScore: opts.firstScore,
+        firstPraise: opts.firstPraise,
+        revisionNote: opts.revisionNote,
+      })
+    }
+    return judgeReview({
       target: input.target as 'anima' | 'h3',
       rubric,
       bridge,
       originalIntent: input.originalIntent ?? '',
       provider,
-      stage: opts.revision === true ? 'revision' : 'first',
-      ...opts,
+      stage: 'first',
+      compiled: opts.compiled,
+      ruleGates: opts.ruleGates ?? gates,
     })
+  }
 
   const debate: DebateRound[] = []
 
   /** A1（spec §10.1-A1 规格5）：评审回查未验证 → evidence_unverified advisory 透传（不重复 push） */
   const noteUnverified = (o: CriticOutcome): void => {
-    if (!('skipped' in o) && o.evidenceUnverified === true && !advisories.includes('evidence_unverified')) {
+    if (!('skipped' in o) && 'evidenceUnverified' in o && o.evidenceUnverified === true && !advisories.includes('evidence_unverified')) {
       advisories.push('evidence_unverified')
     }
   }
@@ -220,19 +219,27 @@ async function runJudgeStage(
     if (budget2 !== undefined) budget = budget2 as Budget
     resultCur = auditOnly ? {} : (compiledCur as Record<string, unknown>)
 
-    const reviser = { changes: rev.changes, rebuttals: parseRebuttals(rev) }
     const second = await review({
-      compiled: compiledCur,
-      ruleGates: gates,
-      firstFindings,
-      revisionNote: rev.revisionNote, // T3 carry：strict 复审必须传 revisionNote
       revision: true,
+      firstFindings,
+      firstScore: outcome.score, // A2：复审 score 透传首轮
+      firstPraise: outcome.praise,
+      revisionNote: rev.revisionNote,
     })
     if ('skipped' in second) {
       // final review I1：复审 skipped → round 2 整轮不 push（0 分 reviewer 是编造数据，
       // 会污染 debate 语料）；只留 judge_skipped advisory + round1 记录，消费方零改动。
       advisories.push('judge_skipped')
       return finish(second, debate)
+    }
+    // A2 规格4：rebuttals 从复审 rebuttalVerdicts 映射（accepted 的才进）；T4 会把生产 rebuttals
+    // 换成修订者自带的结构化字段，本任务先保证 verdicts 映射正确。
+    const acceptedVerdicts = ('rebuttalVerdicts' in second && Array.isArray(second.rebuttalVerdicts))
+      ? second.rebuttalVerdicts.filter((r) => r.accepted)
+      : []
+    const reviser = {
+      changes: rev.changes,
+      rebuttals: acceptedVerdicts.map((r) => ({ finding_id: r.finding_id, rebuttal: r.reason, evidence: 'reviewer-accepted' })),
     }
     debate.push({ round: 2, reviewer: reviewerOf(second), reviser })
     noteUnverified(second)

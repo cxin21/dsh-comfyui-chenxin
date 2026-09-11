@@ -8,6 +8,7 @@
 |---|---|---|
 | 写 Anima 提示词 / 把一段描述变成 Anima tag | 调用 `prompt_author` (target=`anima`) 拿 `positive` + `negative`，**别直接跑 ComfyUI**；要确定性编译/审计用 `prompt_compile` / `prompt_audit`（prompt-master 插件） | `prompt_author` (target=anima) |
 | 写 MiniMax H3 视频提示词 / 验证 H3 prompt 长度 | 调用 `prompt_author` (target=`h3`) / `prompt_compile` (shots)（prompt-master 插件） | `prompt_author` (target=h3) |
+| 用户对出稿满意/不满意，想打分或补充反馈 | 调用 `prompt_feedback` (action=`record`)，`generation_id` 从 `prompt_author` envelope 顶层复制（UPSERT：重复评分覆盖旧评） | `prompt_feedback` (action=record) |
 | 跑 Anima 图（t2i / i2i） | 先 `camera-image describe --summary` 看契约，写 req.json，再 `camera-image run` | `camera_image` |
 | 跑 MiniMax H3 视频 | `camera-video describe --summary` → 写 req.json → `camera-video run` | `camera_video` |
 | 跑多视图角色卡 / 三视图 / 多姿态 | `camera-multiview describe` → 写 req.json → `camera-multiview run` | `camera_multiview` |
@@ -34,7 +35,9 @@
 - `camera-image run` 默认会**问你 y/N**（group plan / asset verification），自动化场景必须加 `--yes`。
 - `camera-video run` 和 `camera-multiview run` **不接受 `--yes`**（argparse 会直接 exit code 2），它们没有交互式 prompt，会直接 enqueue。不要照搬 `camera-image` 的 flag。
 - 所有 CLI 都接受 `--json`（loader 已经自动加），**调 CLI 时不用自己加 `--json`**。
-- 写 Anima / H3 提示词**不走 CLI**：由 prompt-master 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` 处理，CLI 只负责 camera-* 的执行。
+- 写 Anima / H3 提示词**不走 CLI**：由 prompt-master 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` 处理，CLI 只负责 camera-* 的执行。
+- `prompt_author` 的 `judge_mode`（`fast`（默认）/ `strict` / `off`）：LLM 证据化评审，`off`=显式关闭回退旧路径。`enrich`（默认 `true`）：先 LLM 扩写为七维度 brief 再拆解（`false` 显式关闭）；`outputLang`（`en`/`zh`/`ja`）：输出语言偏好（anima 恒锁 en；仅 h3 显式生效）。成功 envelope 顶层字段：`generation_id`（反馈回写用）、`judge`（评审结果，含 `verdict`/`score`/`findings`；跳过时 `judge.skipped=true`）、`debate`（评审-修订全程留痕）、`judgeFeedback`（needs_revision 终态的 findings 投影）、`enrichment`（七维度 brief，`source=user/enriched` 可追溯）。评审/enrich 任何故障不阻塞出稿。
+- **成本提示**：缺省一次 `prompt_author` ≈ 3 次 LLM 调用（intent + enrich + fast 评审，pass 情形；修正轮更多）；要省成本可显式传 `judge_mode:'off'`、`enrich:false`（或两者都关）。
 - `--request` 文件路径用绝对路径或 preset 内相对路径，不要依赖 cwd。
 - **跨 skill 的字段不可移植**：每个 skill 的 request schema 独立，先 `describe --summary` 看 `result.request` 的 schema 描述，不要凭印象从其他 skill 抄。
 
@@ -53,6 +56,7 @@ temp/<skill>/<task>/
 - camera-* 的产物默认落 `<preset>/temp/<skill>/`（不传 `--output-dir` 时），也可显式 `--output-dir` 覆盖到别处
 - prompt-master 的 `catalog_build` 工具从 `assets/knowledge/anima-prompt-v1/tags.sqlite` 重建 `tag-catalog.sqlite` + manifest；`catalog_relations` 读写 `temp/anima-prompt-v1/relation-overlay.sqlite`
 - 引擎 workflow 缓存（每次 run 写 1 个 json）落在 `temp/runtime/.workflow_cache/`，随 temp 一起清理
+- `prompt_feedback` 的生成/反馈记录落在 `data/runtime/feedback.sqlite`（node:sqlite；generations 保留 90 天懒清理，feedback 永久保留，孤儿行在 `list` 里标 `orphaned: true`）；首次使用时自动从旧位置 `temp/runtime/feedback.sqlite` 迁移（含 -wal/-shm）
 - 不要写到 `skills/<name>/` 下面（那是技能包源码 + 只读 knowledge/，与项目无关；历史遗留的 `out/` 已迁到 `temp/`）
 
 ## 4. 不要做的事

@@ -228,6 +228,29 @@ setup 会重装 tokenizers，install_local 不动 tokenizer snapshot（那是 Py
 
 `audio cannot be the only reference type` —— 不能只有音频。
 
+### `generation_not_found`（prompt_feedback / prompt-master 插件）
+
+`prompt_feedback(action=record)` 的 `generation_id` 在生成记录库中不存在：
+
+| 原因 | 修 |
+|---|---|
+| `generation_id` 拼错 / 编造 | 从 `prompt_author` 成功 envelope 顶层的 `generation_id`（形如 `gen_<ts>_<rand>`）原样复制 |
+| 生成记录已过 90 天保留期被懒清理 | 生成记录只保留 90 天；过期后补反馈会得到此错误，属预期行为，不可恢复 |
+
+注意：`record` 是 UPSERT——同 `generation_id` 再次评分会覆盖旧评（补评历史不保留）。
+
+### `prompt_author` 缺省评审/扩写（prompt-master 插件）
+
+缺省 `judge_mode='fast'` + `enrich=true`（每次 author ≈ 3 次 LLM 调用：intent + enrich + fast 评审，pass 情形；修正轮更多）：
+
+| 想要 | 传参 |
+|---|---|
+| 省成本（回旧路径） | `judge_mode:'off'`、`enrich:false`（可只关一个） |
+| 更强质量把关 | `judge_mode:'strict'`（对抗二轮） |
+| 输出语言 | `outputLang:'en'|'zh'|'ja'`（anima 恒锁 en；仅 h3 显式生效） |
+
+评审/enrich 任何故障自动降级（`judge_skipped`/`enrich_skipped` advisory），出稿不中断。
+
 ### `invalid_request` / `input_file_missing`（camera-*）
 
 - `invalid_request`：req.json 不存在、不是 JSON、字段未知

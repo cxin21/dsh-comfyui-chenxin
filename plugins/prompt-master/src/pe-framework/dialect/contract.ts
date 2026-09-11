@@ -70,5 +70,6 @@ export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
   capabilities?: DialectCapabilities
   constraints?: DialectConstraints
   aesthetics?: DialectAesthetics
+  rubric?: import('../eval/rubrics/contract.js').DialectRubric
   license?: DialectLicense
 }

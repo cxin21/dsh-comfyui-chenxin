@@ -6,12 +6,13 @@ import type { AnimaSlots } from '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
 import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
+import { buildTextZh } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
 import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
-import type { StageResult } from '../pe-framework/pipeline/types.js'
+import type { StageResult, CriticRebuttal } from '../pe-framework/pipeline/types.js'
 import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blueprint/repo.js'
 import { projectToH3, projectToAnima, preflightRepair } from '../pe-framework/blueprint/project.js'
 import { enrichBlueprint } from '../pe-framework/enrichment/engine.js'
@@ -46,6 +47,8 @@ export interface AuthorArgs {
   blueprint_id?: string
   /** Task 6（spec §2.4/§3.1）：评审模式；缺省 'off' 零行为变化；audit_only=true 时忽略并保持旧行为 */
   judge_mode?: 'off' | 'fast' | 'strict'
+  /** T4（spec §10.4-A12）：修正轮评审成本开关；缺省 true（现状每修正轮重评）；false=修正轮 runStage 不带 judgeOpts（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动） */
+  judgeRepair?: boolean
 }
 
 /** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
@@ -138,8 +141,13 @@ const MAX_CORRECTIONS = 2
 
 /* ── Task 6 评审接线（spec §2.4/§3.1）：注入点 + 生产装配 ── */
 
-/** strict 修正稿生产者（与 PipelineInput.revisionProvider 同形） */
-export type AuthorRevisionProvider = (compiled: unknown, findings: CriticFinding[]) => Promise<{ compiled: unknown; changes: string[]; revisionNote: string }>
+/** strict 修正稿生产者（与 PipelineInput.revisionProvider 同形；T4 增 praise 参与结构化 rebuttals 产物） */
+export type AuthorRevisionProvider = (compiled: unknown, findings: CriticFinding[], praise: string[]) => Promise<{
+  compiled: unknown
+  changes: string[]
+  revisionNote: string
+  rebuttals: CriticRebuttal[]
+}>
 
 /** 评审依赖注入 seam：生产缺省走 createProduction* 装配；e2e/单测经此注入 mock */
 export interface AuthorJudgeDeps {
@@ -246,10 +254,151 @@ function judgeTopLevel(stage: StageResult): Record<string, unknown> {
   }
 }
 
+/* ── T4（spec §10.2-A3/A4, §10.4-A13）：makeRevisionProvider v2 —— 稿内编辑 + praise 锚点 + 结构化 rebuttals ── */
+
+/** 与 eval/critic.ts tokensOf 同款词元集（实词交集判定；CJK/假名取 2 字符 bigram） */
+function patchTokens(s: string): Set<string> {
+  const out = new Set<string>()
+  for (const m of String(s).toLowerCase().matchAll(/[a-z0-9\u4e00-\u9fff\u3040-\u30ff\uff66-\uff9f]+/g)) {
+    const run = m[0]
+    if (/[a-z0-9]/.test(run[0]) && /[a-z0-9]/.test(run[run.length - 1])) {
+      if (run.length >= 2) out.add(run)
+    } else {
+      for (let i = 0; i + 1 < run.length; i++) out.add(run.slice(i, i + 2))
+    }
+  }
+  return out
+}
+
+function patchIntersects(a: string, b: string): boolean {
+  const ta = patchTokens(a)
+  for (const t of patchTokens(b)) if (ta.has(t)) return true
+  return false
+}
+
+/** finding 定位键：优先证据查询串，缺省回落 problem 描述 */
+function locatorOf(f: CriticFinding): string {
+  return (f.evidence?.query ?? '') + ' ' + f.problem
+}
+
+type PatchResult = { compiled: unknown; changes: string[]; rebuttals: CriticRebuttal[] } | null
+
 /**
- * strict 生产 revisionProvider（工具层最小实现，基于现有修正机制）：
- * 首轮 findings 投影为 feedback → 复用 intent provider 取修正结构 → 经方言 normalize/compile 产修正稿。
- * changes 取各 finding 的 requiredFix；revisionNote 即 feedback 全文（复审 user 段透传）。
+ * anima 稿内编辑：从 compiled.segments 重建槽字段（slot→tags / narrative / exclusions），
+ * 按 finding 定位所属槽后把 requiredFix 追加为该槽新 tag（字段级 patch），再经方言重编译。
+ * requiredFix 内容已在稿内 → 不改稿，产结构化 rebuttal（带稿内证据）。
+ * 任一 finding 定位不到槽 → null（调用方回退整稿重拆）。
+ */
+function patchAnima(compiled: unknown, findings: CriticFinding[], variant: string): PatchResult {
+  const c = compiled as { segments?: unknown; positive?: unknown }
+  if (!Array.isArray(c?.segments) || typeof c.positive !== 'string') return null
+  const positiveText = String(c.positive).toLowerCase()
+  const fields: Record<string, string[]> = {}
+  let narrative: string | undefined
+  let exclusions: string[] | undefined
+  for (const seg of c.segments as Array<Record<string, unknown>>) {
+    const slot = typeof seg['slot'] === 'string' ? seg['slot'] : null
+    const text = typeof seg['text'] === 'string' ? seg['text'] : null
+    const origin = seg['origin']
+    const channel = seg['channel']
+    if (!text) return null
+    if (origin === 'narrative' && channel === 'positive') { narrative = text; continue }
+    if (origin === 'exclusion' && channel === 'negative') { (exclusions ??= []).push(text); continue }
+    if (channel !== 'positive' || typeof slot !== 'string') continue
+    (fields[slot] ??= []).push(text)
+  }
+  const changes: string[] = []
+  const rebuttals: CriticRebuttal[] = []
+  let patched = false
+  for (const f of findings) {
+    const fix = f.requiredFix.trim()
+    if (!fix) return null
+    if (positiveText.includes(fix.toLowerCase())) {
+      // A4：所需内容已在稿内 → 结构化反驳（带稿内证据），不改稿
+      rebuttals.push({ finding_id: f.id, rebuttal: `requiredFix 内容已在稿内（无需修改）: ${fix}`, evidence: String(c.positive) })
+      continue
+    }
+    let target: string | null = null
+    for (const [slot, tags] of Object.entries(fields)) {
+      if (tags.some((t) => patchIntersects(t, locatorOf(f)))) { target = slot; break }
+    }
+    if (target === null) return null // 定位不到槽 → 整体回退整稿重拆
+    fields[target].push(fix)
+    changes.push(`patch:slot ${target} += "${fix}" (finding ${f.id})`)
+    patched = true
+  }
+  if (!patched && rebuttals.length === 0) return null
+  const d = getDialect('anima')
+  if (!d) return null
+  const slots: Record<string, unknown> = { ...fields }
+  if (narrative !== undefined) slots['narrative'] = narrative
+  if (exclusions !== undefined) slots['exclusions'] = exclusions
+  try {
+    const compiled2 = d.compile(slots as never, { variant: (variant as 'base' | 'aesthetic' | 'turbo') ?? 'base' })
+    return { compiled: compiled2, changes, rebuttals }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * h3 稿内编辑：在 compiled.text 里按词元交集定位 finding 对应的 [Shot N] 段，
+ * 用 requiredFix 重写该镜头段文本（保留 dialogue 后缀），text_zh 经 buildTextZh 重投影。
+ * 任一 finding 定位不到镜头 / 结构不合规 → null（回退整稿重拆）。
+ */
+function patchH3(compiled: unknown, findings: CriticFinding[]): PatchResult {
+  const text = (compiled as { text?: unknown } | null | undefined)?.text
+  if (typeof text !== 'string' || !text.includes('[Shot ')) return null
+  let cur = text
+  const changes: string[] = []
+  const rebuttals: CriticRebuttal[] = []
+  for (const f of findings) {
+    const fix = f.requiredFix.trim()
+    if (!fix) return null
+    // 镜头段切分：[Shot N] 起点到下一 [Shot 或文本末尾
+    const starts: number[] = []
+    const re = /\[Shot (\d+)\]/g
+    for (const m of cur.matchAll(re)) starts.push(m.index)
+    if (starts.length === 0) return null
+    let hitIdx = -1
+    for (let i = 0; i < starts.length; i++) {
+      const end = i + 1 < starts.length ? starts[i + 1] : cur.length
+      const seg = cur.slice(starts[i], end)
+      if (patchIntersects(seg, locatorOf(f))) { hitIdx = i; break }
+    }
+    if (hitIdx < 0) return null
+    const start = starts[hitIdx]
+    // 段边界：下一 [Shot，或本行行尾（最后一个镜头不得吞掉后续字段行）
+    const nl = cur.indexOf('\n', start)
+    const end = hitIdx + 1 < starts.length ? starts[hitIdx + 1] : (nl >= 0 ? nl : cur.length)
+    const seg = cur.slice(start, end)
+    const headerM = /^\[Shot \d+\] /.exec(seg)
+    if (!headerM) return null
+    const body = seg.slice(headerM[0].length).replace(/\s+$/, '')
+    if (body.toLowerCase().includes(fix.toLowerCase())) {
+      rebuttals.push({ finding_id: f.id, rebuttal: `requiredFix 内容已在稿内（无需修改）: ${fix}`, evidence: body })
+      continue
+    }
+    // 保留 dialogue 后缀（body 首个「 <d>」之后的部分）
+    const dIdx = body.indexOf(' <d>')
+    const dialogue = dIdx >= 0 ? body.slice(dIdx) : ''
+    const segNo = hitIdx + 1
+    const replaced = `[Shot ${segNo}] ${fix}.${dialogue} `
+    cur = cur.slice(0, start) + replaced + cur.slice(end)
+    changes.push(`patch:shot ${segNo} (finding ${f.id})`)
+  }
+  if (changes.length === 0 && rebuttals.length === 0) return null
+  return { compiled: { text: cur.trimEnd(), text_zh: buildTextZh(cur.trimEnd()) }, changes, rebuttals }
+}
+
+/**
+ * strict 生产 revisionProvider v2（T4，spec §10.2-A3/A4 + §10.4-A13）：
+ * 1. praise 锚点：首轮 praise 非空 → 修订 prompt（feedback）追加「以下优点须保留」块 + 禁删指令；
+ * 2. 稿内编辑优先：按 finding 定位 compiled 槽/镜头字段做定点修改（anima 槽字段追加 tag、h3 重写镜头段），
+ *    patch 成功不重拆（intent provider 零调用）；
+ * 3. patch 失败（定位不到字段/结构不合规）→ 回退整稿重拆（原行为），changes 标注 fallback:full-rebuild；
+ * 4. rebuttals：patch 路径上「requiredFix 已在稿内」的 finding 产结构化反驳（带稿内证据）；
+ *    回退路径一律照改 → 空数组。
  */
 function makeRevisionProvider(args: {
   target: Target
@@ -258,8 +407,23 @@ function makeRevisionProvider(args: {
   runOpts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }
   exec: ToolRunContext
 }): AuthorRevisionProvider {
-  return async (_compiled, findings) => {
-    const feedback = findings.map((f) => `[${f.severity}] ${f.requiredFix}`).join('\n')
+  return async (compiled, findings, praise) => {
+    const feedback = [
+      ...findings.map((f) => `[${f.severity}] ${f.requiredFix}`),
+      ...(praise.length > 0
+        ? ['', '以下优点须保留：', ...praise.map((p) => `- ${p}`), '（修订时不得删除上述优点对应的内容）']
+        : []),
+    ].join('\n')
+    // 1) 稿内编辑优先（A13）：patch 成功 → 不重拆
+    const patched = args.target === 'anima'
+      ? patchAnima(compiled, findings, args.runOpts.variant ?? 'base')
+      : args.target === 'h3'
+        ? patchH3(compiled, findings)
+        : null
+    if (patched) {
+      return { compiled: patched.compiled, changes: patched.changes, revisionNote: feedback, rebuttals: patched.rebuttals }
+    }
+    // 2) 回退整稿重拆（原 makeRevisionProvider 行为），changes 标注 fallback（A13）
     const draft = await args.provider({ ...args.intentBase, round: 1, feedback }, args.exec)
     const input = normalizeDraftToInput(args.target, draft, args.runOpts)
     const d = getDialect(args.target)
@@ -270,7 +434,7 @@ function makeRevisionProvider(args: {
     )
     if (normalized.error !== undefined) throw new Error(normalized.error)
     const revised = d.compile(normalized.value as never, { variant: input.variant, stage: normalized.stage ?? input.stage })
-    return { compiled: revised, changes: findings.map((f) => f.requiredFix), revisionNote: feedback }
+    return { compiled: revised, changes: [...findings.map((f) => f.requiredFix), 'fallback:full-rebuild'], revisionNote: feedback, rebuttals: [] }
   }
 }
 
@@ -367,12 +531,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
       blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影（取回旧蓝图改一字段重投影）' },
       judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'off', description: 'LLM 评审模式（spec §2.4）：off=不评审（缺省）；fast=单轮评审；strict=评审+对抗修正一轮。audit_only=true 时忽略' },
+      judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict' }, exec: ToolRunContext) {
+    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
       const target = String(a.target || 'anima') as Target
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
@@ -433,6 +598,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         }
       }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}${a.blueprint_id ? ` blueprint_id=${a.blueprint_id}` : ''}`)
+      // T4（spec §10.4-A12）：judgeRepair=false → 修正轮 runStage 不带 judgeOpts（provider 零调用）
+      const repairJudgeOpts = a.judgeRepair === false ? undefined : judgeOpts
 
       // Task 10 蓝图管线：blueprint_id → repo.load 跳过 analyzeIntent（增量修改入口）；否则走 intent provider seam
       let draft: AuthorDraft
@@ -464,6 +631,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         if (l1.repairs.length > 0) { repaired = true; repairs.push(...l1.repairs) }
         let bp = l1.bp
         let stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts)
+        // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果（envelope 可见性，不影响闭环）
+        let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
 
         let corrections = 0
@@ -482,7 +651,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           const l2 = preflightRepair(e2.blueprint)
           repairs.push(...l2.repairs)
           bp = l2.bp
-          stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts)
+          stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, repairJudgeOpts)
+          if (repairJudgeOpts) lastJudged = stage
           if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
         }
         if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
@@ -495,13 +665,16 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         // t22 F1：computeNextAction 只读 stage.advisories——把 trailAdvisories（loop_exhausted:true）并入
         // stage 视图；且循环耗尽时 repaired 失效化（否则 repaired 分支在 manual 判定前短路 → 误报 auto_repair）
         const loopExhausted = trailAdvisories.includes('loop_exhausted:true')
+        const projStage: StageResult = (repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined)
+          ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
+          : stage
         const nextStage: StageResult = loopExhausted
           ? { ...stage, advisories: [...stage.advisories, ...trailAdvisories] }
           : stage
         ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
         const generationId = makeGenerationId()
-        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: corrections, advisories: trailAdvisories })
-        return assembleEnvelope(stage, trailAdvisories, {
+        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: trailAdvisories })
+        return assembleEnvelope(projStage, trailAdvisories, {
           corrections,
           loopExhausted,
           joyExtraFiltered,
@@ -510,7 +683,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           repairs,
         }, {
           generation_id: generationId,
-          ...judgeTopLevel(stage),
+          ...judgeTopLevel(projStage),
         }, {
           next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
           repair_hints,
@@ -519,6 +692,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
 
       // 旧 slots/shots 直传路径（向后兼容——AuthorDraft.blueprint 缺省时走原逻辑）
       let stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts)
+      // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果
+      let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined
       let joyExtraFiltered = false
       if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       const trailAdvisories: string[] = []
@@ -532,23 +707,27 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           ...(stage.judgeFeedback ?? []),
         ].join('\n')
         draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
-        stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts)
+        stage = await runDraftThroughStage(target, draft, runOpts, repairJudgeOpts)
+        if (repairJudgeOpts) lastJudged = stage
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       }
       if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
         trailAdvisories.push('loop_exhausted:true')
       }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
+      const projStage: StageResult = (repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined)
+        ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
+        : stage
       const generationId = makeGenerationId()
-      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: corrections, advisories: trailAdvisories })
-      return assembleEnvelope(stage, trailAdvisories, {
+      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: trailAdvisories })
+      return assembleEnvelope(projStage, trailAdvisories, {
         corrections,
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
         joyExtraFiltered,
         traceStages: stage.trace?.stages,
       }, {
         generation_id: generationId,
-        ...judgeTopLevel(stage),
+        ...judgeTopLevel(projStage),
       })
     },
   })

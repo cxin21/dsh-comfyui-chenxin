@@ -170,14 +170,15 @@ describe('规格6 strict：revisionProvider 接线（mock 验证对抗二轮）'
       verdict: 'pass', closedFindingIds: ['f1'], unresolved: [], rebuttalVerdicts: [],
     })
     const critic = criticOf([NEEDS_JSON, REV_PASS_JSON])
-    let revisionInput: { compiled: unknown; findings: unknown[] } | null = null
-    const revisionProvider = async (compiled: unknown, findings: CriticFinding[]) => {
-      revisionInput = { compiled, findings }
+    let revisionInput: { compiled: unknown; findings: unknown[]; praise: unknown } | null = null
+    const revisionProvider = async (compiled: unknown, findings: CriticFinding[], praise: string[]) => {
+      revisionInput = { compiled, findings, praise }
       const c = compiled as Record<string, unknown>
       return {
         compiled: { ...c, positive: `${String(c.positive)}, detailed face` },
         changes: ['补具体细节 tag'],
         revisionNote: '已把质量词前移并补细节',
+        rebuttals: [],
       }
     }
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence, revisionProvider })
@@ -269,6 +270,115 @@ describe('final-fix C1：author 落库 generations', () => {
     expect(raw.ok).toBe(true)
     expect(String(raw.result.positive)).toContain('1girl')
     expect(raw.advisories).toContain('feedback_write_failed')
+  })
+})
+
+/* ── T4（spec §10.2-A3/A4, §10.4-A12/A13）：makeRevisionProvider v2 工具面 ── */
+
+const dimScores5 = (v: number) => ({
+  'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v, aesthetics: v,
+})
+const REV_CLOSE_F1 = JSON.stringify({ verdict: 'pass', closedFindingIds: ['f1'], unresolved: [], rebuttalVerdicts: [] })
+
+describe('T4 规格1 praise 锚点 + 规格3 patch 失败回退整稿重拆', () => {
+  it('首轮 praise 非空 → 修订 prompt 含「以下优点须保留：…」+ 条目 + 禁删指令；定位不到字段 → fallback:full-rebuild', async () => {
+    const finding = {
+      severity: 'major', dimension: 'aesthetics', problem: '夜空氛围不足',
+      evidence: { tool: 'catalog', query: 'night sky', result: 'night sky atmosphere' },
+      requiredFix: 'starry sky backdrop',
+    }
+    const NEEDS_PRAISE = JSON.stringify({ verdict: 'needs_revision', dimensionScores: dimScores5(50), findings: [finding], praise: ['构图干净'] })
+    const critic = criticOf([NEEDS_PRAISE, REV_CLOSE_F1])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence }) // 不注入 revisionProvider → 生产 makeRevisionProvider
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    expect(raw.judge).toMatchObject({ verdict: 'pass' })
+    // patch 定位不到字段（night sky 与 1girl/long hair 零交集）→ 回退整稿重拆（intent 第 2 次调用）
+    expect(intentCalls).toHaveLength(2)
+    const fb = intentCalls[1].feedback ?? ''
+    expect(fb).toContain('以下优点须保留')
+    expect(fb).toContain('构图干净')
+    expect(fb).toContain('不得删除上述优点对应的内容')
+    expect(fb).toContain('starry sky backdrop')
+    expect(raw.debate[1].reviser.changes).toContain('fallback:full-rebuild')
+  })
+})
+
+describe('T4 规格3 稿内编辑成功（anima 槽字段 patch，不重拆）', () => {
+  it('finding 定位到 1girl 所在槽 → requiredFix 追加为该槽 tag，intent provider 不再调用，changes 记录所改字段', async () => {
+    const critic = criticOf([NEEDS_JSON, REV_CLOSE_F1])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    // patch 成功 → 不重拆（intent 只有 round 0 一次调用）
+    expect(intentCalls).toHaveLength(1)
+    expect(String(raw.result.positive)).toContain('把质量词前移到主体前')
+    expect(raw.debate[1].reviser.changes[0]).toContain('patch:slot count_gender')
+    expect(raw.debate[1].reviser.changes.join('\n')).not.toContain('fallback')
+    expect(raw.judge).toMatchObject({ verdict: 'pass' })
+    expect(critic.calls).toBe(2)
+  })
+})
+
+describe('T4 规格2 结构化 rebuttals（requiredFix 已在稿内 → 带证据反驳）', () => {
+  it('patch 路径产 rebuttals 直通 debate round2.reviser.rebuttals（provider 优先于 reviewer-accepted 映射）', async () => {
+    const SLOTS = { slots: { count_gender: ['1girl'], appearance: ['detailed face'] } }
+    const finding = {
+      severity: 'minor', dimension: 'aesthetics', problem: '细节不足',
+      evidence: { tool: 'catalog', query: 'detailed face', result: 'detailed face already present' },
+      requiredFix: 'detailed face',
+    }
+    const NEEDS = JSON.stringify({ verdict: 'needs_revision', dimensionScores: dimScores5(60), findings: [finding], praise: [] })
+    const REV_ACCEPT = JSON.stringify({ verdict: 'pass', closedFindingIds: [], unresolved: [], rebuttalVerdicts: [{ finding_id: 'f1', accepted: true, reason: '反驳成立' }] })
+    const critic = criticOf([NEEDS, REV_ACCEPT])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    setAuthorIntentProvider(async () => SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'strict' })))
+    const reb = raw.debate[1].reviser.rebuttals
+    expect(reb).toHaveLength(1)
+    expect(reb[0].finding_id).toBe('f1')
+    expect(reb[0].rebuttal).toContain('已在稿内')
+    expect(reb[0].evidence).toContain('detailed face')
+    expect(reb[0].evidence).not.toBe('reviewer-accepted') // provider 一手证据优先
+  })
+})
+
+describe('T4 规格3 h3 镜头段 patch', () => {
+  it('finding 定位到 [Shot N] 段 → requiredFix 重写该镜头段文本，不重拆', async () => {
+    const finding = {
+      severity: 'major', dimension: 'shot-increment', problem: '动作不清晰',
+      evidence: { tool: 'aesthetics', query: 'cat stretches', result: 'pass concreteness' },
+      requiredFix: 'The cat yawns and blinks slowly',
+    }
+    const NEEDS_H3 = JSON.stringify({
+      verdict: 'needs_revision',
+      dimensionScores: { 'shot-structure': 40, 'shot-increment': 40, 'cross-shot-consistency': 40, 'duration-fit': 40, pacing: 40, 'atmosphere-coupling': 40 },
+      findings: [finding], praise: [],
+    })
+    const critic = criticOf([NEEDS_H3, REV_CLOSE_F1])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    setAuthorIntentProvider(async () => ({ shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches' }] } }) as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', judge_mode: 'strict' })))
+    expect(String(raw.result.text)).toContain('[Shot 1] The cat yawns and blinks slowly.')
+    expect(raw.debate[1].reviser.changes[0]).toBe('patch:shot 1 (finding f1)')
+    expect(raw.judge).toMatchObject({ verdict: 'pass' })
+  })
+})
+
+describe('T4 规格4 judgeRepair=false 修正轮跳过评审', () => {
+  it('judge_mode=fast + judgeRepair:false → critic 仅首轮 1 次调用，闭环由规则 gates + judgeFeedback 首轮投影驱动', async () => {
+    const critic = criticOf([NEEDS_JSON])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', judge_mode: 'fast', judgeRepair: false })))
+    expect(critic.calls).toBe(1) // 修正轮 provider 零调用
+    expect(intentCalls).toHaveLength(2) // 首轮 + 1 轮修正（judgeFeedback 首轮投影驱动）
+    expect(raw.observability.corrections).toBe(1)
+    expect(raw.ok).toBe(true)
+    expect(raw.judge).toMatchObject({ verdict: 'needs_revision' })
   })
 })
 

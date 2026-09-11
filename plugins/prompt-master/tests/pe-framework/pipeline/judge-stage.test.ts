@@ -7,7 +7,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { registerDialect, __resetDialectsForTests, type DialectContract } from '../../../src/pe-framework/dialect/registry.js'
 import { runStage } from '../../../src/pe-framework/pipeline/runStage.js'
 import type { PipelineInput } from '../../../src/pe-framework/pipeline/types.js'
-import type { CriticProvider } from '../../../src/pe-framework/eval/critic.js'
+import type { CriticProvider, CriticFinding } from '../../../src/pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../../../src/pe-framework/eval/evidence.js'
 
 const RUBRIC = {
@@ -36,6 +36,8 @@ const NEEDS_FIX = {
   requiredFix: '把质量词前移',
 }
 const NEEDS_JSON = JSON.stringify({ verdict: 'needs_revision', dimensionScores: { d1: 50 }, findings: [NEEDS_FIX], praise: [] })
+// T4（spec §10.2-A3）：首轮 praise 非空 → 透传 revisionProvider（praise 锚点数据源）
+const NEEDS_PRAISE_JSON = JSON.stringify({ verdict: 'needs_revision', dimensionScores: { d1: 50 }, findings: [NEEDS_FIX], praise: ['主体表现力强'] })
 // A2 revision 独立契约（spec §10.1-A2）：复审返回关闭/反驳裁决，不产 dimensionScores
 const REV_CLOSE_JSON = JSON.stringify({
   verdict: 'pass', closedFindingIds: ['f1'], unresolved: [],
@@ -160,6 +162,7 @@ describe('分支5 strict + 首评 needs_revision → 修正稿复审 pass', () =
       compiled: { positive: 'p2', negative: 'n2' },
       changes: ['质量词前移'],
       revisionNote: '已把质量词前移',
+      rebuttals: [],
     })
     const r = await runStage(baseInput({ judge: 'strict', criticProvider: provider, evidenceDeps, revisionProvider }))
     expect(r.judge).toMatchObject({ verdict: 'pass', score: 50 }) // score 透传首轮，复审不改分
@@ -182,17 +185,64 @@ describe('分支5 strict + 首评 needs_revision → 修正稿复审 pass', () =
     expect(provider.calls).toBe(2)
   })
 
-  it('rebuttalVerdicts 无 accepted → reviser.rebuttals 为空数组（旧「修正稿自带 rebuttals」语义迁移：复审裁决是唯一来源）', async () => {
+  it('T4 迁移：修订者自带结构化 rebuttals 直通 round2.reviser.rebuttals（provider 优先于复审 verdicts 映射）', async () => {
     registerDialect(fakeDialect())
     const provider = providerOf([NEEDS_JSON, REV_REJECT_JSON])
     const r = await runStage(baseInput({
       judge: 'strict', criticProvider: provider, evidenceDeps,
       revisionProvider: async () => ({
         compiled: { x: 2 }, changes: ['c'], revisionNote: 'note',
-        rebuttals: [{ finding_id: 'f1', rebuttal: '修正稿自带', evidence: 'x' }], // T4 前不再被消费
+        rebuttals: [{ finding_id: 'f1', rebuttal: '所需内容已在稿内', evidence: 'x' }],
       }),
     }))
-    expect(r.debate?.[1].reviser?.rebuttals).toEqual([])
+    // A4（spec §10.2-A4）：结构化 rebuttals 不再经 revisionNote 内嵌，也不仅依赖复审裁决映射
+    expect(r.debate?.[1].reviser?.rebuttals).toEqual([
+      { finding_id: 'f1', rebuttal: '所需内容已在稿内', evidence: 'x' },
+    ])
+  })
+
+  it('T4 并集：provider rebuttals 与复审 accepted 映射按 finding_id 合并，provider 条目优先', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_JSON, REV_CLOSE_JSON])
+    const r = await runStage(baseInput({
+      judge: 'strict', criticProvider: provider, evidenceDeps,
+      revisionProvider: async () => ({
+        compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note',
+        rebuttals: [{ finding_id: 'f1', rebuttal: '修订者自己的证据', evidence: 'compiled-text' }],
+      }),
+    }))
+    expect(r.debate?.[1].reviser?.rebuttals).toEqual([
+      { finding_id: 'f1', rebuttal: '修订者自己的证据', evidence: 'compiled-text' },
+    ])
+  })
+
+  it('T4：修订者无 rebuttals 时回退复审 accepted 映射（reviewer-accepted 证据保留）', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_JSON, REV_CLOSE_JSON])
+    const r = await runStage(baseInput({
+      judge: 'strict', criticProvider: provider, evidenceDeps,
+      revisionProvider: async () => ({
+        compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [],
+      }),
+    }))
+    expect(r.debate?.[1].reviser?.rebuttals).toEqual([
+      { finding_id: 'f1', rebuttal: '已修复，证据见修正稿', evidence: 'reviewer-accepted' },
+    ])
+  })
+
+  it('T4 praise 透传：首轮 praise 作为第三参传给 revisionProvider（praise 锚点数据源）', async () => {
+    registerDialect(fakeDialect())
+    const provider = providerOf([NEEDS_PRAISE_JSON, REV_CLOSE_JSON])
+    const seen: unknown[] = []
+    const r = await runStage(baseInput({
+      judge: 'strict', criticProvider: provider, evidenceDeps,
+      revisionProvider: async (_c: unknown, _f: CriticFinding[], praise: string[]) => {
+        seen.push(praise)
+        return { compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [] }
+      },
+    }))
+    expect(seen).toEqual([['主体表现力强']])
+    expect(r.judge).toMatchObject({ verdict: 'pass' })
   })
 
   it('revision 轮不触发证据回查：bridge.query 仅首评调用一次，revision user 无证据工具段', async () => {
@@ -200,7 +250,7 @@ describe('分支5 strict + 首评 needs_revision → 修正稿复审 pass', () =
     const provider = providerOf([NEEDS_JSON, REV_CLOSE_JSON])
     const r = await runStage(baseInput({
       judge: 'strict', criticProvider: provider, evidenceDeps,
-      revisionProvider: async () => ({ compiled: { x: 2 }, changes: ['c'], revisionNote: 'note' }),
+      revisionProvider: async () => ({ compiled: { x: 2 }, changes: ['c'], revisionNote: 'note', rebuttals: [] }),
     }))
     expect(r.judge).toMatchObject({ verdict: 'pass' })
     expect(provider.users[1]).not.toContain('可用证据工具')
@@ -235,7 +285,7 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
     const provider = providerOf([NEEDS_JSON, REV_STILL_JSON])
     const r = await runStage(baseInput({
       judge: 'strict', criticProvider: provider, evidenceDeps,
-      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note' }),
+      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [] }),
     }))
     expect(r.judge).toMatchObject({ verdict: 'needs_revision', score: 50 })
     expect((r.judge as any).findings).toHaveLength(1)
@@ -253,7 +303,7 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
     const provider = providerOf([NEEDS_JSON, REV_INVALID_JSON])
     const r = await runStage(baseInput({
       judge: 'strict', criticProvider: provider, evidenceDeps,
-      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note' }),
+      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [] }),
     }))
     expect(r.judge).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
     expect(r.advisories).toContain('judge_skipped')
@@ -267,7 +317,7 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
     const provider = providerOf([NEEDS_JSON, 'THROW'])
     const r = await runStage(baseInput({
       judge: 'strict', criticProvider: provider, evidenceDeps,
-      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note' }),
+      revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [] }),
     }))
     expect(r.judge).toMatchObject({ skipped: true })
     expect(r.advisories).toContain('judge_skipped')

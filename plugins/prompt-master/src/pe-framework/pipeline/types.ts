@@ -17,8 +17,10 @@ export interface PipelineInput {
   criticProvider?: CriticProvider
   /** 证据工具注入点：测试 mock / 生产 createProductionEvidenceDeps */
   evidenceDeps?: EvidenceDeps
-  /** strict 模式修正稿生产者；缺省时 strict 退化为 fast（advisory: strict_degraded） */
-  revisionProvider?: (compiled: unknown, findings: CriticFinding[]) => Promise<{ compiled: unknown; changes: string[]; revisionNote: string }>
+  /** strict 模式修正稿生产者；缺省时 strict 退化为 fast（advisory: strict_degraded）。
+   *  T4（spec §10.2-A3/A4）：第三参 praise=首轮评委优点（praise 锚点）；产物 rebuttals=修订者自带结构化反驳（直通 debate round2） */
+  revisionProvider?: (compiled: unknown, findings: CriticFinding[], praise: string[]) =>
+    Promise<{ compiled: unknown; changes: string[]; revisionNote: string; rebuttals: CriticRebuttal[] }>
   /** 用户原意（注入评委 user 段；缺省空串） */
   originalIntent?: string
 }

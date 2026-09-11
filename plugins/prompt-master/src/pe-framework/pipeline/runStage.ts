@@ -210,7 +210,8 @@ async function runJudgeStage(
   }
   if (outcome.verdict === 'needs_revision' && revisionProvider) {
     const firstFindings = outcome.findings as CriticFinding[]
-    const rev = await revisionProvider(compiledCur, firstFindings)
+    // T4（spec §10.2-A3）：首轮 praise 透传修订者（praise 锚点）
+    const rev = await revisionProvider(compiledCur, firstFindings, outcome.praise ?? [])
     compiledCur = rev.compiled
     const audit2 = d.audit(compiledCur as never, auditCtx)
     gates = audit2.gates
@@ -232,14 +233,19 @@ async function runJudgeStage(
       advisories.push('judge_skipped')
       return finish(second, debate)
     }
-    // A2 规格4：rebuttals 从复审 rebuttalVerdicts 映射（accepted 的才进）；T4 会把生产 rebuttals
-    // 换成修订者自带的结构化字段，本任务先保证 verdicts 映射正确。
-    const acceptedVerdicts = ('rebuttalVerdicts' in second && Array.isArray(second.rebuttalVerdicts))
+    // A2 规格4 + T4（spec §10.2-A4）rebuttals 双来源并集：基础 = 复审 rebuttalVerdicts 映射
+    // （accepted 的才进，evidence='reviewer-accepted'）；修订者自带结构化 rebuttals 按 finding_id
+    // 合并覆盖（provider 条目优先——它是修订者的第一手证据，复审裁决 reason 是二手投影）。
+    const mappedReb = (('rebuttalVerdicts' in second && Array.isArray(second.rebuttalVerdicts))
       ? second.rebuttalVerdicts.filter((r) => r.accepted)
-      : []
+      : []).map((r) => ({ finding_id: r.finding_id, rebuttal: r.reason, evidence: 'reviewer-accepted' }))
+    const byId = new Map(mappedReb.map((r) => [r.finding_id, r]))
+    for (const r of Array.isArray(rev.rebuttals) ? rev.rebuttals : []) {
+      byId.set(r.finding_id, r)
+    }
     const reviser = {
       changes: rev.changes,
-      rebuttals: acceptedVerdicts.map((r) => ({ finding_id: r.finding_id, rebuttal: r.reason, evidence: 'reviewer-accepted' })),
+      rebuttals: [...byId.values()],
     }
     debate.push({ round: 2, reviewer: reviewerOf(second), reviser })
     noteUnverified(second)

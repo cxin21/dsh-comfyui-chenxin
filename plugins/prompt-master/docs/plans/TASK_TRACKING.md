@@ -16,10 +16,36 @@
 | Round 2: 遗漏修复（补齐） | 9 | 9 | ✅ 已完成 |
 | **Round 3: 反推清洗链 + 测试体系 + schema 补齐** | 5 | 5 | ✅ 已完成 |
 | **Round 4: 质量飞轮 M1-M4（2026-09-08）** | 11 | 11 | ✅ 已完成 |
+| **Round 5: 二期 enrich+默认评审+一期遗留全量补齐（2026-09-08）** | 9 | 9 | ✅ 已完成 |
 
 ---
 
 ## Round 4：质量飞轮（证据化评审 → 人工反馈 → 自动优化）
+
+> Spec：`docs/2026-09-08-quality-flywheel-design.md`；实施计划：`docs/plans/2026-09-08-quality-flywheel-implementation.md`
+> 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照），完成时间 2026-09-08
+> 验收：全量 vitest 711 passed / 1 skipped / 0 failed（BASE ca220ace 起 621→711，golden 零破坏）；tsc/build 干净；终审 C1/I1 修复波 90c0b73 已 scoped 复审通过
+
+> Spec：`docs/2026-09-08-enrich-default-judge-design.md`；实施计划：`docs/plans/2026-09-08-enrich-phase2-implementation.md`
+> 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照 + 终审修复波）
+> 验收：全量 vitest **797 passed / 1 skipped / 0 failed**（711→797，golden 零破坏）；tsc/build 干净；缺省行为=judge fast + enrich 双开
+
+| Task | 内容 | 状态 | 关键 commit |
+|---|---|---|---|
+| T1 | critic schema v2：维度加权评分+finding id+evidenceOptional | ✅ | 22c315c |
+| T2 | 证据回查复核（堵幻觉证据） | ✅ | 976b854 |
+| T3 | strict 复审独立契约（纠正 D1 全量重评偏差） | ✅ | 009c627 |
+| T4 | revisionProvider v2：praise 锚点/结构化反驳/稿内编辑/judgeRepair | ✅ | 1e7caba |
+| T5 | enrich 层：七维度 brief schema+双方言 persona+降级引擎 | ✅ | 5e18f54 |
+| T6 | author 接线 enrich+outputLang+nameAnchors+generations.enrich | ✅ | 0727f64 |
+| T7 | 卫生打包：词表/校准视图/dbPath 迁移/limit/共享映射/测试卫生 | ✅ | 6b871b5 |
+| T8 | optimize-loop 驱动器（loop.ts+CLI 壳） | ✅ | 02c0a64 |
+| T9 | judge 默认 fast + enrich 默认开 + 存量迁移 17 处 | ✅ | 07369f5 |
+| T10 | 终审（可合入）+ 修复波 I-1/I-2 + 登记 | ✅ | 4504445 |
+
+终审遗留（deferred，均不阻塞）：detectLanguage 混合日文归 zh、patch 后审计上下文偏松、loop 同秒覆盖无回归测试等——见 SDD ledger（工作区已删，历史在 git）。
+
+---
 
 > Spec：`docs/2026-09-08-quality-flywheel-design.md`；实施计划：`docs/plans/2026-09-08-quality-flywheel-implementation.md`
 > 执行：Subagent-Driven（每任务独立实施者+审查者，spec 符合性逐条对照），完成时间 2026-09-08

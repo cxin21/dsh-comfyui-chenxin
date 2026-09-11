@@ -15,6 +15,16 @@ const RUBRIC: DialectRubric = {
   passThreshold: 70,
 }
 
+const RUBRIC_OPT: DialectRubric = {
+  dimensions: [
+    { id: 'structure', weight: 0.6, instruction: '检查结构完整性' },
+    { id: 'aesthetics', weight: 0.4, instruction: '检查美学具体性', evidenceOptional: true },
+  ],
+  severityRules: 'blocker=必须修复；major=显著缺陷；minor=可忽略',
+  evidenceTools: ['catalog'],
+  passThreshold: 70,
+}
+
 function fakeBridge(): EvidenceBridge {
   return {
     list: () => ['catalog', 'tokenizer'] as EvidenceToolId[],
@@ -45,7 +55,7 @@ function finding(over: Partial<Record<string, unknown>> = {}): Record<string, un
 function ok(verdict: string, over: Record<string, unknown> = {}): string {
   return JSON.stringify({
     verdict,
-    score: 85,
+    dimensionScores: { 'tag-order': 85, 'cross-shot-consistency': 85 },
     findings: [finding()],
     praise: ['结构清晰'],
     ...over,
@@ -83,6 +93,7 @@ describe('judgeReview', () => {
     expect(req.persona).toContain('blocker=必须修复')
     expect(req.schema).toContain('"tag-order"')
     expect(req.schema).toContain('"cross-shot-consistency"')
+    expect(req.schema).toContain('"dimensionScores"')
     expect(req.user).toContain('1girl, smile')
     expect(req.user).toContain('一个微笑的女孩')
     // 非预期参数不进入：此断言仅记录签名为三段式
@@ -90,7 +101,7 @@ describe('judgeReview', () => {
   })
 
   it('规格3：verdict=pass 但 score<passThreshold → 改判 needs_revision（其余字段保留）', async () => {
-    const provider: CriticProvider = async () => ok('pass', { score: 40 })
+    const provider: CriticProvider = async () => ok('pass', { dimensionScores: { 'tag-order': 40, 'cross-shot-consistency': 40 } })
     const r = await judgeReview({ ...baseInput(), provider })
     expect(r).toMatchObject({ verdict: 'needs_revision', score: 40 })
   })
@@ -129,7 +140,7 @@ describe('judgeReview', () => {
   })
 
   it('规格4-F1：needs_revision + 零有效 findings + score=50 → 终局改判 pass（规格4 对 needs_revision 终局生效，不再被规格3 低分改回）', async () => {
-    const provider: CriticProvider = async () => ok('needs_revision', { score: 50, findings: [] })
+    const provider: CriticProvider = async () => ok('needs_revision', { dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 }, findings: [] })
     const r = await judgeReview({ ...baseInput(), provider })
     expect(r).toMatchObject({ verdict: 'pass', score: 50 })
     expect((r as any).findings).toHaveLength(0)
@@ -137,7 +148,7 @@ describe('judgeReview', () => {
 
   it('规格4-F1b：needs_revision + 零有效 findings + findings 含 blocker（已丢弃）→ 仍改判 pass', async () => {
     const provider: CriticProvider = async () => ok('needs_revision', {
-      score: 50,
+      dimensionScores: { 'tag-order': 50, 'cross-shot-consistency': 50 },
       findings: [finding({ severity: 'blocker', evidence: { tool: 'catalog', query: 'x' } })], // 无效证据，被丢弃
     })
     const r = await judgeReview({ ...baseInput(), provider })
@@ -157,12 +168,49 @@ describe('judgeReview', () => {
   })
 
   it('规格5c：schema 不合（verdict 非法 / 缺 score）→ skipped', async () => {
-    const bad1: CriticProvider = async () => JSON.stringify({ verdict: 'maybe', score: 80, findings: [], praise: [] })
+    const bad1: CriticProvider = async () => JSON.stringify({ verdict: 'maybe', dimensionScores: { 'tag-order': 80, 'cross-shot-consistency': 80 }, findings: [], praise: [] })
     const bad2: CriticProvider = async () => JSON.stringify({ verdict: 'pass', findings: [], praise: [] })
+    // 旧单数字 score 字段不再接受（schema 移除）：缺 dimensionScores → skipped
     const r1 = await judgeReview({ ...baseInput(), provider: bad1 })
     const r2 = await judgeReview({ ...baseInput(), provider: bad2 })
     expect(r1).toMatchObject({ skipped: true })
-    expect(r2).toMatchObject({ skipped: true })
+    expect(r2).toMatchObject({ skipped: true, reason: 'invalid_dimensions' })
+  })
+
+  it('finding id：有效 findings 按序编号 f1…fN（LLM 不产 id，parse 后由代码编号）', async () => {
+    const provider: CriticProvider = async () => ok('needs_revision', {
+      dimensionScores: { 'tag-order': 40, 'cross-shot-consistency': 40 },
+      findings: [finding(), finding({ dimension: 'cross-shot-consistency', problem: '角色描述矛盾' })],
+    })
+    const r = await judgeReview({ ...baseInput(), provider })
+    const findings = (r as any).findings
+    expect(findings).toHaveLength(2)
+    expect(findings[0].id).toBe('f1')
+    expect(findings[1].id).toBe('f2')
+  })
+
+  it('维度加权分：score = Math.round(Σ weight × dimScore)，由代码计算', async () => {
+    const provider: CriticProvider = async () => ok('pass', {
+      dimensionScores: { 'tag-order': 83, 'cross-shot-consistency': 67 }, // 0.5*83 + 0.5*67 = 75
+    })
+    const r = await judgeReview({ ...baseInput(), provider })
+    expect((r as any).score).toBe(75)
+  })
+
+  it('invalid_dimensions：缺维度 / 多维度 / 非法值 / 非对象 → 整体 skipped reason=invalid_dimensions', async () => {
+    const cases: unknown[] = [
+      { 'tag-order': 80 },                                                                        // 缺 cross-shot-consistency
+      { 'tag-order': 80, 'cross-shot-consistency': 80, extra: 80 },                               // 多维度
+      { 'tag-order': 'high', 'cross-shot-consistency': 80 },                                      // 非数字
+      { 'tag-order': 80, 'cross-shot-consistency': 101 },                                         // 越界
+      { 'tag-order': 80, 'cross-shot-consistency': Number.NaN },                                  // 非法数
+      'not-an-object',                                                                            // 非对象
+    ]
+    for (const dimensionScores of cases) {
+      const provider: CriticProvider = async () => ok('pass', { dimensionScores })
+      const r = await judgeReview({ ...baseInput(), provider })
+      expect(r).toMatchObject({ skipped: true, reason: 'invalid_dimensions' })
+    }
   })
 
   it('规格6：revision 模式——user 含 firstFindings 与修正说明，逻辑同 first', async () => {
@@ -217,6 +265,65 @@ describe('judgeReview', () => {
     expect(req.user).not.toContain('不应出现')
     expect(req.user).not.toContain('修正说明')
   })
+
+describe('A5 evidenceOptional（spec §10.2-A5）', () => {
+  const optInput = () => ({ ...baseInput(), rubric: RUBRIC_OPT })
+
+  it('evidenceOptional 维度的 finding 无证据也放行，加 evidenceAssumed: true，verdict 维持 needs_revision', async () => {
+    const provider: CriticProvider = async () => JSON.stringify({
+      verdict: 'needs_revision',
+      dimensionScores: { structure: 50, aesthetics: 40 },
+      findings: [{ severity: 'major', dimension: 'aesthetics', problem: 'beautiful 太抽象', requiredFix: '换成具体风格词' }],
+      praise: [],
+    })
+    const r = await judgeReview({ ...optInput(), provider })
+    expect(r).toMatchObject({ verdict: 'needs_revision' })
+    const findings = (r as any).findings
+    expect(findings).toHaveLength(1)
+    expect(findings[0].evidenceAssumed).toBe(true)
+    expect(findings[0].id).toBe('f1')
+  })
+
+  it('非 evidenceOptional 维度无证据 → 照旧丢弃；仅剩 evidenceOptional 无证据 findings 时非零有效，不触发规格4', async () => {
+    const provider: CriticProvider = async () => JSON.stringify({
+      verdict: 'needs_revision',
+      dimensionScores: { structure: 50, aesthetics: 40 },
+      findings: [
+        { severity: 'major', dimension: 'structure', problem: '缺段', requiredFix: '补齐' },          // 无证据 → 丢
+        { severity: 'minor', dimension: 'aesthetics', problem: '色彩词弱', requiredFix: '补具体色' }, // 放行
+      ],
+      praise: [],
+    })
+    const r = await judgeReview({ ...optInput(), provider })
+    expect(r).toMatchObject({ verdict: 'needs_revision' })
+    expect((r as any).findings).toHaveLength(1)
+    expect((r as any).findings[0].dimension).toBe('aesthetics')
+  })
+
+  it('evidenceOptional 维度照常参与 dimensionScores 加权，铁律不影响打分', async () => {
+    const provider: CriticProvider = async () => JSON.stringify({
+      verdict: 'pass',
+      dimensionScores: { structure: 90, aesthetics: 80 }, // 0.6*90 + 0.4*80 = 86
+      findings: [{ severity: 'minor', dimension: 'aesthetics', problem: '可更具体', requiredFix: 'x' }],
+      praise: [],
+    })
+    const r = await judgeReview({ ...optInput(), provider })
+    expect((r as any).score).toBe(86)
+    expect(r).toMatchObject({ verdict: 'pass' })
+  })
+
+  it('persona/schema 标注证据可选维度', async () => {
+    const provider = vi.fn().mockResolvedValue(JSON.stringify({
+      verdict: 'pass', dimensionScores: { structure: 90, aesthetics: 90 }, findings: [], praise: [],
+    }))
+    await judgeReview({ ...optInput(), provider })
+    const req = provider.mock.calls[0][0]
+    expect(req.persona).toContain('证据可选')
+    expect(req.persona).toContain('该维度 finding 无证据也可输出')
+    expect(req.schema).toContain('"structure"')
+    expect(req.schema).toContain('"aesthetics"')
+  })
+})
 
   it('装配：createSubagentCriticProvider 用 ctx.subagents.start 装配，生命周期 start→result→dispose，文本 strip fence 后可解析', async () => {
     const dispose = vi.fn()

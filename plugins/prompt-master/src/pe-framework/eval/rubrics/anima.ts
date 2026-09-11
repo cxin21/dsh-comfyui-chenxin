@@ -11,7 +11,7 @@ export const ANIMA_RUBRIC: DialectRubric = {
       '抽查非通用 tag 在 catalog 的证据（用 catalog 工具）；miss 的 tag 给出 canonical 替代。无证据 tag>2 个=blocker。' },
     { id: 'negative-template', weight: 0.15, instruction:
       '负面提示词须含标准模板 + 针对本图主体的排除项；缺模板=major，缺主体排除=minor。' },
-    { id: 'aesthetics', weight: 0.2, instruction:
+    { id: 'aesthetics', weight: 0.2, evidenceOptional: true, instruction:
       '风格/氛围词的具体性（用 aesthetics 工具）：抽象词（beautiful）占比过高=major；正面具体化建议写进 requiredFix。' },
   ],
   severityRules: 'blocker=出图必然错误或严重偏离；major=明显降低质量但不致命；minor=可改进瑕疵。',

@@ -3,6 +3,7 @@ export interface DialectRubricDimension {
   id: string          // 如 'tag-order' | 'cross-shot-consistency'
   weight: number      // 归一化权重（Σ=1），score 加权用
   instruction: string // 注入评委 persona 的评审指令
+  evidenceOptional?: boolean // true = 该维度 finding 无证据也放行（加 evidenceAssumed 标记；spec §10.2-A5）
 }
 
 export interface DialectRubric {

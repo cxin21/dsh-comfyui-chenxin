@@ -29,13 +29,13 @@ function fakeDialect(overrides: Partial<DialectContract> = {}): DialectContract 
   }
 }
 
-const PASS_JSON = JSON.stringify({ verdict: 'pass', score: 90, findings: [], praise: [] })
+const PASS_JSON = JSON.stringify({ verdict: 'pass', dimensionScores: { d1: 90 }, findings: [], praise: [] })
 const NEEDS_FIX = {
   severity: 'major', dimension: 'd1', problem: 'tag 顺序错',
   evidence: { tool: 'catalog', query: '1girl', result: 'canonical,n=120' },
   requiredFix: '把质量词前移',
 }
-const NEEDS_JSON = JSON.stringify({ verdict: 'needs_revision', score: 50, findings: [NEEDS_FIX], praise: [] })
+const NEEDS_JSON = JSON.stringify({ verdict: 'needs_revision', dimensionScores: { d1: 50 }, findings: [NEEDS_FIX], praise: [] })
 
 function providerOf(responses: string[]): CriticProvider & { calls: number; users: string[] } {
   const fn = (async (req: { persona: string; schema: string; user: string }) => {

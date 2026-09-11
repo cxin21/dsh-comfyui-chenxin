@@ -14,11 +14,16 @@ import type { EvidenceBridge } from './evidence.js'
 import type { AuditGate } from '../types.js'
 
 export type CriticFinding = {
+  /** 首轮内稳定编号 f1…fN（LLM 不产 id，parse 后由代码编号；复审/rebuttal/回查引用此 id） */
+  id: string
   severity: 'blocker' | 'major' | 'minor'
   dimension: string
   problem: string
-  evidence: { tool: string; query: string; result: string }
+  /** evidenceOptional 维度的 finding 可无证据（此时带 evidenceAssumed: true） */
+  evidence?: { tool: string; query: string; result: string }
   requiredFix: string
+  /** 证据可选维度放行标记（spec §10.2-A5） */
+  evidenceAssumed?: boolean
 }
 
 export type CriticOutcome =
@@ -55,18 +60,31 @@ function skipped(reason: string): CriticOutcome {
   return { skipped: true, reason }
 }
 
-/** 证据铁律：evidence 三键（tool/query/result）任一缺失（含空串）的 finding 丢弃，不得进入结果。 */
-function hasValidEvidence(f: unknown): f is CriticFinding {
+/**
+ * 证据铁律过滤（spec §10.2-A5）：evidence 三键（tool/query/result）任一缺失（含空串）的 finding 丢弃；
+ * 例外：finding.dimension 对应维度 evidenceOptional===true → 无证据也放行，加 evidenceAssumed: true。
+ * 返回 null 表示该 finding 无效（丢弃）。首个有效 id 由调用方在过滤后统一编号。
+ */
+function toValidFinding(f: unknown, rubric: DialectRubric): CriticFinding | null {
   const ev = (f as { evidence?: unknown })?.evidence
-  if (typeof ev !== 'object' || ev === null) return false
-  const e = ev as Record<string, unknown>
-  return typeof e['tool'] === 'string' && e['tool'].length > 0
-    && typeof e['query'] === 'string' && e['query'].length > 0
-    && typeof e['result'] === 'string' && e['result'].length > 0
+  if (typeof ev === 'object' && ev !== null) {
+    const e = ev as Record<string, unknown>
+    if (typeof e['tool'] === 'string' && e['tool'].length > 0
+      && typeof e['query'] === 'string' && e['query'].length > 0
+      && typeof e['result'] === 'string' && e['result'].length > 0) {
+      return { ...(f as CriticFinding) }
+    }
+  }
+  const dim = (f as { dimension?: unknown })?.dimension
+  const dimDef = typeof dim === 'string' ? rubric.dimensions.find((d) => d.id === dim) : undefined
+  if (dimDef?.evidenceOptional === true) {
+    return { ...(f as CriticFinding), evidenceAssumed: true }
+  }
+  return null
 }
 
 /** schema 级校验：形状不合 → null（调用方转 skipped）。 */
-function parseOutcome(raw: string): { verdict: 'pass' | 'needs_revision'; score: number; findings: unknown[]; praise: string[] } | null {
+function parseOutcome(raw: string): { verdict: 'pass' | 'needs_revision'; dimensionScores: unknown; findings: unknown[]; praise: string[] } | null {
   let obj: any
   try {
     obj = JSON.parse(stripFences(raw))
@@ -75,14 +93,32 @@ function parseOutcome(raw: string): { verdict: 'pass' | 'needs_revision'; score:
   }
   if (typeof obj !== 'object' || obj === null) return null
   if (obj.verdict !== 'pass' && obj.verdict !== 'needs_revision') return null
-  if (typeof obj.score !== 'number' || !Number.isFinite(obj.score)) return null
   if (!Array.isArray(obj.findings)) return null
   const praise = Array.isArray(obj.praise) ? obj.praise.filter((p: unknown): p is string => typeof p === 'string') : []
-  return { verdict: obj.verdict, score: obj.score, findings: obj.findings, praise }
+  return { verdict: obj.verdict, dimensionScores: obj.dimensionScores, findings: obj.findings, praise }
+}
+
+/**
+ * A6 维度分校验：dimensionScores 必须覆盖 rubric 全维度（多/缺/非 0-100 有限数 → null，调用方 skipped
+ * reason=invalid_dimensions）。总分单数字 score 字段已废弃，LLM 不再产。
+ */
+function dimensionScoresOf(raw: unknown, rubric: DialectRubric): Record<string, number> | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+  if (Object.keys(obj).length !== rubric.dimensions.length) return null
+  const out: Record<string, number> = {}
+  for (const d of rubric.dimensions) {
+    const v = obj[d.id]
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100) return null
+    out[d.id] = v
+  }
+  return out
 }
 
 function buildPersona(rubric: DialectRubric): string {
-  const dims = rubric.dimensions.map((d) => `- [${d.id}] ${d.instruction}`).join('\n')
+  const dims = rubric.dimensions
+    .map((d) => `- [${d.id}] ${d.instruction}${d.evidenceOptional === true ? '（证据可选：该维度 finding 无证据也可输出）' : ''}`)
+    .join('\n')
   return [
     '你是一位资深的提示词质量评审评委（EvidenceCritic）。',
     '对给定「编译产物 + 用户原意」按以下维度逐条评审：',
@@ -91,17 +127,21 @@ function buildPersona(rubric: DialectRubric): string {
     '严重度判定标准：',
     rubric.severityRules,
     '',
+    '打分要求：对上述每个维度各给一个 0-100 的维度分（dimensionScores，全维度必填）。',
     '铁律：每条 finding 必须附带 evidence 三键 {tool, query, result}——tool 是你实际调用过的证据工具名，',
-    'query 是查询串，result 是证据摘要。没有证据的 finding 一律不要输出。',
+    'query 是查询串，result 是证据摘要。没有证据的 finding 一律不要输出；标注「证据可选」的维度例外。',
     '输出：只输出一个 JSON（可带 ```json fence），形状见 schema；不要任何额外文字或解释。',
   ].join('\n')
 }
 
 function buildSchema(rubric: DialectRubric): string {
   const ids = rubric.dimensions.map((d) => JSON.stringify(d.id)).join(', ')
+  const dimScoreLines = rubric.dimensions.map((d) => `    ${JSON.stringify(d.id)}: 0-100`).join(',\n')
   return `{
   "verdict": "pass" | "needs_revision",
-  "score": 0-100,
+  "dimensionScores": {
+${dimScoreLines}
+  },
   "findings": [
     {
       "severity": "blocker" | "major" | "minor",
@@ -157,15 +197,27 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
     }
     const raw = await input.provider(req)
 
-    // 规格 5：schema 不合 / parse 失败 → skipped
+    // 规格 5：schema 不合 / parse 失败 → skipped；A6 维度分缺失/多出/非法 → skipped invalid_dimensions
     const parsed = parseOutcome(raw)
     if (!parsed) return skipped('invalid_schema_or_parse')
+    const dimScores = dimensionScoresOf(parsed.dimensionScores, input.rubric)
+    if (!dimScores) return skipped('invalid_dimensions')
 
-    // 规格 3（防御归一）：只作用于 LLM 原生 verdict=pass——pass 但 score < passThreshold 或含 blocker → needs_revision
-    const findings = parsed.findings.filter(hasValidEvidence) as CriticFinding[]
+    // A6：score = Math.round(Σ weight × dimScore)，由代码计算（LLM 只产维度分）
+    const score = Math.round(
+      input.rubric.dimensions.reduce((sum, d) => sum + d.weight * dimScores[d.id], 0),
+    )
+
+    // 证据铁律（含 A5 evidenceOptional 放行）→ 有效 findings 按序编号 f1…fN
+    const findings = parsed.findings
+      .map((f) => toValidFinding(f, input.rubric))
+      .filter((f): f is CriticFinding => f !== null)
+      .map((f, i) => ({ ...f, id: `f${i + 1}` }))
+
+    // 规格 3（防御归一）：只作用于 LLM 原生 verdict=pass——pass 但加权分 < passThreshold 或含 blocker → needs_revision
     let verdict = parsed.verdict
     const hasBlocker = findings.some((f) => f.severity === 'blocker')
-    if (verdict === 'pass' && (parsed.score < input.rubric.passThreshold || hasBlocker)) {
+    if (verdict === 'pass' && (score < input.rubric.passThreshold || hasBlocker)) {
       verdict = 'needs_revision'
     }
 
@@ -176,7 +228,7 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
       verdict = 'pass'
     }
 
-    return { verdict, score: parsed.score, findings: findings as CriticFinding[], praise: parsed.praise }
+    return { verdict, score, findings, praise: parsed.praise }
   } catch (err) {
     return skipped(`critic_error:${err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120)}`)
   }

@@ -41,13 +41,16 @@ function criticOf(responses: string[]) {
   return fn
 }
 
-const PASS_JSON = JSON.stringify({ verdict: 'pass', score: 90, findings: [], praise: [] })
+const dimScores = (v: number) => ({
+  'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v, aesthetics: v,
+})
+const PASS_JSON = JSON.stringify({ verdict: 'pass', dimensionScores: dimScores(90), findings: [], praise: [] })
 const NEEDS_FIX = {
   severity: 'major', dimension: 'tag-order', problem: 'tag 顺序错',
   evidence: { tool: 'catalog', query: '1girl', result: 'canonical,n=120' },
   requiredFix: '把质量词前移到主体前',
 }
-const NEEDS_JSON = JSON.stringify({ verdict: 'needs_revision', score: 50, findings: [NEEDS_FIX], praise: [] })
+const NEEDS_JSON = JSON.stringify({ verdict: 'needs_revision', dimensionScores: dimScores(50), findings: [NEEDS_FIX], praise: [] })
 
 const mockEvidence: EvidenceDeps = {
   catalog: (q) => [{ tag: q, kind: 'canonical', count: 1 }],

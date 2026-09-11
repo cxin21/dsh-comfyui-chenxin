@@ -85,5 +85,27 @@ describe('prompt_author correction loop (P4)', () => {
     expect(raw.audit.gates.some((g: any) => g.rule === 'references_unmapped' && g.severity === 'critical')).toBe(true)
   })
 
+  // Round7 T6：三期 T3 闭环联动的行为级锚定——中文片段触发 cjk_in_positive critical 后，
+  // 修正闭环必须真走（intent provider 第二次调用 + feedback 携带 gate detail），修正后英文稿出稿 ok
+  it('cjk_in_positive critical (Chinese fragment) truly drives the correction loop → English draft ok', async () => {
+    const reqs: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => {
+      reqs.push(req)
+      return req.round === 0
+        ? { slots: { count_gender: ['1girl'], appearance: ['蓝色短发'] } } // 含中文片段 → cjk_in_positive critical
+        : { slots: { count_gender: ['1girl'], appearance: ['blue short hair'] } } // 修正轮纯英文
+    })
+    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'anima', input: 'x', judge_mode: 'off', enrich: false })))
+    expect(reqs.map((r) => r.round)).toEqual([0, 1]) // intent provider 第二次调用——闭环真走
+    // feedback 携带 cjk gate 的 detail 片段文本（闭环驱动内容可观测）
+    expect(reqs[1].feedback).toContain('cjk_in_positive')
+    expect(reqs[1].feedback).toContain('cjk fragment in positive (invalid for anima tag library)')
+    expect(reqs[1].feedback).toContain('蓝色短发')
+    // 修正后英文稿出稿 ok=true，cjk gate 不再出现
+    expect(raw.ok).toBe(true)
+    expect(raw.audit.passed).toBe(true)
+    expect(raw.audit.gates.some((g: any) => g.rule === 'cjk_in_positive')).toBe(false)
+  })
+
   afterAll(() => setAuthorIntentProvider(null))
 })

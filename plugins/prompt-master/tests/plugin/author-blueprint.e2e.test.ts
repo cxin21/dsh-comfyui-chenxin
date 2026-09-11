@@ -3,7 +3,6 @@ import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/pro
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
 import { stubCtx, runTool, textStream } from './helpers.js'
 import type { AuthorIntentFn } from '../../src/tools/prompt-author.js'
-
 // 注入蓝图 provider：第一轮产出 v0，后续轮只补 duration
 const fakeProvider: AuthorIntentFn = async (req: any) => {
   if (req.round === 0) return {
@@ -86,5 +85,39 @@ describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁)', () => {
     expect(v.advisories).toContain('loop_exhausted:true')
     expect(v.observability.repairs.length).toBeGreaterThan(0) // Level 1 修复记录存在
     setAuthorIntentProvider(null)
+  })
+})
+
+// Round7 T6：blueprint_id 路径忽略 enrich 参数（blueprint 分支自带 enrichBlueprint 扩展）——
+// 显式 enrich=true 时必须补 advisory 消除静默忽略；不传 enrich（缺省忽略）不打扰
+describe('prompt_author blueprint_id enrich advisory (Round7 T6)', () => {
+  function savedRepo() {
+    const { settings } = settingsRepo()
+    const repo = createBlueprintRepo({ settings } as any)
+    repo.save('bp-enrich-check', {
+      schema_version: 1, media: 'video',
+      core: { concept: '三镜头打斗CG', aspect_ratio: '9:16', negative: [] },
+      media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } },
+    } as any)
+    return settings
+  }
+
+  beforeEach(() => setAuthorIntentProvider(async () => ({}) as any))
+  afterEach(() => setAuthorIntentProvider(null))
+
+  it('blueprint_id + enrich=true → advisory enrich_ignored_blueprint', async () => {
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
+    ctx.settings = savedRepo()
+    const def = registerAuthorTool(ctx, { temperature: 0.7 })
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'bp-enrich-check', judge_mode: 'off', enrich: true })))
+    expect(v.advisories).toContain('enrich_ignored_blueprint')
+  })
+
+  it('blueprint_id 不传 enrich → 无 enrich_ignored_blueprint advisory', async () => {
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
+    ctx.settings = savedRepo()
+    const def = registerAuthorTool(ctx, { temperature: 0.7 })
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'bp-enrich-check', judge_mode: 'off' })))
+    expect(v.advisories).not.toContain('enrich_ignored_blueprint')
   })
 })

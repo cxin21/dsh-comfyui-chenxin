@@ -18,27 +18,31 @@ import { searchCatalog } from '../dialect/anima-catalog.js'
  * 真实证据依赖装配。适配器映射（T2 carry 逐条落实）：
  * - catalog：searchCatalog(tag) → CatalogHit[] 按实际字段映射为 { tag, kind, count }
  *   （CatalogHit: prompt_form?/match_type/usage_count?/raw?，缺失时兜底）；
+ *   仅 target='anima' 装配（Round7 T6 分流防护：h3 未声明 catalog 工具，键不进 deps）；
  * - tokenizer：countTokensH3(text) 恒带 tokens（undefined → 0 + estimate: true）；
  * - aesthetics：query 为序列化后的画面文本 → BlueprintV1 最小构造可行（{core:{concept}}，
  *   checkConcreteness 全程可选链兼容）→ 扁平摘要；最小构造失败 → lexicon-only 降级摘要。
  */
 export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDeps {
-  void target
   const deps: EvidenceDeps = {}
 
-  try {
-    // catalog 适配器仅 anima；h3 rubric 未声明 catalog；未来若声明需按 target 分流
-    deps.catalog = (query: string) => {
-      const hits = searchCatalog(query)
-      if (!Array.isArray(hits)) return []
-      return hits.map((h) => ({
-        tag: h.prompt_form ?? h.raw ?? query,
-        kind: h.match_type,
-        count: typeof h.usage_count === 'number' ? h.usage_count : 0,
-      }))
+  // Round7 T6 catalog 分流防护：仅 anima 装配 catalog 适配器——h3 方言未声明 catalog 工具；
+  // 若未来声明需提供 h3 侧证据源。target !== 'anima' 时 catalog 键不进 deps
+  // （fail-fast：bridge.list 自然不含 catalog，不再恒用 anima searchCatalog 混入 h3 评审证据面）。
+  if (target === 'anima') {
+    try {
+      deps.catalog = (query: string) => {
+        const hits = searchCatalog(query)
+        if (!Array.isArray(hits)) return []
+        return hits.map((h) => ({
+          tag: h.prompt_form ?? h.raw ?? query,
+          kind: h.match_type,
+          count: typeof h.usage_count === 'number' ? h.usage_count : 0,
+        }))
+      }
+    } catch {
+      /* 构造失败 → 键缺省 */
     }
-  } catch {
-    /* 构造失败 → 键缺省 */
   }
 
   try {

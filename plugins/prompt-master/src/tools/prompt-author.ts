@@ -679,6 +679,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           enrichmentTop = { skipped: true, reason: eRes.reason }
         }
         traceExtra.push({ name: 'enrich', ms: performance.now() - tEnrich0 })
+      } else if (a.enrich === true && a.blueprint_id) {
+        // Round7 T6：blueprint 路径忽略 enrich 参数（blueprint 分支自带 enrichBlueprint 扩展层）。
+        // 显式 enrich=true 补 advisory 消除静默忽略（与 judge_mode 忽略口径一致：参数被忽略必须可观测）。
+        enrichAdvisories.push('enrich_ignored_blueprint')
       }
 
       const intentBase = { target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }

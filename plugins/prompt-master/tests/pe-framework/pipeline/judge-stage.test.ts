@@ -449,4 +449,13 @@ describe('judge-assembly 生产装配（不打真连，只验适配器形状）'
     const provider = createProductionCriticProvider({})
     await expect(provider({ persona: 'p', schema: 's', user: 'u' })).rejects.toThrow()
   })
+
+  it('Round7 T6：target=h3 → catalog 键不进 deps（fail-fast 分流；h3 未声明 catalog 工具）', async () => {
+    const { createProductionEvidenceDeps } = await import('../../../src/pe-framework/pipeline/judge-assembly.js')
+    const deps = createProductionEvidenceDeps('h3')
+    expect(deps.catalog).toBeUndefined() // bridge.list 自然不含 catalog
+    // tokenizer/aesthetics 不受分流影响
+    expect(typeof deps.tokenizer).toBe('function')
+    expect(typeof deps.aesthetics).toBe('function')
+  })
 })

@@ -55,7 +55,8 @@ function criticOf(responses: string[]) {
 
 const PASS_JSON = JSON.stringify({
   verdict: 'pass',
-  dimensionScores: { 'tag-order': 90, contradiction: 90, 'tag-evidence': 90, 'negative-template': 90, aesthetics: 90 },
+  // D10（外部基准 2026-09）：与 ANIMA_RUBRIC 7 维精确一致（缺/多 → invalid_dimensions）
+  dimensionScores: { 'tag-order': 90, contradiction: 90, 'tag-evidence': 90, 'negative-template': 90, composition: 90, 'lighting-color': 90, 'aesthetic-vocabulary': 90 },
   findings: [], praise: [],
 })
 const mockEvidence: EvidenceDeps = {

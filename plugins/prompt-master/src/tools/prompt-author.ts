@@ -26,6 +26,7 @@ import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 import { recordGeneration } from '../pe-framework/feedback/store.js'
 import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
+import { catalogCandidatesForText } from '../pe-framework/dialect/catalog-recall.js'
 import { tokensOf } from '../pe-framework/tokens.js'
 import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
 import { defaultFeedbackDbPath } from './prompt-feedback.js'
@@ -85,6 +86,8 @@ export interface AuthorIntentRequest {
   /** Task 7 方言化：author 按 getDialect(target).intent 注入（req > opts > DEFAULT 兜底在 provider 内） */
   persona?: string
   schema?: string
+  /** B7（外部基准 2026-09）：catalog 候选召回——intent 前置检索的已验证规范 tag（provider 渲染为候选块） */
+  catalogCandidates?: string[]
   /** Task 10 蓝图管线：关键维度缺失澄清策略透传（→ analyzeIntent opts.clarify；t22 F2 修复） */
   clarify?: 'ask' | 'auto'
 }
@@ -107,7 +110,11 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
     req.target === 'anima'
       ? '你是 Anima 提示词意图拆解器：把创作意图拆成槽位 JSON，仅输出 JSON（形如 {"slots": {"count_gender": [...], "appearance": [...], ...}}，键为 count_gender/character/appearance/clothing/pose_action/expression/camera/scene/detail_mood/narrative）。'
       : '你是 MiniMax-H3 意图拆解器：把创作意图写成 shots JSON，仅输出 JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。'
-  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）:\n${req.feedback}\n\n` : '') + `创作意图: ${req.input}`
+  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）:\n${req.feedback}\n\n` : '') +
+    (req.catalogCandidates && req.catalogCandidates.length > 0
+      ? `可用 catalog 规范候选（已验证存在，优先采用其规范写法）:\n${req.catalogCandidates.join(', ')}\n\n`
+      : '') +
+    `创作意图: ${req.input}`
   const { text } = await complete(ctx, {
     provider: route.provider,
     model: route.model,
@@ -574,6 +581,56 @@ function catalogTraceEntry(stage: StageResult, out: Array<{ name: string; ms: nu
   if (typeof ms === 'number') out.push({ name: 'catalog', ms })
 }
 
+/* ── A6（外部基准 2026-09）：design_notes 设计说明投影 ── */
+
+const SLOT_LABELS_ZH: Record<string, string> = {
+  count_gender: '人数', character: '角色', artist: '画师', appearance: '外观', clothing: '服装',
+  pose_action: '动作', expression: '表情', camera: '景别', scene: '场景', detail_mood: '细节与氛围',
+}
+
+/**
+ * design_notes（确定性，零 LLM）：从 compiled.segments 按槽位汇总实际采用的设计选择
+ * （标签分组 / narrative 职责 / 排除项 / catalog 锚定率），补足「产出只有 tag 串、
+ * 没有设计逻辑可读」的缺口。judge 在场时其 findings/praise 提供质量视角，本投影负责
+ * 事实视角（互补）。非 anima（无 segments）返回 []。
+ */
+export function designNotesOf(stage: StageResult): string[] {
+  const r = stage.result as { segments?: unknown }
+  if (!Array.isArray(r.segments)) return []
+  const bySlot = new Map<string, string[]>()
+  let narrative: string | null = null
+  const exclusions: string[] = []
+  let grounded = 0
+  let contentTags = 0
+  for (const seg of r.segments as Array<Record<string, unknown>>) {
+    const text = typeof seg['text'] === 'string' ? seg['text'] : ''
+    const slot = typeof seg['slot'] === 'string' ? seg['slot'] : null
+    const origin = seg['origin']
+    const channel = seg['channel']
+    if (origin === 'grounded' || origin === 'user-fuzzy') {
+      contentTags++
+      if (origin === 'grounded') grounded++
+    }
+    if (origin === 'narrative' && channel === 'positive') { narrative = text; continue }
+    if (origin === 'exclusion' && channel === 'negative') { exclusions.push(text); continue }
+    if (channel !== 'positive' || slot === null) continue
+    if (!text) continue
+    const arr = bySlot.get(slot) ?? []
+    arr.push(text)
+    bySlot.set(slot, arr)
+  }
+  const notes: string[] = []
+  for (const [slot, tags] of bySlot) {
+    if (tags.length === 0) continue
+    const label = SLOT_LABELS_ZH[slot] ?? slot
+    notes.push(`${label}（${tags.length}）: ${tags.slice(0, 6).join(' / ')}${tags.length > 6 ? ' 等' : ''}`)
+  }
+  if (narrative) notes.push(`场景叙述（构图/曝光/色彩职责）: ${narrative}`)
+  if (exclusions.length > 0) notes.push(`排除项: ${exclusions.join(', ')}`)
+  if (contentTags > 0) notes.push(`catalog 锚定: ${grounded}/${contentTags} 个内容段命中规范库`)
+  return notes
+}
+
 export function registerAuthorTool(ctx: Context, config: Config) {
   return defineTool({
     name: 'prompt_author',
@@ -641,7 +698,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const stage = await runDraftThroughStage(target, draft, runOpts)
         if (target === 'anima') applyAnimaJoyExtraFilter(stage, a.form_fields)
         // Task 6：audit_only 不触发评审；generation_id 仍生成（唯一允许的缺省新增字段）
-        return assembleEnvelope(stage, [], undefined, { generation_id: makeGenerationId() })
+        return assembleEnvelope(stage, [], { designNotes: designNotesOf(stage) }, { generation_id: makeGenerationId() })
       }
 
       const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
@@ -685,7 +742,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         enrichAdvisories.push('enrich_ignored_blueprint')
       }
 
-      const intentBase = { target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify }
+      // B7（外部基准 2026-09）：catalog 候选召回——anima 的检索证据进生成回路（LLM 写 tag 前
+      // 先看到已验证存在的规范写法）。召回文本 = enrich brief（英文，缺省路径）∪ 原始输入；
+      // 检索故障/空文本静默降级为无候选（增强层，不阻塞出稿）。
+      const catalogCandidates = target === 'anima' ? catalogCandidatesForText(intentInput) : []
+      if (catalogCandidates.length > 0) enrichAdvisories.push(`catalog_recall_injected:${catalogCandidates.length}`)
+
+      const intentBase = { target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, persona: intentCfg?.persona, schema: intentCfg?.schema, clarify: a.clarify, catalogCandidates }
 
       // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化
       const judgeMode = a.judge_mode ?? 'fast'
@@ -796,6 +859,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           substitutions: canon.substitutions,
           expansions,
           repairs,
+          designNotes: designNotesOf(projStage),
         }, {
           generation_id: generationId,
           ...judgeTopLevel(projStage),
@@ -850,6 +914,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         traceStages: [...(stage.trace?.stages ?? []), ...traceExtra],
         canonicalSubstitutions: canon.canonicalSubstitutions,
         substitutions: canon.substitutions,
+        designNotes: designNotesOf(projStage),
       }, {
         generation_id: generationId,
         ...judgeTopLevel(projStage),

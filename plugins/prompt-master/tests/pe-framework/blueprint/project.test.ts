@@ -110,15 +110,17 @@ describe('projectToH3', () => {
       core: { ...fightBp.core, style: { base: '写实电影', theme: '暗黑史诗' } },
     }
     const enriched = applyStyle(bp, 'cinematic_real', 0.6)
+    // 合并语义：用户 brief 已有 style.base 优先，风格库只补缺
     expect(enriched.core.style?.base).toContain('写实')
     const s = projectToH3(enriched)
     for (const shot of s.shots) {
       // 风格引用进 what（第 1 级）
       expect(shot.what).toContain('写实电影')
       // 约 60% 风格短语进 what（第 2 级，不再仅引用）——cinematic_real video fragment 5 短语 → round(0.6×5)=3 短语注入
-      expect(shot.what).toContain('IMAX 胶片质感')
-      expect(shot.what).toContain('Panavision C 系 35mm f4')
-      expect(shot.what).toContain('伦勃朗光')
+      // C9（外部基准 2026-09）：风格片段已词表化（英文短语）
+      expect(shot.what).toContain('IMAX film grain')
+      expect(shot.what).toContain('anamorphic lens flare')
+      expect(shot.what).toContain('teal and orange grading')
     }
   })
   it('hard negative → throws BlueprintHardNegativeError', () => {
@@ -145,6 +147,15 @@ describe('projectToAnima', () => {
     expect(s.detail_mood).toContain('三分法')
     expect(s.detail_mood).toContain('侧逆光')
     expect(s.scene).toContain('黄昏荒原')
+  })
+  it('maps style.artist_hints to artist slot (B8, bare names); absent hints → no artist slot', () => {
+    const withArtists = projectToAnima({
+      ...fightBp,
+      core: { ...fightBp.core, style: { base: 'cel shading', artist_hints: ['rella', 'wlop'] } },
+    } as any)
+    expect(withArtists.artist).toEqual(['rella', 'wlop'])
+    const withoutArtists = projectToAnima(fightBp as any)
+    expect(withoutArtists.artist).toBeUndefined()
   })
 })
 

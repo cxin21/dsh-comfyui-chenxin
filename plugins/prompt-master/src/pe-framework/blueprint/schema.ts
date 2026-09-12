@@ -19,6 +19,7 @@ export interface StyleRef {
   base?: string                 // 基底风格：媒介/画风（写实电影/赛璐璐/厚涂）
   theme?: string                // 主题风格：赛博朋克/和风/废土（影响场景+配色）
   palette?: string              // 情绪配色：青橙对比/低饱和/高饱和
+  artist_hints?: string[]       // B8（外部基准 2026-09）：画师候选（裸名，catalog 已验证存在；投影 → anima artist 槽）
 }
 
 export interface Character {

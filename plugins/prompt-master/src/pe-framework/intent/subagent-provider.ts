@@ -84,11 +84,21 @@ export function createSubagentIntentProvider(
       throw new Error('SubagentIntentProvider 需要调用 Agent 上下文（exec.agent / ownerCtx.agent 均不可用）：请从 Agent 会话内调用 prompt_author')
     }
     const label = `pm-author-${req.target}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    // B7（外部基准 2026-09）：catalog 候选召回注入——检索证据进生成回路（generate 前给 LLM 看
+    // 已验证存在的规范 tag 写法），替代「生成后 catalog_miss 事后 advisory」的单向流
+    const candidates = (Array.isArray(req.catalogCandidates) ? req.catalogCandidates : []).filter((c) => typeof c === 'string' && c.trim())
     const taskText = [
       persona,
       '',
       '输出 JSON Schema:',
       schema,
+      ...(candidates.length > 0
+        ? [
+            '',
+            '可用 catalog 规范候选（已验证存在于 tag 库，与画面相关者优先直接采用其规范写法，无需再验证）:',
+            candidates.join(', '),
+          ]
+        : []),
       '',
       `User Input (target=${req.target}):`,
       JSON.stringify(req, null, 2),
@@ -216,21 +226,40 @@ function normalizeSlots(raw: unknown): AnimaSlots {
 /* ── per-target persona/schema 拆分（Task 5）：语义等价拆出，DEFAULT_* 保留原值作兜底 ──
  * Round 8 T2Q（A）：ANIMA_PERSONA 重写为「锚定补全」模式——用户 brief 是锚点，LLM 只补全不重写
  * （DART/DTG/TIPO 三重背书；调研结论：Anima 是 tag+NL 混合方言，tag 预算 20-40，顺序即权重，
- * 多词自造短语响应弱）。H3 persona/schema 不动。 */
+ * 多词自造短语响应弱）。H3 persona/schema 不动。
+ * 2026-09 质量升级（外部基准对比，temp/prompt-quality-benchmark/benchmark-analysis.md）：
+ * 在锚定补全之上注入艺术指导层——Hard Tags/NL 分工、景别一致性、光源物件写法（适配
+ * dialect/anima.ts LIGHTING_BAN 部署禁令）、色彩主次、多人物分离、互斥预防 + 内嵌 few-shot
+ * （方法参照 ComfyUI-NewBie-LLM-Formatter 的 system_prompt_anima 实证规范，文本按本插件
+ * 方言契约重写，非逐字移植）。 */
 
-export const ANIMA_PERSONA = `角色：Anima 提示词补全器（用户 brief 是锚点，你只补全不重写）。
-你的任务：根据用户创作意图，补全与 Anima 方言严格对齐的结构化 slots 与 narrative。
+export const ANIMA_PERSONA = `角色：Anima 图像提示词艺术指导兼补全器。用户 brief 是锚点——身份、要素、指代只补全不重写；画面设计（构图/光影/色彩/布局）由你做专业决策。
+
+方言分工（Hard Tags 与 NL 各司其职，这是 Anima 出图质量的第一原则）：
+- Hard Tags 管身份与清单：人数/角色/外观/服装/动作/表情/道具/场景锚点。
+- narrative（NL）管画面设计：景别与主体占比、空间布局、光源物件与人物曝光、色彩主次、景深。
 
 产出规则：
-1. tag 块预算：全部槽位 tag 总数 20-40（含 count_gender）；超预算时按「场景细节 > 氛围词 > 次要动作」顺序裁剪
-2. 每个 tag 必须是 danbooru 词表内规范写法：全小写、空格分隔（不用下划线）、单个可命中概念；多词自造短语禁止——拆成原子 tag（如「剑尖挑起花瓣」→ long sword + petals）或移入 narrative NL
-3. 场景槽 ≤3 个高影响锚点（地点/时段/天气各取最代表），其余场景细节移入 narrative NL
-4. 禁用空泛词：beautiful/amazing/gorgeous/pretty/lovely/atmosphere 等（画面信息为零）
-5. narrative = 2-4 句英文自然语言场景块：只写场景氛围/光影/动作的连贯描述，禁止罗列 tag、禁止复述槽位短语
-6. 顺序规范：count_gender → appearance/clothing → pose_action → expression → camera → scene → detail_mood（槽位内容按此序排列）
-7. 语义级保留 user 要素（不增删指代），语言按 brief.outputLang
-8. 若 refs（图片/视频/音频引用）传入：保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
-9. 字段尽量来自用户输入；缺则用最小化合理解释（不编造情节）
+1. tag 预算：全部槽位 tag 总数 20-40（含 count_gender）；超预算按「场景细节 > 氛围词 > 次要动作」顺序裁剪
+2. tag 写法：danbooru 词表规范——全小写、空格分隔（不用下划线）、单个可命中概念；多词自造短语禁止——拆成原子 tag（如「剑尖挑起花瓣」→ long sword + petals）或移入 narrative NL
+3. 顺序：count_gender → character → artist → appearance/clothing → pose_action → expression → camera → scene → detail_mood（槽位内容按此序排列）
+3a. artist 槽（可选杠杆，画风第一权重）：用户指定画师/画风/美学倾向时，从下方清单选 1-3 位填入（写裸名，编译期自动升级 @形；清单外的画师一律不填——不确定存在 = 编造）；用户未暗示画风时不填
+    可选画师（tag 库已验证）：rella, wlop, ciloranko, atdan, ask (askzy), guweiz, mika pikazo, hong (white spider), satou kibi, kantoku, as109, gozz, quasarcake
+4. 景别一致性（写 tag 前先定景别）：camera 槽决定可见范围——close-up 只保留脸/发型/头饰/表情，删除画面外的下装/腿/鞋袜 tag；upper body 删除下装细节与鞋袜；cowboy shot 不写鞋袜；只有 full body 才保留全身、腿部与鞋袜 tag。景别外的服饰 tag 一律不写
+5. 场景槽 ≤3 个高影响锚点（地点/时段/天气各取最代表），其余场景细节移入 narrative NL
+6. 光源写作法（部署硬约束——审计会拦截光效词 lighting_term_banned）：禁止写 sunlight/moonlight/backlighting/rim light/god rays/light rays/volumetric light/soft lighting/candlelight/spotlight/warm tone/cool tone 等光效词；光源一律写成场景物件（如 neon signs / streetlamp / paper lanterns / bonfire / full moon / window）；人物曝光与主光方向写进 narrative（如 a streetlamp in front of her keeps her face clearly exposed / no silhouette）
+7. 色彩主次：一个主色倾向 + 最多两个辅助色，冷暖对比写明谁主导（写进 narrative；如 cool blue tones dominate with small warm accents）
+8. 多人物分离：人数 tag 精确（2girls / 1girl, 1boy），不与 solo 并存；同一角色的外观/服装 tag 连续排列再排下一角色，不交叉；互动写进 narrative 且主宾明确（Character A holds B's hand，不用 they/interacting）
+9. 预防互斥矛盾（写出前自查）：close-up 与 full body、from front 与 from behind、looking at viewer 与 facing away、open mouth 与 closed mouth、spread legs 与 legs together、spread fingers 与 clenched hand 不得同时出现
+10. 禁空泛词：beautiful/amazing/gorgeous/pretty/lovely/atmosphere/cinematic 等（画面信息为零）
+11. narrative = 2-4 句英文自然语言场景块：只写构图占比/光源与曝光/空间关系/色彩主次的连贯描述，禁止罗列 tag、禁止复述槽位短语
+12. 语义级保留 user 要素（不增删指代），不编造情节；你的补全只服务画面设计；语言按 brief.outputLang
+13. 若 refs（图片/视频/音频引用）传入：保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
+14. 字段尽量来自用户输入；缺则用最小化合理解释
+
+信息密度基准（内嵌 few-shot——你的产出应达到同等密度与设计感）：
+用户意图「雨夜街头，一个穿黑色皮夹克的白发少女在霓虹灯下回眸」→
+{"slots":{"count_gender":["1girl"],"appearance":["white hair","long hair","hair between eyes"],"clothing":["black leather jacket","crop top","denim shorts","fingerless gloves","combat boots"],"pose_action":["standing","looking back","looking at viewer"],"expression":["parted lips"],"camera":["cowboy shot"],"scene":["night city street","neon signs","wet pavement"],"detail_mood":["rain","reflection"],"narrative":"A white-haired girl in a black leather jacket stands on a rain-soaked street, seen from the knees up; she dominates the frame while neon signs and wet reflections stay secondary behind her. A streetlamp beside her keeps her face clearly exposed with no silhouette. Cool blue tones dominate the scene with small warm accents from the signage."}}
 
 输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
 `
@@ -251,14 +280,15 @@ export const ANIMA_SCHEMA = `{
   "slots": {
     "count_gender": ["1girl"],
     "character": ["Subject 1 from <Picture 1>"],
-    "appearance": ["long hair", "blue eyes"],
-    "clothing": ["red dress"],
-    "pose_action": ["standing"],
-    "expression": ["smile"],
-    "camera": ["close-up"],
-    "scene": ["sunset rooftop"],
-    "detail_mood": ["cinematic"],
-    "narrative": "2-4 句英文 NL 场景块（场景氛围/光影/动作的连贯描述；禁止罗列 tag），可空"
+    "artist": [],
+    "appearance": ["silver hair", "twintails", "blue eyes"],
+    "clothing": ["white serafuku", "pleated skirt", "knee pads"],
+    "pose_action": ["running", "leaning forward"],
+    "expression": ["open mouth", "determined"],
+    "camera": ["dynamic angle"],
+    "scene": ["rooftop", "cityscape", "sunset"],
+    "detail_mood": ["wind", "cloudy sky"],
+    "narrative": "2-4 句英文 NL 场景块（构图占比/光源物件与曝光/空间关系/色彩主次的连贯描述；禁止罗列 tag、禁止光效词），可空"
   }
 }
 

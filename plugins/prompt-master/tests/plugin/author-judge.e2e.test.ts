@@ -42,8 +42,11 @@ function criticOf(responses: string[]) {
   return fn
 }
 
+// D10（外部基准 2026-09）：rubric 扩为 7 维（composition/lighting-color/aesthetic-vocabulary 替换 aesthetics），
+// critic mock 的维度分必须与 ANIMA_RUBRIC 维度 id 精确一致（dimensionScoresOf 缺/多即 invalid_dimensions）
 const dimScores = (v: number) => ({
-  'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v, aesthetics: v,
+  'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
+  composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,
 })
 const PASS_JSON = JSON.stringify({ verdict: 'pass', dimensionScores: dimScores(90), findings: [], praise: [] })
 const NEEDS_FIX = {
@@ -298,14 +301,15 @@ describe('final-fix C1：author 落库 generations', () => {
 /* ── T4（spec §10.2-A3/A4, §10.4-A12/A13）：makeRevisionProvider v2 工具面 ── */
 
 const dimScores5 = (v: number) => ({
-  'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v, aesthetics: v,
+  'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
+  composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,
 })
 const REV_CLOSE_F1 = JSON.stringify({ verdict: 'pass', closedFindingIds: ['f1'], unresolved: [], rebuttalVerdicts: [] })
 
 describe('T4 规格1 praise 锚点 + 规格3 patch 失败回退整稿重拆', () => {
   it('首轮 praise 非空 → 修订 prompt 含「以下优点须保留：…」+ 条目 + 禁删指令；定位不到字段 → fallback:full-rebuild', async () => {
     const finding = {
-      severity: 'major', dimension: 'aesthetics', problem: '夜空氛围不足',
+      severity: 'major', dimension: 'aesthetic-vocabulary', problem: '夜空氛围不足',
       evidence: { tool: 'catalog', query: 'night sky', result: 'night sky atmosphere' },
       requiredFix: 'starry sky backdrop',
     }
@@ -356,7 +360,7 @@ describe('T4 规格2 结构化 rebuttals（requiredFix 已在稿内 → 带证�
   it('patch 路径产 rebuttals 直通 debate round2.reviser.rebuttals（provider 优先于 reviewer-accepted 映射）', async () => {
     const SLOTS = { slots: { count_gender: ['1girl'], appearance: ['detailed face'] } }
     const finding = {
-      severity: 'minor', dimension: 'aesthetics', problem: '细节不足',
+      severity: 'minor', dimension: 'aesthetic-vocabulary', problem: '细节不足',
       evidence: { tool: 'catalog', query: 'detailed face', result: 'detailed face already present' },
       requiredFix: 'detailed face',
     }

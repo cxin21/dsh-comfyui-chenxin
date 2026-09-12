@@ -11,6 +11,7 @@ import type { Target } from './types.js'
 export const SLOT_ORDER: string[] = [
   'count_gender',
   'character',
+  'artist', // 2026-09 外部基准 B8：画师是 Anima 画风第一杠杆（NewBie/Animagine 实证序：count→character→@artist→特征）。空槽零输出——不设 artist 时 positive/negative 与旧序逐字节一致；segments priority 仅在 artist 在场时后续 +50
   'appearance',
   'clothing',
   'pose_action',

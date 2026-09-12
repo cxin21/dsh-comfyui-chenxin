@@ -15,6 +15,8 @@ import type { AuditGate } from '../types.js'
 export interface AnimaSlots {
   count_gender?: string[]
   character?: string[]
+  /** B8（外部基准 2026-09）：画师槽——存裸名（rella），grounding 命中后经 prompt_form 升级为 @rella 规范形；未命中保留原文 + catalog_miss advisory */
+  artist?: string[]
   appearance?: string[]
   clothing?: string[]
   pose_action?: string[]
@@ -459,7 +461,9 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
 
 /* ── inspection.py 移植（audit gates）── */
 
-const LIGHTING_BAN = [
+/** 光效禁词（camera-anima 部署约束：光照渲染由 LoRA/控件承接，prompt 文本出现即触发 LoRA）。
+ *  A7（外部基准 2026-09）：导出供 art-direction 卡片一致性测试镜像把关（卡 tag 不得撞本表）。 */
+export const LIGHTING_BAN = [
   'sunlight', 'moonlight', 'rim light', 'warm lighting', 'cool lighting',
   'golden hour glow', 'soft lighting', 'backlighting', 'god rays',
   'light rays', 'volumetric light', 'spotlight', 'candlelight',
@@ -473,8 +477,26 @@ const MUTUAL_EXCLUSIONS: Array<[string, string]> = [
   ['from front', 'from behind'],
   ['from above', 'from below'],
   ['pov', 'full body'],
-  ['close-up', 'full body'],
   ['looking at viewer', 'facing away'],
+  // A4（外部基准 2026-09，对齐 NewBie-LLM-Formatter 冲突清单；substring 语义下逐对核实无脏子串）：
+  ['solo', '2girls'],
+  ['solo', '2boys'],
+  ['solo', '1boy'],
+  ['solo', 'multiple girls'],
+  ['solo', 'multiple boys'],
+  ['open mouth', 'closed mouth'],
+  ['spread legs', 'legs together'],
+  ['spread fingers', 'clenched hand'],
+]
+
+/** A5（外部基准 2026-09）：景别一致性表——framing term → 取景内不可见的内容 tag
+ *  （NewBie 规范实证：close-up 时下装/鞋袜/全身 tag 对出图是噪声甚至负向引导）。
+ *  close-up|full body 互斥由本表接管（细化到具体内容 tag，文案可执行）；substring 语义
+ *  与 MUTUAL_EXCLUSIONS 同款（normalizeText 后 includes）。 */
+const FRAMING_MISMATCH: Array<[string, string[]]> = [
+  ['close-up', ['full body', 'shoes', 'footwear', 'thighhighs', 'pantyhose', 'kneehighs', 'socks']],
+  ['upper body', ['full body', 'shoes', 'footwear', 'thighhighs', 'pantyhose', 'kneehighs']],
+  ['cowboy shot', ['shoes', 'footwear']],
 ]
 
 const TAG_COUNT_MIN = 12
@@ -543,6 +565,14 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
   for (const [first, second] of MUTUAL_EXCLUSIONS) {
     if (lightText.includes(first) && lightText.includes(second)) {
       gates.push({ rule: 'mutual_exclusion', target: 'anima', severity: 'important', detail: `mutually exclusive tags: ${first} + ${second}`, source: 'dialect/anima' })
+    }
+  }
+  // A5（外部基准 2026-09）：景别一致性——framing term 与取景外内容 tag 同现 → important
+  for (const [framing, mismatches] of FRAMING_MISMATCH) {
+    if (!lightText.includes(framing)) continue
+    const hits = mismatches.filter((t) => lightText.includes(t)).sort()
+    if (hits.length) {
+      gates.push({ rule: 'framing_tag_mismatch', target: 'anima', severity: 'important', detail: `framing '${framing}' 与取景外内容 tag 同现（画面内不可见，建议删除对应 tag 或改景别）: ${hits.join(', ')}`, source: 'dialect/anima' })
     }
   }
   // F4（三期 Task 3）：CJK 泄漏守门——anima tag 库无 CJK 条目，中文/假名片段对出图无效（硬伤）。
@@ -746,7 +776,7 @@ export function variantPolicy(variant: string): Policy {
 
 /* ── Task 5：方言注册（validateAnimaSlots 收敛 _coerce_brief 校验）── */
 
-const ANIMA_SLOT_KEYS = new Set(['count_gender', 'character', 'appearance', 'clothing', 'pose_action', 'expression', 'camera', 'scene', 'detail_mood'])
+const ANIMA_SLOT_KEYS = new Set(['count_gender', 'character', 'artist', 'appearance', 'clothing', 'pose_action', 'expression', 'camera', 'scene', 'detail_mood'])
 /** brief 扩展字段（composition.py _coerce_brief 契约）：exclusions string[]；qualityPrefix/explicit boolean */
 const ANIMA_BOOL_KEYS = new Set(['qualityPrefix', 'explicit'])
 

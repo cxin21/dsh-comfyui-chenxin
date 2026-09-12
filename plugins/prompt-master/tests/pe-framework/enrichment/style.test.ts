@@ -15,6 +15,8 @@ const requiredFields: (keyof (typeof MINIMAL_STYLES)[number])[] = [
   'negative_hints',
 ]
 
+const CINEMATIC_PHRASES = ['IMAX film grain', 'anamorphic lens flare', 'teal and orange grading', 'golden hour ambience', 'shallow depth of field']
+
 describe('minimal style library', () => {
   it('has at least 10 styles (spec §17 Phase 2: 10+ style templates)', () => {
     expect(MINIMAL_STYLES.length).toBeGreaterThanOrEqual(10)
@@ -44,6 +46,18 @@ describe('minimal style library', () => {
     }
   })
 
+  // B8（外部基准 2026-09）：画师候选——每风格 3 位、裸名（不带 @，grounding 升级）、非空
+  it('every style carries 3 verified-form artist hints (bare names, no @)', () => {
+    for (const s of MINIMAL_STYLES) {
+      expect(s.artistHints, `style ${s.id} artistHints`).toHaveLength(3)
+      for (const a of s.artistHints) {
+        expect(a.trim().length).toBeGreaterThan(0)
+        expect(a.startsWith('@'), `style ${s.id} artist ${a} must be bare name`).toBe(false)
+      }
+      expect(new Set(s.artistHints.map((x) => x.toLowerCase())).size).toBe(3)
+    }
+  })
+
   it('style ids are unique', () => {
     const ids = MINIMAL_STYLES.map((s) => s.id)
     expect(new Set(ids).size).toBe(ids.length)
@@ -51,43 +65,48 @@ describe('minimal style library', () => {
 
   it('applyStyle at conformity 0 injects base style', () => {
     const out = applyStyle(bp, 'cinematic_real', 0)
-    expect(out.core.style?.base).toContain('写实')
+    expect(out.core.style?.base).toBe('photorealistic')
   })
 
   it('applyStyle at conformity 0 injects full fragment into shots', () => {
     const out = applyStyle(bp, 'cinematic_real', 0)
     // cinematic_real video fragment 5 短语，全量注入 → 含最后一短语
-    expect(out.media_layer.video?.shots[0]?.action).toContain('青橙色彩分级')
+    expect(out.media_layer.video?.shots[0]?.action).toContain('shallow depth of field')
+  })
+
+  it('applyStyle writes artist_hints into core.style (B8, media-agnostic)', () => {
+    const out = applyStyle(bp, 'cinematic_real', 1)
+    expect(out.core.style?.artist_hints).toEqual(['guweiz', 'wlop', 'ask (askzy)'])
   })
 
   it('applyStyle at 0<conformity<1 injects proportional complete phrases (3/5 at 0.6)', () => {
     const out = applyStyle(bp, 'cinematic_real', 0.6)
     // round(0.6×5)=3 → 前 3 个完整短语注入
-    expect(out.media_layer.video?.shots[0]?.action).toContain('IMAX 胶片质感')
-    expect(out.media_layer.video?.shots[0]?.action).toContain('Panavision C 系 35mm f4')
-    expect(out.media_layer.video?.shots[0]?.action).toContain('伦勃朗光')
+    expect(out.media_layer.video?.shots[0]?.action).toContain('IMAX film grain')
+    expect(out.media_layer.video?.shots[0]?.action).toContain('anamorphic lens flare')
+    expect(out.media_layer.video?.shots[0]?.action).toContain('teal and orange grading')
     // 第 4/5 短语不注入（比例注入完整短语，不截断、不溢出）
-    expect(out.media_layer.video?.shots[0]?.action).not.toContain('黄昏黄金时刻')
-    expect(out.media_layer.video?.shots[0]?.action).not.toContain('青橙色彩分级')
+    expect(out.media_layer.video?.shots[0]?.action).not.toContain('golden hour ambience')
+    expect(out.media_layer.video?.shots[0]?.action).not.toContain('shallow depth of field')
     // core.style 仍写入（参考）
-    expect(out.core.style?.base).toContain('写实')
+    expect(out.core.style?.base).toBe('photorealistic')
   })
 
   it('applyStyle at tiny 0<conformity<1 keeps at least 1 complete phrase', () => {
     const out = applyStyle(bp, 'cinematic_real', 0.05)
-    expect(out.media_layer.video?.shots[0]?.action).toContain('IMAX 胶片质感')
-    // 绝不产生半句话：注入内容必为完整短语的以「，」分隔的头部
+    expect(out.media_layer.video?.shots[0]?.action).toContain('IMAX film grain')
+    // 绝不产生半句话：注入内容必为完整短语的以「，/,」分隔的头部
     const action = out.media_layer.video?.shots[0]?.action ?? ''
-    for (const part of action.split('，')) {
+    for (const part of action.split(/[，,]/)) {
       const t = part.trim()
       if (t.length === 0) continue
-      expect(['IMAX 胶片质感', 'Panavision C 系 35mm f4', '伦勃朗光', '黄昏黄金时刻', '青橙色彩分级']).toContain(t)
+      expect(CINEMATIC_PHRASES).toContain(t)
     }
   })
 
   it('applyStyle at conformity >= 1 only references style, does not inject fragment', () => {
     const out = applyStyle(bp, 'cinematic_real', 1)
-    expect(out.core.style?.base).toContain('写实')
+    expect(out.core.style?.base).toBe('photorealistic')
     expect(out.media_layer.video?.shots[0]?.action).toBeUndefined()
     const out2 = applyStyle(bp, 'cinematic_real', 1.5)
     expect(out2.media_layer.video?.shots[0]?.action).toBeUndefined()

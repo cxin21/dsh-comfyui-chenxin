@@ -130,6 +130,8 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
   const character = characters.flatMap((c, i) =>
     (c.reference_slots ?? []).map((_slot, j) => `Subject ${i + 1} from <Picture ${j + 1}>`),
   )
+  // B8（外部基准 2026-09）：风格画师候选 → artist 槽（裸名；grounding 命中后升 @形）
+  const artist = (bp.core.style?.artist_hints ?? []).filter((a) => typeof a === 'string' && a.trim().length > 0)
   const scene = bp.core.scene?.environment && bp.core.scene.environment.trim() ? [bp.core.scene.environment] : []
   const detailMood = [
     ...(bp.core.scene?.lighting ? [bp.core.scene.lighting] : []),
@@ -152,6 +154,7 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
     ...(appearance.length > 0 ? { appearance } : {}),
     ...(clothing.length > 0 ? { clothing } : {}),
     ...(character.length > 0 ? { character } : {}),
+    ...(artist.length > 0 ? { artist } : {}),
     ...(scene.length > 0 ? { scene } : {}),
     ...(detailMood.length > 0 ? { detail_mood: detailMood } : {}),
     ...(camera.length > 0 ? { camera } : {}),

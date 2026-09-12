@@ -74,6 +74,8 @@ export interface EnvelopeObservability {
   canonicalSubstitutions?: number
   /** F5：canonical 替换对（`原片段→新tag`，来自 compile result T1 字段）；无替换为空数组 */
   substitutions?: string[]
+  /** A6（外部基准 2026-09）：design_notes 设计说明投影（anima segments 槽位汇总，零 LLM） */
+  designNotes?: string[]
 }
 
 export interface EnvelopeNextAction {

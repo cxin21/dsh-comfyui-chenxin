@@ -1,0 +1,17 @@
+{
+  "id": "showa_retro",
+  "name": "昭和复古",
+  "category": "retro",
+  "rating": "safe",
+  "theme": "showa period nostalgia streetscape",
+  "palette": "faded amber and soda-pop red palette",
+  "fragments": {
+    "image": "showa era cityscape with standing signage, retro anime color dot tone, 1970s cine stock grain, tiled rooftop alley",
+    "video": "showa era cityscape with standing signage, retro anime color dot tone, 1970s cine stock grain, tiled rooftop alley"
+  },
+  "negative_hints": ["modern digital look", "glossy cg shading"],
+  "artist_hints": ["terada katsuya", "ross tran", "mika pikazo"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

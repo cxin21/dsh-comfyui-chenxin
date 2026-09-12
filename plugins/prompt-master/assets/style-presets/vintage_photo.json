@@ -1,0 +1,17 @@
+{
+  "id": "vintage_photo",
+  "name": "老照片",
+  "category": "retro",
+  "rating": "safe",
+  "theme": "antique photograph preservation",
+  "palette": "yellowed brown monochrome palette",
+  "fragments": {
+    "image": "yellowed brown monochrome print, faded edges with worn corners, analog film damage with dust and scratches, vignette from an old uncoated lens",
+    "video": "yellowed brown monochrome print, faded edges with worn corners, analog film damage with dust and scratches, vignette from an old uncoated lens"
+  },
+  "negative_hints": ["hdr clarity", "oversaturated modern grading"],
+  "artist_hints": ["loundraw", "ross tran", "wlop"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

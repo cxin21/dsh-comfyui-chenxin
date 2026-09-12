@@ -1,0 +1,17 @@
+{
+  "id": "gothic_vampire",
+  "name": "哥特暗夜",
+  "category": "dark_supernatural",
+  "rating": "safe",
+  "theme": "victorian gothic night interior",
+  "palette": "bone white and blood crimson palette",
+  "fragments": {
+    "image": "gothic cathedral architecture, wrought iron candle chandelier, pale skin under stone tracery shadows, victorian lace collar",
+    "video": "gothic cathedral architecture, wrought iron candle chandelier, pale skin under stone tracery shadows, victorian lace collar"
+  },
+  "negative_hints": ["bright daylight", "sunny beach setting"],
+  "artist_hints": ["abigail larson", "gustave dore", "edward gorey"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

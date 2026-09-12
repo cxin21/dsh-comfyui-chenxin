@@ -9,9 +9,9 @@ describe('style_list (spec §9)', () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), def(), {})))
     expect(Array.isArray(raw)).toBe(true)
     // M2 数据里程碑：55 → 批次递增（T4 +7=62；T5 +5=67；T8 收口总账收紧为 82）
-    expect(raw.length).toBe(67)
+    expect(raw.length).toBe(72)
     const ids = new Set(raw.map((p: { id: string }) => p.id))
-    expect(ids.size).toBe(67)
+    expect(ids.size).toBe(72)
     for (const p of raw) {
       for (const k of ['id', 'name', 'category', 'rating', 'artistCount', 'negativeCount', 'source']) {
         expect(k in p, `missing key ${k}`).toBe(true)
@@ -25,19 +25,20 @@ describe('style_list (spec §9)', () => {
     for (const p of safe) expect(p.rating).toBe('safe')
     // 当前数据全为 safe：任一上限 ≥ safe 都应返回全量（cap 语义，非精确相等；计数随 M2 批次递增）
     const sensitive = JSON.parse(String(await runTool(stubCtx(), def(), { rating: 'sensitive' })))
-    expect(sensitive.length).toBe(67)
+    expect(sensitive.length).toBe(72)
     const explicit = JSON.parse(String(await runTool(stubCtx(), def(), { rating: 'explicit' })))
-    expect(explicit.length).toBe(67)
+    expect(explicit.length).toBe(72)
   })
   it('category and applies_to filters', async () => {
     const anime = JSON.parse(String(await runTool(stubCtx(), def(), { category: 'anime' })))
     expect(anime.length).toBeGreaterThan(0)
     for (const p of anime) expect(p.category).toBe('anime')
     const anima = JSON.parse(String(await runTool(stubCtx(), def(), { applies_to: 'anima' })))
-    expect(anima.length).toBe(67)
+    expect(anima.length).toBe(72)
     const graphic = JSON.parse(String(await runTool(stubCtx(), def(), { category: 'graphic' })))
+    // M2-T6 起 graphic 含 hand-authored 预设（poster_constructivist）
     expect(graphic.map((p: { id: string }) => p.id).sort()).toEqual([
-      'nb20_简约线条高饱和高对比风', 'nb35_高亮平涂矢量轻漫风格', 'nb43_粗砺墨线限色高反差平涂风',
+      'nb20_简约线条高饱和高对比风', 'nb35_高亮平涂矢量轻漫风格', 'nb43_粗砺墨线限色高反差平涂风', 'poster_constructivist',
     ])
   })
   it('query matches id/name substring case-insensitively', async () => {

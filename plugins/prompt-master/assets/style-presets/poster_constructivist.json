@@ -1,0 +1,17 @@
+{
+  "id": "poster_constructivist",
+  "name": "构成海报",
+  "category": "graphic",
+  "rating": "safe",
+  "theme": "revolutionary era propaganda printmaking",
+  "palette": "red black and newsprint cream palette",
+  "fragments": {
+    "image": "constructivist poster composition, bold geometric blocks in red and black, propaganda print style with letterpress texture, diagonal wedges and star motifs",
+    "video": "constructivist poster composition, bold geometric blocks in red and black, propaganda print style with letterpress texture, diagonal wedges and star motifs"
+  },
+  "negative_hints": ["photorealism", "soft airbrush gradients"],
+  "artist_hints": ["alphonse mucha", "loish", "ross tran"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

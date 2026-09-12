@@ -11,7 +11,7 @@ describe('style registry (spec §4.2)', () => {
   it('loads 55 presets with no conflicts', () => {
     expect(loaded.advisories).toEqual([])
     // M2 数据里程碑：55 → 批次递增（T4 +7=62；T5 +5=67；T8 收口总账收紧为 82）
-    expect(stylePresetCount()).toBe(67)
+    expect(stylePresetCount()).toBe(72)
   })
   it('get by id returns preset; unknown returns undefined', () => {
     expect(getStylePreset('cinematic_real')?.category).toBe('photography')
@@ -32,12 +32,12 @@ describe('style registry (spec §4.2)', () => {
     expect(() => assertAppliesToElements(bad, 'fixture.json')).toThrow(/applies_to/)
     expect(() => assertAppliesToElements(getStylePreset('cinematic_real')!, 'fixture.json')).not.toThrow()
     // 全量条目经 load 通道隐式过检（loadStylePresets 内逐条调用）；计数随 M2 批次递增（T8=82）
-    expect(stylePresetCount()).toBe(67)
+    expect(stylePresetCount()).toBe(72)
   })
   it('captain addendum ②: every loaded preset carries a category from the ten-class taxonomy', () => {
     const all = listStylePresets()
     // 计数随 M2 批次递增（T4 +7=62；T5 +5=67；T8 收口=82）
-    expect(all.length).toBe(67)
+    expect(all.length).toBe(72)
     for (const p of all) expect(TAXONOMY, `${p.id}: ${p.category}`).toContain(p.category)
   })
 })

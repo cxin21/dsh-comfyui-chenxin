@@ -1,0 +1,17 @@
+{
+  "id": "studio_portrait",
+  "name": "棚拍人像",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "controlled studio environment",
+  "palette": "neutral grey backdrop palette",
+  "fragments": {
+    "image": "seamless paper backdrop, softbox key light with catchlight in eyes, clean studio reflector fill",
+    "video": "seamless paper backdrop, softbox key light with catchlight in eyes, clean studio reflector fill"
+  },
+  "negative_hints": ["cluttered background", "busy household props"],
+  "artist_hints": ["wlop", "artgerm", "guweiz"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

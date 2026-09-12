@@ -1,0 +1,17 @@
+{
+  "id": "fashion_editorial",
+  "name": "时尚大片",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "high fashion magazine production",
+  "palette": "glossy high-contrast editorial palette",
+  "fragments": {
+    "image": "dramatic editorial pose, haute couture gown with structured silhouette, glossy magazine spread layout, couture fabric sheen",
+    "video": "dramatic editorial pose, haute couture gown with structured silhouette, glossy magazine spread layout, couture fabric sheen"
+  },
+  "negative_hints": ["casual snapshot framing", "wrinkled everyday clothes"],
+  "artist_hints": ["artgerm", "mika pikazo", "ross tran"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

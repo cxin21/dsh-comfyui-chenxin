@@ -1,0 +1,17 @@
+{
+  "id": "film_photography",
+  "name": "胶片摄影",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "analog film aesthetic",
+  "palette": "kodak portra warm film palette",
+  "fragments": {
+    "image": "35mm film grain, kodak portra color tones, halation glow around highlights, analog film texture",
+    "video": "35mm film grain, kodak portra color tones, halation glow around highlights, analog film texture"
+  },
+  "negative_hints": ["crisp digital clarity", "oversharpened edges"],
+  "artist_hints": ["loundraw", "ross tran", "wlop"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

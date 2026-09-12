@@ -1,0 +1,17 @@
+{
+  "id": "documentary_photo",
+  "name": "纪实抓拍",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "photojournalistic candid document",
+  "palette": "desaturated reportage palette",
+  "fragments": {
+    "image": "candid unposed moment, available window light on subject, photojournalistic street scene, handheld 50mm framing",
+    "video": "candid unposed moment, available window light on subject, photojournalistic street scene, handheld 50mm framing"
+  },
+  "negative_hints": ["staged studio pose", "artificial seamless backdrop"],
+  "artist_hints": ["loundraw", "ross tran", "loish"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

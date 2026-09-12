@@ -1,0 +1,17 @@
+{
+  "id": "sports_action",
+  "name": "体育动感",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "competitive athletics coverage",
+  "palette": "vivid team color palette",
+  "fragments": {
+    "image": "motion-blurred swinging limbs, panning shot with streaked background, sweat droplets catching stadium floodlights, dynamic mid-air jump",
+    "video": "motion-blurred swinging limbs, panning shot with streaked background, sweat droplets catching stadium floodlights, dynamic mid-air jump"
+  },
+  "negative_hints": ["static stiff pose", "frozen studio stillness"],
+  "artist_hints": ["loish", "ross tran", "guweiz"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

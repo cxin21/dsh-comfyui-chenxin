@@ -1,0 +1,17 @@
+{
+  "id": "night_street",
+  "name": "夜景街拍",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "urban night documentary",
+  "palette": "neon magenta and cyan street palette",
+  "fragments": {
+    "image": "neon signage reflections on wet asphalt, handheld night street framing, shopfront bokeh with shallow depth of field, rain-slicked crosswalk",
+    "video": "neon signage reflections on wet asphalt, handheld night street framing, shopfront bokeh with shallow depth of field, rain-slicked crosswalk"
+  },
+  "negative_hints": ["bright daylight", "dry dusty asphalt"],
+  "artist_hints": ["guweiz", "mika pikazo", "loundraw"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

@@ -9,7 +9,10 @@ const dir = resolve(fileURLToPath(import.meta.url), '../../../../assets/style-pr
 
 describe('builtin migration (spec §4.4/§10)', () => {
   const byId = new Map(MINIMAL_STYLES.map((s) => [s.id, s]))
-  const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.startsWith('nb'))
+  // M2 起库内含 hand-authored/newbie-migrated 等非 builtin 预设——builtin 1:1 断言按 source 圈定
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .filter((f) => JSON.parse(readFileSync(resolve(dir, f), 'utf8')).source === 'builtin-migrated')
 
   it('has one JSON per builtin style', () => {
     expect(files.length).toBe(MINIMAL_STYLES.length)

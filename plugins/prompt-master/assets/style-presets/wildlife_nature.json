@@ -1,0 +1,17 @@
+{
+  "id": "wildlife_nature",
+  "name": "生态自然",
+  "category": "photography",
+  "rating": "safe",
+  "theme": "field natural history photography",
+  "palette": "earthy golden and green nature palette",
+  "fragments": {
+    "image": "telephoto compression of layered habitat, tall savanna grass in natural habitat, golden hour ambience across the plain, catchlight in animal eyes",
+    "video": "telephoto compression of layered habitat, tall savanna grass in natural habitat, golden hour ambience across the plain, catchlight in animal eyes"
+  },
+  "negative_hints": ["seamless studio backdrop", "captive zoo fencing"],
+  "artist_hints": ["greg rutkowski", "loish", "ross tran"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

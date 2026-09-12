@@ -598,3 +598,32 @@ temp/camera-multiview/multiview-1/
 | `unexpected` | 70 | `unexpected_error` |
 
 `h3` 例外：`budget_exceeded` 走 exit 3，`official_envelope_violated` 也走 exit 3（但 code 是 `validation` 类）。
+
+---
+
+## prompt-master 插件工具（DSH tool，不走 CLI）
+
+写 Anima / H3 提示词的 `prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` 是 **prompt-master 插件的 DSH 工具**，由 agent 直接调用，不经过 `.venv` CLI。完整工具表见 `plugins/prompt-master/docs/usage-prompt-engineering.md`。
+
+### `prompt_author` 的 `rating` 参数（M1，spec §5）
+
+| 值 | 语义 |
+|---|---|
+| `safe`（缺省） | 全年龄；explicit 关键词命中会被自动升档，并在 advisories 记 `rating_escalated:<tier>` |
+| `sensitive` | 性感/暗示向；negative 自动追加 nude/nudity/genitals/rating_explicit 阻断词 |
+| `explicit` | 成人向；negative 自动追加未成年阻断词（child/loli/shota 等） |
+
+- 预检在**任何 LLM 调用之前**：声明 rating 与内容关键词定档，硬边界违规（未成年/非自愿/兽）直接抛错——0 token。
+- 声明的 rating 确定性注入蓝图（`core.rating`）并透传 enrich/评审；成功 envelope 顶层新增 `rating` / `aesthetics` / `style` 三字段（spec §9）。
+
+### `style_list`（M1，spec §9）
+
+```json
+{ "category": "cinematic", "rating": "safe", "query": "wuxia" }
+```
+
+参数全可选（`category` / `rating` / `applies_to` / `query`；枚举非法 fail-fast），返回风格预设摘要数组 `{id, name, category, rating, artistCount, negativeCount, source}`（现库 55 条）。`rating` 语义 = 会话档位上限：只返回 `preset.rating ≤ 上限` 的预设。拿到 id 后传给 `prompt_author` 的 `style_id`。
+
+### `audit_only` 已移除（迁移说明）
+
+`prompt_author` 的 `audit_only` 参数已删除（编排恒跑 intent → 编译 → 审计全链）。要**只审计不生成**，改用确定性审计工具 `prompt_audit`（纯闸门零 LLM，支持 target=anima/h3）；`prompt_compile` 自身的 `audit_only`（只审计该次编译输出，不编译）保留不变。

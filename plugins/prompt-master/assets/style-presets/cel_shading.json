@@ -1,0 +1,16 @@
+{
+  "id": "cel_shading",
+  "name": "赛璐璐",
+  "category": "anime",
+  "rating": "safe",
+  "base": "cel shading",
+  "fragments": {
+    "image": "cel shading, hard two-tone shadows, white highlight accents, crisp lineart, flat colors",
+    "video": "cel shading, hard two-tone shadows, white highlight accents, crisp lineart, flat colors"
+  },
+  "negative_hints": ["impasto", "realistic skin texture"],
+  "artist_hints": ["rella", "atdan", "satou kibi"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

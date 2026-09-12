@@ -1,0 +1,16 @@
+{
+  "id": "wasteland",
+  "name": "废土",
+  "category": "scifi_fantasy",
+  "rating": "safe",
+  "theme": "post-apocalyptic wasteland",
+  "fragments": {
+    "image": "rusted metal, swirling sand, derelict vehicles, cracked earth, dust haze",
+    "video": "rusted metal, swirling sand, derelict vehicles, cracked earth, dust haze"
+  },
+  "negative_hints": ["busy city", "lush vegetation"],
+  "artist_hints": ["gozz", "as109", "quasarcake"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

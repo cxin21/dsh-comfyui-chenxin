@@ -1,0 +1,16 @@
+{
+  "id": "thick_paint",
+  "name": "厚涂",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "impasto painting",
+  "fragments": {
+    "image": "impasto brush strokes, oil painting texture, warm-cool color blocking, palette knife highlights",
+    "video": "impasto brush strokes, oil painting texture, warm-cool color blocking, palette knife highlights"
+  },
+  "negative_hints": ["cel shading", "hard two-tone shadows"],
+  "artist_hints": ["guweiz", "ask (askzy)", "wlop"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

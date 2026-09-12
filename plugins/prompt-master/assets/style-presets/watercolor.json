@@ -1,0 +1,16 @@
+{
+  "id": "watercolor",
+  "name": "水彩",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "watercolor",
+  "fragments": {
+    "image": "watercolor paper texture, wet-on-wet bleeding, soft pastel wash, pencil underdrawing",
+    "video": "watercolor paper texture, wet-on-wet bleeding, soft pastel wash, pencil underdrawing"
+  },
+  "negative_hints": ["oil impasto", "sharp digital edges"],
+  "artist_hints": ["kantoku", "satou kibi", "hong (white spider)"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

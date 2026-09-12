@@ -1,0 +1,17 @@
+{
+  "id": "fairy_tale",
+  "name": "童话",
+  "category": "illustration",
+  "rating": "safe",
+  "theme": "fairy tale",
+  "palette": "warm honey tones",
+  "fragments": {
+    "image": "storybook illustration, mushroom cottage, glowing plants, warm honey tones, soft bokeh",
+    "video": "storybook illustration, mushroom cottage, glowing plants, warm honey tones, soft bokeh"
+  },
+  "negative_hints": ["gothic horror", "gore"],
+  "artist_hints": ["kantoku", "mika pikazo", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

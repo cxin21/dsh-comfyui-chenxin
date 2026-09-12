@@ -1,0 +1,16 @@
+{
+  "id": "wafuu",
+  "name": "和风",
+  "category": "oriental",
+  "rating": "safe",
+  "theme": "japanese traditional",
+  "fragments": {
+    "image": "shoji paper window, tatami mat, wooden eaves, paper lanterns, zen rock garden",
+    "video": "shoji paper window, tatami mat, wooden eaves, paper lanterns, zen rock garden"
+  },
+  "negative_hints": ["modern architecture", "western furniture"],
+  "artist_hints": ["hong (white spider)", "kantoku", "satou kibi"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

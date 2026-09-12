@@ -1,0 +1,17 @@
+{
+  "id": "cinematic_real",
+  "name": "写实电影",
+  "category": "photography",
+  "rating": "safe",
+  "base": "photorealistic",
+  "palette": "teal and orange grading",
+  "fragments": {
+    "image": "IMAX film grain, anamorphic lens flare, teal and orange grading, golden hour ambience, shallow depth of field",
+    "video": "IMAX film grain, anamorphic lens flare, teal and orange grading, golden hour ambience, shallow depth of field"
+  },
+  "negative_hints": ["amateur photography", "over-sharpened"],
+  "artist_hints": ["guweiz", "wlop", "ask (askzy)"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

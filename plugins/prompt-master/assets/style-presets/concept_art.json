@@ -1,0 +1,16 @@
+{
+  "id": "concept_art",
+  "name": "概念原画",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "concept art",
+  "fragments": {
+    "image": "matte painting, bold brush blocks, ambient occlusion shading, sketch-like texture",
+    "video": "matte painting, bold brush blocks, ambient occlusion shading, sketch-like texture"
+  },
+  "negative_hints": ["photorealistic render", "glossy advertisement"],
+  "artist_hints": ["gozz", "guweiz", "quasarcake"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

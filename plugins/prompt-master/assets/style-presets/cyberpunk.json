@@ -1,0 +1,17 @@
+{
+  "id": "cyberpunk",
+  "name": "赛博朋克",
+  "category": "scifi_fantasy",
+  "rating": "safe",
+  "theme": "cyberpunk",
+  "palette": "magenta and cyan neon palette",
+  "fragments": {
+    "image": "neon signs, rain-soaked streets, holographic billboards, wet asphalt reflections",
+    "video": "neon signs, rain-soaked streets, holographic billboards, wet asphalt reflections, magenta and cyan neon palette"
+  },
+  "negative_hints": ["low saturation", "plastic texture"],
+  "artist_hints": ["as109", "gozz", "mika pikazo"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

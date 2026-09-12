@@ -1,0 +1,16 @@
+{
+  "id": "game_cg",
+  "name": "游戏 CG",
+  "category": "cg_3d",
+  "rating": "safe",
+  "base": "game CG rendering",
+  "fragments": {
+    "image": "PBR materials, global illumination, volumetric fog, particle effects, ray-traced reflections",
+    "video": "PBR materials, global illumination, volumetric fog, particle effects, ray-traced reflections"
+  },
+  "negative_hints": ["low-poly", "blurry textures"],
+  "artist_hints": ["mika pikazo", "gozz", "as109"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

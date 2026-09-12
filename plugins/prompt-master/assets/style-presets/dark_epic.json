@@ -1,0 +1,17 @@
+{
+  "id": "dark_epic",
+  "name": "暗黑史诗",
+  "category": "dark_supernatural",
+  "rating": "safe",
+  "theme": "dark fantasy epic",
+  "palette": "black and gold palette",
+  "fragments": {
+    "image": "black and gold palette, gothic spires, heavy dark clouds, ember sparks, polished armor reflections",
+    "video": "black and gold palette, gothic spires, heavy dark clouds, ember sparks, polished armor reflections"
+  },
+  "negative_hints": ["bright high saturation", "cartoonish"],
+  "artist_hints": ["quasarcake", "guweiz", "gozz"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "builtin-migrated"
+}

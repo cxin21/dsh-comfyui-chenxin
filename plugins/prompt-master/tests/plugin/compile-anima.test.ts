@@ -14,7 +14,7 @@ describe('prompt_compile (target=anima)', () => {
     })))
     expect(raw.ok).toBe(true)
     expect(raw.result.positive).toBe('masterpiece, best quality, score_7, safe, 1girl, long hair')
-    expect(raw.result.negative).toBe('worst quality, low quality, score_1, score_2, score_3')
+    expect(raw.result.negative).toBe('worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration')
     expect(raw.audit.passed).toBe(true)
   })
 
@@ -79,7 +79,7 @@ describe('prompt_compile (target=anima)', () => {
     expect(light.audit.gates.some((g: any) => g.rule === 'lighting_term_banned')).toBe(true)
   })
 
-  it('G2: segments projection (origin/priority/slot provenance; Round8 F6 narrative 默认排除 + advisory)', async () => {
+  it('G2: segments projection (origin/priority/slot provenance; T2Q narrative 条件纳入——不合格排除 + advisory)', async () => {
     const ctx = stubCtx()
     const raw = JSON.parse(String(await runTool(ctx, def(), {
       target: 'anima',
@@ -88,10 +88,10 @@ describe('prompt_compile (target=anima)', () => {
     const segs = raw.result.segments as Array<{ text: string; channel: string; origin: string; priority: number; slot?: string }>
     expect(segs.filter((s) => s.origin === 'policy').length).toBeGreaterThan(0)
     expect(segs.some((s) => s.origin === 'grounded' && s.slot === 'count_gender')).toBe(true)
-    // F6：narrative 默认不进 positive——无 narrative 段，advisory narrative_excluded（附字符数）可追溯
+    // T2Q：不合格 narrative（非 2-4 句英文 NL 块）不进 positive——advisory narrative_excluded 附原因码
     expect(segs.some((s) => s.origin === 'narrative' && s.channel === 'positive')).toBe(false)
     expect(raw.result.positive).not.toContain('一段描述')
-    expect(raw.result.assumptions).toContain('narrative_excluded:4chars')
+    expect(raw.result.assumptions).toContain('narrative_excluded:sentence_count:1')
     expect(segs.some((s) => s.origin === 'exclusion' && s.channel === 'negative')).toBe(true)
     expect(segs.every((s) => typeof s.priority === 'number')).toBe(true)
   })

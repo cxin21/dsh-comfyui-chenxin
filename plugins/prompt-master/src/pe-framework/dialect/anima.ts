@@ -33,8 +33,9 @@ export interface AnimaSlots {
 export interface CompileAnimaOptions {
   variant?: 'base' | 'aesthetic' | 'turbo'
   search?: (tag: string) => CatalogHit[]
-  /** F6（Round 8）：narrative 默认排除（false=默认，narrative 段不进 positive，留痕
-   *  `narrative_excluded:<chars>chars` advisory）；true=显式合法出口，走既有 F1 去重路径 */
+  /** C（Round 8 T2Q）：narrative 质量检查出口——true=跳过 NL 质量检查强制纳入（F1 去重仍生效）；
+   *  false/缺省=条件纳入：narrative 通过确定性 NL 质量检查（checkNarrativeQuality：2-4 句英文、
+   *  非 tag 罗列）才作为 NL 场景块进 positive，否则排除 + `narrative_excluded:<原因>` advisory */
   allowNarrative?: boolean
 }
 
@@ -104,7 +105,12 @@ const POLICIES: Record<string, Policy> = {
   base: {
     variant: 'base',
     mandatoryPositive: ['masterpiece', 'best quality', 'score_7'],
-    mandatoryNegative: ['worst quality', 'low quality', 'score_1', 'score_2', 'score_3'],
+    // Round 8 T2Q（B）：官方负向模板（base 默认）——worst/low quality + score_1..3 + 四项官方补充
+    // （artist name/blurry/jpeg artifacts/chromatic aberration）。aesthetic/turbo 维持轻量负向不变。
+    mandatoryNegative: [
+      'worst quality', 'low quality', 'score_1', 'score_2', 'score_3',
+      'artist name', 'blurry', 'jpeg artifacts', 'chromatic aberration',
+    ],
     safetySeed: ['safe'],
   },
   aesthetic: {
@@ -143,6 +149,17 @@ export function slotOf(slots: AnimaSlots, key: string): string[] | undefined {
   return (slots as Record<string, string[] | undefined>)[key]
 }
 
+/** F4（三期 Task 3）：CJK 泄漏判定（inspectAnima gate 与 T2Q narrative NL 检查共用同一 regex）：
+ *  CJK 统一表意文字（含扩展A/兼容）连续 ≥2 字符为一段（单字符放宽防误报，如型号「R2」相邻数字）；
+ *  假名（平/片/半角片）≥1 即触发（孤假名在英文 prompt 中只可能是泄漏，无合法 tag 形态）。
+ *  共享正则以 containsCjk 的非全局克隆消费（规避 /g lastIndex 状态残留）。 */
+const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2,}|[\u3040-\u30ff\uff66-\uff9f]+/g
+
+/** T2Q（C 检查②）：文本是否含 CJK——复用 F4 判定（非全局克隆，无状态副作用） */
+function containsCjk(text: string): boolean {
+  return new RegExp(CJK_RE.source).test(text)
+}
+
 /** F1：narrative 按句切分（。！？!? 恒切；`.` 仅在前后不均为数字时切——小数 1.5 不切分，`\.\d`
  *  作为片段内字符被消耗，可跨小数继续匹配），句末标点保留在前句尾部；空串/纯标点片段剔除；
  *  无标点尾片段由第二分支保留（不静默丢弃） */
@@ -150,6 +167,27 @@ function splitSentences(text: string): string[] {
   return (text.match(/(?:[^。！？.!?]|\.\d)*(?:[。！？!?]+|(?<!\d)\.(?!\d))+|(?:[^。！？.!?]|\.\d)+/g) ?? [])
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+/** C（Round 8 T2Q）：narrative 确定性 NL 质量检查（零 LLM）——全部通过返回 null（作为 NL 场景块
+ *  纳入 positive），否则返回排除原因码（advisory `narrative_excluded:<原因>`）。检查项与顺序
+ *  （brief 逐字）：①句子数 2-4（按 。！？.!? 切分，与 F1 去重同 util）②全英文（无 CJK，复用 F4
+ *  判定）③无逗号 tag 罗列形态（逗号数 > 句子数 → 视为 tag 串）。 */
+function checkNarrativeQuality(text: string): string | null {
+  const sentences = splitSentences(text)
+  if (sentences.length < 2 || sentences.length > 4) return `sentence_count:${sentences.length}`
+  if (containsCjk(text)) return 'cjk'
+  const commas = (text.match(/[,，]/g) ?? []).length
+  if (commas > sentences.length) return `tag_list:${commas}commas/${sentences.length}sentences`
+  return null
+}
+
+/** C（Round 8 T2Q）：narrative 是否参与装配/计入 contentCount（与 compile 行为一致——纳入才计 1：
+ *  allowNarrative=true 强制纳入，或条件纳入路径下质量检查通过；空白 narrative 不计） */
+function narrativeIncluded(slots: AnimaSlots, allowNarrative?: boolean): boolean {
+  const text = slots.narrative?.trim() ?? ''
+  if (!text) return false
+  return allowNarrative === true || checkNarrativeQuality(text) === null
 }
 
 /** F1 fix1（review Important-1）：去重入口剥离已知叙述前缀（确定性正常化，零 LLM）——
@@ -301,15 +339,17 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       pushSeg(text, 'positive', citation && citation.match_type && GROUNDED.has(citation.match_type) ? 'grounded' : 'user-fuzzy', base + tagIndex, slotName, citation ?? null)
     })
   })
-  // 3d: narrative 最后。F6（Round 8）：默认排除——narrative 段（slot=null/origin=narrative）默认
-  // 不进 positive（实战 2/2 为伪增量冗余）。排除发生在段入列处（pushSeg 之前，非装配后删除——
-  // 后者会留下去重死代码路径）；排除时 assumptions 留痕 `narrative_excluded:<chars>chars`
-  // （envelope.result.assumptions 可见，可追溯）。allowNarrative=true 为合法出口：走既有 F1
-  // 第一轮去重路径（与 R7-T2 第二轮共用 dedupNarrativeSegments，逻辑不变）。
-  // 安全语义独立：isExplicitRequest（3b）始终扫描 narrative，排除不影响 explicit 关断判定。
+  // 3d: narrative 最后。C（Round 8 T2Q）：条件纳入取代 Round8 T1 默认排除——合格的 2-4 句英文
+  // NL 场景块是 Anima 官方原生格式（tag+NL 混合方言），应纳入而非一刀切排除。装配前先过确定性
+  // NL 质量检查（checkNarrativeQuality）：通过 → 作为 NL 场景块纳入 positive（走既有 F1 第一轮
+  // 去重路径）；不通过 → 排除 + advisory `narrative_excluded:<原因>`（sentence_count/cjk/tag_list）。
+  // allowNarrative=true 语义升级为「跳过质量检查强制纳入」（出口保留，F1 去重仍生效）。排除发生在
+  // 段入列处（pushSeg 之前，非装配后删除）。安全语义独立：isExplicitRequest（3b）始终扫描
+  // narrative，排除不影响 explicit 关断判定。
   const narrativeText = slots.narrative?.trim() ?? ''
   if (narrativeText) {
-    if (opts?.allowNarrative === true) {
+    const reason = opts?.allowNarrative === true ? null : checkNarrativeQuality(narrativeText)
+    if (reason === null) {
       // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集；
       // 全部被覆盖 → 不追加该 narrative 段（第一轮，与 R7-T2 第二轮共用 dedupNarrativeSegments）
       const covered = new Set<string>()
@@ -317,7 +357,7 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       const kept = dedupNarrativeSegments([narrativeText], covered)
       if (kept.length) pushSeg(kept[0], 'positive', 'narrative', 2000)
     } else {
-      assumptions.push(`narrative_excluded:${narrativeText.length}chars`)
+      assumptions.push(`narrative_excluded:${reason}`)
     }
   }
   // 3e: exclusions → negative（原样）
@@ -501,15 +541,13 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
   }
   // F4（三期 Task 3）：CJK 泄漏守门——anima tag 库无 CJK 条目，中文/假名片段对出图无效（硬伤）。
   // severity = critical：修正闭环只在 critical gate 上触发（important 不进闭环），CJK 必须强制修正。
-  // 判定边界：CJK 统一表意文字（含扩展A/兼容）连续 ≥2 字符为一段（单字符放宽防误报，如型号「R2」相邻数字）；
-  // 假名（平/片/半角片）≥1 即触发（孤假名在英文 prompt 中只可能是泄漏，无合法 tag 形态）。
-  const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{2,}|[\u3040-\u30ff\uff66-\uff9f]+/g
+  // 判定边界与 T2Q narrative NL 检查共用模块级 CJK_RE（语义单源）。
   for (const m of positive.matchAll(CJK_RE)) {
     gates.push({ rule: 'cjk_in_positive', target: 'anima', severity: 'critical', detail: `cjk fragment in positive (invalid for anima tag library): ${m[0]}`, source: 'dialect/anima' })
   }
   // tag count（F1：segment 语义——调用方按「槽标签逐项 + narrative 整段计 1」提供 contentCount；
-  // 缺省才回退 token 拆分估算，仅脱机近似、不进 golden 路径。F6（Round 8）：narrative 计 1 仅在
-  // allowNarrative=true（实际参与装配）时成立——默认排除后正文无 narrative 段，计数须与之一致）
+  // 缺省才回退 token 拆分估算，仅脱机近似、不进 golden 路径。T2Q（C）：narrative 计 1 仅在
+  // 实际参与装配时成立——allowNarrative=true 强制纳入，或条件纳入下质量检查通过（与 compile 一致））
   const contentCount =
     opts?.contentCount ??
     positive.split(', ').map((s) => s.trim()).filter(Boolean).filter((t) => !new Set([...(qualityPrefix ? policy.mandatoryPositive : []), 'safe']).has(t)).length
@@ -566,9 +604,11 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
     variant,
     qualityPrefix: opts?.slots?.qualityPrefix ?? true,
     explicit: opts?.slots?.explicit,
+    // T2Q（C）：narrative 计 1 与 compile 装配一致——强制纳入（allowNarrative=true）或条件纳入
+    // （质量检查通过）才计 1；被排除的 narrative 不计
     contentCount: opts?.slots
       ? SLOT_ORDER.reduce((sum, key) => sum + (slotOf(opts.slots!, key)?.length ?? 0), 0)
-        + (opts.allowNarrative === true && opts.slots.narrative ? 1 : 0)
+        + (narrativeIncluded(opts.slots, opts.allowNarrative) ? 1 : 0)
       : undefined,
   }))
   return gates

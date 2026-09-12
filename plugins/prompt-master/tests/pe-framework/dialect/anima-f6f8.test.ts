@@ -1,15 +1,16 @@
 /**
- * Round 8 Task 1（F6/F8）：
- * F6 narrative 默认排除——compileAnima 装配时 narrative 段（slot=null/origin=narrative）默认不进
- * positive（实战 2/2 为伪增量冗余）；`allowNarrative: true` 为显式合法出口，走既有 F1 去重路径
- * （第一轮装配层去重保留）。排除发生在段入列处（pushSeg 之前，非装配后删除）；排除时留痕
- * advisory `narrative_excluded:<chars>chars`（result.assumptions 载体 → envelope.result.assumptions
- * 可见）。contentCount 与排除一致：被排除的 narrative 不计 1（allowNarrative=true 维持 F1 的
- * 「narrative 整段计 1」语义）。安全语义独立：isExplicitRequest 始终扫描 narrative。
+ * Round 8 Task 1（F6/F8）→ Task 2Q 迁移：
+ * F6 narrative 默认排除已被 T2Q「条件纳入」取代——compileAnima 装配时 narrative 先过确定性
+ * NL 质量检查（checkNarrativeQuality：2-4 句英文、非 tag 罗列），通过则作为 NL 场景块纳入
+ * positive（走既有 F1 去重路径）；不通过则排除 + advisory `narrative_excluded:<原因>`
+ * （sentence_count/cjk/tag_list；本文件保留不合格 narrative 的排除路径覆盖）。
+ * `allowNarrative: true` 语义升级为「跳过质量检查强制纳入」，F1 第一轮去重仍生效。
+ * contentCount 与装配一致：被排除的 narrative 不计 1（纳入路径维持「narrative 整段计 1」）。
+ * 安全语义独立：isExplicitRequest 始终扫描 narrative。
  * F8 空泛词拦截——audit 新增 `vague_tag` gate（severity minor，advisory 性质不进修正闭环）：
  * positive 逐逗号分段与 VAGUE_TAGS 精确匹配（trim 后整段相等，大小写不敏感），质量前缀白名单豁免
  * （masterpiece/best quality/score_x/safe 等）。
- * 全程零 LLM；mock catalog（纯函数注入 search），不依赖真库。
+ * 全程零 LLM；mock catalog（纯函数注入 search），不依赖真库。T2Q 新增路径归 anima-t2q.test.ts。
  */
 import { describe, expect, it } from 'vitest'
 import { auditAnima, compileAnima, VAGUE_TAGS } from '../../../src/pe-framework/dialect/anima.js'
@@ -18,8 +19,8 @@ import type { CatalogHit } from '../../../src/pe-framework/dialect/anima-catalog
 /** mock search：全部 miss（F6/F8 与 grounding 无关；mock 走 user-fuzzy 原文保留路径） */
 const nullSearch = (_t: string): CatalogHit[] => []
 
-describe('F6: narrative 默认排除（compileAnima 装配层）', () => {
-  it('规格1 默认排除：narrative 不进 positive、无 narrative 段、advisory narrative_excluded 附字符数', () => {
+describe('F6→T2Q: narrative 排除路径（不合格 narrative，compileAnima 装配层）', () => {
+  it('规格1 迁移（T2Q 条件纳入）：不合格 narrative（单句非 NL 块）不进 positive、无 narrative 段、advisory narrative_excluded 附原因码', () => {
     const narrative = 'a lantern glows beside the moon gate, softly lit'
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative },
@@ -28,7 +29,8 @@ describe('F6: narrative 默认排除（compileAnima 装配层）', () => {
     expect(r.positive).not.toContain('lantern')
     expect(r.positive.endsWith('moon gate')).toBe(true)
     expect(r.segments.some((s) => s.origin === 'narrative')).toBe(false)
-    expect(r.assumptions).toContain(`narrative_excluded:${narrative.length}chars`)
+    // T2Q：排除原因码化（句子数 2-4 检查先行——无句末标点 = 1 句 → sentence_count:1）
+    expect(r.assumptions).toContain('narrative_excluded:sentence_count:1')
   })
 
   it('规格2 默认排除不留残余：narrative 含槽位未覆盖新句同样不追加（排除优先于去重）', () => {
@@ -81,8 +83,8 @@ describe('F6: narrative 默认排除（compileAnima 装配层）', () => {
   })
 })
 
-describe('F6: contentCount 与排除一致（tag_count 语义）', () => {
-  it('规格8 默认排除后 narrative 不计 contentCount；allowNarrative=true 维持「narrative 计 1」', () => {
+describe('F6→T2Q: contentCount 与装配一致（tag_count 语义）', () => {
+  it('规格8 被排除的 narrative 不计 contentCount；allowNarrative=true 维持「narrative 计 1」', () => {
     const tags = Array.from({ length: 11 }, (_, i) => `tag${i + 1}`)
     const slots = { appearance: tags, narrative: 'alpha, beta' }
     // 默认：narrative 被排除 → contentCount=11 <12 → tag_count gate 触发（与 positive 实际段数一致）

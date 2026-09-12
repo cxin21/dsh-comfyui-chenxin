@@ -30,7 +30,7 @@
     "result": {
       "prompt": {
         "positive": "masterpiece, best quality, score_7, safe, 1girl, curvy, leotard, from front, from behind, moonlight, backlighting",
-        "negative": "worst quality, low quality, score_1, score_2, score_3",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration",
         "notes": [
           "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:235619:match=canonical:canonical=curvy:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
@@ -310,6 +310,42 @@
           "priority": 100,
           "slot": null,
           "citation": null
+        },
+        {
+          "segment_id": "seg17",
+          "channel": "negative",
+          "text": "artist name",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg18",
+          "channel": "negative",
+          "text": "blurry",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg19",
+          "channel": "negative",
+          "text": "jpeg artifacts",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg20",
+          "channel": "negative",
+          "text": "chromatic aberration",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
         }
       ]
     },
@@ -320,5 +356,5 @@
       "[warning] tag_count_out_of_range: 7 content tags (working range 12-50)"
     ]
   },
-  "sha256": "111f498551a39eaec9ab467455871aaf317128a03d79ff5eeca71b295313b2f4"
+  "sha256": "fdce2f68f7c5c32783f5dd6e944c64bc2534ad97707351edfb923885d5aae140"
 }

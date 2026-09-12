@@ -30,7 +30,7 @@
     "result": {
       "prompt": {
         "positive": "masterpiece, best quality, score_7, safe, 1girl, solo, long hair, blue eyes, smile, blush, smile, close-up, looking at viewer",
-        "negative": "worst quality, low quality, score_1, score_2, score_3",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration",
         "notes": [
           "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
@@ -350,6 +350,42 @@
           "priority": 100,
           "slot": null,
           "citation": null
+        },
+        {
+          "segment_id": "seg19",
+          "channel": "negative",
+          "text": "artist name",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg20",
+          "channel": "negative",
+          "text": "blurry",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg21",
+          "channel": "negative",
+          "text": "jpeg artifacts",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg22",
+          "channel": "negative",
+          "text": "chromatic aberration",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
         }
       ]
     },
@@ -359,5 +395,5 @@
       "[warning] tag_count_out_of_range: 9 content tags (working range 12-50)"
     ]
   },
-  "sha256": "4490fbe7b267bfaac9367b8d8343749f1f25a24641b162dcbaac68704e3861bf"
+  "sha256": "495afec747de86626f4c5704153f7f89d4828749f8985da7acffcbfdfda78189"
 }

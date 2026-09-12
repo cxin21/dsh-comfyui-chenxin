@@ -26,7 +26,7 @@ describe('anima compile (anima.ts P2 core)', () => {
   it('variant policy injection: base adds score_7 + safety seed', () => {
     const r = compileAnima({ count_gender: ['1girl'], appearance: ['long hair'] }, { variant: 'base', search: realSearch })
     expect(r.positive).toBe('masterpiece, best quality, score_7, safe, 1girl, long hair')
-    expect(r.negative).toBe('worst quality, low quality, score_1, score_2, score_3')
+    expect(r.negative).toBe('worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration')
   })
 
   it('aesthetic drops score_7 and score_1..3', () => {

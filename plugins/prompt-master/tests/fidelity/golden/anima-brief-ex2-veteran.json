@@ -75,7 +75,7 @@
     "result": {
       "prompt": {
         "positive": "masterpiece, best quality, score_7, safe, 1girl, solo, mature, long hair, black hair, ponytail, red eyes, makeup, lipstick, curvy, large breasts, wide hips, pale skin, bodysuit, skin tight, torn clothes, battle damage, scratches, gauntlets, high heel boots, kneeling, hand on own hip, holding sword, expressionless, smirk, narrow eyes, cowboy shot, from below, looking at viewer, ruins, debris, cityscape, night, rain, smoke, fire, cinematic, atmospheric",
-        "negative": "worst quality, low quality, score_1, score_2, score_3, no text, no watermark, no censored, no bar censor, no mosaic",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration, no text, no watermark, no censored, no bar censor, no mosaic",
         "notes": [
           "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
@@ -118,7 +118,7 @@
         ],
         "assumptions": [
           "safety_seed_injected:default_for_non_explicit_request",
-          "narrative_excluded:623chars"
+          "narrative_excluded:sentence_count:1"
         ],
         "advisories": []
       },
@@ -1131,6 +1131,42 @@
         {
           "segment_id": "seg48",
           "channel": "negative",
+          "text": "artist name",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg49",
+          "channel": "negative",
+          "text": "blurry",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg50",
+          "channel": "negative",
+          "text": "jpeg artifacts",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg51",
+          "channel": "negative",
+          "text": "chromatic aberration",
+          "origin": "policy",
+          "priority": 100,
+          "slot": null,
+          "citation": null
+        },
+        {
+          "segment_id": "seg52",
+          "channel": "negative",
           "text": "no text",
           "origin": "exclusion",
           "priority": 900,
@@ -1138,7 +1174,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg49",
+          "segment_id": "seg53",
           "channel": "negative",
           "text": "no watermark",
           "origin": "exclusion",
@@ -1147,7 +1183,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg50",
+          "segment_id": "seg54",
           "channel": "negative",
           "text": "no censored",
           "origin": "exclusion",
@@ -1156,7 +1192,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg51",
+          "segment_id": "seg55",
           "channel": "negative",
           "text": "no bar censor",
           "origin": "exclusion",
@@ -1165,7 +1201,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg52",
+          "segment_id": "seg56",
           "channel": "negative",
           "text": "no mosaic",
           "origin": "exclusion",
@@ -1178,5 +1214,5 @@
     "errors": [],
     "advisories": []
   },
-  "sha256": "a5bb406809fc76f5e79ff2ba3926939ed2de431ec84294817a885634c000c3de"
+  "sha256": "f3d94e75409eb056604678b9da117d1a7decaaa2815346cd0a3fac280bbb12ae"
 }

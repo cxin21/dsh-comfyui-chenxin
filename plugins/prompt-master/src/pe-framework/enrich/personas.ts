@@ -17,6 +17,9 @@ export function buildEnrichPersona(target: 'anima' | 'h3'): string {
       'source=user 条目按语义级保留：语义与指代必须保留、不得增删要素，但语言必须改写为 outputLang 对应语言',
       '（Anima 恒为英文）——中文/日文等原文条目一律译成英文进 brief，不得原样照搬原语言。',
       '风格词优先使用常见英文 tag 词汇；角色名保持原样并按 schema 给出英文锚定（nameAnchors）。',
+      // Round 8 T2Q（D）：tag 化准备指引——enrich brief 是下游 intent 补全/tag 化的锚点，短语质量决定 tag 块质量
+      '每个维度 2-3 条高质量短语即可，禁止堆砌；场景维度最终最多 3 条进 tag，其余走 narrative NL；',
+      '用 danbooru 词表常见英文词汇（如 holding sword 而非 sword tip lifting flower petals），多词自造短语响应弱。',
       '输出：只输出一个 JSON（可带 ```json fence），形状见 schema；不要任何额外文字或解释。',
     ].join('\n')
   }

@@ -39,6 +39,13 @@ export interface H3Shot {
   /** 可选：本镜时长（秒）。显式时必须全部镜头都给且总和 = duration_seconds（contractGatesH3 硬校验）；
    *  缺省时编译器回退官方等分切点（golden 兼容）。 */
   duration?: number
+  /** 可选导演级字段（h3-director-depth Phase 5，全部可选宁缺勿滥）。编译时确定性投影进 what 文本：
+   *  camera=摄影机回应（须有观看动机）；action=动作因果链；micro=微表演（刺激→压住→泄露→选择→余波）；
+   *  carry=出口状态/交给下一镜的锚点。 */
+  camera?: string
+  action?: string
+  micro?: string
+  carry?: string
   ambient?: string
   music?: string
   dialogue?: string | { text: string; language?: string }
@@ -108,7 +115,7 @@ function coerceShot(raw: unknown, index: number): H3Shot {
   }
   const r = raw as Record<string, unknown>
   const unknown = Object.keys(r)
-    .filter((k) => !['what', 'who', 'duration', 'ambient', 'music', 'dialogue', 'language'].includes(k))
+    .filter((k) => !['what', 'who', 'duration', 'camera', 'action', 'micro', 'carry', 'ambient', 'music', 'dialogue', 'language'].includes(k))
     .sort()
   if (unknown.length) throw new ContractError(`${label} has unsupported field(s): ${unknown.join(', ')}`)
   const what = stringOf(r['what'], `${label}.what`)
@@ -119,6 +126,10 @@ function coerceShot(raw: unknown, index: number): H3Shot {
       throw new ContractError(`${label}.duration must be a positive number of seconds (got ${JSON.stringify(durationRaw)})`)
     }
   }
+  const camera = r['camera'] != null ? stringOf(r['camera'], `${label}.camera`) : undefined
+  const action = r['action'] != null ? stringOf(r['action'], `${label}.action`) : undefined
+  const micro = r['micro'] != null ? stringOf(r['micro'], `${label}.micro`) : undefined
+  const carry = r['carry'] != null ? stringOf(r['carry'], `${label}.carry`) : undefined
   const ambient = r['ambient'] != null ? stringOf(r['ambient'], `${label}.ambient`) : undefined
   const musicVal = r['music']
   if (musicVal != null && typeof musicVal !== 'string') {
@@ -142,7 +153,7 @@ function coerceShot(raw: unknown, index: number): H3Shot {
   }
   if (r['language'] != null) language = stringOf(r['language'], `${label}.language`)
   const duration = durationRaw != null ? (durationRaw as number) : undefined
-  return { what, who, duration, ambient, music, dialogue, language }
+  return { what, who, duration, camera, action, micro, carry, ambient, music, dialogue, language }
 }
 
 function coercePixels(width: unknown, height: unknown, label: string): [number, number] {

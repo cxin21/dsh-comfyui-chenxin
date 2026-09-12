@@ -64,6 +64,42 @@ describe('prompt_compile (target=h3)', () => {
     expect(raw.audit.budget.counter).toBe('official-tokenizer')
   })
 
+  it('Phase 5: MultishotPlan 形状输入 → 校验转换后编译（导演字段投影进正文）', async () => {
+    const raw = await run({
+      target: 'h3',
+      shots: {
+        total_duration: 9,
+        shot_count: 2,
+        shots: [
+          { content: 'the harbour wakes.', camera: 'slow push along the pier', narrative_function: 'establish place', entry_state: 'still water', exit_state: 'ripples spreading', sound_focus: 'water lapping', start: 0, end: 5.5 },
+          { content: 'a net is hauled up.', action: 'two fishermen lean back and pull', exit_state: 'net dripping over the rail', start: 5.5, end: 9 },
+        ],
+        continuity_ledger: { identity: 'two fishermen, unchanged', wardrobe_and_props: 'yellow slickers, coiled rope' },
+      },
+    })
+    expect(raw.ok).toBe(true)
+    const text: string = raw.result.text
+    expect(text).toContain('[Shot 1] establish place. the harbour wakes.')
+    expect(text).toContain('The camera responds: slow push along the pier')
+    expect(text).toContain('Carrying over: Exit: net dripping over the rail')
+    expect(text).toContain('At 00:05.500,')
+  })
+
+  it('Phase 5: plan 缺 continuity_ledger.identity → critical plan gate 且不烧编译', async () => {
+    const raw = await run({
+      target: 'h3',
+      shots: {
+        total_duration: 9,
+        shot_count: 1,
+        shots: [{ content: 'a.', start: 0, end: 9 }],
+        continuity_ledger: { wardrobe_and_props: 'x' },
+      },
+    })
+    expect(raw.ok).toBe(false)
+    expect(raw.result).toEqual({}) // plan critical → fail-fast envelope，result 为空对象（无正文）
+    expect(raw.audit.gates.some((g: any) => g.rule === 'plan_ledger' && g.severity === 'critical')).toBe(true)
+  })
+
   it('unknown target errors with DIALECT_NOT_AVAILABLE', async () => {
     await expect(runTool(stubCtx(), def(), { target: 'sd', shots: { duration_seconds: 6, shots: [{ what: 'x' }] } } as any)).rejects.toThrow(/DIALECT_NOT_AVAILABLE/)
   })

@@ -2,7 +2,7 @@
  * H3 文本级硬闸门（TS 移植，逐函数对照 h3_prompt/audit.py + multishot.py）。
  * 每条 H3AuditError → 一条 AuditGate（severity: 'critical'，rule 按 spec §7 分类）。
  */
-import { MAX_PROMPT_CHARS, KEYFRAME_STAGES, type Reference, type H3Shot } from '../schema/h3-shots.js'
+import { MAX_PROMPT_CHARS, KEYFRAME_STAGES, type Reference, type H3Shot, type H3ShotsInput } from '../schema/h3-shots.js'
 import type { AuditGate } from '../types.js'
 
 const SHOT_MARKER = /\[Shot ([1-9][0-9]*)\]/g
@@ -595,15 +595,82 @@ export function compilePlan(plan: MultishotPlan): string[] {
   return findings
 }
 
-/** multishot.py compile_to_shots 移植：plan shots → H3Shot[] */
+/** multishot.py compile_to_shots 移植：plan shots → H3Shot[]。
+ *  Phase 5（h3-director-depth）扩展投影：camera/shotSize/composition → camera；action → action；
+ *  entry/exit → carry；narrativeFunction → what 前缀；start/end → 显式 per-shot duration（供累计切点）。
+ *  此前仅投影 content + soundFocus，导演字段被静默丢弃。 */
 export function compilePlanToShots(plan: MultishotPlan): H3Shot[] {
-  return plan.shots.map((draft) => ({
-    what: draft.content,
-    who: undefined,
-    ambient: draft.soundFocus || undefined,
-    music: undefined,
-    dialogue: undefined,
-  }))
+  return plan.shots.map((draft) => {
+    const duration = draft.start != null && draft.end != null && draft.end > draft.start
+      ? Math.round((draft.end - draft.start) * 1000) / 1000
+      : undefined
+    const cameraParts = [draft.camera, draft.shotSize, draft.composition].map((x) => x.trim()).filter(Boolean)
+    const carryParts: string[] = []
+    if (draft.entryState.trim()) carryParts.push(`Entry: ${draft.entryState.trim()}`)
+    if (draft.exitState.trim()) carryParts.push(`Exit: ${draft.exitState.trim()}`)
+    const content = draft.content.trim()
+    const narrative = draft.narrativeFunction.trim()
+    return {
+      what: narrative ? `${narrative}. ${content}` : content,
+      who: undefined,
+      ...(duration != null && duration > 0 ? { duration } : {}),
+      ...(cameraParts.length > 0 ? { camera: cameraParts.join('; ') } : {}),
+      ...(draft.action.trim() ? { action: draft.action.trim() } : {}),
+      ...(carryParts.length > 0 ? { carry: carryParts.join('; ') } : {}),
+      ambient: draft.soundFocus || undefined,
+      music: undefined,
+      dialogue: undefined,
+    }
+  })
+}
+
+/** Phase 5：snake_case plan dict → MultishotPlan（multishot.py plan 输入形状） */
+export function multishotPlanFromDict(raw: Record<string, unknown>): MultishotPlan {
+  const rawShots = Array.isArray(raw['shots']) ? (raw['shots'] as Record<string, unknown>[]) : []
+  const ledger = (raw['continuity_ledger'] ?? {}) as Record<string, unknown>
+  return {
+    totalDuration: typeof raw['total_duration'] === 'number' ? raw['total_duration'] : Number.NaN,
+    shotCount: typeof raw['shot_count'] === 'number' ? raw['shot_count'] : 0,
+    editRhythm: String(raw['edit_rhythm'] ?? ''),
+    continuityStrategy: String(raw['continuity_strategy'] ?? ''),
+    shots: rawShots.map((s, i) => shotDraftFromDict(s, i + 1)),
+    continuityLedger: {
+      identity: String(ledger['identity'] ?? ''),
+      wardrobe_and_props: String(ledger['wardrobe_and_props'] ?? ''),
+    },
+  }
+}
+
+/** Phase 5：形状探测——shot_count/total_duration 存在，或 shots[0] 带 content 而无 what（plan 形状） */
+export function looksLikeMultishotPlan(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
+  const r = raw as Record<string, unknown>
+  if (r['shot_count'] != null || r['total_duration'] != null) return true
+  const shots = r['shots']
+  if (Array.isArray(shots) && shots.length > 0 && typeof shots[0] === 'object' && shots[0] !== null) {
+    const first = shots[0] as Record<string, unknown>
+    return first['content'] != null && first['what'] == null
+  }
+  return false
+}
+
+/** Phase 5：plan → 校验 → shots 转换单点（prompt_compile 的 sceneToShotsChecked 同款契约）。
+ *  critical gate 存在时 shots=undefined（调用方以 gates 呈现失败）；否则产出可用 H3ShotsInput。 */
+export function planToShotsChecked(raw: unknown): { shots?: H3ShotsInput; gates: AuditGate[]; advisories: string[] } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return {
+      gates: [{
+        rule: 'plan_shape', target: 'h3', severity: 'critical',
+        detail: 'plan 输入需为对象 {total_duration, shot_count, shots[], continuity_ledger}',
+        source: 'audit/rules-h3',
+      }],
+      advisories: [],
+    }
+  }
+  const plan = multishotPlanFromDict(raw as Record<string, unknown>)
+  const gates = auditMultishotPlan(plan)
+  if (gates.some((g) => g.severity === 'critical')) return { gates, advisories: [] }
+  return { shots: { duration_seconds: plan.totalDuration, shots: compilePlanToShots(plan) }, gates, advisories: [] }
 }
 
 function multishotRuleForMessage(msg: string): string {

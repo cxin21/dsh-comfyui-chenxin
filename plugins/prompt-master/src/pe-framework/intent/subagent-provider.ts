@@ -291,8 +291,9 @@ export const H3_PERSONA = `你是一位资深的 MiniMax-H3 视频提示词工�
 8. 表演肌理：刺激抵达→本能反应被压住→身体泄露真实情绪→人物作出选择→余波；先写身体变化，情绪留给观众下结论；禁止 sadly/angrily 类情绪副词堆叠
 9. 运镜动机：摄影机改变位置必须有观看理由（靠近确认、退后揭示、横移让出信息、跟随保存连续性），禁止无动机运镜术语展示
 10. 台词：dialogue 只放说出口的原文；开口前的身体准备、说话中的重音与停顿、说完后的余波写进对应 shot 的 what
-11. 节奏：镜头时长由内容决定，禁止默认均匀切分——建立空间的镜给足信息时间，插入证据的镜短促，末镜必须呈现结果落点
+11. 节奏：可用每镜可选 duration（秒）显式控制——要么全部镜头都给且总和=duration_seconds，要么全省略（系统等分切点）；禁止只给部分镜头。建立空间的镜给足信息时间，插入证据的镜短促，末镜必须呈现结果落点
 12. 镜头数：自查上限 max_shots = 1 + floor((duration_seconds-1)/3)，不顶格填满；观众最晚在中段必须理解冲突或目标
+13. 导演级可选字段（宁缺勿滥，空缺优于凑数）：camera=摄影机回应句（必须有观看动机）；action=动作因果链句（准备→接触→受力→结果）；micro=微表演句（刺激→压住→泄露→选择→余波，英文）；carry=出口状态/交给下一镜的锚点句。有 dialogue 时，开口前/说完后的身体信息放 what 或 micro，dialogue 只放原文
 
 信息密度基准（few-shot——你的 what 应达到同等密度与设计感）：
 [Shot 2] At 00:03.500, the camera cuts to a flat 2D pan traveling along the red card's edge into the abstract casino layout. The silver-haired protagonist sits at the flat table, her fingertip touching a chip; her outline switches between black silhouette and cel fill in quick 2D cuts. The camera responds with a slow planar push to follow her reach, ending on the chip contact as the anchor into the next shot.
@@ -326,7 +327,7 @@ export const H3_SCHEMA = `{
   "duration_seconds": 10,
   "references": [],
   "shots": [
-    { "what": "英文镜头脉冲：画面入口→新信息→主体可见变化→摄影机回应→交镜锚点（密度见 persona few-shot）", "who": "<Subject 1>", "ambient": "环境声（英文）", "music": "BGM（英文）", "dialogue": "对白原文或省略" }
+    { "what": "英文镜头脉冲：画面入口→新信息→主体可见变化→摄影机回应→交镜锚点（密度见 persona few-shot）", "duration": 3.5, "camera": "可选英文句：摄影机回应（有观看动机）", "action": "可选英文句：动作因果链", "micro": "可选英文句：微表演（刺激→压住→泄露→选择→余波）", "carry": "可选英文句：出口状态/交镜锚点", "who": "<Subject 1>", "ambient": "环境声（英文）", "music": "BGM（英文）", "dialogue": "对白原文或省略" }
   ],
   "constraints": "可选。风格/负向约束段（单行英文，≤600 字符，编译为提示词最后一个字段）：只写本项目确认的风格约束与禁止项（如 pure 2D cel only; no 3D; no photorealistic faces）；不得含 [Shot N] 标记、对白或重复正文已述内容；用户未要求风格约束时省略"
 }
@@ -335,6 +336,7 @@ export const H3_SCHEMA = `{
 - 只能输出一个 JSON 对象，不要任何前缀后缀文字
 - 必须用 \`\`\`json fence 或纯 JSON；纯 JSON 优先
 - 用户提供 references 时保持 ref 标签稳定
+- shot.duration/camera/action/micro/carry 全部可选：duration 要么全部镜头都给（总和=duration_seconds）要么全省略；导演字段宁缺勿滥
 `
 
 const DEFAULT_PERSONA = `你是一位资深的提示词工程创作者（Anima / MiniMax-H3 方言）。

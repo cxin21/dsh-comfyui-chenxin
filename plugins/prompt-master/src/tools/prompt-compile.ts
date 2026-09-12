@@ -6,7 +6,7 @@ import { normalizeH3Input } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
 import { assembleEnvelope, computeNextAction } from '../pe-framework/render/envelope.js'
 import { getDialectPackage } from '../pe-framework/dialect/package.js'
-import { contractGatesH3 } from '../pe-framework/audit/rules-h3.js'
+import { contractGatesH3, looksLikeMultishotPlan, planToShotsChecked } from '../pe-framework/audit/rules-h3.js'
 import type { StageResult } from '../pe-framework/pipeline/types.js'
 import { serializeReport } from '../pe-framework/audit/report.js'
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
@@ -110,9 +110,30 @@ export function registerCompileTool(ctx?: Context) {
         extraGates.push(...checked.gates)
         extraAdvisories.push(...checked.advisories)
       } else if (a.shots && Array.isArray(a.shots.shots) && (a.shots.shots as unknown[]).length > 0) {
-        shots = a.shots as unknown as H3ShotsInput
+        // Phase 5（h3-director-depth）：MultishotPlan 形状（shot_count/total_duration 或 shots[].content）→ 校验后转换
+        if (looksLikeMultishotPlan(a.shots)) {
+          const plan = planToShotsChecked(a.shots)
+          extraGates.push(...plan.gates)
+          shots = plan.shots ?? null
+        } else {
+          shots = a.shots as unknown as H3ShotsInput
+        }
       }
-      if (!shots) throw new Error('需要 scenario_id 或 shots 输入')
+      if (!shots) {
+        if (extraGates.some((g) => g.severity === 'critical')) {
+          const failStage: StageResult = {
+            ok: false,
+            result: {},
+            gates: extraGates,
+            advisories: extraAdvisories,
+            assumptions: [],
+            targetSlotHint: 't2v.prompt',
+          }
+          logInfo(`[prompt-master] prompt_compile plan → ok=false gates=${extraGates.length} critical=${extraGates.filter((g) => g.severity === 'critical').length}`)
+          return stageToEnvelope(failStage, { omitResult: a.audit_only === true })
+        }
+        throw new Error('需要 scenario_id 或 shots 输入')
+      }
       // Task 5（spec #3 约束前置）：preflight_only=true 只跑方言约束校验（零 LLM），不执行 compile/budget
       if (a.preflight_only === true) {
         const normalized = normalizeH3Input({ shots }, { scenarioId, formFields: a.form_fields })

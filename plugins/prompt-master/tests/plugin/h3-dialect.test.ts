@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseRequest, max_shots, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS, MAX_PROMPT_CHARS, ContractError } from '../../src/pe-framework/schema/h3-shots.js'
 import { compileH3 } from '../../src/pe-framework/dialect/h3.js'
-import { contractGatesH3, auditH3 } from '../../src/pe-framework/audit/rules-h3.js'
+import { contractGatesH3, auditH3, looksLikeMultishotPlan, planToShotsChecked } from '../../src/pe-framework/audit/rules-h3.js'
 import { readGolden, assertGolden } from '../fidelity/harness.js'
 
 describe('h3 contracts (contracts.py port)', () => {
@@ -255,6 +255,85 @@ describe('h3 constraints block (Phase 4 风格/负向约束段)', () => {
     const { text } = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps.' }], constraints: 'never introduce [Shot 2]' })
     const gates = auditT2vaText(text)
     expect(gates.some((g) => g.rule === 'constraints_block' && g.severity === 'critical')).toBe(true)
+  })
+})
+
+describe('h3 director fields + MultishotPlan (Phase 5)', () => {
+  it('shot camera/action/micro/carry 确定性投影进 [Shot N] 行（存在才投影）', () => {
+    const { text } = compileH3({
+      duration_seconds: 8,
+      shots: [
+        { what: 'the room sits in silence.', camera: 'the camera holds on the phone face-up on the table', micro: 'she presses her lips flat and retracts the reach', carry: 'the phone screen stays lit into the next shot' },
+        { what: 'she grabs the phone.', action: 'the reach starts at the shoulder, the fingers close around the case' },
+      ],
+    })
+    expect(text).toContain('The camera responds: the camera holds on the phone face-up on the table.')
+    expect(text).toContain('Micro-performance: she presses her lips flat and retracts the reach.')
+    expect(text).toContain('Carrying over: the phone screen stays lit into the next shot.')
+    expect(text).toContain('The action plays out: the reach starts at the shoulder, the fingers close around the case.')
+  })
+
+  it('缺省导演字段保持 golden 口径（逐字节）', () => {
+    const { text } = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps.' }] })
+    expect(text).toBe('integrated_multimodal_description: [Shot 1] A cat sleeps.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A')
+  })
+
+  it('plan 形状探测：shot_count/content → plan；what → 非 plan', () => {
+    expect(looksLikeMultishotPlan({ shot_count: 2, shots: [] })).toBe(true)
+    expect(looksLikeMultishotPlan({ shots: [{ content: 'x' }] })).toBe(true)
+    expect(looksLikeMultishotPlan({ shots: [{ what: 'x' }] })).toBe(false)
+    expect(looksLikeMultishotPlan({ duration_seconds: 8, shots: [{ what: 'x' }] })).toBe(false)
+  })
+
+  it('planToShotsChecked：合法 plan → shots（narrativeFunction 前缀 + camera/carry/duration 投影 + 可过审计）', () => {
+    const plan = {
+      total_duration: 9,
+      shot_count: 2,
+      edit_rhythm: 'slow build',
+      continuity_strategy: 'matched exits',
+      shots: [
+        { content: 'the harbour wakes.', camera: 'slow push along the pier', shot_size: 'wide', composition: 'boats on the left third', action: 'gulls lift off as the first light hits', entry_state: 'still water', exit_state: 'ripples spreading', narrative_function: 'establish place', sound_focus: 'water lapping', active_references: [], start: 0, end: 5.5 },
+        { content: 'a net is hauled up.', camera: 'handheld follow', shot_size: 'medium', action: 'two fishermen lean back and pull', entry_state: 'ripples spreading', exit_state: 'net dripping over the rail', narrative_function: 'introduce labor', sound_focus: 'rope strain', active_references: [], start: 5.5, end: 9 },
+      ],
+      continuity_ledger: { identity: 'two fishermen, unchanged', wardrobe_and_props: 'yellow slickers, coiled rope' },
+    }
+    const { shots, gates } = planToShotsChecked(plan)
+    expect(gates.some((g) => g.severity === 'critical')).toBe(false)
+    expect(shots).toBeDefined()
+    expect(shots!.duration_seconds).toBe(9)
+    expect(shots!.shots[0].what).toBe('establish place. the harbour wakes.')
+    expect(shots!.shots[0].duration).toBe(5.5)
+    expect(shots!.shots[0].camera).toBe('slow push along the pier; wide; boats on the left third')
+    expect(shots!.shots[0].carry).toBe('Entry: still water; Exit: ripples spreading')
+    expect(shots!.shots[1].duration).toBe(3.5)
+    const compiled = compileH3({ duration_seconds: shots!.duration_seconds, shots: shots!.shots })
+    const gateList = auditH3(compiled.text, { stage: 't2va', duration: 9, shotCount: 2 })
+    expect(gateList.some((g) => g.severity === 'critical')).toBe(false)
+  })
+
+  it('planToShotsChecked：continuity_ledger 缺 identity → critical gate 且无 shots', () => {
+    const { shots, gates } = planToShotsChecked({
+      total_duration: 9,
+      shot_count: 1,
+      shots: [{ content: 'a.', start: 0, end: 9 }],
+      continuity_ledger: { wardrobe_and_props: 'x' },
+    })
+    expect(shots).toBeUndefined()
+    expect(gates.some((g) => g.rule === 'plan_ledger' && g.severity === 'critical')).toBe(true)
+  })
+
+  it('planToShotsChecked：时长断接 → plan_timing gate', () => {
+    const { shots, gates } = planToShotsChecked({
+      total_duration: 9,
+      shot_count: 2,
+      shots: [
+        { content: 'a.', start: 0, end: 4 },
+        { content: 'b.', start: 5, end: 9 },
+      ],
+      continuity_ledger: { identity: 'x', wardrobe_and_props: 'y' },
+    })
+    expect(shots).toBeUndefined()
+    expect(gates.some((g) => g.rule === 'plan_timing')).toBe(true)
   })
 })
 

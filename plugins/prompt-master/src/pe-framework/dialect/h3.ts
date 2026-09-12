@@ -89,6 +89,16 @@ function buildDialogue(shot: H3Shot): string {
   return ` <d>[${lang}] ${text}</d>`
 }
 
+/** Phase 5：导演级可选字段确定性投影（存在才投影；引导词固定，语义由 persona 契约约束） */
+function projectDirectorFields(shot: H3Shot): string {
+  const parts: string[] = []
+  if (shot.camera?.trim()) parts.push(`The camera responds: ${trimPunct(shot.camera.trim())}.`)
+  if (shot.action?.trim()) parts.push(`The action plays out: ${trimPunct(shot.action.trim())}.`)
+  if (shot.micro?.trim()) parts.push(`Micro-performance: ${trimPunct(shot.micro.trim())}.`)
+  if (shot.carry?.trim()) parts.push(`Carrying over: ${trimPunct(shot.carry.trim())}.`)
+  return parts.length > 0 ? ` ${parts.join(' ')}` : ''
+}
+
 export function buildShotLines(request: StoryRequest, subjectLabelsMap?: Map<string, number>): string[] {
   const labels = subjectLabelsMap ?? new Map<string, number>()
   const times = shotCutTimesFromShots(request.shots) ?? shotCutTimes(request.duration_seconds, request.shots.length)
@@ -104,7 +114,7 @@ export function buildShotLines(request: StoryRequest, subjectLabelsMap?: Map<str
     } else {
       body = `[Shot ${index}] At ${formatTimestamp(cut)}, the camera cuts to ${what}.`
     }
-    lines.push(body + buildDialogue(shot))
+    lines.push(body + projectDirectorFields(shot) + buildDialogue(shot))
   })
   return lines
 }

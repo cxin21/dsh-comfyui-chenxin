@@ -26,7 +26,7 @@ export const PERSPECTIVE_CARDS: readonly ArtDirectionCard[] = [
   { id: 'wide_panorama', name: '广角全景', tags: ['wide angle shot', 'expansive view', 'cinematic wide shot'] },
   { id: 'close_up', name: '特写', tags: ['close-up', 'shallow depth of field', 'detailed face'] },
   { id: 'top_down', name: '俯视', tags: ['from above', 'top-down view', 'looking down'] },
-  { id: 'side_silhouette', name: '侧面剪影', tags: ['from side', 'silhouette', 'backlit subject'] },
+  { id: 'side_silhouette', name: '侧面剪影', tags: ['from side', 'silhouette', 'dark outline'] },
 ]
 
 /** 构图设计（8）：均衡 / 动势 / 呼吸感 / 聚焦 / 仪式感 / 纵深 / 协调 / 戏剧性 */
@@ -38,24 +38,28 @@ export const COMPOSITION_CARDS: readonly ArtDirectionCard[] = [
   { id: 'perfect_symmetry', name: '对称', tags: ['perfect symmetry', 'mirrored composition', 'formal and elegant'] },
   { id: 'leading_lines', name: '引导线', tags: ['leading lines', 'converging lines', 'depth through perspective'] },
   { id: 'golden_ratio', name: '黄金分割', tags: ['golden ratio composition', 'naturally pleasing placement', 'organic balance'] },
-  { id: 'strong_silhouette', name: '剪影', tags: ['strong silhouette', 'dramatic outline', 'backlit minimal detail'] },
+  { id: 'strong_silhouette', name: '剪影', tags: ['strong silhouette', 'dramatic outline', 'minimal detail'] },
 ]
 
-/** 光影设计（8）：电影感 / 发丝边缘光 / 穿透感 / 夜景 / 黄金时刻 / 暖光私密 / 明暗戏剧 / 梦幻柔焦 */
+/** 光影设计（8）：电影感 / 发丝边缘光 / 穿透感 / 夜景 / 黄金时刻 / 暖光私密 / 明暗戏剧 / 梦幻柔焦
+ *  A7（外部基准 2026-09）：全部 tag 必须通过 dialect/anima.ts LIGHTING_BAN 审计——光效词
+ *  （backlighting/rim light/god rays/moonlight/candlelight/soft lighting/volumetric light/
+ *  sunlight…）被 camera-anima 部署禁用，改用「光源物件 + 明暗造型 + 色调」词汇表达同一设计意图
+ *  （不变式由 tests/pe-framework/enrichment/art-direction-ban.test.ts 把关）。 */
 export const LIGHTING_CARDS: readonly ArtDirectionCard[] = [
-  { id: 'cinematic_lighting', name: '电影级', tags: ['cinematic lighting', 'volumetric lighting', 'dramatic shadows'] },
-  { id: 'rim_backlight', name: '逆光轮廓', tags: ['backlighting', 'rim lighting', 'glowing edge'] },
-  { id: 'god_rays', name: '体积光', tags: ['god rays', 'light rays', 'volumetric sunlight'] },
-  { id: 'moonlight_cool', name: '月夜冷调', tags: ['moonlight', 'cool blue tones', 'soft night glow'] },
-  { id: 'golden_hour', name: '黄金时刻', tags: ['golden hour lighting', 'warm sunlight', 'long shadows'] },
-  { id: 'lantern_glow', name: '烛光灯火', tags: ['warm lantern light', 'candlelight glow', 'intimate warm tones'] },
+  { id: 'cinematic_lighting', name: '电影级', tags: ['cinematic lighting', 'dramatic shadows', 'strong key light'] },
+  { id: 'rim_backlight', name: '逆光轮廓', tags: ['glowing edge', 'luminous outline', 'bright rim'] },
+  { id: 'god_rays', name: '体积光', tags: ['sunbeam', 'sunbeams through leaves', 'dappled light'] },
+  { id: 'moonlight_cool', name: '月夜冷调', tags: ['full moon', 'cool blue tones', 'soft night glow'] },
+  { id: 'golden_hour', name: '黄金时刻', tags: ['golden hour', 'long shadows', 'warm amber tones'] },
+  { id: 'lantern_glow', name: '烛光灯火', tags: ['warm lantern light', 'paper lanterns', 'cozy amber palette'] },
   { id: 'high_contrast', name: '高对比', tags: ['high contrast lighting', 'chiaroscuro', 'dramatic light and shadow'] },
-  { id: 'soft_dreamlight', name: '柔光梦幻', tags: ['soft lighting', 'ethereal glow', 'diffused light'] },
+  { id: 'soft_dreamlight', name: '柔光梦幻', tags: ['ethereal glow', 'diffused light', 'soft diffused glow'] },
 ]
 
 /** 色彩设计（6）：张力 / 统一 / 电影调色 / 点睛 / 淡雅 / 幻想高饱和 */
 export const COLOR_CARDS: readonly ArtDirectionCard[] = [
-  { id: 'warm_cool_contrast', name: '冷暖对比', tags: ['contrasting color palette', 'cool and warm tones', 'color tension'] },
+  { id: 'warm_cool_contrast', name: '冷暖对比', tags: ['contrasting color palette', 'teal against orange accents', 'color tension'] },
   { id: 'limited_palette', name: '有限色板', tags: ['limited palette', 'two-tone color scheme', 'unified color harmony'] },
   { id: 'cinematic_grading', name: '浓郁电影调色', tags: ['cinematic color grading', 'rich saturated colors', 'vivid yet natural tones'] },
   { id: 'accent_on_mono', name: '单色点缀', tags: ['monochrome with accent color', 'splash of red', 'selective color pop'] },

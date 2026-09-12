@@ -80,12 +80,11 @@ describe('rating integration (spec §5.3)', () => {
     const gates = auditAnima(r.positive, r.negative, { variant: 'base', search: realSearch, slots: s, rating: 'explicit' })
     expect(gates.some((g) => g.rule === 'minor_content_conflict')).toBe(true)
   })
-  it('canonical substitution census: escaper set is exactly {vulva→pussy} (TR8-1 residual audit, captain-ruled)', () => {
-    // 29 词全量审计的 durable 形态（EXPLICIT 19 + SENSITIVE 10，captain 口径「18 词」以源码数组为准）：
-    // 每个 marker 词经 searchCatalog 取 top grounded 形态，替换后不再命中任何 marker 者=逃逸词。
-    // 现状恰一条（vulva→pussy，alias），由档位单调化（compile 透传 3b eff）兜底。
-    // 未来 catalog 变更引入新逃逸词会在此处 FAIL，强制复核档位链路；若把 pussy 加入词表，
-    // 本期望应随之改为 []（有意的词表变更走评审）。
+  it('canonical substitution census: escaper set is exactly {} (TR8-1 residual audit, ⑤a ruling closed it)', () => {
+    // 30 词全量审计的 durable 形态（EXPLICIT 20 + SENSITIVE 10；初版审计 EXPLICIT 19 时唯一逃逸词
+    // vulva→pussy 已由 ⑤a 裁决把 pussy 纳入 EXPLICIT_MARKERS 而消失——替换形态现命中词表，
+    // 直用与替换两条路径的档位语义统一）。未来 catalog 变更引入新逃逸词会在此处 FAIL，
+    // 强制复核档位链路；有意的词表变更走评审并同步本期望。
     const escapers: string[] = []
     for (const w of [...EXPLICIT_MARKERS, ...SENSITIVE_MARKERS]) {
       const top = searchCatalog(w, { limit: 5 })[0]
@@ -96,7 +95,7 @@ describe('rating integration (spec §5.3)', () => {
         }
       }
     }
-    expect(escapers).toEqual(['vulva->pussy'])
+    expect(escapers).toEqual([])
   })
   afterAll(() => closeCatalog())
 })

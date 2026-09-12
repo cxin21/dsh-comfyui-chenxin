@@ -6,9 +6,11 @@ import type { Rating } from '../types.js'
 // type-only import：编译期取 AnimaSlots 形状，运行时零依赖，规避与 dialect 层的环。
 import type { AnimaSlots } from '../dialect/anima.js'
 
-/** types.py EXPLICIT_SAFETY_MARKERS 逐字（自 dialect/anima.ts 平移，原位再导出保兼容） */
+/** types.py EXPLICIT_SAFETY_MARKERS 逐字（自 dialect/anima.ts 平移，原位再导出保兼容）。
+ *  M1 审计 ⑤a 裁决增补：pussy（vulva 的 catalog alias 形态，与 vulva 同类 explicit 解剖俚语，
+ *  保守方向扩表——补齐「替换形态/直用」两路径的档位语义统一，消 direct-usage safe 档渲染缺口）。 */
 export const EXPLICIT_MARKERS: readonly string[] = [
-  'explicit', 'nude', 'nudity', 'genitals', 'genital', 'vulva', 'penis',
+  'explicit', 'nude', 'nudity', 'genitals', 'genital', 'vulva', 'pussy', 'penis',
   '乳头', '乳房', '生殖器', '阴部', '阴茎', '阴道', '隐私部位', '裸露', '露骨', '色情', 'pornographic', 'nsfw',
 ]
 

@@ -1,0 +1,17 @@
+{
+  "id": "claymation_clay",
+  "name": "黏土定格",
+  "category": "cg_3d",
+  "rating": "safe",
+  "theme": "handmade claymation miniature aesthetic",
+  "palette": "matte plasticine palette with natural clay pigment",
+  "fragments": {
+    "image": "clay texture, fingerprint marks, stop motion feel, handmade plasticine surface",
+    "video": "clay texture, fingerprint marks, stop motion feel, handmade plasticine surface"
+  },
+  "negative_hints": ["smooth render", "glossy digital surface"],
+  "artist_hints": ["aardman"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

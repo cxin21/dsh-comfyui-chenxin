@@ -1,0 +1,17 @@
+{
+  "id": "unreal_render",
+  "name": "UE 渲染感",
+  "category": "cg_3d",
+  "rating": "safe",
+  "theme": "real-time 3d engine render aesthetic",
+  "palette": "physically-based render palette with hdr environment reflections",
+  "fragments": {
+    "image": "lumen global illumination, nanite geometric detail, real-time engine render, ray-traced reflections",
+    "video": "lumen global illumination, nanite geometric detail, real-time engine render, ray-traced reflections"
+  },
+  "negative_hints": ["flat shading", "hand-drawn toon outline"],
+  "artist_hints": ["greg rutkowski", "simon stalenhag"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

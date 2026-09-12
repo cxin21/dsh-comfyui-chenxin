@@ -1,0 +1,17 @@
+{
+  "id": "hanfu_xianxia",
+  "name": "古风仙侠",
+  "category": "oriental",
+  "rating": "safe",
+  "theme": "xianxia immortal-hero aesthetic in traditional hanfu",
+  "palette": "muted mineral pigment palette with jade accents",
+  "fragments": {
+    "image": "flowing hanfu, ribbon sleeves, immortal mist peaks, floating silk sash",
+    "video": "flowing hanfu, ribbon sleeves, immortal mist peaks, floating silk sash"
+  },
+  "negative_hints": ["modern clothing", "western streetwear"],
+  "artist_hints": ["wlop", "ask (askzy)", "anmi"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

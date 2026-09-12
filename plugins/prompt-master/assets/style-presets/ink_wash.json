@@ -1,0 +1,17 @@
+{
+  "id": "ink_wash",
+  "name": "水墨写意",
+  "category": "oriental",
+  "rating": "safe",
+  "theme": "chinese ink wash painting aesthetic",
+  "palette": "monochrome ink gradation palette on rice paper",
+  "fragments": {
+    "image": "ink wash painting, brush splashes, negative space rice paper, sumi-e brushwork",
+    "video": "ink wash painting, brush splashes, negative space rice paper, sumi-e brushwork"
+  },
+  "negative_hints": ["heavy saturation", "neon color gradient"],
+  "artist_hints": ["hokusai"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

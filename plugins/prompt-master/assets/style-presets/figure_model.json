@@ -1,0 +1,17 @@
+{
+  "id": "figure_model",
+  "name": "手办质感",
+  "category": "cg_3d",
+  "rating": "safe",
+  "theme": "collectible pvc figure aesthetic",
+  "palette": "glossy injection-plastic palette with matte display base",
+  "fragments": {
+    "image": "pvc figure, glossy coat, display base, studio product photography",
+    "video": "pvc figure, glossy coat, display base, studio product photography"
+  },
+  "negative_hints": ["2d lineart", "flat paper illustration"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "hand-authored"
+}

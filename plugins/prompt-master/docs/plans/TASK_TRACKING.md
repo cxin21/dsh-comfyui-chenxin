@@ -19,6 +19,26 @@
 | **Round 5: 二期 enrich+默认评审+一期遗留全量补齐（2026-09-08）** | 9 | 9 | ✅ 已完成 |
 | **Round 6: 三期实战修复（会话 398c261e 暴露的编译/catalog 问题，2026-09-09）** | 5 | 5 | ✅ 已完成 |
 | **Round 7: 全量遗留清零（文档清账+grounding 去重+语言层+健壮性/卫生/观测包，2026-09-09）** | 6 | 6 | ✅ 已完成 |
+| **Round 8: 提示词质量层改写（调研驱动：锚定补全 persona+官方负向+NL 场景块+预算闸门，2026-09-09）** | 3 | 3 | ✅ 已完成 |
+
+---
+
+## Round 8：提示词质量层改写（调研驱动）
+
+> Spec：`docs/2026-09-09-round8-narrative-budget-design.md`；计划：`docs/plans/2026-09-09-round8-implementation.md`（含追加 Task 2Q）
+> 输入：用户实战反馈「提示词质量过于差」+ 深度调研（Anima=tag+NL 混合方言/DTG-DART 档位/锚定补全模式/官方规范）
+> 验收：全量 vitest **880 passed / 1 skipped / 0 failed**（854→880，golden 零破坏）；**生图实战验证通过**——初始提示词（古风美女舞剑/anima base）出稿 21 tags+3 句英文 NL 场景块，ComfyUI 实测出图全部场景细节渲染且主体不稀释（seed 20260909）
+
+| Task | 内容 | 状态 | 关键 commit |
+|---|---|---|---|
+| T1 | F6 narrative 默认排除 + F8 vague_tag 拦截（atmosphere/beautiful 类 minor gate） | ✅ | 1e75fa4 |
+| T2Q | 提示词质量层改写：ANIMA_PERSONA 锚定补全重写（20-40 预算/词表规范 tag/场景≤3/NL 场景块）+ 官方负向八项 + narrative 条件纳入（NL 质量检查） | ✅ | a4b8406 |
+| T2 | F7 tag_budget_exceeded 软预算闸门（>40 段或 >1200 字符，important）+ **important gates 进修正 feedback 接线**（brief 假设被实测证伪后补的必要路径） | ✅ | 2e1c844 |
+| T3 | 实战生图验证 + 终审 PASS + 登记 | ✅ | 7323040+ |
+
+**登记事项（终审 F3 要求）**：F7 的 important 搭车接线为共享修正环——**h3 的 `shot_execution`（rules-h3.ts:248，important）现也进入 h3 修正轮 feedback**，属 h3 修正 prompt 的真实语义变化（大概率是改善：启发式裁剪指令到达修正轮），后续观察是否指令过载，调节点 prompt-author.ts 两行 filter。
+
+**四期候选（终审定稿）**：①h3 important 搭车实战观察+可选白名单收窄；②合格 narrative 被去重吞段时加 `narrative_deduped` advisory + narrativeIncluded 按「实际装配」计数；③补钉测试（仅 important 不出车直接锚定/条件纳入默认路径去重用例）；④设计文档变更记录节+f6f8 标题措辞+resolve.test POSIX 存量；⑤软预算阈值实战观察（调节点 TAG_BUDGET_MAX_SEGMENTS/CHARS 两常量）。
 
 ---
 

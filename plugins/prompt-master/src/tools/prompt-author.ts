@@ -26,6 +26,7 @@ import { resolveRoute, type ExecLike } from '../llm/route.js'
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
 import { recordGeneration } from '../pe-framework/feedback/store.js'
 import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
+import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js'
 import { catalogCandidatesForText } from '../pe-framework/dialect/catalog-recall.js'
 import { tokensOf } from '../pe-framework/tokens.js'
 import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
@@ -57,6 +58,9 @@ export interface AuthorArgs {
   enrich?: boolean
   /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 纠正 + advisory enrich_lang_forced） */
   outputLang?: 'en' | 'zh' | 'ja'
+  /** 2026-09-12 P1：调用方显式指定艺术指导卡片（每类至多 1 张；字段 perspective/composition/lighting/color/motion → 卡片 id）。
+   *  仅 anima + enrich 开启时消费；无效字段/id fail-fast 抛错；enrich 关/blueprint/h3 目标 → advisory art_direction_ignored_*。 */
+  art_direction?: Record<string, string>
 }
 
 /** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
@@ -656,12 +660,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
       enrich: { type: 'boolean', default: true, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。audit_only/blueprint_id 时忽略' },
       outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 被纠正 + advisory enrich_lang_forced）' },
+      art_direction: { type: 'object', default: {}, additionalProperties: true, description: 'anima 专用：显式指定艺术指导卡片（每类至多 1 张，缺省由 enrich LLM 自选）。字段: perspective/composition/lighting/color/motion；值=卡片 id（perspective: low_angle/three_quarter_view/over_shoulder_glance/dutch_angle/wide_panorama/close_up/top_down/side_silhouette；composition: rule_of_thirds/diagonal_dynamics/negative_space/framed_subject/perfect_symmetry/leading_lines/golden_ratio/strong_silhouette；lighting: cinematic_lighting/rim_backlight/god_rays/moonlight_cool/golden_hour/lantern_glow/high_contrast/soft_dreamlight；color: warm_cool_contrast/limited_palette/cinematic_grading/accent_on_mono/soft_pastel/vivid_fantasy；motion: dynamic_pose/flowing_dress/flowing_hair/weapon_trail/falling_petals/frozen_peak）。无效字段/id 直接报错；enrich=false 或 blueprint_id 或 target=h3 时忽略 + advisory' },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja' }, exec: ToolRunContext) {
+    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja'; art_direction?: Record<string, unknown> }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
       const target = String(a.target || 'anima') as Target
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
@@ -714,14 +719,27 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       let enrichFlag: 0 | 1 = 0
       let enrichmentTop: Record<string, unknown> | undefined
       const traceExtra: Array<{ name: string; ms: number }> = [] // F5：enrich/intent/catalog 耗时子条目
+      // 2026-09-12 P1：调用方显式指定艺术指导卡——fail-fast 校验（不烧 LLM）；不消费的路径补 advisory（参数被忽略必须可观测）
+      const artDirectionSpecified = a.art_direction !== undefined && a.art_direction !== null && Object.keys(a.art_direction).length > 0
+      if (artDirectionSpecified) {
+        const invalid = validateArtDirectionSpec(a.art_direction as Record<string, string>)
+        if (invalid) throw new Error(invalid)
+        if (target !== 'anima') enrichAdvisories.push('art_direction_ignored_h3')
+        else if (a.enrich === false || a.blueprint_id) enrichAdvisories.push('art_direction_ignored_enrich_off')
+      }
+      // 2026-09-12 P0：exec.agent 线穿为 enrich/judge 子代理的 parent——critic provider 此前定义时只绑 ctx，
+      // host 装配子代理读 parent.options 缺 parent 直接 TypeError → 全量静默 skipped
+      // （docs/2026-09-12-camera-language-research.md §2）
+      const criticParent = (exec as unknown as ExecLike | undefined)?.agent ?? (ctx as { agent?: unknown } | undefined)?.agent
       if (a.enrich !== false && !a.blueprint_id) {
         const tEnrich0 = performance.now()
-        const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx)
+        const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent })
         const eRes = await runEnrich({
           target: target as EnrichTarget,
           userInput: input,
           outputLang: a.outputLang,
           provider: enrichProvider,
+          ...(artDirectionSpecified && target === 'anima' ? { artDirection: a.art_direction } : {}),
         })
         if ('brief' in eRes) {
           const brief = eRes.brief
@@ -756,7 +774,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       if (judgeMode !== 'off') {
         judgeOpts = {
           judge: judgeMode,
-          criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx),
+          criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
           evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
           originalIntent: input,
         }

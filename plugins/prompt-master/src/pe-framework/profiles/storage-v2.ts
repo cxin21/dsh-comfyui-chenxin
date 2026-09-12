@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
 
 export interface BuiltinOverride { enabled: boolean; sort?: number }
 export interface OverridesSection { builtinOverrides: Record<string, BuiltinOverride> }
@@ -17,12 +17,38 @@ export interface OverridesApi {
 }
 
 /**
+ * register-or-reuse：settings namespace 在同一进程内只允许注册一次（重复 register 抛
+ * "already registered"，整个 preset mount 失败）。本插件随 preset 挂载，同一进程里可能
+ * 多次走到 apply（mount 失败重试、standing mount 按文件戳重建），而旧注册可能仍驻留，
+ * 因此冲突时退化为 document 级 API（get/update/replace）复用既有注册，而不是让 mount 失败。
+ */
+export function registerOrReuseNamespace<T>(
+  ctx: Context,
+  ns: ReturnType<typeof settingsNamespace>,
+  schema: z<T>,
+): SettingsScope<T> {
+  try {
+    return ctx.settings.register(ns, schema)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('already registered')) throw error
+    return {
+      get: () => ctx.settings.get(ns) as T,
+      // 复用路径拿不到原注册的 watcher 集合；本插件没有 watch 消费方，no-op 即可。
+      watch: () => () => {},
+      update: (patch: object) => ctx.settings.update(ns, patch),
+      replace: (section: object) => ctx.settings.replace(ns, section),
+    }
+  }
+}
+
+/**
  * 注册内置覆盖层 namespace（spec §7.1）。
  * schemastery 纪律：无 default 字段即 optional-by-default，绝不 .optional()。
  */
 export function registerOverridesNamespace(ctx: Context): OverridesApi {
   const ns = settingsNamespace('prompt-master-profile-overrides')
-  const scope = ctx.settings.register(ns, z.object({
+  const scope = registerOrReuseNamespace(ctx, ns, z.object({
     builtinOverrides: z.dict(z.object({ enabled: z.boolean(), sort: z.number() })),
   }))
   const read = (): Record<string, BuiltinOverride> =>

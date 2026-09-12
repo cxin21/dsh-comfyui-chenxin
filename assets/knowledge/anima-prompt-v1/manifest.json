@@ -1,11 +1,11 @@
 {
   "content_filters": false,
   "output": {
-    "checksum": "c5fd14b8f8c73c30d4694ea5e56242f93c9e5231cd64050958cf4b145b47eb80",
-    "path": "tag-catalog.sqlite"
+    "path": "tag-catalog.sqlite",
+    "checksum": "a2e3cdc5df3a438f58a77eb832966cc4ba5cfec272cd77f715a32e7ca81bea04"
   },
   "source": {
-    "checksum": "4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d",
-    "path": "tags.sqlite"
+    "path": "tags.sqlite",
+    "checksum": "4401b7e78340acb4da3cc7b5b082d394c0a42139172b6557d8abe2a77000407d"
   }
 }

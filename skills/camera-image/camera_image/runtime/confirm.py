@@ -94,11 +94,16 @@ def confirm_group_plan(
 ) -> None:
     """Print the plan and (unless ``yes``) read y/n from stdin.
 
+    The plan summary is *diagnostic* output: it goes to ``sys.stderr`` by
+    default so the process's stdout stays machine-parseable (the P1 JSON
+    envelope contract for ``--json`` callers). Pass ``stream`` explicitly to
+    redirect it (e.g. in tests).
+
     Aborts by raising :class:`GroupConfirmationAborted` on 'n' or EOF.
     Pass ``yes=True`` to skip the prompt entirely (for non-interactive /
     agent pipelines that already approved).
     """
-    out = stream if stream is not None else sys.stdout
+    out = stream if stream is not None else sys.stderr
     out.write(format_group_plan(plan, available=available) + "\n")
 
     if yes:

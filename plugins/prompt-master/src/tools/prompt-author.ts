@@ -2,6 +2,7 @@ import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { TARGETS, type Target } from '../pe-framework/index.js'
 import { serializeReport } from '../pe-framework/audit/index.js'
 import type { AnimaSlots } from '../pe-framework/dialect/anima.js'
+import { SLOT_ORDER } from '../pe-framework/anima.js'
 // 方言模块副作用注册（Task 6：DIALECT_READY 静态表 → 注册表查询）
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
@@ -108,13 +109,33 @@ export function getAuthorIntentProvider(): AuthorIntentFn | null {
   return _intentProvider
 }
 
-/** 缺省 intent（真实运行）：经 ctx.llm 走 complete 组装；测试一律注入 provider（route 在 execute 入口经 resolveRoute 解析） */
-async function defaultIntent(ctx: Context, route: { provider: string; model: string }, req: AuthorIntentRequest): Promise<AuthorDraft> {
+/**
+ * 2026-09-12 P2（真实样本两轮：修复 LLM 删除了 findings 从未点名的 artist 槽）：
+ * 修复轮程序化 slot carry-over——某个槽在修复轮被改动，但反馈文本既没提到槽名也没提到
+ * 该槽任何 tag → 视为越权改动，回滚为上一轮值。文本约束（修订纪律）靠 LLM 自觉，
+ * 这里用代码兜底。仅 anima slots 路径；h3 shots 不做（结构不同，未观察到该问题）。
+ */
+function mergeRepairSlots(prev: AnimaSlots | undefined, next: AnimaSlots | undefined, feedback: string): AnimaSlots | undefined {
+  if (!prev || !next) return next
+  const fb = feedback.toLowerCase()
+  const merged: Record<string, unknown> = { ...next }
+  for (const key of SLOT_ORDER) {
+    const p = (prev as Record<string, unknown>)[key]
+    const n = (next as Record<string, unknown>)[key]
+    if (p === undefined || JSON.stringify(p) === JSON.stringify(n)) continue
+    const mentioned = fb.includes(key.toLowerCase()) ||
+      (Array.isArray(p) && p.some((t) => fb.includes(String(t).toLowerCase())))
+    if (!mentioned) merged[key] = p
+  }
+  return merged as unknown as AnimaSlots
+}
+
+/** 缺省 intent（真实运行）：经 ctx.llm 走 complete 组装；测试一律注入 provider（route 在 execute 入口经 resolveRoute 解析） */async function defaultIntent(ctx: Context, route: { provider: string; model: string }, req: AuthorIntentRequest): Promise<AuthorDraft> {
   const system =
     req.target === 'anima'
       ? '你是 Anima 提示词意图拆解器：把创作意图拆成槽位 JSON，仅输出 JSON（形如 {"slots": {"count_gender": [...], "appearance": [...], ...}}，键为 count_gender/character/appearance/clothing/pose_action/expression/camera/scene/detail_mood/narrative）。'
       : '你是 MiniMax-H3 意图拆解器：把创作意图写成 shots JSON，仅输出 JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。'
-  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）:\n${req.feedback}\n\n` : '') +
+  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。修订纪律：只修复反馈点名的问题，未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
     (req.catalogCandidates && req.catalogCandidates.length > 0
       ? `可用 catalog 规范候选（已验证存在，优先采用其规范写法）:\n${req.catalogCandidates.join(', ')}\n\n`
       : '') +
@@ -906,12 +927,18 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           ...stage.gates.filter((g) => g.severity === 'critical' || g.severity === 'important').map((g) => `[${g.rule}] ${g.detail}`),
           ...(stage.judgeFeedback ?? []),
         ].join('\n')
+        const prevDraft = draft
         draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
+        // P2：未点名槽回滚（两轮真实样本中修复 LLM 均越权删除 artist 槽）
+        if (target === 'anima' && draft.slots) draft.slots = mergeRepairSlots(prevDraft?.slots, draft.slots, feedback)
         stage = await runDraftThroughStage(target, draft, runOpts, repairJudgeOpts)
         if (repairJudgeOpts) lastJudged = stage
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
       }
-      if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
+      // P3（2026-09-12 真实样本）：judge needs_revision 耗尽修正轮后静默交付——补打点，
+      // 与 critical-gates 路径同款 loop_exhausted:true（否则下游误报「评审 pass」）
+      const reviewStillFailed = (stage.judgeFeedback?.length ?? 0) > 0
+      if ((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (reviewStillFailed && corrections >= MAX_CORRECTIONS)) {
         trailAdvisories.push('loop_exhausted:true')
       }
       ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)

@@ -1,7 +1,10 @@
-/** Anima 方言评审 rubric（spec §2.2，Task 4 逐字落地）：阈值进 rubric 不进代码。
+/** Anima 方言评审 rubric（spec §2.2）：阈值进 rubric 不进代码。
  *  D10（外部基准 2026-09）：aesthetics 单维拆为 composition / lighting-color /
  *  aesthetic-vocabulary 三维，与 ANIMA_PERSONA 的设计规范同源（构图占比/景别一致、
- *  光源物件写法与色彩主次、词表信息密度），使评委从「查结构」升级为「评设计」。 */
+ *  光源物件写法与色彩主次、词表信息密度），使评委从「查结构」升级为「评设计」。
+ *  2026-09-12（用户批准的 spec 变更）：negative-template 口径修订——负面提示词由编译
+ *  模板生成、修复层不可修改，原「缺主体排除=minor」是修复路径无法执行的死信 finding
+ *  （真实样本两轮复现）；改为仅评模板存在性与正负冲突，主体排除建议走 praise 段。 */
 import type { DialectRubric } from './contract.js'
 
 export const ANIMA_RUBRIC: DialectRubric = {
@@ -13,7 +16,7 @@ export const ANIMA_RUBRIC: DialectRubric = {
     { id: 'tag-evidence', weight: 0.15, instruction:
       '抽查非通用 tag 在 catalog 的证据（用 catalog 工具）；miss 的 tag 给出 canonical 替代。无证据 tag>2 个=blocker。' },
     { id: 'negative-template', weight: 0.10, instruction:
-      '负面提示词须含标准模板 + 针对本图主体的排除项；缺模板=major，缺主体排除=minor。' },
+      '负面提示词由编译模板生成，修复层不可修改——本维度仅评模板本身：缺标准质量模板（worst quality/low quality/score 系列）=major；负面项与正面 tag 语义冲突=major。主体相关排除项（bad hands/extra arms 等）属改进建议：写入 praise 段，不作为 finding。' },
     { id: 'composition', weight: 0.15, instruction:
       '评构图设计（用 aesthetics 工具）：是否有唯一明确景别；景别与 tag 一致（close-up 不得残留鞋袜/全身 tag）；主体占比/布局/背景层级是否在 NL 说明。缺景别=minor；景别与内容矛盾=major；无任何布局描述=major。' },
     { id: 'lighting-color', weight: 0.15, instruction:
@@ -24,4 +27,10 @@ export const ANIMA_RUBRIC: DialectRubric = {
   severityRules: 'blocker=出图必然错误或严重偏离；major=明显降低质量但不致命；minor=可改进瑕疵。',
   evidenceTools: ['catalog', 'aesthetics'],
   passThreshold: 80,
+  // 2026-09-12：评审边界——修复层只能改槽位与 narrative。negative-template 口径已直接
+  // 修订进 dimension 指令（见文件头 spec 变更注释），此处只保留通用能力边界。
+  boundary: `【评审边界（硬性）】
+被评审产物由「槽位编译」生成。修复层只能修改槽位与 narrative，不能修改负面提示词模板与编译行为。因此：
+- 每条 requiredFix 必须指明作用槽位与目标形式（如 clothing: swordsman→删除，语义并入 holding sword），不得要求修复层做槽位之外的操作
+- tag-evidence 维度的 miss 判定以产物 citations 为准；substitutions 产生的未验证形式按 minor 计（编译层责任），requiredFix 给出应采用的规范形式`,
 }

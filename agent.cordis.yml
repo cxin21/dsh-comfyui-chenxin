@@ -25,7 +25,9 @@
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: |-
+    # dsh-persona schema (0.1.5-rc.1): required `prefix`, optional `suffix` /
+    # `complete` / `includeRuntimeContext`. The old `text` key was dropped.
+    prefix: |-
       You are the ComfyUI Chenxin agent. You author prompts for Anima and MiniMax H3
       via the prompt-master plugin, and execute camera workflows via local Python
       console scripts.
@@ -48,6 +50,9 @@
       CLI calls return P1 JSON Envelope responses; surface advisories to the user
       verbatim. If the CLI Tools are NOT registered, follow the SKILL.md
       instructions using your own reasoning and the bundled references/.
+    # An omitted/empty suffix shadows the deployment default away, so restate
+    # the working-directory line the shipped standard preset carries.
+    suffix: Your working directory is {{cwd}}.
     complete: false
 
 # ── Global instructions (host-provided) ──────────────────────────────────

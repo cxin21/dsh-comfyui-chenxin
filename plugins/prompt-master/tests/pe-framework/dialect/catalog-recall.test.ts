@@ -28,6 +28,33 @@ describe('catalogCandidatesForText', () => {
     expect(catalogCandidatesForText('雨夜的街道', { search })).toEqual([])
   })
 
+  it('2026-09-12 中文概念桥接：CJK 输入经桥接表转 EN 后走同一 exact 召回（长键优先防重叠：雨夜≠雨+夜）', () => {
+    const search = mockSearch({
+      rain: { match_type: 'canonical', prompt_form: 'rain' },
+      night: { match_type: 'canonical', prompt_form: 'night' },
+      street: { match_type: 'canonical', prompt_form: 'street' },
+    })
+    const out = catalogCandidatesForText('雨夜的街道', { search })
+    expect(out).toEqual(['rain', 'night', 'street'])
+  })
+
+  it('桥接只收 canonical/alias：fuzzy/miss 与拉丁路径同规则，不引入编造', () => {
+    const search = mockSearch({
+      rain: { match_type: 'fuzzy', prompt_form: 'rainy day' },
+      night: { match_type: 'miss' },
+    })
+    expect(catalogCandidatesForText('雨夜', { search })).toEqual([])
+  })
+
+  it('桥接与拉丁召回去重共享上限（拉丁已收集的规范形式不重复注入）', () => {
+    const search = mockSearch({
+      dancing: { match_type: 'canonical', prompt_form: 'dancing' },
+      sword: { match_type: 'canonical', prompt_form: 'sword' },
+    })
+    const out = catalogCandidatesForText('dancing girl 舞剑', { search })
+    expect(out).toEqual(['dancing', 'sword']) // dancing 来自拉丁 1-gram，桥接的 dancing 被去重
+  })
+
   it('fuzzy 与 miss 不注入（只收 canonical/alias）', () => {
     const search = mockSearch({
       rain: { match_type: 'fuzzy', prompt_form: 'rainy day' },

@@ -101,6 +101,29 @@ export function isKnownCardId(field: ArtDirectionField, id: string): boolean {
   return ALL_ART_DIRECTION[field].some((card) => card.id === id)
 }
 
+/** 按 字段+id 取卡片（engine buildUser 注入「调用方指定卡」块用）。 */
+export function artDirectionCardOf(field: ArtDirectionField, id: string): ArtDirectionCard | undefined {
+  return ALL_ART_DIRECTION[field].find((card) => card.id === id)
+}
+
+/**
+ * 校验调用方显式指定的 art_direction（prompt_author.art_direction）：
+ * 字段必须属于五类之一，id 必须属于该字段卡组。返回 null=合法；否则返回可操作的错误消息
+ * （含该字段全部合法 id，调用方 fail-fast 抛出，不烧 LLM）。
+ */
+export function validateArtDirectionSpec(spec: Record<string, string>): string | null {
+  for (const [field, id] of Object.entries(spec)) {
+    if (!(field in ALL_ART_DIRECTION)) {
+      return `art_direction 字段无效: ${String(field)}（合法字段: perspective/composition/lighting/color/motion）`
+    }
+    const f = field as ArtDirectionField
+    if (typeof id !== 'string' || !isKnownCardId(f, id)) {
+      return `art_direction.${field} 无效卡片 id: ${String(id)}（该字段合法 id: ${ALL_ART_DIRECTION[f].map((c) => c.id).join(', ')}）`
+    }
+  }
+  return null
+}
+
 /** 卡片清单菜单（engine buildUser 注入 user 段）：id+name+tags，供 LLM 先选卡、再按组合拳扩写。 */
 export function buildArtDirectionMenu(): string {
   const lines: string[] = [

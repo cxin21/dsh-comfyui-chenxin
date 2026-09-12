@@ -39,6 +39,12 @@ export interface CompileAnimaOptions {
    *  false/缺省=条件纳入：narrative 通过确定性 NL 质量检查（checkNarrativeQuality：2-4 句英文、
    *  非 tag 罗列）才作为 NL 场景块进 positive，否则排除 + `narrative_excluded:<原因>` advisory */
   allowNarrative?: boolean
+  /** P2'（2026-09-12 DanbooruSearch 式证据流）：true = 内容槽（appearance/clothing/pose_action/
+   *  scene/detail_mood）的 miss 片段落不到 exact 形式 → 删除该 tag（概念由 narrative 承载，
+   *  advisory `catalog_miss_dropped:*`）。身份/结构槽（count_gender/character/artist/camera/
+   *  expression）与 CJK 片段永不删。缺省 false = 历史行为（miss 原文保留，交由 judge/修复轮）。
+   *  生产管线（registerAnimaDialect.compile）显式开启；单测/直调缺省关闭。 */
+  dropUnresolvedMiss?: boolean
 }
 
 export interface CompileAnimaResult {
@@ -385,8 +391,8 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM。
   // R7-T2：catalogMs 计时窗口扩展到含第二轮 narrative 去重的整个 audit 后处理阶段（纯可观测）
   const tCatalog0 = performance.now()
-  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search, allowNarrative: opts?.allowNarrative })
-  if (subst.corrections > 0) {
+  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search, allowNarrative: opts?.allowNarrative, dropUnresolvedMiss: opts?.dropUnresolvedMiss === true })
+  if (subst.corrections > 0 || subst.dropped.length > 0) {
     positiveText = subst.positive
     // segments 投影同步（文本级替换；citation 保持 miss 溯源）
     for (const pair of subst.replacements) {
@@ -399,6 +405,17 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       // 被替换片段的 miss assumption 撤除
       const aidx = assumptions.indexOf(`catalog_miss:${from}`)
       if (aidx >= 0) assumptions.splice(aidx, 1)
+    }
+    // P2'：被丢弃 tag 的段清空 + miss assumption 撤除（概念已由 narrative 承载）
+    for (const piece of subst.dropped) {
+      for (const seg of segments) {
+        if (seg.channel === 'positive' && seg.text === piece) seg.text = ''
+      }
+      const aidx = assumptions.indexOf(`catalog_miss:${piece}`)
+      if (aidx >= 0) assumptions.splice(aidx, 1)
+    }
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (segments[i].channel === 'positive' && segments[i].text === '') segments.splice(i, 1)
     }
   }
   let gates = subst.gates
@@ -417,7 +434,10 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       for (const t of tokensOf(seg.text)) covered.add(t)
     }
     for (const key of SLOT_ORDER) {
-      for (const raw of slotOf(slots, key) ?? []) for (const t of tokensOf(String(raw))) covered.add(t)
+      // 2026-09-12 P2' 修正：覆盖集用 subst.effectiveSlots（替换/丢弃后视图）——被丢弃 tag 的
+      // 词元不得进入覆盖集，否则携带该概念的 narrative 句会被误判「已覆盖」而移除，
+      // 导致概念从 tag 列表和 narrative 同时消失
+      for (const raw of slotOf(subst.effectiveSlots ?? slots, key) ?? []) for (const t of tokensOf(String(raw))) covered.add(t)
     }
     const texts = narrSegs.map((s) => s.text)
     const kept = dedupNarrativeSegments(texts, covered)
@@ -469,6 +489,9 @@ export const LIGHTING_BAN = [
   'light rays', 'volumetric light', 'spotlight', 'candlelight',
   'warm tone', 'cool tone', 'sepia',
   'light particles', 'backlit',
+  // 2026-09-12（真实出稿复盘）：moonlit 漏网进 narrative，judge 复审才以 minor 抓到——
+  // 补光效派生词（-lit/-lighted 形），与 -light/-lighting 同语义
+  'moonlit', 'sunlit', 'candlelit', 'daylight', 'firelit', 'moonlit night',
   // 注：去掉了 'neon light'/'streetlights' —— 它们是场景光源对象（霓虹灯/街灯是画面内容），
   // 不是光照渲染 LoRA 触发词；保留的是 true light-effect 词（Anima3 §2 语义）
 ]
@@ -672,7 +695,9 @@ export interface CanonicalSubstitutionResult {
   corrections: number
   /** 替换对（`原片段→新tag`） */
   replacements: string[]
-  /** advisory（`canonical_substitution:原片段→新tag`） */
+  /** P2'：被丢弃的 miss 槽位 tag（内容槽落不到 exact 形式 → 移除，概念由 narrative 承载） */
+  dropped: string[]
+  /** advisory（`canonical_substitution:原片段→新tag`；含 `catalog_miss_dropped:片段`） */
   advisories: string[]
   /** 替换后重跑的 audit gates（无替换时为当次 audit gates） */
   gates: AuditGate[]
@@ -696,14 +721,18 @@ export function applyCanonicalSubstitutions(
   const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
   const variant = opts?.variant ?? 'base'
   const replacements: string[] = []
+  const dropped: string[] = []
   const advisories: string[] = []
   // slots 在场时只采纳「槽位原文 tag」片段 —— narrative 散文句/派生片段不做标签替换（防止 prose 变异）
-  const slotTags = new Set<string>()
+  const slotTags = new Map<string, string>() // tag → 槽位名
   if (opts?.slots) {
     for (const key of SLOT_ORDER) {
-      for (const raw of slotOf(opts.slots, key) ?? []) slotTags.add(String(raw))
+      for (const raw of slotOf(opts.slots, key) ?? []) slotTags.set(String(raw), key)
     }
   }
+  // P2'（DanbooruSearch 式证据流）：可丢弃槽位——内容型槽的 miss 片段落不到 exact 形式 →
+  // 从 tag 列表删除（概念由 narrative 承载，tag 列表只留已验证形式）。身份/结构槽永不丢。
+  const DROPPABLE_SLOTS = new Set(['appearance', 'clothing', 'pose_action', 'scene', 'detail_mood'])
   const pieces = positive.split(', ').map((s) => s.trim()).filter(Boolean)
   const seen = new Set<string>()
   const out = pieces.map((piece) => {
@@ -721,6 +750,24 @@ export function applyCanonicalSubstitutions(
       const pieceTokens = new Set(normalizeTag(piece).split(' ').filter(Boolean))
       const candTokens = normalizeTag(cand).split(' ').filter(Boolean)
       if (!candTokens.length || !candTokens.every((t) => pieceTokens.has(t))) continue
+      // 2026-09-12 P1（真实出稿两轮 judge blocker 的机械根源）：归化禁丢中心名词、禁词序重排——
+      // 「flowing sleeves→flowing」（丢中心名词 sleeves，剩孤立修饰词）与「flowing hair→hair flowing」
+      // （重排后 miss）都是替换本身制造了新的无证据 tag。规则：①候选末词必须保留片段末词
+      // （中心名词，如 beside a moon gate→moon gate ✓、flowing sleeves→flowing ✗）；
+      // ②多词候选必须保持片段词序（子序列匹配，如 flowing hair→hair flowing ✗）。
+      // 落不到 → 保留原文（交由 judge findings / 修复轮处理）。
+      const pieceSeq = normalizeTag(piece).split(' ').filter(Boolean)
+      if (candTokens.length > 1) {
+        let idx = 0
+        let inOrder = true
+        for (const t of candTokens) {
+          const found = pieceSeq.indexOf(t, idx)
+          if (found < 0) { inOrder = false; break }
+          idx = found + 1
+        }
+        if (!inOrder) continue
+      }
+      if (pieceSeq.length > 0 && candTokens[candTokens.length - 1] !== pieceSeq[pieceSeq.length - 1]) continue
       const verified = search(cand)[0]
       if (verified && verified.match_type && GROUNDED.has(verified.match_type)) {
         const to = verified.prompt_form ?? cand
@@ -729,28 +776,43 @@ export function applyCanonicalSubstitutions(
         return to
       }
     }
+    // P2'：可丢弃内容槽 miss 且无 exact 落点 → 删除该 tag（advisory 可观测）。
+    // 仅当 dropUnresolvedMiss 开启（生产管线）。
+    // 例外①：lighting_term_banned 词（rim light 等）不 drop——该 gate 驱动修复闭环，先删后审会绕过它；
+    // 例外②：CJK 片段——cjk_in_positive 是 critical gate，靠它触发修复轮回炉（LLM 重写语言）。
+    const slotKey = opts?.slots ? slotTags.get(piece) : undefined
+    const bannedLight = LIGHTING_BAN.some((b) => piece.toLowerCase().includes(b))
+    if (opts?.dropUnresolvedMiss === true && slotKey && DROPPABLE_SLOTS.has(slotKey) && !bannedLight && !/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(piece)) {
+      dropped.push(piece)
+      advisories.push(`catalog_miss_dropped:${piece}`)
+      return ''
+    }
     return piece
   })
-  if (!replacements.length) {
-    return { positive, corrections: 0, replacements, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search, allowNarrative: opts?.allowNarrative }), effectiveSlots: opts?.slots }
+  if (!replacements.length && !dropped.length) {
+    return { positive, corrections: 0, replacements, dropped, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search, allowNarrative: opts?.allowNarrative }), effectiveSlots: opts?.slots }
   }
-  const newPositive = out.join(', ')
-  // 重跑 audit 用替换后的槽位视图（原文片段已换成 canonical tag → 对应 miss gate 消失）
+  const newPositive = out.filter((s) => s !== '').join(', ')
+  // 重跑 audit 用替换/丢弃后的槽位视图（原文片段已换 canonical 或移除 → 对应 miss gate 消失）
   let effectiveSlots = opts?.slots
   if (opts?.slots) {
     const fromSet = new Set(replacements.map((p) => p.slice(0, p.lastIndexOf('→'))))
     const toMap = new Map(replacements.map((p) => [p.slice(0, p.lastIndexOf('→')), p.slice(p.lastIndexOf('→') + 1)] as const))
+    const droppedSet = new Set(dropped)
     effectiveSlots = { ...opts.slots }
     for (const key of SLOT_ORDER) {
       const tags = slotOf(opts.slots, key)
-      if (!tags?.some((t) => fromSet.has(String(t)))) continue
-      ;(effectiveSlots as Record<string, unknown>)[key] = tags.map((t) => toMap.get(String(t)) ?? String(t))
+      if (!tags) continue
+      let mapped = tags.map((t) => toMap.get(String(t)) ?? String(t))
+      if (droppedSet.size) mapped = mapped.filter((t) => !droppedSet.has(t))
+      ;(effectiveSlots as Record<string, unknown>)[key] = mapped
     }
   }
   return {
     positive: newPositive,
     corrections: replacements.length,
     replacements,
+    dropped,
     advisories,
     gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, search, allowNarrative: opts?.allowNarrative }),
     effectiveSlots,
@@ -808,7 +870,9 @@ export function registerAnimaDialect(): void {
     },
     compile: (slots, opts) => {
       const variant = (opts.variant as 'base' | 'aesthetic' | 'turbo') ?? 'base'
-      return compileAnima(slots as AnimaSlots, { variant })
+      // 2026-09-12 P2'：生产管线开启证据流丢弃（内容槽 miss 落不到 exact → 删除）；
+      // 单测/直调缺省关闭（保持历史「原文保留」语义，见 anima-f1-dedup 等 nullSearch 约定）
+      return compileAnima(slots as AnimaSlots, { variant, dropUnresolvedMiss: true })
     },
     audit: (compiled, ctx) => {
       const variant = (ctx.variant as 'base' | 'aesthetic' | 'turbo') ?? 'base'

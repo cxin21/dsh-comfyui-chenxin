@@ -49,6 +49,30 @@ describe('runEnrich 正常路径', () => {
   })
 })
 
+/* 规格 4（2026-09-12 P1）：调用方显式指定艺术指导卡（prompt_author.art_direction → runEnrich.artDirection） */
+describe('runEnrich artDirection 指定卡注入', () => {
+  it('anima + artDirection → user 段含「调用方已指定」硬要求块（id/name/tags）；h3 目标不注入', async () => {
+    captured.length = 0
+    const fenced = '```json\n' + validBriefJson() + '\n```'
+    const res = await runEnrich({ target: 'anima', userInput: '古风美女舞剑', provider: capturing(providerReturning(fenced)), artDirection: { motion: 'weapon_trail', perspective: 'three_quarter_view' } })
+    expect('brief' in res).toBe(true)
+    const user = captured[0].user
+    expect(user).toContain('调用方已指定的艺术指导卡片')
+    expect(user).toContain('- motion=weapon_trail（武器轨迹）: sword trail, gleaming blade, weapon arc')
+    expect(user).toContain('- perspective=three_quarter_view（三分之二视角）')
+    captured.length = 0
+    await runEnrich({ target: 'h3', userInput: 'x', provider: capturing(providerReturning(fenced)), artDirection: { motion: 'weapon_trail' } })
+    expect(captured[0].user).not.toContain('调用方已指定的艺术指导卡片')
+  })
+
+  it('未指定 artDirection → user 段不含指定卡块（仅卡片菜单）', async () => {
+    captured.length = 0
+    await runEnrich({ target: 'anima', userInput: 'x', provider: capturing(providerReturning(validBriefJson())) })
+    expect(captured[0].user).not.toContain('调用方已指定的艺术指导卡片')
+    expect(captured[0].user).toContain('艺术指导卡片菜单')
+  })
+})
+
 /* 规格 2：三类故障 → skipped，永不抛出 */
 describe('runEnrich 降级', () => {
   it('provider 抛错 → skipped enrich_llm_error', async () => {

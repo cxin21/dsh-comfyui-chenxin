@@ -11,4 +11,7 @@ export interface DialectRubric {
   severityRules: string   // blocker/major/minor 判定标准文本
   evidenceTools: ReadonlyArray<'catalog' | 'tokenizer' | 'aesthetics'>
   passThreshold: number   // 0-100；≥ 此值且无 blocker 才 verdict=pass
+  /** 2026-09-12：方言评审边界（拼接进 persona 尾部）——声明修复层能力边界，
+   *  约束 findings 只出「修复层可执行」的操作（如 anima：只能改槽位与 narrative） */
+  boundary?: string
 }

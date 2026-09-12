@@ -14,7 +14,7 @@ import { registerAuditTool } from '../tools/prompt-audit.js'
 import { registerFeedbackTool } from '../tools/prompt-feedback.js'
 import { setCustomProfileSource } from '../resolver/profiles/source.js'
 import { setBuiltinFilter } from '../resolver/profiles/index.js'
-import { registerOverridesNamespace } from '../pe-framework/profiles/storage-v2.js'
+import { registerOverridesNamespace, registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js'
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
 import { createDefaultIntentProvider } from '../pe-framework/intent/index.js'
@@ -30,7 +30,8 @@ export function apply(ctx: Context, config: ConfigShape) {
   setPresetRoot(config.presetRoot)
 
   const ns = settingsNamespace('prompt-master-custom-profiles')
-  const scope: SettingsScope<{ customProfiles: Record<string, string> }> = ctx.settings.register(ns, z.object({
+  // register-or-reuse：同进程重复 mount（失败重试 / standing 重建）时复用既有注册，不让 mount 失败
+  const scope: SettingsScope<{ customProfiles: Record<string, string> }> = registerOrReuseNamespace(ctx, ns, z.object({
     customProfiles: z.dict(z.string(), z.string()).default({}),
   }))
 

@@ -12,7 +12,7 @@ import { detectLanguage } from '../dialect/h3.js'
 import { validateBrief } from './brief.js'
 import type { EnrichedBrief } from './brief.js'
 import { buildEnrichPersona } from './personas.js'
-import { buildArtDirectionMenu } from './art-direction.js'
+import { buildArtDirectionMenu, artDirectionCardOf, type ArtDirectionField } from './art-direction.js'
 
 export type EnrichTarget = 'anima' | 'h3'
 
@@ -42,7 +42,7 @@ function buildSchema(target: EnrichTarget): string {
 }`
 }
 
-function buildUser(input: { target: EnrichTarget; userInput: string }): string {
+function buildUser(input: { target: EnrichTarget; userInput: string; artDirection?: Record<string, string> }): string {
   const lines = [
     `target=${input.target}`,
     '',
@@ -52,9 +52,23 @@ function buildUser(input: { target: EnrichTarget; userInput: string }): string {
     // Round7 T3：与 persona 的语义级保留规则同步——字面「原样保留，不改写」会让中文 user 条目穿透英文 brief
     '要求：source=user 仅用于用户显式指定的内容（语义与指代保留、不得增删要素，语言必须改写为 outputLang 对应语言）；其余全部标 source=enriched。',
     '每维度 ≤6 条、单条 ≤200 字符。outputLang 按目标方言给出（anima 恒为 en）。',
+    // 2026-09-12 真实样本：enrich 子代理曾试图调用 prompt_author（套娃）——one-shot 禁工具
+    '本任务为 one-shot 结构产出：不要调用任何工具，输出仅限要求的 JSON。',
   ]
   // Round8 T3Q：anima user 段附艺术指导卡片清单（id+name+tags），供 LLM 先选卡、再按组合拳扩写
   if (input.target === 'anima') lines.push('', buildArtDirectionMenu())
+  // 2026-09-12 P1：调用方显式指定卡（prompt_author.art_direction）——必须回写 brief.artDirection 并按组合拳扩写
+  const specified = Object.entries(input.artDirection ?? {})
+  if (input.target === 'anima' && specified.length > 0) {
+    lines.push(
+      '',
+      '调用方已指定的艺术指导卡片（硬要求：把每个卡片 id 原样写入 brief.artDirection 对应字段，并把该卡片的配套 tag 融入对应维度的扩写；不得替换为其他卡片）：',
+    )
+    for (const [field, id] of specified) {
+      const card = artDirectionCardOf(field as ArtDirectionField, id)
+      if (card) lines.push(`- ${field}=${card.id}（${card.name}）: ${card.tags.join(', ')}`)
+    }
+  }
   return lines.join('\n')
 }
 
@@ -85,12 +99,14 @@ export async function runEnrich(input: {
   /** 显式指定优先（仅 h3 有效；anima 恒锁 en） */
   outputLang?: EnrichedBrief['outputLang']
   provider: CriticProvider
+  /** 2026-09-12 P1：调用方显式指定的艺术指导卡（prompt_author.art_direction；仅 anima 消费，h3 忽略） */
+  artDirection?: Record<string, string>
 }): Promise<EnrichResult> {
   try {
     const raw = await input.provider({
       persona: buildEnrichPersona(input.target),
       schema: buildSchema(input.target),
-      user: buildUser(input),
+      user: buildUser({ target: input.target, userInput: input.userInput, artDirection: input.artDirection }),
     })
     let parsed: unknown
     try {

@@ -84,7 +84,9 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
  * 生产 CriticProvider 装配 = createSubagentCriticProvider(ownerCtx)。
  * T3 carry：ownerCtx 必须含 agent 供 parent 归属；缺 agent / ctx.subagents 未注册时
  * provider 内部抛错 → 管线层 skipped 降级（可接受，不在此兜底）。
+ * 2026-09-12 P0：opts.parent 透传（工具层从 exec.agent 线穿调用方 Agent，缺 parent 时
+ * host 装配子代理直接 TypeError——详见 docs/2026-09-12-camera-language-research.md §2）。
  */
-export function createProductionCriticProvider(ownerCtx: any, opts?: { timeoutMs?: number }): CriticProvider {
+export function createProductionCriticProvider(ownerCtx: any, opts?: { timeoutMs?: number; parent?: unknown }): CriticProvider {
   return createSubagentCriticProvider(ownerCtx, opts)
 }

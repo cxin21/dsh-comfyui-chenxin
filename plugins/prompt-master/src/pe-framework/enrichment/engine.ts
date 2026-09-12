@@ -89,7 +89,7 @@ function buildExpansionPersona(): string {
     `光线: ${CINEMA_LEXICON.lighting.join('/')}`,
     `色彩分级: ${CINEMA_LEXICON.grading.join('/')}`,
     `构图: ${CINEMA_LEXICON.composition.join('/')}`,
-    '输出契约：只输出一个增量 JSON patch（不要代码块、不要解释），形状：',
+    '输出契约（硬性）：本任务为 one-shot 结构产出，不要调用任何工具；只输出一个增量 JSON patch——裸 JSON（不要代码块、不要解释）。形状：',
     '{"set": {...要覆盖的蓝图字段...}, "additions": {...要追加的数组字段...}, "expansions": ["改写记录1", ...]}',
   ].join('\n')
 }

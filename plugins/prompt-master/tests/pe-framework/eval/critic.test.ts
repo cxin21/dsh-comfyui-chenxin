@@ -559,12 +559,14 @@ describe('A1 证据回查复核（spec §10.1-A1）', () => {
       }),
       dispose,
     })
-    const ownerCtx: any = { subagents: { start } }
+    // 2026-09-12 P0：真实装配要求可解析的 parent（host 装配子代理读 parent.options），mock 同步补 agent
+    const ownerCtx: any = { agent: { id: 'owner-agent' }, subagents: { start } }
     const provider = createSubagentCriticProvider(ownerCtx)
     const out = await provider({ persona: 'P', schema: 'S', user: 'U' })
     expect(start).toHaveBeenCalledTimes(1)
     const [providerName, req] = start.mock.calls[0]
     expect(providerName).toBe('spawn')
+    expect(req.parent).toEqual({ id: 'owner-agent' })
     expect(JSON.stringify(req.prompt)).toContain('P')
     expect(JSON.stringify(req.prompt)).toContain('S')
     expect(JSON.stringify(req.prompt)).toContain('U')
@@ -572,6 +574,26 @@ describe('A1 证据回查复核（spec §10.1-A1）', () => {
     // provider 返回原始文本（含 fence）；fence 剥离是 judgeReview 的职责
     const parsed = JSON.parse(out.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim())
     expect(parsed).toMatchObject({ verdict: 'pass' })
+  })
+
+  it('装配（2026-09-12 P0）：opts.parent 优先于 ownerCtx.agent 且必须进 start payload', async () => {
+    const start = vi.fn().mockResolvedValue({
+      id: 'run-p',
+      result: Promise.resolve({ output: [{ type: 'text', text: ok('pass') }], stopReason: 'completed' }),
+      dispose: vi.fn(),
+    })
+    const ownerCtx: any = { agent: { id: 'ctx-agent' }, subagents: { start } }
+    const provider = createSubagentCriticProvider(ownerCtx, { parent: { id: 'exec-agent' } })
+    await provider({ persona: 'P', schema: 'S', user: 'U' })
+    expect(start.mock.calls[0][1].parent).toEqual({ id: 'exec-agent' })
+  })
+
+  it('装配（2026-09-12 P0）：opts.parent 与 ownerCtx.agent 均缺 → 抛可操作错误（judgeReview catch 后 skipped），不再落到 host TypeError', async () => {
+    const start = vi.fn()
+    const ownerCtx: any = { subagents: { start } }
+    const provider = createSubagentCriticProvider(ownerCtx)
+    await expect(provider({ persona: 'P', schema: 'S', user: 'U' })).rejects.toThrow(/需要调用 Agent 上下文/)
+    expect(start).not.toHaveBeenCalled()
   })
 
   it('装配：ownerCtx 不可用 → 返回的 provider 被调用时抛错（由 judgeReview catch 后 skipped）', async () => {

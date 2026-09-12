@@ -386,4 +386,74 @@ describe('Round8 T3Q artDirection 透传与向后兼容', () => {
   })
 })
 
+/* 2026-09-12 P1（docs/2026-09-12-camera-language-research.md §6）：调用方显式指定艺术指导卡（art_direction 参数） */
+describe('art_direction 调用方指定卡', () => {
+  /** 捕获 enrich 收到的 user 段（断言指定卡硬要求块被注入） */
+  function enrichCapturing(responses: string[]) {
+    const seen: { persona: string; schema: string; user: string }[] = []
+    const fn = (async (req: { persona: string; schema: string; user: string }) => {
+      seen.push(req)
+      const next = responses[Math.min(seen.length - 1, responses.length - 1)]
+      if (next === 'THROW') throw new Error('enrich llm down')
+      return next
+    }) as unknown as CriticProvider & { seen: typeof seen }
+    fn.seen = seen
+    return fn
+  }
+
+  it('合法 art_direction → enrich user 含指定卡硬要求块；brief 回写卡片 id；无 art_direction_ignored_* advisory', async () => {
+    const enrich = enrichCapturing([briefJson({ artDirection: { motion: 'weapon_trail', perspective: 'three_quarter_view' } })])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
+      target: 'anima', input: '古风美女舞剑', enrich: true, judge_mode: 'off',
+      art_direction: { motion: 'weapon_trail', perspective: 'three_quarter_view' },
+    })))
+    expect(raw.ok).toBe(true)
+    expect(enrich.seen[0].user).toContain('调用方已指定的艺术指导卡片')
+    expect(enrich.seen[0].user).toContain('- motion=weapon_trail（武器轨迹）: sword trail, gleaming blade, weapon arc')
+    expect(enrich.seen[0].user).toContain('- perspective=three_quarter_view（三分之二视角）')
+    expect(raw.enrichment.brief.artDirection).toEqual({ motion: 'weapon_trail', perspective: 'three_quarter_view' })
+    expect(raw.advisories.filter((a: string) => a.startsWith('art_direction_ignored'))).toEqual([])
+  })
+
+  it('无效卡片 id → execute fail-fast 抛错（不烧 LLM）', async () => {
+    const enrich = enrichCapturing([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    await expect(runTool(stubCtx(), tool(), {
+      target: 'anima', input: 'x', enrich: true, judge_mode: 'off',
+      art_direction: { motion: 'no_such_card' },
+    })).rejects.toThrow(/无效卡片 id/)
+    expect(enrich.seen).toHaveLength(0)
+  })
+
+  it('enrich:false + art_direction → advisory art_direction_ignored_enrich_off，enrich 零调用，照常出稿', async () => {
+    const enrich = enrichCapturing([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
+      target: 'anima', input: 'cat portrait', enrich: false, judge_mode: 'off',
+      art_direction: { motion: 'weapon_trail' },
+    })))
+    expect(raw.ok).toBe(true)
+    expect(raw.advisories).toContain('art_direction_ignored_enrich_off')
+    expect(enrich.seen).toHaveLength(0)
+    expect(String(raw.result.positive)).toContain('1girl')
+  })
+
+  it('target=h3 + art_direction → advisory art_direction_ignored_h3（enrich 正常跑但不注入卡片块）', async () => {
+    const enrich = enrichCapturing([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => ({ shots: { duration_seconds: 5, references: [], shots: [{ what: 'x' }] } }) as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
+      target: 'h3', input: '一段舞蹈', enrich: true, judge_mode: 'off',
+      art_direction: { motion: 'weapon_trail' },
+    })))
+    expect(raw.ok).toBe(true)
+    expect(raw.advisories).toContain('art_direction_ignored_h3')
+    expect(enrich.seen[0].user).not.toContain('调用方已指定的艺术指导卡片')
+  })
+})
+
 afterAll(() => { setAuthorIntentProvider(null); setAuthorEnrichProvider(null); setAuthorJudgeDeps(null); setAuthorFeedbackDbPath(null); closeCatalog() })

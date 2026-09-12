@@ -127,3 +127,67 @@ describe('F2: catalog_miss 的 canonical/alias 候选确定性自动采纳', () 
     expect(r.substitutions).toEqual(['beside a moon gate→moon gate'])
   })
 })
+
+/* P1/P2'（2026-09-12，docs/2026-09-12-prompt-rewrite-and-architecture.md）：真实样本回归——
+ * 两轮 judge blocker 的机械根源 = 归化产废词（flowing sleeves→flowing / flowing hair→hair flowing）；
+ * P2' = 内容槽 miss 落不到 exact → 删除（DanbooruSearch 式：tag 列表只留已验证形式） */
+describe('P1 归化守卫 / P2' + "' 证据流丢弃", () => {
+  it('P1 守卫①：禁丢中心名词（flowing sleeves 不得归化为孤立词 flowing）', () => {
+    const search = mockSearch({
+      'flowing sleeves': [hit('fuzzy', 'flowing')],
+      flowing: [hit('canonical', 'flowing')],
+    })
+    const slots = { count_gender: ['1girl'], clothing: ['flowing sleeves'] }
+    const res = applyCanonicalSubstitutions('masterpiece, 1girl, flowing sleeves', '', { variant: 'base', slots, search })
+    expect(res.corrections).toBe(0)
+    expect(res.dropped).toEqual([])
+    expect(res.positive).toContain('flowing sleeves')
+  })
+
+  it('P1 守卫②：禁词序重排（flowing hair 不得归化为 hair flowing）', () => {
+    const search = mockSearch({
+      'flowing hair': [hit('fuzzy', 'hair flowing')],
+      'hair flowing': [hit('canonical', 'hair flowing')],
+    })
+    const slots = { count_gender: ['1girl'], appearance: ['flowing hair'] }
+    const res = applyCanonicalSubstitutions('masterpiece, 1girl, flowing hair', '', { variant: 'base', slots, search })
+    expect(res.corrections).toBe(0)
+    expect(res.positive).toContain('flowing hair')
+  })
+
+  it("P2'：可丢弃内容槽 miss 且无 exact 落点 → 删除 + advisory + 槽位视图同步；受保护槽（count_gender/character）保留", () => {
+    const search = mockSearch({
+      '1girl': [hit('canonical', '1girl')],
+      'zzzzzzzzq': [hit('fuzzy', 'qqqqqqzzz')],
+      'qqqqqqzzz': [hit('fuzzy', 'zzzzzzqqq')],
+    })
+    const slots = { count_gender: ['1girl'], character: ['zzzzzzzzq'], scene: ['flowing sleeves'] }
+    // P2' 需显式开启（生产管线 registerAnimaDialect.compile 传 true；缺省关，保持历史语义）
+    const res = applyCanonicalSubstitutions('masterpiece, 1girl, zzzzzzzzq, flowing sleeves', '', { variant: 'base', slots, search, dropUnresolvedMiss: true })
+    // scene ∈ 可丢弃 → 删；character ∈ 受保护 → 留
+    expect(res.dropped).toEqual(['flowing sleeves'])
+    expect(res.advisories).toContain('catalog_miss_dropped:flowing sleeves')
+    expect(res.positive).toContain('zzzzzzzzq')
+    expect(res.positive).not.toContain('flowing sleeves')
+    expect(res.effectiveSlots?.scene).toEqual([])
+    expect(res.effectiveSlots?.character).toEqual(['zzzzzzzzq'])
+  })
+
+  it("P2' 联动：被丢弃 tag 的词元不得压制 narrative 去重覆盖集（概念必须留在 narrative 里）", () => {
+    const search = mockSearch({
+      '1girl': [hit('canonical', '1girl')],
+      'zzzzzzzzq': [hit('fuzzy', 'qqqqqqzzz')],
+      'qqqqqqzzz': [hit('fuzzy', 'zzzzzzqqq')],
+    })
+    const slots = {
+      count_gender: ['1girl'],
+      scene: ['zzzzzzzzq'],
+      narrative: 'The zzzzzzzzq tower glows under the moon. A lantern drifts across the stone floor.',
+    }
+    const r = compileAnima(slots, { variant: 'base', search, dropUnresolvedMiss: true, allowNarrative: true })
+    // tag 删了，但 narrative 两句都必须原样保留（丢 tag 的词元不得进入去重覆盖集）
+    expect(r.positive).toContain('The zzzzzzzzq tower glows under the moon')
+    expect(r.positive).toContain('A lantern drifts across the stone floor')
+    expect(r.segments.some((s) => s.origin === 'narrative' && s.text.includes('zzzzzzzzq'))).toBe(true)
+  })
+})

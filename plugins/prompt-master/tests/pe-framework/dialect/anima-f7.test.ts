@@ -61,7 +61,9 @@ describe('F7: tag_budget_exceeded 软预算闸门', () => {
   it('规格4 stage.ok 语义不受影响：runStage 超预算（important 非 critical）→ ok=true', () => {
     // 40 appearance + 1 count_gender = 41 槽位 tag + 4 前缀 + safe = 46 段 > 40 → gate 触发；
     // runStage ok 只认 critical（runStage.ts:66）→ 软预算不翻 ok（闭环联动锚定，模式同 F4）
-    const slots = { count_gender: ['1girl'], appearance: Array.from({ length: 40 }, (_, i) => padTag(i, 20)) }
+    // 2026-09-12 P2'：夹具改用 40 个真 canonical danbooru tag——假 tag 会被证据流删除，
+    // 预算 gate 不再触发（drop 行为只对生产 compile 开启，runStage 走生产路径）
+    const slots = { count_gender: ['1girl'], appearance: CANONICAL_APPEARANCE_TAGS.slice(0, 40) }
     const stage = runStage({ target: 'anima', slots, variant: 'base', judge: 'off' })
     const gate = stage.gates.find((g) => g.rule === 'tag_budget_exceeded')
     expect(gate).toBeDefined()
@@ -69,3 +71,13 @@ describe('F7: tag_budget_exceeded 软预算闸门', () => {
     expect(stage.ok).toBe(true)
   })
 })
+
+/** 40 个 catalog 已验证的 canonical danbooru 外观 tag（P2' 夹具：grounded tag 不受证据流影响） */
+const CANONICAL_APPEARANCE_TAGS = [
+  'long hair', 'short hair', 'twintails', 'ponytail', 'braid', 'bob cut', 'ahoge', 'hime cut',
+  'blunt bangs', 'side ponytail', 'black hair', 'brown hair', 'blue hair', 'red hair', 'white hair',
+  'purple hair', 'pink hair', 'grey hair', 'green hair', 'blonde hair', 'blue eyes', 'red eyes',
+  'green eyes', 'brown eyes', 'purple eyes', 'gold eyes', 'heterochromia', 'glasses', 'blush',
+  'mole', 'freckles', 'hair ornament', 'hair ribbon', 'hairclip', 'headband', 'hair bobbles',
+  'cone hairbun', 'double bun', 'hair flower', 'parted bangs',
+]

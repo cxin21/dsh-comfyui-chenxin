@@ -110,8 +110,9 @@ describe('规格3 fast + needs_revision 终态 → 工具层 max-2 闭环消费 
     expect(raw.judge).toMatchObject({ verdict: 'needs_revision' })
     expect(raw.judgeFeedback).toEqual(['[major] 把质量词前移到主体前'])
     expect(raw.observability.corrections).toBe(2)
-    // loop_exhausted 语义不变：无规则 critical → 不置 loop_exhausted
-    expect(raw.advisories).not.toContain('loop_exhausted:true')
+    // 2026-09-12 P3：judge needs_revision 耗尽修正轮 → 必须浮出 loop_exhausted（此前静默交付，
+    // 下游误报「评审 pass」——真实样本 session 89a0dce0）
+    expect(raw.advisories).toContain('loop_exhausted:true')
   })
 })
 

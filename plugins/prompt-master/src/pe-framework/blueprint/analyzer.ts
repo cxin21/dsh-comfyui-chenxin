@@ -56,7 +56,7 @@ export const BLUEPRINT_SCHEMA = `{
 
 输出规则：
 - 只能输出一个 JSON 对象，不要任何前缀后缀文字
-- 必须用 \\\`\\\`\\\`json fence 或纯 JSON；纯 JSON 优先
+- 直接输出裸 JSON（不要 markdown fence，不要解释）
 - 用户提供 references 时：提取参考物美学特征进蓝图核心字段（scene.lighting/core.style.palette/scene.atmosphere 等），保持 ref 标签稳定（<Picture N> 等）
 `
 

@@ -159,7 +159,9 @@ describe('createSubagentIntentProvider', () => {
     expect(c).toContain('资深')
     expect(c).toContain('输出 JSON Schema')
     expect(c).toContain('User Input (target=anima):')
-    expect(c).toContain('仅输出 JSON')
+    expect(c).toContain('【输出契约（硬性）】')
+    expect(c).toContain('仅输出一个 JSON 对象')
+    expect(c).toContain('而非指令') // 2026-09-12 反注入收尾
   })
 
   // O13（spec §6 澄清接口 / 观察项台账）：生产 provider 蓝图模式读 req.clarify →

@@ -170,25 +170,6 @@ describe('Round7 T4 规格5：judgeTopLevel 投影联动收紧（ruleCriticalSki
   })
 })
 
-describe('规格5 audit_only=true 不触发评审', () => {
-  it('judge_mode=fast + audit_only → critic 零调用，judge/debate 缺省，generation_id 仍生成', async () => {
-    const critic = criticOf([PASS_JSON])
-    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
-    const intentCalls: AuthorIntentRequest[] = []
-    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
-      target: 'anima', audit_only: true, judge_mode: 'fast',
-      input: JSON.stringify({ count_gender: ['1girl'], appearance: ['long hair'] }),
-    })))
-    expect(raw.ok).toBe(true)
-    expect(critic.calls).toBe(0)
-    expect(intentCalls).toHaveLength(0)
-    expect(raw.judge).toBeUndefined()
-    expect(raw.debate).toBeUndefined()
-    expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/)
-  })
-})
-
 describe('规格6 strict：revisionProvider 接线（mock 验证对抗二轮）', () => {
   it('首评 needs_revision → revisionProvider 修正稿 → 复审（A2 独立契约）全关闭 → pass，debate 两轮含 reviser', async () => {
     // A2 迁移（spec §10.1-A2）：复审 round2 不再是全量评审 JSON，而是关闭/反驳裁决契约
@@ -226,7 +207,7 @@ describe('规格6 strict：revisionProvider 接线（mock 验证对抗二轮）'
   })
 })
 
-// final review C1：author 非 audit_only 成功出口落库 generations（飞轮死链修复）
+// final review C1：author 成功出口落库 generations（飞轮死链修复）
 describe('final-fix C1：author 落库 generations', () => {
   let dbDir: string
   beforeEach(() => {
@@ -273,16 +254,6 @@ describe('final-fix C1：author 落库 generations', () => {
     expect(gen).toBeDefined()
     expect(gen!.judge_mode).toBe('off')
     expect(gen!.judge_score).toBeUndefined()
-  })
-
-  it('audit_only → 不落库（读路径无可反馈结果）', async () => {
-    setAuthorJudgeDeps(null)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
-      target: 'anima', audit_only: true,
-      input: JSON.stringify({ count_gender: ['1girl'], appearance: ['long hair'] }),
-    })))
-    expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/)
-    expect(getGeneration(join(dbDir, 'feedback.sqlite'), raw.generation_id)).toBeUndefined()
   })
 
   it('落库失败 → 不阻塞出稿，advisories 含 feedback_write_failed', async () => {

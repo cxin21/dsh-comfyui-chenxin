@@ -29,6 +29,12 @@ import { recordGeneration } from '../pe-framework/feedback/store.js'
 import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
 import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js'
 import { catalogCandidatesForText } from '../pe-framework/dialect/catalog-recall.js'
+import { resolveRating } from '../pe-framework/safety/rating.js'
+import { checkBoundaries } from '../pe-framework/safety/boundaries.js'
+import { recommendArtDirection } from '../pe-framework/aesthetics/recommend.js'
+import { analyzeBlueprintIncremental } from '../pe-framework/blueprint/analyzer.js'
+import { getStylePreset } from '../pe-framework/styles/registry.js'
+import type { Rating } from '../pe-framework/types.js'
 import { tokensOf } from '../pe-framework/tokens.js'
 import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
 import { defaultFeedbackDbPath } from './prompt-feedback.js'
@@ -42,20 +48,21 @@ export interface AuthorArgs {
   stage?: string
   scenario_id?: string
   form_fields?: Record<string, unknown>
-  audit_only?: boolean
+  /** Task 14（spec §8）：内容分级——缺省 undefined = 按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；显式声明优先不升级 */
+  rating?: Rating
   /** Task 10 蓝图管线：风格模板 id（MINIMAL_STYLES，如 cinematic_real） */
   style_id?: string
   /** Task 10 蓝图管线：风格注入 conformity（0=全量注入；>0 仅引用） */
   conformity?: number
   /** Task 10 蓝图管线：关键维度缺失时的澄清策略 ask|auto */
   clarify?: 'ask' | 'auto'
-  /** Task 10 蓝图管线：增量修改入口——传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影 */
+  /** Task 14：增量修改入口——传蓝图 id 时跳过直连 analyzeIntent，改走 <old_blueprint> 锚定的增量意图分析（spec §8 恒跑无旁路） */
   blueprint_id?: string
-  /** Task 6（spec §2.4/§3.1）：评审模式；T9 起缺省 'fast'（显式 'off' 回退旧路径）；audit_only=true 时忽略并保持旧行为 */
+  /** Task 6（spec §2.4/§3.1）：评审模式；T9 起缺省 'fast'（显式 'off' 回退旧路径） */
   judge_mode?: 'off' | 'fast' | 'strict'
   /** T4（spec §10.4-A12）：修正轮评审成本开关；缺省 true（现状每修正轮重评）；false=修正轮 runStage 不带 judgeOpts（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动） */
   judgeRepair?: boolean
-  /** 二期（spec §2.4）：enrich 扩写层开关；T9 起缺省 true（显式 false 关闭）；audit_only/blueprint_id 时忽略 */
+  /** 二期（spec §2.4）：enrich 扩写层开关；T9 起缺省 true（显式 false 关闭）；blueprint_id 时忽略 */
   enrich?: boolean
   /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 纠正 + advisory enrich_lang_forced） */
   outputLang?: 'en' | 'zh' | 'ja'
@@ -286,7 +293,7 @@ function finalOutputText(stage: StageResult): string {
 }
 
 /**
- * 非 audit_only 成功出口统一落库（spec §6：反馈增强层，try/catch 全包——
+ * 成功出口统一落库（spec §6：反馈增强层，try/catch 全包——
  * 写失败只 push `feedback_write_failed` advisory，绝不阻塞出稿）。
  */
 function recordGenerationSafe(args: {
@@ -300,6 +307,8 @@ function recordGenerationSafe(args: {
   advisories: string[]
   /** 二期 spec §11.3：enrich 扩写标记（0|1） */
   enrich: 0 | 1
+  /** Task 14 ⑥（spec §8）：预检定档的内容分级（generations.rating 列） */
+  rating: Rating
 }): void {
   try {
     const dbPath = resolveFeedbackDbPath()
@@ -318,6 +327,7 @@ function recordGenerationSafe(args: {
       ...(args.stage.debate !== undefined ? { debate_json: JSON.stringify(args.stage.debate) } : {}),
       repair_rounds: args.repairRounds,
       enrich: args.enrich,
+      rating: args.rating,
     })
   } catch {
     args.advisories.push('feedback_write_failed')
@@ -656,12 +666,53 @@ export function designNotesOf(stage: StageResult): string[] {
   return notes
 }
 
+/**
+ * Task 14 ⑤：envelope 顶层 style 摘要（spec §9）——applyStyle 无摘要返回（enrichment/engine 返回
+ * {blueprint, expansions}），按计划第二选项「从 blueprint.core.style 提取」+ registry 补 id/name：
+ * artists=core.style.artist_hints（applyStyle 截断后的实际注入名单）；injectedFragmentPhrases=
+ * 预设 fragment 短语中实际出现在 media_layer 的（conformity≥1 不注入 → 自然为空，纯提取不重算）；
+ * negativeAdded=预设 negative_hints 中实际并入 core.negative 的（用户已有同名单去重跳过的不计）。
+ * 无 styleId / 预设未知 / 无蓝图 → 空摘要（字段仍在，acceptance「两条出口都有三字段」）。
+ */
+function styleSummaryOf(styleId: string | undefined, bp: BlueprintV1 | undefined): {
+  id?: string
+  name?: string
+  injectedFragmentPhrases: string[]
+  artists: string[]
+  negativeAdded: string[]
+} {
+  const preset = styleId ? getStylePreset(styleId) : undefined
+  if (!preset || !bp) return { injectedFragmentPhrases: [], artists: [], negativeAdded: [] }
+  const phrases: string[] = []
+  const image = bp.media_layer.image
+  if (typeof image?.lighting_detail === 'string') {
+    for (const p of preset.fragments.image.split(/[，,]/).map((s) => s.trim()).filter(Boolean)) {
+      if (!phrases.includes(p) && image.lighting_detail.includes(p)) phrases.push(p)
+    }
+  }
+  const video = bp.media_layer.video
+  if (video) {
+    for (const p of preset.fragments.video.split(/[，,]/).map((s) => s.trim()).filter(Boolean)) {
+      if (phrases.includes(p)) continue
+      if ((video.shots ?? []).some((sh) => typeof sh.action === 'string' && sh.action.includes(p))) phrases.push(p)
+    }
+  }
+  const negatives = bp.core.negative ?? []
+  return {
+    id: preset.id,
+    name: preset.name,
+    injectedFragmentPhrases: phrases,
+    artists: Array.isArray(bp.core.style?.artist_hints) ? bp.core.style!.artist_hints! : [],
+    negativeAdded: preset.negative_hints.filter((h) => negatives.some((n) => n.target.toLowerCase() === h.toLowerCase())),
+  }
+}
+
 export function registerAuthorTool(ctx: Context, config: Config) {
   return defineTool({
     name: 'prompt_author',
     description:
       '统一提示词工程主入口（全链路编排）：输入创作意图 → intent（LLM 拆结构）→ schema → dialect（compileAnima/compileH3）→ audit → Envelope + target_slot_hint；audit 未过且有 Critical 时自动修正重跑（max 2 次，仍失败置 loop_exhausted）。' +
-      '创作蓝图流水线：分析意图→美学扩展→方言投影→审计；h3 的 duration_seconds 指视频总时长（如 3 个 5 秒分镜请传总时长 15，shots 数 ≤ max_shots）。可选 style_id/conformity/clarify。失败时读取 next_action 决定重试/人工。' +
+      '创作蓝图流水线：分析意图→美学扩展→方言投影→审计；h3 的 duration_seconds 指视频总时长（如 3 个 5 秒分镜请传总时长 15，shots 数 ≤ max_shots）。可选 style_id/conformity/clarify/rating（safe/sensitive/explicit，缺省 safe——任何 LLM 前预检定档，硬边界违规 0 token 抛错）。失败时读取 next_action 决定重试/人工。' +
       '当前归化状态：' +
       TARGETS.map((t) => `${t}=${isDialectReady(t) ? 'ready' : 'pending'}`).join(' ') +
       '；sd/generic 报 DIALECT_NOT_AVAILABLE。',
@@ -672,14 +723,14 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       stage: { type: 'string', default: '', description: 'h3 stage（t2va/ref2va…；缺省按 references/场景推断）' },
       scenario_id: { type: 'string', default: '', description: 'h3 场景 id（如 full_reference；可配合 form_fields）' },
       form_fields: { type: 'object', description: 'h3 场景表单字段（含 references 可选）', default: {}, additionalProperties: true },
-      audit_only: { type: 'boolean', default: false, description: '仅审计（不调 LLM）：input 需为结构化 JSON（anima: slots；h3: shots{...}）' },
-      style_id: { type: 'string', default: '', description: '蓝图风格模板 id（MINIMAL_STYLES：cinematic_real/game_cg/cel_shading/thick_paint/cyberpunk/wafuu/wasteland/dark_epic；空=不注入）' },
+      rating: { type: 'string', enum: ['safe', 'sensitive', 'explicit'], default: 'safe', description: '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错' },
+      style_id: { type: 'string', default: '', description: '风格预设 id（style_list 可查，82+ 条）' },
       conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
       clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
-      blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时跳过 analyzeIntent，从 repo 取回旧蓝图直接扩展→投影（取回旧蓝图改一字段重投影）' },
-      judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'fast', description: 'LLM 评审模式（spec §2.4）：fast=单轮评审（缺省）；strict=评审+对抗修正一轮；off=不评审（显式关闭，回退旧路径）。audit_only=true 时忽略' },
+      blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时以 <old_blueprint> 锚定运行增量意图分析（仅做与修改意图相关的局部改动，禁止整图重解释）→扩展→投影' },
+      judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'fast', description: 'LLM 评审模式（spec §2.4）：fast=单轮评审（缺省）；strict=评审+对抗修正一轮；off=不评审（显式关闭，回退旧路径）' },
       judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
-      enrich: { type: 'boolean', default: true, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。audit_only/blueprint_id 时忽略' },
+      enrich: { type: 'boolean', default: true, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。blueprint_id 时忽略' },
       outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 被纠正 + advisory enrich_lang_forced）' },
       art_direction: { type: 'object', default: {}, additionalProperties: true, description: 'anima 专用：显式指定艺术指导卡片（每类至多 1 张，缺省由 enrich LLM 自选）。字段: perspective/composition/lighting/color/motion；值=卡片 id（perspective: low_angle/three_quarter_view/over_shoulder_glance/dutch_angle/wide_panorama/close_up/top_down/side_silhouette；composition: rule_of_thirds/diagonal_dynamics/negative_space/framed_subject/perfect_symmetry/leading_lines/golden_ratio/strong_silhouette；lighting: cinematic_lighting/rim_backlight/god_rays/moonlight_cool/golden_hour/lantern_glow/high_contrast/soft_dreamlight；color: warm_cool_contrast/limited_palette/cinematic_grading/accent_on_mono/soft_pastel/vivid_fantasy；motion: dynamic_pose/flowing_dress/flowing_hair/weapon_trail/falling_petals/frozen_peak）。无效字段/id 直接报错；enrich=false 或 blueprint_id 或 target=h3 时忽略 + advisory' },
     },
@@ -687,7 +738,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; audit_only?: boolean; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja'; art_direction?: Record<string, unknown> }, exec: ToolRunContext) {
+    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; rating?: 'safe' | 'sensitive' | 'explicit'; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja'; art_direction?: Record<string, unknown> }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
       const target = String(a.target || 'anima') as Target
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
@@ -702,7 +753,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         } as never)
       }
       const input = String(a.input ?? '')
-      if (!input.trim() && !a.blueprint_id) throw new Error('input 必填')
+      if (!input.trim()) throw new Error('input 必填')
 
       const scenarioId = String(a.scenario_id ?? '').trim() || undefined
       const runOpts = { stage: a.stage || undefined, scenarioId, formFields: a.form_fields, variant: a.variant }
@@ -712,20 +763,29 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         throw new Error(`未知 variant: ${a.variant}；可选 base|aesthetic|turbo`)
       }
 
-      // audit_only：不调 LLM，把 input 当结构 JSON（原语义：完整编译+审计，result 照常产出——不用内核 auditOnly 标志）
-      if (a.audit_only === true) {
-        let draft: AuthorDraft
-        try {
-          const parsed = JSON.parse(input) as Record<string, unknown>
-          draft = target === 'anima' ? { slots: parsed as unknown as AnimaSlots } : { shots: parsed as unknown as H3ShotsInput }
-        } catch {
-          throw new Error('audit_only 需要结构化 JSON 输入（anima: slots；h3: shots{...}）')
-        }
-        const stage = await runDraftThroughStage(target, draft, runOpts)
-        if (target === 'anima') applyAnimaJoyExtraFilter(stage, a.form_fields)
-        // Task 6：audit_only 不触发评审；generation_id 仍生成（唯一允许的缺省新增字段）
-        return assembleEnvelope(stage, [], { designNotes: designNotesOf(stage) }, { generation_id: makeGenerationId() })
-      }
+      // Task 14 预检（spec §8）：input 校验后、任何 LLM 之前——硬边界违规 0 token 抛错。
+      // captain ③（t4 交接）：a.rating 原样透传（缺省 undefined）——物化 'safe' 会以显式输入身份令
+      // resolveRating 记 source='input'、永不记 escalatedFrom，rating_escalated advisory 被压死。
+      const resolved = resolveRating(a.rating, input)
+      const preflightAdvisories: string[] = []
+      if (resolved.escalatedFrom) preflightAdvisories.push(`rating_escalated:${resolved.rating}`)
+      const violations = checkBoundaries(input, resolved.rating)
+      if (violations.length > 0) throw new Error(violations.map((v) => `${v.gate}:${v.matched}`).join('; '))
+
+      // Task 14 ④：推荐器信号拼装（spec §6.2/§6.3）。captain ①②（t6 裁定 + t17 预登记）：
+      // hasMotionIntent 仅在 motion 维度已满足（style 预设 hints.motion 存在）时置 true，
+      // 绝不以 input 动作词扫描置 true（计划 Task 14 的关键词扫描公式已被裁定作废）；
+      // presetHints（style 预设 art_direction_hints）只换被推荐维度的卡 id，不算已满足。
+      const recommendationMedia: 'image' | 'video' = target === 'h3' ? 'video' : 'image'
+      const presetHints = a.style_id ? getStylePreset(a.style_id)?.art_direction_hints : undefined
+      const recommendedCards = recommendArtDirection({
+        media: recommendationMedia,
+        hasMotionIntent: presetHints?.motion !== undefined,
+        hasLighting: false,
+        hasComposition: false,
+        hasFocal: false,
+        ...(presetHints !== undefined ? { presetHints } : {}),
+      })
 
       const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
       // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
@@ -733,7 +793,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const intentCfg = getDialect(target)?.intent
 
       // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
-      // audit_only 已提前返回；blueprint_id 路径跳过 intent（无生句子输入）→ 不 enrich。
+      // blueprint_id 路径跳过 enrich（自带 enrichBlueprint 扩展层）。
       // 降级铁律：runEnrich 永不抛出；skipped → intent 吃原始输入 + advisory enrich_skipped，照常出稿。
       let intentInput = input
       const enrichAdvisories: string[] = []
@@ -760,7 +820,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           userInput: input,
           outputLang: a.outputLang,
           provider: enrichProvider,
+          rating: resolved.rating, // Task 14 ④：预检定档透传（Task 12 persona 【内容分级】块）
           ...(artDirectionSpecified && target === 'anima' ? { artDirection: a.art_direction } : {}),
+          recommendations: recommendedCards, // Task 14 ④：推荐器输出 →【推荐先验】（Task 12 P2，LLM 终决）
         })
         if ('brief' in eRes) {
           const brief = eRes.brief
@@ -807,19 +869,22 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // T4（spec §10.4-A12）：judgeRepair=false → 修正轮 runStage 不带 judgeOpts（provider 零调用）
       const repairJudgeOpts = a.judgeRepair === false ? undefined : judgeOpts
 
-      // Task 10 蓝图管线：blueprint_id → repo.load 跳过 analyzeIntent（增量修改入口）；否则走 intent provider seam
+      // Task 14 恒跑（spec §8 D6）：blueprint_id → <old_blueprint> 锚定的增量意图分析（无旁路；
+      // input 必填豁免已取消）；否则走 intent provider seam——两条蓝图来源统一
       const tIntent0 = performance.now()
       let draft: AuthorDraft
       if (a.blueprint_id) {
         const settings = (ctx as unknown as { settings?: RepoSettingsScope }).settings
         if (!settings) throw new Error('blueprint_id 需要 repo 后端（ctx.settings 不可用）')
         const repo = createBlueprintRepo({ settings })
-        const bp = repo.load(a.blueprint_id)
-        if (!bp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
-        draft = { blueprint: bp }
+        const oldBp = repo.load(a.blueprint_id)
+        if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
+        draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input) }
       } else {
         draft = await provider({ ...intentBase, round: 0 }, exec)
       }
+      // Task 14 ③：core.rating 确定性注入（安全数据不信任 LLM 产物，t7 交接）——两条蓝图来源统一
+      if (draft.blueprint) draft.blueprint.core.rating = resolved.rating
       traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
 
       // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
@@ -887,8 +952,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const canon = canonicalObservabilityOf(stage)
         const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
         catalogTraceEntry(stage, traceExtra)
-        const blueprintAdvisories = [...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
-        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: blueprintAdvisories, enrich: enrichFlag })
+        const blueprintAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
+        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: blueprintAdvisories, enrich: enrichFlag, rating: resolved.rating })
         return assembleEnvelope(projStage, blueprintAdvisories, {
           corrections,
           loopExhausted,
@@ -903,6 +968,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           generation_id: generationId,
           ...judgeTopLevel(projStage),
           ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
+          // Task 14 ⑤（spec §9）：result 顶层三字段——rating 定档 / aesthetics 推荐卡 / style 注入摘要
+          rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
+          aesthetics: { recommendedCards },
+          style: styleSummaryOf(a.style_id, bp),
         }, {
           next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
           repair_hints,
@@ -950,8 +1019,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const canon = canonicalObservabilityOf(stage)
       const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
       catalogTraceEntry(stage, traceExtra)
-      const finalAdvisories = [...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
-      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: finalAdvisories, enrich: enrichFlag })
+      const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
+      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: finalAdvisories, enrich: enrichFlag, rating: resolved.rating })
       return assembleEnvelope(projStage, finalAdvisories, {
         corrections,
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
@@ -964,6 +1033,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         generation_id: generationId,
         ...judgeTopLevel(projStage),
         ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
+        // Task 14 ⑤（spec §9）：result 顶层三字段——rating 定档 / aesthetics 推荐卡 / style 注入摘要
+        rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
+        aesthetics: { recommendedCards },
+        style: styleSummaryOf(a.style_id, draft.blueprint),
       })
     },
   })

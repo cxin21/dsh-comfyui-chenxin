@@ -41,17 +41,6 @@ describe('prompt_author full pipeline (P4)', () => {
     expect(raw.audit.budget.counter).toBe('official-tokenizer')
   })
 
-  it('audit_only skips the intent LLM (zero provider calls)', async () => {
-    const { fn, calls } = providerFor([GOOD_SLOTS])
-    setAuthorIntentProvider(fn)
-    const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-      target: 'anima', audit_only: true, input: JSON.stringify({ count_gender: ['1girl'], appearance: ['long hair'] }),
-    })))
-    expect(calls()).toBe(0)
-    expect(raw.ok).toBe(true)
-    expect(raw.result.positive).toContain('1girl')
-  })
-
   it('sd/generic still report DIALECT_NOT_AVAILABLE envelope', async () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), { target: 'sd', input: 'x' })))
     expect(raw.ok).toBe(false)

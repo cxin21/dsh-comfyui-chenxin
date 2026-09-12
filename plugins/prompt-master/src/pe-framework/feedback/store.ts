@@ -11,6 +11,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
+import type { Rating } from '../types.js'
 
 export interface GenerationRow {
   id: string // gen_<ts>_<rand>（T6 已产）
@@ -26,6 +27,8 @@ export interface GenerationRow {
   repair_rounds?: number
   /** 二期 spec §11.3：是否经 enrich 扩写（0|1）；旧库行读回缺省 0 */
   enrich: 0 | 1
+  /** Task 14（spec §8）：预检定档的内容分级档位（safe|sensitive|explicit）——注意与 FeedbackRow.rating（1-5 人工评分）同名不同义 */
+  rating?: Rating
 }
 
 export interface FeedbackRow {
@@ -54,7 +57,8 @@ CREATE TABLE IF NOT EXISTS generations (
     judge_verdict TEXT,
     debate_json TEXT,
     repair_rounds INTEGER,
-    enrich INTEGER NOT NULL DEFAULT 0
+    enrich INTEGER NOT NULL DEFAULT 0,
+    rating TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_generations_created ON generations(created_at);
 CREATE TABLE IF NOT EXISTS feedback (
@@ -77,12 +81,22 @@ function ensureEnrichColumn(db: DatabaseSync): void {
   }
 }
 
+/** Task 14（spec §8）：rating 列幂等迁移——新库由 SCHEMA 建列，旧库 ALTER 补列（列已存在时 catch 吞掉，幂等）。 */
+function ensureRatingColumn(db: DatabaseSync): void {
+  try {
+    db.exec('ALTER TABLE generations ADD COLUMN rating TEXT')
+  } catch {
+    // 列已存在（新库或已迁移）——幂等
+  }
+}
+
 /** 读写模式打开（relations.ts openOverlayDb 同款：mkdir -p + 建 schema，调用方负责 close） */
 function openDb(dbPath: string): DatabaseSync {
   mkdirSync(dirname(dbPath), { recursive: true })
   const db = new DatabaseSync(dbPath)
   db.exec(SCHEMA)
   ensureEnrichColumn(db)
+  ensureRatingColumn(db)
   return db
 }
 
@@ -122,8 +136,8 @@ export function recordGeneration(dbPath: string, g: GenerationRow): void {
     db.prepare(
       `INSERT INTO generations
        (id, created_at, target, variant, judge_mode, input_digest, final_output,
-        judge_score, judge_verdict, debate_json, repair_rounds, enrich)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        judge_score, judge_verdict, debate_json, repair_rounds, enrich, rating)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       g.id,
       g.created_at,
@@ -137,6 +151,7 @@ export function recordGeneration(dbPath: string, g: GenerationRow): void {
       g.debate_json === undefined ? null : trimDebateJson(g.debate_json),
       g.repair_rounds ?? null,
       g.enrich,
+      g.rating ?? null,
     )
   } finally {
     db.close()
@@ -187,6 +202,7 @@ function rowToGeneration(r: Record<string, unknown>): GenerationRow {
   if (r.judge_verdict !== null && r.judge_verdict !== undefined) g.judge_verdict = String(r.judge_verdict)
   if (r.debate_json !== null && r.debate_json !== undefined) g.debate_json = String(r.debate_json)
   if (r.repair_rounds !== null && r.repair_rounds !== undefined) g.repair_rounds = Number(r.repair_rounds)
+  if (r.rating !== null && r.rating !== undefined) g.rating = String(r.rating) as Rating
   return g
 }
 

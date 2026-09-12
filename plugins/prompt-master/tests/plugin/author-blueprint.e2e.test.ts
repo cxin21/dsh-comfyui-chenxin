@@ -40,6 +40,15 @@ function settingsRepo() {
   }
 }
 
+// Task 14：blueprint_id 路径改走 <old_blueprint> 锚定的增量意图分析——stub stream 文本需为
+// parseBlueprintJson 可解析的完整蓝图（同文本作为 enrich patch 输入时等价自合并，无副作用）；
+// input 必填豁免已取消，blueprint_id 用例需携带 input。
+const BP_JSON = JSON.stringify({
+  schema_version: 1, media: 'video',
+  core: { concept: '三镜头打斗CG', negative: [] },
+  media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } },
+})
+
 describe('prompt_author blueprint_id incremental path', () => {
   it('reload by blueprint_id skips analyzeIntent (provider not called)', async () => {
     const { settings } = settingsRepo()
@@ -54,12 +63,12 @@ describe('prompt_author blueprint_id incremental path', () => {
     const countingProvider: AuthorIntentFn = async (req: any) => { providerCalls++; return {} as any }
     setAuthorIntentProvider(countingProvider as any)
 
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
+    const ctx = stubCtx({ stream: textStream(BP_JSON) }) as any
     ctx.settings = settings
     const def = registerAuthorTool(ctx, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s', judge_mode: 'off' })))
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s', input: '把第二镜改成雨夜', judge_mode: 'off' })))
 
-    expect(providerCalls).toBe(0)              // 跳过 analyzeIntent
+    expect(providerCalls).toBe(0)              // intent provider seam 未被消费（增量分析走 complete/llm.stream）
     expect(v.next_action).toBeDefined()
     setAuthorIntentProvider(null)
   })
@@ -106,18 +115,18 @@ describe('prompt_author blueprint_id enrich advisory (Round7 T6)', () => {
   afterEach(() => setAuthorIntentProvider(null))
 
   it('blueprint_id + enrich=true → advisory enrich_ignored_blueprint', async () => {
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
+    const ctx = stubCtx({ stream: textStream(BP_JSON) }) as any
     ctx.settings = savedRepo()
     const def = registerAuthorTool(ctx, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'bp-enrich-check', judge_mode: 'off', enrich: true })))
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'bp-enrich-check', input: '修改一个镜头', judge_mode: 'off', enrich: true })))
     expect(v.advisories).toContain('enrich_ignored_blueprint')
   })
 
   it('blueprint_id 不传 enrich → 无 enrich_ignored_blueprint advisory', async () => {
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
+    const ctx = stubCtx({ stream: textStream(BP_JSON) }) as any
     ctx.settings = savedRepo()
     const def = registerAuthorTool(ctx, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'bp-enrich-check', judge_mode: 'off' })))
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'bp-enrich-check', input: '修改一个镜头', judge_mode: 'off' })))
     expect(v.advisories).not.toContain('enrich_ignored_blueprint')
   })
 })

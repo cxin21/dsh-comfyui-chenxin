@@ -161,28 +161,6 @@ describe('规格3 enrich 降级', () => {
   })
 })
 
-/* 规格4：audit_only=true 跳过 enrich（沿一期裁定） */
-describe('规格4 audit_only 跳过 enrich', () => {
-  let dbDir: string
-  beforeEach(() => {
-    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
-    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
-  })
-
-  it('enrich=true + audit_only → enrich provider 零调用、无 enrichment 字段、不落库', async () => {
-    const enrich = enrichOf([briefJson()])
-    setAuthorEnrichProvider(enrich)
-    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), {
-      target: 'anima', audit_only: true, enrich: true,
-      input: JSON.stringify({ count_gender: ['1girl'], appearance: ['long hair'] }),
-    })))
-    expect(raw.ok).toBe(true)
-    expect(enrich.calls).toBe(0)
-    expect(raw.enrichment).toBeUndefined()
-    expect(getGeneration(join(dbDir, 'feedback.sqlite'), String(raw.generation_id))).toBeUndefined()
-  })
-})
-
 /* 规格5：outputLang 透传 + anima 显式 zh 纠正（T5 carry①） */
 describe('规格5 outputLang 语言归一化', () => {
   it("anima 显式 outputLang='zh' → brief.outputLang 纠正为 'en' + advisory enrich_lang_forced", async () => {

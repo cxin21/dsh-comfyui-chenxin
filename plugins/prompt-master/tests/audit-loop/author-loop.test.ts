@@ -51,15 +51,6 @@ describe('prompt_author correction loop (P4)', () => {
     expect(raw.advisories).toContain('loop_exhausted:true')
   })
 
-  it('audit_only performs zero LLM calls', async () => {
-    let calls = 0
-    setAuthorIntentProvider(async () => { calls++; return { slots: { count_gender: ['1girl'] } } })
-    await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-      target: 'anima', audit_only: true, input: JSON.stringify({ count_gender: ['1girl'] }),
-    })
-    expect(calls).toBe(0)
-  })
-
   it('F1: ref2va with 2 references is rejected as critical ref_count gate (loop not engaged)', async () => {
     setAuthorIntentProvider(async () => ({
       shots: {

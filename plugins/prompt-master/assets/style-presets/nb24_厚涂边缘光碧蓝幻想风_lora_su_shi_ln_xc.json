@@ -1,0 +1,17 @@
+{
+  "id": "nb24_厚涂边缘光碧蓝幻想风_lora_su_shi_ln_xc",
+  "name": "厚涂边缘光碧蓝幻想风(LoRA:su_shi,ln,xcnlight)",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "granblue fantasy official art style, illustration",
+  "fragments": {
+    "image": "impasto oil shading, granblue fantasy art style, crisp edge definition, ornate game illustration finish",
+    "video": "impasto oil shading, granblue fantasy art style, crisp edge definition, ornate game illustration finish"
+  },
+  "negative_hints": ["flat cel shading", "minimalist flat design"],
+  "artist_hints": ["su_shi", "ln", "daito", "minaba hideo", "onineko"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

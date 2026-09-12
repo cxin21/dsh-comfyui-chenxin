@@ -1,0 +1,16 @@
+{
+  "id": "nb26_极端对比霓虹合成波",
+  "name": "极端对比霓虹合成波",
+  "category": "retro",
+  "rating": "safe",
+  "theme": "cyberpunk aesthetic, graphic novel style, monochromatic dystopian realism",
+  "fragments": {
+    "image": "extreme neon color contrast, synthwave grid motifs, heavy color grading, graphic novel inking",
+    "video": "extreme neon color contrast, synthwave grid motifs, heavy color grading, graphic novel inking"
+  },
+  "negative_hints": ["low contrast", "muted pastel palette"],
+  "artist_hints": ["ciloranko", "diyokama", "quasarcake", "modare", "remsrar"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

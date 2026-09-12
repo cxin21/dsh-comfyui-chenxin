@@ -1,0 +1,15 @@
+{
+  "id": "nb65_alma01_mika_pikazo_tarou2",
+  "name": "alma01,mika_pikazo, tarou2",
+  "category": "anime",
+  "rating": "safe",
+  "fragments": {
+    "image": "polished bishoujo rendering, airy highlight accents, elegant pastel-to-vivid color balance, refined character illustration",
+    "video": "polished bishoujo rendering, airy highlight accents, elegant pastel-to-vivid color balance, refined character illustration"
+  },
+  "negative_hints": ["muddy colors", "harsh outlines"],
+  "artist_hints": ["alma01", "mika_pikazo", "tarou2"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

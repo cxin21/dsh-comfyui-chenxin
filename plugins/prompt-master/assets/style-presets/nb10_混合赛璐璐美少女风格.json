@@ -1,0 +1,16 @@
+{
+  "id": "nb10_混合赛璐璐美少女风格",
+  "name": "混合赛璐璐美少女风格",
+  "category": "anime",
+  "rating": "safe",
+  "theme": "japanese anime bishoujo illustration, cel-shading hybrid rendering",
+  "fragments": {
+    "image": "hybrid cel shading, semi-painterly rendering, bishoujo character design, crisp anime key visual finish",
+    "video": "hybrid cel shading, semi-painterly rendering, bishoujo character design, crisp anime key visual finish"
+  },
+  "negative_hints": ["photorealistic render", "rough draft lines"],
+  "artist_hints": ["ame929", "rain_sama", "konya_karasue", "zhibuji_loom", "agm"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

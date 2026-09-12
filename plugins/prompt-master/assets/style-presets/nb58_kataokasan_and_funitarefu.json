@@ -1,0 +1,15 @@
+{
+  "id": "nb58_kataokasan_and_funitarefu",
+  "name": "kataokasan and funitarefu",
+  "category": "anime",
+  "rating": "safe",
+  "fragments": {
+    "image": "clean bright anime illustration, smooth flat shading, playful character design, crisp detailing",
+    "video": "clean bright anime illustration, smooth flat shading, playful character design, crisp detailing"
+  },
+  "negative_hints": ["gritty texture", "heavy impasto"],
+  "artist_hints": ["kataokasan", "funitarefu"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "nb08_清新动漫风格",
+  "name": "清新动漫风格",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "fresh style",
+  "fragments": {
+    "image": "fresh airy palette, light pastel tones, clean linework, breezy seasonal atmosphere",
+    "video": "fresh airy palette, light pastel tones, clean linework, breezy seasonal atmosphere"
+  },
+  "negative_hints": ["heavy impasto", "dark desaturated palette"],
+  "artist_hints": ["ame929", "rain_sama", "konya_karasue", "zhibuji_loom", "void_0"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

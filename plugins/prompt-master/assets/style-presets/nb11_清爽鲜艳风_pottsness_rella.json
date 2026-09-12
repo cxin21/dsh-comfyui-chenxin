@@ -1,0 +1,17 @@
+{
+  "id": "nb11_清爽鲜艳风_pottsness_rella",
+  "name": "清爽鲜艳风 (Pottsness & Rella)",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "vibrant colors, high contrast",
+  "fragments": {
+    "image": "refreshing vivid palette, crisp high-contrast shading, clean bright linework, lively anime colors",
+    "video": "refreshing vivid palette, crisp high-contrast shading, clean bright linework, lively anime colors"
+  },
+  "negative_hints": ["muted earth tones", "murky shadows"],
+  "artist_hints": ["pottsness", "midori_fufu", "kazutake_hazano", "sushispin", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

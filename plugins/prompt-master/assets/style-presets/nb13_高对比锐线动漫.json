@@ -1,0 +1,17 @@
+{
+  "id": "nb13_高对比锐线动漫",
+  "name": "高对比锐线动漫",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "vibrant colors, high contrast",
+  "fragments": {
+    "image": "razor-sharp lineart, high contrast color separation, punchy saturated shading, crisp anime finish",
+    "video": "razor-sharp lineart, high contrast color separation, punchy saturated shading, crisp anime finish"
+  },
+  "negative_hints": ["fuzzy linework", "washed-out colors"],
+  "artist_hints": ["pottsness", "midori_fufu", "kazutake_hazano", "sushispin", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

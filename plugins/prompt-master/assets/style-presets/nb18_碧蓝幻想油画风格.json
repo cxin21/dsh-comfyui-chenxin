@@ -1,0 +1,16 @@
+{
+  "id": "nb18_碧蓝幻想油画风格",
+  "name": "碧蓝幻想油画风格",
+  "category": "illustration",
+  "rating": "safe",
+  "theme": "fantasy art, dark romanticism, gothic surrealism",
+  "fragments": {
+    "image": "granblue fantasy style oil painting, ornate game key art finish, realistic anime rendering, rich layered color depth",
+    "video": "granblue fantasy style oil painting, ornate game key art finish, realistic anime rendering, rich layered color depth"
+  },
+  "negative_hints": ["flat colors", "minimalist sketch"],
+  "artist_hints": ["onineko", "cover"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

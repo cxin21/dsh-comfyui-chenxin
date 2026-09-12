@@ -1,0 +1,17 @@
+{
+  "id": "nb43_粗砺墨线限色高反差平涂风",
+  "name": "粗砺墨线限色高反差平涂风",
+  "category": "graphic",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "vibrant pop art, limited color palette, bold rough lineart",
+  "fragments": {
+    "image": "gritty ink lineart, limited flat palette, high contrast flat shading, offset color outline",
+    "video": "gritty ink lineart, limited flat palette, high contrast flat shading, offset color outline"
+  },
+  "negative_hints": ["smooth airbrushed rendering", "photorealistic render"],
+  "artist_hints": ["limited palette", "animation paper", "color trace", "fujiyama", "nardack"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

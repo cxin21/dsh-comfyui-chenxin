@@ -1,0 +1,17 @@
+{
+  "id": "nb53_清透高调细线平涂淡彩",
+  "name": "清透高调细线平涂淡彩",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "cel shading, soft pastel color palette, minimalist white background",
+  "fragments": {
+    "image": "fine thin lineart, translucent pale color wash, bright flat shading, airy minimalist background",
+    "video": "fine thin lineart, translucent pale color wash, bright flat shading, airy minimalist background"
+  },
+  "negative_hints": ["heavy dark shadows", "thick impasto"],
+  "artist_hints": ["rurudo", "gusha s", "wlop", "yoneyama mai", "mikami mika"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

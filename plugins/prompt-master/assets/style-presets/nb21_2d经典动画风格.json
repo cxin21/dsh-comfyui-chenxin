@@ -1,0 +1,17 @@
+{
+  "id": "nb21_2d经典动画风格",
+  "name": "2D经典动画风格",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "classic 2d animation style, hand-drawn cel paint, clean character acting, realistic shading",
+    "video": "classic 2d animation style, hand-drawn cel paint, clean character acting, realistic shading"
+  },
+  "negative_hints": ["3d cgi render", "photorealistic render"],
+  "artist_hints": ["daito", "mika_pikazo", "ogipote", "sy4", "funitarefu"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

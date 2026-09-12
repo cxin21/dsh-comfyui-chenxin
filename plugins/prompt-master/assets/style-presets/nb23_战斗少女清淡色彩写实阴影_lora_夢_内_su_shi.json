@@ -1,0 +1,16 @@
+{
+  "id": "nb23_战斗少女清淡色彩写实阴影_lora_夢_内_su_shi",
+  "name": "战斗少女清淡色彩写实阴影(LoRA:夢ノ内,su_shi)",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "fragments": {
+    "image": "battle girl action styling, light muted color wash, realistic shadow shapes, dynamic combat pose energy",
+    "video": "battle girl action styling, light muted color wash, realistic shadow shapes, dynamic combat pose energy"
+  },
+  "negative_hints": ["flat colors", "oversaturated palette"],
+  "artist_hints": ["daito", "ln", "kataokasan", "su_shi"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

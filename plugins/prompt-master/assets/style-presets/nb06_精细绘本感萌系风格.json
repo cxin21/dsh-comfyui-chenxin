@@ -1,0 +1,17 @@
+{
+  "id": "nb06_精细绘本感萌系风格",
+  "name": "精细绘本感萌系风格",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "moe, painterly, digital art",
+  "fragments": {
+    "image": "picture-book storybook texture, moe character design, soft rounded shapes, fine detailed linework",
+    "video": "picture-book storybook texture, moe character design, soft rounded shapes, fine detailed linework"
+  },
+  "negative_hints": ["gritty realism", "photorealistic render"],
+  "artist_hints": ["ame929", "rain_sama", "konya_karasue", "zhibuji_loom", "void_0"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

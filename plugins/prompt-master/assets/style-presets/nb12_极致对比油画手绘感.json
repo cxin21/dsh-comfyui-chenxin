@@ -1,0 +1,16 @@
+{
+  "id": "nb12_极致对比油画手绘感",
+  "name": "极致对比油画手绘感",
+  "category": "illustration",
+  "rating": "safe",
+  "theme": "oil painting, extreme high contrast, dynamic line art",
+  "fragments": {
+    "image": "oil painting texture, extreme value contrast, hand-painted brushwork, bold cross-hatching",
+    "video": "oil painting texture, extreme value contrast, hand-painted brushwork, bold cross-hatching"
+  },
+  "negative_hints": ["flat digital gradients", "pastel softness"],
+  "artist_hints": ["ciloranko", "diyokama", "quasarcake", "remsrar", "modare"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

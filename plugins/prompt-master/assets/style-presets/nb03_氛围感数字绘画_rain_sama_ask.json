@@ -1,0 +1,17 @@
+{
+  "id": "nb03_氛围感数字绘画_rain_sama_ask",
+  "name": "氛围感数字绘画 (Rain_sama & Ask)",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "atmospheric digital painting, soft ambient shading, luminous skin tones, moody background art",
+    "video": "atmospheric digital painting, soft ambient shading, luminous skin tones, moody background art"
+  },
+  "negative_hints": ["flat colors", "harsh outlines"],
+  "artist_hints": ["ame929", "rain_sama", "konya_karasue", "zhibuji_loom", "void_0"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "nb05_中式传统美学幻想风",
+  "name": "中式传统美学幻想风",
+  "category": "oriental",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "traditional chinese aesthetic, fantasy, painterly",
+  "fragments": {
+    "image": "hanfu-inspired flowing robes, chinese ornamental patterns, ink brush accents, fantasy palace backdrop",
+    "video": "hanfu-inspired flowing robes, chinese ornamental patterns, ink brush accents, fantasy palace backdrop"
+  },
+  "negative_hints": ["western medieval clothing", "modern streetwear"],
+  "artist_hints": ["ame929", "rain_sama", "konya_karasue", "zhibuji_loom", "void_0"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

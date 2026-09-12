@@ -1,0 +1,16 @@
+{
+  "id": "nb25_硬朗描边高对比平涂风",
+  "name": "硬朗描边高对比平涂风",
+  "category": "anime",
+  "rating": "safe",
+  "theme": "flat color, bold lines, pop art",
+  "fragments": {
+    "image": "hard-edged bold outlines, flat color blocking, high contrast palette, decorative graphic background",
+    "video": "hard-edged bold outlines, flat color blocking, high contrast palette, decorative graphic background"
+  },
+  "negative_hints": ["soft gradients", "photorealistic render"],
+  "artist_hints": ["daito", "coldcat.", "ln"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

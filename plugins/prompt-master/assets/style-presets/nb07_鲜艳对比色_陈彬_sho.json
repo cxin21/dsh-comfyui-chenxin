@@ -1,0 +1,17 @@
+{
+  "id": "nb07_鲜艳对比色_陈彬_sho",
+  "name": "鲜艳对比色 (陈彬 & Sho)",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "vibrant colors, high contrast",
+  "fragments": {
+    "image": "vivid complementary color blocking, high contrast shading, bold saturated palette, clean anime illustration",
+    "video": "vivid complementary color blocking, high contrast shading, bold saturated palette, clean anime illustration"
+  },
+  "negative_hints": ["muted color palette", "low contrast"],
+  "artist_hints": ["chen_bin", "ningen_mame", "tianliang_duohe_fangdongye", "ciloranko", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

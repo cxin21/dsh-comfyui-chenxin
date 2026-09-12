@@ -1,0 +1,15 @@
+{
+  "id": "nb57_mika_pikazo_and_cogecha",
+  "name": "mika pikazo and cogecha",
+  "category": "anime",
+  "rating": "safe",
+  "fragments": {
+    "image": "pop-saturated character colors, glossy skin highlights, ornate detailed accessories, vivid gradient hair",
+    "video": "pop-saturated character colors, glossy skin highlights, ornate detailed accessories, vivid gradient hair"
+  },
+  "negative_hints": ["muted earth palette", "rough sketch lines"],
+  "artist_hints": ["mika_pikazo", "cogecha"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

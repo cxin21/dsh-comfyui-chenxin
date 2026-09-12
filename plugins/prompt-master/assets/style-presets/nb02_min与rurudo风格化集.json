@@ -1,0 +1,17 @@
+{
+  "id": "nb02_min与rurudo风格化集",
+  "name": "Min与Rurudo风格化集",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "stylized bishoujo illustration, glossy hair rendering, soft gradient shading, delicate facial features",
+    "video": "stylized bishoujo illustration, glossy hair rendering, soft gradient shading, delicate facial features"
+  },
+  "negative_hints": ["photorealistic render", "thick impasto"],
+  "artist_hints": ["rurudo", "jacknife"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

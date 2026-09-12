@@ -1,0 +1,17 @@
+{
+  "id": "nb51_青色霓虹边缘光写实厚涂_konya_karusue_nk",
+  "name": "青色霓虹边缘光写实厚涂(konya_karusue,nk-nyalia)",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "cyan and magenta color palette, high contrast, smooth digital painting",
+  "fragments": {
+    "image": "cyan neon accents on magenta shadows, thick impasto rendering, glossy highlight edges, high contrast digital painting",
+    "video": "cyan neon accents on magenta shadows, thick impasto rendering, glossy highlight edges, high contrast digital painting"
+  },
+  "negative_hints": ["flat pastel palette", "thin sketchy paint"],
+  "artist_hints": ["wanke", "wlop"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "nb40_锐利光影写实材质风",
+  "name": "锐利光影写实材质风",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "sharp specular shading, realistic material textures, crisp anime realism, defined edge control",
+    "video": "sharp specular shading, realistic material textures, crisp anime realism, defined edge control"
+  },
+  "negative_hints": ["flat colors", "blurry soft focus"],
+  "artist_hints": ["rella", "ciloranko", "novelance", "tokkyu", "miv4t"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

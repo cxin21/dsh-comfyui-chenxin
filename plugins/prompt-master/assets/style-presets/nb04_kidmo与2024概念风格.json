@@ -1,0 +1,15 @@
+{
+  "id": "nb04_kidmo与2024概念风格",
+  "name": "Kidmo与2024概念风格",
+  "category": "illustration",
+  "rating": "safe",
+  "fragments": {
+    "image": "contemporary concept illustration, bold graphic shapes, textured painterly finish, trend-forward color design",
+    "video": "contemporary concept illustration, bold graphic shapes, textured painterly finish, trend-forward color design"
+  },
+  "negative_hints": ["photorealistic render", "dull color palette"],
+  "artist_hints": ["kidmo", "jvn", "xilmo"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

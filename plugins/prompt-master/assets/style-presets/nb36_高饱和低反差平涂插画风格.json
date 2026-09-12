@@ -1,0 +1,17 @@
+{
+  "id": "nb36_高饱和低反差平涂插画风格",
+  "name": "高饱和低反差平涂插画风格",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "cel shaded, vibrant palette, ghibli-esque color aesthetic",
+  "fragments": {
+    "image": "flat cel shading, saturated low-contrast palette, airy pastel atmosphere, clear line art with soft focus background",
+    "video": "flat cel shading, saturated low-contrast palette, airy pastel atmosphere, clear line art with soft focus background"
+  },
+  "negative_hints": ["high contrast shadows", "gritty realism"],
+  "artist_hints": ["tianliang duohe fangdongye", "ln"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

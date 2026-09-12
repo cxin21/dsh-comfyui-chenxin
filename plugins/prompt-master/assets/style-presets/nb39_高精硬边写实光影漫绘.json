@@ -1,0 +1,17 @@
+{
+  "id": "nb39_高精硬边写实光影漫绘",
+  "name": "高精硬边写实光影漫绘",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "high-precision hard-edged lineart, realistic light and shadow modeling, refined material rendering, polished manga illustration",
+    "video": "high-precision hard-edged lineart, realistic light and shadow modeling, refined material rendering, polished manga illustration"
+  },
+  "negative_hints": ["flat colors", "loose sketchy lines"],
+  "artist_hints": ["chen_bin", "ningen_mame", "tianliang_duohe_fangdongye", "ciloranko", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

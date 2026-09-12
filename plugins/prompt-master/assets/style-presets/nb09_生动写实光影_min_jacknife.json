@@ -1,0 +1,16 @@
+{
+  "id": "nb09_生动写实光影_min_jacknife",
+  "name": "生动写实光影 (Min & Jacknife)",
+  "category": "anime",
+  "rating": "safe",
+  "theme": "vibrant colors, realistic lighting",
+  "fragments": {
+    "image": "vivid realistic lighting contrast, glossy highlight rendering, saturated color depth, lively shading",
+    "video": "vivid realistic lighting contrast, glossy highlight rendering, saturated color depth, lively shading"
+  },
+  "negative_hints": ["flat colors", "washed-out palette"],
+  "artist_hints": ["rurudo", "jacknife"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

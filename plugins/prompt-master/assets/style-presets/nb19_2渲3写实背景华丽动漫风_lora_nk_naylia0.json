@@ -1,0 +1,17 @@
+{
+  "id": "nb19_2渲3写实背景华丽动漫风_lora_nk_naylia0",
+  "name": "2渲3写实背景华丽动漫风(LoRA:nk_naylia0.5,konya_karasue0.5)",
+  "category": "cg_3d",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "physically based rendering (pbr), highly detailed texture, digital art",
+  "fragments": {
+    "image": "2d character over realistic 3d background, ornate anime detailing, pbr texture depth, rich game illustration finish",
+    "video": "2d character over realistic 3d background, ornate anime detailing, pbr texture depth, rich game illustration finish"
+  },
+  "negative_hints": ["flat background", "low-detail textures"],
+  "artist_hints": ["betabeet", "yoneyama_mai", "konya_karasue"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

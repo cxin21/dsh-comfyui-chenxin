@@ -1,0 +1,16 @@
+{
+  "id": "nb17_油画叠色高亮表现主义",
+  "name": "油画叠色高亮表现主义",
+  "category": "illustration",
+  "rating": "safe",
+  "theme": "oil painting, expressionist brushwork and high textural detail, extreme high contrast",
+  "fragments": {
+    "image": "expressionist oil brushwork, layered glazing colors, bright highlight accents, textured canvas feel",
+    "video": "expressionist oil brushwork, layered glazing colors, bright highlight accents, textured canvas feel"
+  },
+  "negative_hints": ["flat colors", "airbrushed smoothness"],
+  "artist_hints": ["ciloranko", "diyokama", "quasarcake", "remsrar", "modare"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

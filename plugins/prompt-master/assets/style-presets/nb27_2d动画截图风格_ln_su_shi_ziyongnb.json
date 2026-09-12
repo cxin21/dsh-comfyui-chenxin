@@ -1,0 +1,17 @@
+{
+  "id": "nb27_2d动画截图风格_ln_su_shi_ziyongnb",
+  "name": "2D动画截图风格(ln,su_shi,ziyongnb)",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading, animation screenshot, flat art",
+  "fragments": {
+    "image": "2d anime screenshot framing, flat art shading, clean screen composition, realistic shading depth",
+    "video": "2d anime screenshot framing, flat art shading, clean screen composition, realistic shading depth"
+  },
+  "negative_hints": ["photorealistic render", "sketchy lines"],
+  "artist_hints": ["coldcat.", "ln", "su_shi", "rella", "ciloranko"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

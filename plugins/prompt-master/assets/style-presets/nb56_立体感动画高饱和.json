@@ -1,0 +1,15 @@
+{
+  "id": "nb56_立体感动画高饱和",
+  "name": "立体感动画高饱和",
+  "category": "anime",
+  "rating": "safe",
+  "fragments": {
+    "image": "dimensional anime rendering, high saturation palette, volumetric character shading, crisp animated finish",
+    "video": "dimensional anime rendering, high saturation palette, volumetric character shading, crisp animated finish"
+  },
+  "negative_hints": ["flat 2d shading", "washed-out colors"],
+  "artist_hints": ["funitarefu", "kataokasan", "mika pikazo", "sy4", "ogipote"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

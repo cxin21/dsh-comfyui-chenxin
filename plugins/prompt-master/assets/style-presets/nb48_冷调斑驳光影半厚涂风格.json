@@ -1,0 +1,17 @@
+{
+  "id": "nb48_冷调斑驳光影半厚涂风格",
+  "name": "冷调斑驳光影半厚涂风格",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "soft cel shading, cool color palette, lofi aesthetic",
+  "fragments": {
+    "image": "mottled dappled shading, semi-impasto rendering, cool color palette, shallow depth of field",
+    "video": "mottled dappled shading, semi-impasto rendering, cool color palette, shallow depth of field"
+  },
+  "negative_hints": ["high saturation neon palette", "hard edge cel shadows"],
+  "artist_hints": ["mika_pikazo", "ogipote", "sy4", "funitarefu", "kataokasan"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "nb15_绝区零式写实阴影",
+  "name": "绝区零式写实阴影",
+  "category": "cg_3d",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "stylized 3d anime rendering, realistic shadow shaping, game-grade material finish, bold action styling",
+    "video": "stylized 3d anime rendering, realistic shadow shaping, game-grade material finish, bold action styling"
+  },
+  "negative_hints": ["flat cel shading", "low-detail textures"],
+  "artist_hints": ["jyt", "omone_hokoma_agm", "deyui", "kase_daiki", "abpart"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

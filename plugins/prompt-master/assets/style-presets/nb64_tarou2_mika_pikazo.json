@@ -1,0 +1,15 @@
+{
+  "id": "nb64_tarou2_mika_pikazo",
+  "name": "tarou2, mika_pikazo",
+  "category": "anime",
+  "rating": "safe",
+  "fragments": {
+    "image": "soft glossy anime rendering, luminous skin tones, stylish contemporary fashion feel, delicate color gradients",
+    "video": "soft glossy anime rendering, luminous skin tones, stylish contemporary fashion feel, delicate color gradients"
+  },
+  "negative_hints": ["flat dull colors", "rough lineart"],
+  "artist_hints": ["tarou2", "mika_pikazo"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

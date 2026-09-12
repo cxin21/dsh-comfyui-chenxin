@@ -1,0 +1,17 @@
+{
+  "id": "nb01_2024顶级画师混搭_rella_wlop",
+  "name": "2024顶级画师混搭 (Rella & WLOP)",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "realistic shading",
+  "fragments": {
+    "image": "clean lineart, realistic shading, detailed eyes, contemporary anime palette",
+    "video": "clean lineart, realistic shading, detailed eyes, contemporary anime palette"
+  },
+  "negative_hints": ["photorealistic render", "flat colors"],
+  "artist_hints": ["rella", "tidsean", "wlop", "ciloranko", "atdan"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

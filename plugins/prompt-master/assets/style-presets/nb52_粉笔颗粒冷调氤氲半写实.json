@@ -1,0 +1,17 @@
+{
+  "id": "nb52_粉笔颗粒冷调氤氲半写实",
+  "name": "粉笔颗粒冷调氤氲半写实",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "monochromatic blue palette, pastel colors, grainy texture",
+  "fragments": {
+    "image": "chalky grain texture, hazy cool atmosphere, soft flat shading, half-realistic anime rendering",
+    "video": "chalky grain texture, hazy cool atmosphere, soft flat shading, half-realistic anime rendering"
+  },
+  "negative_hints": ["high saturation palette", "crisp hard edges"],
+  "artist_hints": ["rella", "tidsean", "wlop", "ciloranko", "atdan"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

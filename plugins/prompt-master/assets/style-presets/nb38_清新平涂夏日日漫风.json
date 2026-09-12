@@ -1,0 +1,17 @@
+{
+  "id": "nb38_清新平涂夏日日漫风",
+  "name": "清新平涂夏日日漫风",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "cel shading with soft gradients, airy and bright atmosphere, crisp line art",
+  "fragments": {
+    "image": "fresh summer anime palette, flat cel shading, breezy seasonal mood, crisp lineart",
+    "video": "fresh summer anime palette, flat cel shading, breezy seasonal mood, crisp lineart"
+  },
+  "negative_hints": ["wintry muted palette", "heavy impasto"],
+  "artist_hints": ["kazutake hazano", "ciloranko", "kedama milk", "wanke", "wlop"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

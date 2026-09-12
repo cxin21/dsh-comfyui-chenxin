@@ -1,0 +1,17 @@
+{
+  "id": "nb28_柔光写实赛璐珞风_su_shi",
+  "name": "柔光写实赛璐珞风(su_shi)",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "illustration, animation screenshot, flat art",
+  "fragments": {
+    "image": "softly diffused shading, realistic cel rendering, gentle value transitions, clean anime illustration",
+    "video": "softly diffused shading, realistic cel rendering, gentle value transitions, clean anime illustration"
+  },
+  "negative_hints": ["harsh contrast", "gritty texture"],
+  "artist_hints": ["rurudo", "gusha s", "wlop", "yoneyama mai", "mikami mika"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

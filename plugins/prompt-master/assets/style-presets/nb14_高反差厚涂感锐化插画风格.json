@@ -1,0 +1,17 @@
+{
+  "id": "nb14_高反差厚涂感锐化插画风格",
+  "name": "高反差厚涂感锐化插画风格",
+  "category": "illustration",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "vibrant colors, high contrast",
+  "fragments": {
+    "image": "high-contrast impasto shading, sharpened edge rendering, thick paint accents, vivid illustration palette",
+    "video": "high-contrast impasto shading, sharpened edge rendering, thick paint accents, vivid illustration palette"
+  },
+  "negative_hints": ["flat cel shading", "muted colors"],
+  "artist_hints": ["pottsness", "midori_fufu", "kazutake_hazano", "sushispin", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

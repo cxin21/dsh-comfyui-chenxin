@@ -1,0 +1,17 @@
+{
+  "id": "nb35_高亮平涂矢量轻漫风格",
+  "name": "高亮平涂矢量轻漫风格",
+  "category": "graphic",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "light novel cover aesthetic, azure and golden yellow color palette",
+  "fragments": {
+    "image": "flat vector-like cel shading, azure and golden yellow palette, clean line art, bright light novel cover composition",
+    "video": "flat vector-like cel shading, azure and golden yellow palette, clean line art, bright light novel cover composition"
+  },
+  "negative_hints": ["dark desaturated palette", "heavy texture"],
+  "artist_hints": ["ningen mame", "ciloranko", "tianliang duohe fangdongye", "rhasta", "ln"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

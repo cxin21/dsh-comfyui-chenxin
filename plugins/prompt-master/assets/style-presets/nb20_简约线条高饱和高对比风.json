@@ -1,0 +1,17 @@
+{
+  "id": "nb20_简约线条高饱和高对比风",
+  "name": "简约线条高饱和高对比风",
+  "category": "graphic",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "art nouveau, pop art, vector art",
+  "fragments": {
+    "image": "minimal clean linework, high saturation flat color, bold emblem composition, vector graphic finish",
+    "video": "minimal clean linework, high saturation flat color, bold emblem composition, vector graphic finish"
+  },
+  "negative_hints": ["photorealistic render", "painterly texture"],
+  "artist_hints": ["kataokasan", "mika_pikazo", "Midori_fufu", "void_0"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

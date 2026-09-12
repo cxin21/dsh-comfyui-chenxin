@@ -1,0 +1,17 @@
+{
+  "id": "nb34_高调强逆光平涂冷淡插画风",
+  "name": "高调强逆光平涂冷淡插画风",
+  "category": "anime",
+  "rating": "safe",
+  "base": "anime style",
+  "theme": "cel shading with soft gradients, vibrant blue and white palette, airy and bright atmosphere",
+  "fragments": {
+    "image": "flat color illustration, cool blue-white palette, bright airy contrast, crisp lineart with soft gradients",
+    "video": "flat color illustration, cool blue-white palette, bright airy contrast, crisp lineart with soft gradients"
+  },
+  "negative_hints": ["dark moody palette", "heavy impasto"],
+  "artist_hints": ["ln", "daito", "coldcat.", "kazutake hazano", "ciloranko"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

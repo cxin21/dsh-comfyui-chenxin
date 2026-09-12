@@ -1,0 +1,16 @@
+{
+  "id": "nb16_缥缈杰作光影集",
+  "name": "缥缈杰作光影集",
+  "category": "anime",
+  "rating": "safe",
+  "theme": "delicate floral details, high saturation blue sky, painterly texture",
+  "fragments": {
+    "image": "ethereal atmosphere rendering, delicate floral motifs, billowing fabric detail, painterly oil texture",
+    "video": "ethereal atmosphere rendering, delicate floral motifs, billowing fabric detail, painterly oil texture"
+  },
+  "negative_hints": ["harsh industrial backdrop", "flat colors"],
+  "artist_hints": ["pottsness", "midori_fufu", "kazutake_hazano", "sushispin", "rella"],
+  "artist_max": 3,
+  "applies_to": ["anima", "h3", "sd"],
+  "source": "newbie-migrated"
+}

@@ -10,7 +10,7 @@
     "video": "gritty ink lineart, limited flat palette, high contrast flat shading, offset color outline"
   },
   "negative_hints": ["smooth airbrushed rendering", "photorealistic render"],
-  "artist_hints": ["limited palette", "animation paper", "color trace", "fujiyama", "nardack"],
+  "artist_hints": ["fujiyama", "nardack", "tekito_midori", "mion"],
   "artist_max": 3,
   "applies_to": ["anima", "h3", "sd"],
   "source": "newbie-migrated"

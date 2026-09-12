@@ -10,7 +10,7 @@
     "video": "impressionist brushstroke shading, muted cool palette, impasto texture, soft ambient depth"
   },
   "negative_hints": ["flat cel shading", "hard digital edges"],
-  "artist_hints": ["daito", "dsmile", "loli"],
+  "artist_hints": ["daito", "dsmile"],
   "artist_max": 3,
   "applies_to": ["anima", "h3", "sd"],
   "source": "newbie-migrated"

@@ -44,12 +44,28 @@ export function registerMinimaxTool(ctx: Context, config: Config) {
       form_fields: { type: 'object', description: '场景表单字段（随场景而异）', default: {}, additionalProperties: true },
       output_lang: { type: 'string', default: 'zh', description: '输出语言 zh/en/ja' },
       dry_run: { type: 'boolean', default: false, description: '只返回组装+审计结果' },
+      rating: { type: 'string', enum: ['safe', 'sensitive', 'explicit'], default: 'safe', description: '内容分级声明（spec §5.2）；本工具为 H3 场景面——MiniMax 政策只支持 safe（spec §5.5），声明 sensitive/explicit 将被 argument error 拒绝（不做降级猜测）' },
     },
     output: {
       schema: { type: 'string', description: 'JSON 字符串：{prompt, sections, scenario, budget, dry_run?}' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { scenario_id?: string; form_fields?: Record<string, unknown>; output_lang?: string; dry_run?: boolean }, exec: ToolRunContext) {
+    async execute(args: { scenario_id?: string; form_fields?: Record<string, unknown>; output_lang?: string; dry_run?: boolean; rating?: string }, exec: ToolRunContext) {
+      // M3-T1（spec §5.5 L185 / §7 P4）：rating 输入源——枚举 fail-fast + h3 硬约束
+      // （target=h3 等价面：本工具即 H3 场景工具，MiniMax 政策只支持 safe），两道校验
+      // 都在任何 LLM 调用之前（0 token，与 prompt_author 预检同源语义）。
+      const RATING_TIERS = ['safe', 'sensitive', 'explicit'] as const
+      const ratingArg = String(args.rating ?? 'safe')
+      if (!(RATING_TIERS as readonly string[]).includes(ratingArg)) {
+        throw new Error(`invalid rating: ${ratingArg}（枚举 safe|sensitive|explicit，缺省 safe）`)
+      }
+      const rating = ratingArg as (typeof RATING_TIERS)[number]
+      if (rating !== 'safe') {
+        throw new Error(
+          `h3_rating_unsupported: MiniMax H3 内容政策只支持 safe（spec §5.5）——本工具为 H3 场景面，rating=${rating} 被拒绝，不做降级猜测。` +
+            '需要 sensitive/explicit 内容分级请改走 prompt_author(target=anima)。',
+        )
+      }
       const scenarioId = String(args.scenario_id || '').trim()
       if (!scenarioId) return JSON.stringify({ scenarios: listScenarios(), hint: '请指定 scenario_id 选择一个场景' })
       const scenario = getScenarioById(scenarioId)
@@ -99,6 +115,9 @@ export function registerMinimaxTool(ctx: Context, config: Config) {
           },
           signal: exec.signal,
           formFields: args.form_fields || {},
+          // M3-T1（spec §7 P4）：T13 四接线点最后两处之一从工具流激活——declaredRating
+          // 恒透传（safe 缺省），续写修订轮携带评级行（不得降档/清洗/委婉化）。
+          declaredRating: rating,
           onContinue: (n, max) => ctx.logger?.info?.(`[prompt-master] continue round=${n}/${max}`),
         })
         text = outcome.text

@@ -336,4 +336,53 @@ describe('Round7 T3 persona 语言层修正', () => {
   })
 })
 
+/* Round8 T3Q：artDirection 透传（envelope enrichment 段）+ 旧形状 brief 向后兼容 */
+describe('Round8 T3Q artDirection 透传与向后兼容', () => {
+  let dbDir: string
+  beforeEach(() => {
+    dbDir = mkdtempSync(join(tmpdir(), 'pm-author-enrich-'))
+    setAuthorFeedbackDbPath(join(dbDir, 'feedback.sqlite'))
+  })
+
+  it('mock enrich 返回含 artDirection 的 brief → envelope enrichment.brief 带 artDirection，出稿流程不回归', async () => {
+    const ad = { perspective: 'low_angle', composition: 'diagonal_dynamics', lighting: 'rim_backlight', color: 'warm_cool_contrast', motion: 'flowing_dress' }
+    const enrich = enrichOf([briefJson({ artDirection: ad })])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: '月夜持剑而舞的少女', enrich: true, judge_mode: 'off' })))
+    expect(raw.ok).toBe(true)
+    // envelope enrichment 段带 artDirection（所选卡片 id 原样透传）
+    expect(raw.enrichment).toBeDefined()
+    expect(raw.enrichment.skipped).toBeUndefined()
+    expect(raw.enrichment.brief.artDirection).toEqual(ad)
+    // 出稿流程不回归：brief 仍是 intent 权威输入
+    expect(intentCalls[0].input).toContain('brief 是权威输入')
+  })
+
+  it('旧形状 brief（无 artDirection）→ 照常通过（向后兼容），enrichment.brief 无 artDirection 键', async () => {
+    const enrich = enrichOf([briefJson()])
+    setAuthorEnrichProvider(enrich)
+    setAuthorIntentProvider(async () => GOOD_SLOTS as never)
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: true, judge_mode: 'off' })))
+    expect(raw.ok).toBe(true)
+    expect(raw.enrichment).toBeDefined()
+    expect(raw.enrichment.brief.outputLang).toBe('en')
+    expect(raw.enrichment.brief.artDirection).toBeUndefined()
+  })
+
+  it('mock enrich 返回未知卡片 id → enrichment.skipped reason=invalid_art_direction + advisory enrich_skipped，照常出稿', async () => {
+    const enrich = enrichOf([briefJson({ artDirection: { lighting: 'no_such_card' } })])
+    setAuthorEnrichProvider(enrich)
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { intentCalls.push(req); return GOOD_SLOTS as never })
+    const raw = JSON.parse(String(await runTool(stubCtx(), tool(), { target: 'anima', input: 'cat portrait', enrich: true, judge_mode: 'off' })))
+    expect(raw.ok).toBe(true)
+    expect(raw.enrichment).toEqual({ skipped: true, reason: 'invalid_art_direction' })
+    expect(raw.advisories).toContain('enrich_skipped')
+    expect(String(raw.result.positive)).toContain('1girl') // 降级铁律：intent 吃原始输入，照常出稿
+    expect(intentCalls[0].input).toBe('cat portrait')
+  })
+})
+
 afterAll(() => { setAuthorIntentProvider(null); setAuthorEnrichProvider(null); setAuthorJudgeDeps(null); setAuthorFeedbackDbPath(null); closeCatalog() })

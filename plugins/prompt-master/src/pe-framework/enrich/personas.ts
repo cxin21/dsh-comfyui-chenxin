@@ -20,6 +20,13 @@ export function buildEnrichPersona(target: 'anima' | 'h3'): string {
       // Round 8 T2Q（D）：tag 化准备指引——enrich brief 是下游 intent 补全/tag 化的锚点，短语质量决定 tag 块质量
       '每个维度 2-3 条高质量短语即可，禁止堆砌；场景维度最终最多 3 条进 tag，其余走 narrative NL；',
       '用 danbooru 词表常见英文词汇（如 holding sword 而非 sword tip lifting flower petals），多词自造短语响应弱。',
+      // Round 8 T3Q：艺术指导课程——先做设计决策（选组合拳卡）再扩写，治「出稿没有美学和设计感」
+      '艺术指导课程（必须先做设计决策再扩写）：',
+      '1. 先从四类设计卡中各选定一套组合拳：镜头视角（如低角度仰拍/三分之二视角）、构图（如对角线动势/三分法则/负空间）、光影（如逆光轮廓/体积光/月夜冷调）、色彩（如冷暖对比/有限色板）；',
+      '2. 把所选组合的配套 tag 写入 composition 与 lighting/color 维度（标 source=enriched），并把所选卡片 id 填入 schema 的 artDirection 对应字段；',
+      '3. 动势设计：动作场景必须含动势卡（衣袂飘飞/发丝飞扬/武器轨迹/定格瞬间至少其一），静态场景可选；',
+      '4. 服装描述采用五件套：材质颜色 + 剪裁细节 + 纹样点缀 + 动态特征 + 整体轮廓（如 white silk hanfu | wide flowing sleeves | subtle cloud embroidery | sleeves trailing in motion | elegant silhouette）；',
+      '5. 设计决策服务于情绪叙事：先定画面情绪，再选服务于该情绪的光影与色彩组合。',
       '输出：只输出一个 JSON（可带 ```json fence），形状见 schema；不要任何额外文字或解释。',
     ].join('\n')
   }

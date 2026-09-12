@@ -84,3 +84,60 @@ describe('validateBrief', () => {
     expect(validateBrief(okBrief({ nameAnchors: 'x' })).ok).toBe(false)
   })
 })
+
+/* Round8 T3Q：artDirection 可选字段——所选艺术指导卡片 id 的合法性校验 */
+describe('validateBrief artDirection', () => {
+  it('缺省（旧形状）→ ok:true，输出 brief 无 artDirection 键（向后兼容硬约束）', () => {
+    const res = validateBrief(okBrief())
+    expect(res.ok).toBe(true)
+    if (res.ok) expect('artDirection' in res.brief).toBe(false)
+  })
+
+  it('合法卡片 id（全五类）→ ok:true 且 brief.artDirection 原样保留', () => {
+    const ad = { perspective: 'low_angle', composition: 'diagonal_dynamics', lighting: 'rim_backlight', color: 'warm_cool_contrast', motion: 'flowing_dress' }
+    const res = validateBrief(okBrief({ artDirection: ad }))
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.brief.artDirection).toEqual(ad)
+  })
+
+  it('部分选择（子集字段）→ ok:true，仅保留所选字段', () => {
+    const res = validateBrief(okBrief({ artDirection: { lighting: 'god_rays', color: 'limited_palette' } }))
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.brief.artDirection).toEqual({ lighting: 'god_rays', color: 'limited_palette' })
+  })
+
+  it('未知卡片 id → ok:false reason=invalid_art_direction', () => {
+    const res = validateBrief(okBrief({ artDirection: { perspective: 'no_such_card' } }))
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.reason).toBe('invalid_art_direction')
+  })
+
+  it('跨类目 id（lighting 填构图卡）→ ok:false reason=invalid_art_direction', () => {
+    const res = validateBrief(okBrief({ artDirection: { lighting: 'rule_of_thirds' } }))
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.reason).toBe('invalid_art_direction')
+  })
+
+  it('值非字符串（数字/null）→ ok:false reason=invalid_art_direction', () => {
+    expect(validateBrief(okBrief({ artDirection: { color: 42 } })).ok).toBe(false)
+    const res = validateBrief(okBrief({ artDirection: { color: null } }))
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.reason).toBe('invalid_art_direction')
+  })
+
+  it('artDirection 非对象（串/数组）→ ok:false reason=invalid_art_direction', () => {
+    const s = validateBrief(okBrief({ artDirection: 'low_angle' }))
+    expect(s.ok).toBe(false)
+    if (!s.ok) expect(s.reason).toBe('invalid_art_direction')
+    expect(validateBrief(okBrief({ artDirection: ['low_angle'] })).ok).toBe(false)
+  })
+
+  it('未知子键被丢弃；空对象 {} → ok:true 且不产出空 artDirection', () => {
+    const dropped = validateBrief(okBrief({ artDirection: { perspective: 'low_angle', bogus: 'x' } }))
+    expect(dropped.ok).toBe(true)
+    if (dropped.ok) expect(dropped.brief.artDirection).toEqual({ perspective: 'low_angle' })
+    const empty = validateBrief(okBrief({ artDirection: {} }))
+    expect(empty.ok).toBe(true)
+    if (empty.ok) expect('artDirection' in empty.brief).toBe(false)
+  })
+})

@@ -168,3 +168,44 @@ describe('runEnrich 保真', () => {
     expect(res!.subject).toEqual(userItems)
   })
 })
+
+/* Round8 T3Q：艺术指导卡片内置——persona 课程 / user 卡片清单 / artDirection 校验降级 */
+describe('runEnrich 艺术指导（Round8 T3Q）', () => {
+  const ART = { perspective: 'low_angle', composition: 'diagonal_dynamics', lighting: 'rim_backlight', color: 'warm_cool_contrast', motion: 'flowing_dress' }
+
+  it('anima persona 含「艺术指导」「设计决策」「五件套」课程关键词；h3 persona 不含（h3 不做美学升级）', async () => {
+    captured.length = 0
+    await runEnrich({ target: 'anima', userInput: 'u1', provider: capturing(providerReturning(validBriefJson())) })
+    await runEnrich({ target: 'h3', userInput: 'u2', provider: capturing(providerReturning(validBriefJson())) })
+    expect(captured[0].persona).toContain('艺术指导')
+    expect(captured[0].persona).toContain('设计决策')
+    expect(captured[0].persona).toContain('五件套')
+    expect(captured[1].persona).not.toContain('艺术指导')
+  })
+
+  it('anima user 段附五类卡片清单（id+name+tags）与 schema 的 artDirection 字段；h3 user/schema 无卡片清单', async () => {
+    captured.length = 0
+    await runEnrich({ target: 'anima', userInput: 'u1', provider: capturing(providerReturning(validBriefJson())) })
+    await runEnrich({ target: 'h3', userInput: 'u2', provider: capturing(providerReturning(validBriefJson())) })
+    // anima：菜单 + 代表性卡片 id/tag + schema artDirection 形状
+    expect(captured[0].user).toContain('艺术指导卡片菜单')
+    expect(captured[0].user).toContain('low_angle 低角度仰拍')
+    expect(captured[0].user).toContain('from below')
+    expect(captured[0].user).toContain('flowing_dress 衣袂飘飞')
+    expect(captured[0].schema).toContain('artDirection')
+    // h3：不加卡片清单（范围钉死：T3Q 只做 anima 美学升级）
+    expect(captured[1].user).not.toContain('艺术指导卡片菜单')
+    expect(captured[1].schema).not.toContain('artDirection')
+  })
+
+  it('mock brief 含合法 artDirection → brief.artDirection 原样透传', async () => {
+    const res = await runEnrich({ target: 'anima', userInput: '持剑舞者的少女', provider: providerReturning(validBriefJson({ artDirection: ART })) })
+    if ('brief' in res) expect(res.brief.artDirection).toEqual(ART)
+    else expect.unreachable()
+  })
+
+  it('未知卡片 id → skipped invalid_art_direction（reason 不被归并为 enrich_invalid_schema）', async () => {
+    const res = await runEnrich({ target: 'anima', userInput: 'x', provider: providerReturning(validBriefJson({ artDirection: { lighting: 'no_such_card' } })) })
+    expect(res).toEqual({ skipped: true, reason: 'invalid_art_direction' })
+  })
+})

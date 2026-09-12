@@ -12,6 +12,7 @@ import { detectLanguage } from '../dialect/h3.js'
 import { validateBrief } from './brief.js'
 import type { EnrichedBrief } from './brief.js'
 import { buildEnrichPersona } from './personas.js'
+import { buildArtDirectionMenu } from './art-direction.js'
 
 export type EnrichTarget = 'anima' | 'h3'
 
@@ -21,8 +22,13 @@ function stripFences(text: string): string {
   return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 }
 
-function buildSchema(): string {
+function buildSchema(target: EnrichTarget): string {
   const item = `{ "text": "维度内容（≤200 字符）", "source": "user" | "enriched" }`
+  // Round8 T3Q：anima 增加 artDirection（所选卡片 id，全部可选）；h3 不做美学升级，schema 不出现该字段
+  const artDirection = target === 'anima'
+    ? `
+  "artDirection": { "perspective": "镜头视角卡片 id（可省略）", "composition": "构图卡片 id（可省略）", "lighting": "光影卡片 id（可省略）", "color": "色彩卡片 id（可省略）", "motion": "动势卡片 id（可省略）" },`
+    : ''
   return `{
   "outputLang": "en" | "zh" | "ja",
   "subject": [${item}],
@@ -31,13 +37,13 @@ function buildSchema(): string {
   "lighting": [${item}],
   "color": [${item}],
   "style": [${item}],
-  "mood": [${item}],
+  "mood": [${item}],${artDirection}
   "nameAnchors": [{ "original": "用户原角色名", "anchored": "英文锚定名" }]
 }`
 }
 
 function buildUser(input: { target: EnrichTarget; userInput: string }): string {
-  return [
+  const lines = [
     `target=${input.target}`,
     '',
     '用户原始输入：',
@@ -46,7 +52,10 @@ function buildUser(input: { target: EnrichTarget; userInput: string }): string {
     // Round7 T3：与 persona 的语义级保留规则同步——字面「原样保留，不改写」会让中文 user 条目穿透英文 brief
     '要求：source=user 仅用于用户显式指定的内容（语义与指代保留、不得增删要素，语言必须改写为 outputLang 对应语言）；其余全部标 source=enriched。',
     '每维度 ≤6 条、单条 ≤200 字符。outputLang 按目标方言给出（anima 恒为 en）。',
-  ].join('\n')
+  ]
+  // Round8 T3Q：anima user 段附艺术指导卡片清单（id+name+tags），供 LLM 先选卡、再按组合拳扩写
+  if (input.target === 'anima') lines.push('', buildArtDirectionMenu())
+  return lines.join('\n')
 }
 
 /** detectLanguage（'中文'|'日本語'|'English'）→ brief outputLang（'zh'|'ja'|'en'，其他归 en）。 */
@@ -68,6 +77,7 @@ function resolveOutputLang(target: EnrichTarget, explicit: EnrichedBrief['output
  * - provider 抛错 → enrich_llm_error
  * - JSON parse 失败 / schema 不合 → enrich_invalid_schema
  * - 大小超限（validateBrief brief_too_large）→ brief_too_large（不截断，整体降级）
+ * - Round8 T3Q：未知/跨类目艺术指导卡片 id（validateBrief invalid_art_direction）→ invalid_art_direction（整体降级）
  */
 export async function runEnrich(input: {
   target: EnrichTarget
@@ -79,7 +89,7 @@ export async function runEnrich(input: {
   try {
     const raw = await input.provider({
       persona: buildEnrichPersona(input.target),
-      schema: buildSchema(),
+      schema: buildSchema(input.target),
       user: buildUser(input),
     })
     let parsed: unknown
@@ -90,8 +100,11 @@ export async function runEnrich(input: {
     }
     const validated = validateBrief(parsed)
     if (!validated.ok) {
-      // 形状/schema 不合归一为 enrich_invalid_schema；大小超限保留专属 reason（不截断，整体降级）
-      const reason = validated.reason === 'brief_too_large' ? 'brief_too_large' : 'enrich_invalid_schema'
+      // 形状/schema 不合归一为 enrich_invalid_schema；专属降级 reason 保留（不修补，整体降级）：
+      // 大小超限 brief_too_large；Round8 T3Q 未知/跨类目卡片 id invalid_art_direction
+      const reason = validated.reason === 'brief_too_large' || validated.reason === 'invalid_art_direction'
+        ? validated.reason
+        : 'enrich_invalid_schema'
       return { skipped: true, reason }
     }
     const brief: EnrichedBrief = {

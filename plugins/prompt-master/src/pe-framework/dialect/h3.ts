@@ -34,6 +34,23 @@ export function shotCutTimes(durationSeconds: number, shotCount: number): (numbe
   return [null, ...Array.from({ length: shotCount - 1 }, (_, i) => (durationSeconds * (i + 1)) / shotCount)]
 }
 
+/**
+ * Phase 2（h3-director-depth）：切点投影单点。
+ * 全部镜头显式 duration（>0 有限数）→ 按累计求和取切点（真实节奏，禁止均匀切分）；
+ * 否则回退官方等分（golden 双跑逐字节兼容）。
+ */
+export function shotCutTimesFromShots(shots: H3Shot[]): (number | null)[] | null {
+  const explicit = shots.length > 0 && shots.every((s) => typeof s.duration === 'number' && Number.isFinite(s.duration) && s.duration > 0)
+  if (!explicit) return null
+  const cuts: (number | null)[] = [null]
+  let acc = 0
+  for (let i = 0; i < shots.length - 1; i++) {
+    acc += shots[i].duration as number
+    cuts.push(Math.round(acc * 1000) / 1000)
+  }
+  return cuts
+}
+
 export function detectLanguage(text: string): string {
   // Round7 T3：假名优先于汉字判定——含任何假名（ひらがな/カタカナ）即日文，混合日文「雨の夜の江南园林」不再误判中文
   if (KANA.test(text)) return '日本語'
@@ -74,7 +91,7 @@ function buildDialogue(shot: H3Shot): string {
 
 export function buildShotLines(request: StoryRequest, subjectLabelsMap?: Map<string, number>): string[] {
   const labels = subjectLabelsMap ?? new Map<string, number>()
-  const times = shotCutTimes(request.duration_seconds, request.shots.length)
+  const times = shotCutTimesFromShots(request.shots) ?? shotCutTimes(request.duration_seconds, request.shots.length)
   const lines: string[] = []
   request.shots.forEach((shot, i) => {
     const index = i + 1
@@ -262,6 +279,10 @@ export function compileH3(
     if (!shot || typeof shot !== 'object' || typeof (shot as { what?: unknown }).what !== 'string' || !(shot as { what: string }).what.trim()) {
       const keys = shot && typeof shot === 'object' ? Object.keys(shot).join(',') : String(shot)
       throw new Error(`compileH3: 第 ${i + 1} 镜缺少 what 字段（当前字段: ${keys || '无'}）；H3 shot 契约键为 what（镜头内容文本），不是 content/what 之类——请参照 prompt_compile 的 shots schema`)
+    }
+    const dur = (shot as { duration?: unknown }).duration
+    if (dur != null && (typeof dur !== 'number' || !Number.isFinite(dur) || dur <= 0)) {
+      throw new Error(`compileH3: 第 ${i + 1} 镜 duration 必须为正数秒（got ${JSON.stringify(dur)}）；显式 duration 必须覆盖全部镜头且总和 = duration_seconds`)
     }
   })
   const refs: Reference[] = Array.isArray(input.references)

@@ -274,6 +274,35 @@ export function contractGatesH3(stage: string, shots: { duration_seconds: number
       source: 'audit/rules-h3',
     })
   }
+  // Phase 2（h3-director-depth）：per-shot duration 契约——全部显式或全部缺省；显式时总和 ≡ duration_seconds
+  const rawShotList = shots.shots as Array<Record<string, unknown> | null>
+  const durVals = rawShotList.map((s) => (s && typeof s === 'object' ? (s as Record<string, unknown>)['duration'] : undefined))
+  const explicitDurs = durVals.filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0)
+  if (explicitDurs.length > 0 && explicitDurs.length < durVals.length) {
+    gates.push({
+      rule: 'shot_duration_mixed', target: 'h3', severity: 'critical',
+      detail: `per-shot duration: 全部镜头显式或全部缺省，禁止混合（当前 ${explicitDurs.length}/${durVals.length} 显式；非正数/非数值视同缺省）`,
+      source: 'audit/rules-h3',
+    })
+  } else if (explicitDurs.length > 0 && explicitDurs.length === durVals.length) {
+    const sum = explicitDurs.reduce((a, b) => a + b, 0)
+    if (Math.abs(sum - d) > 1e-6) {
+      gates.push({
+        rule: 'shot_duration_sum', target: 'h3', severity: 'critical',
+        detail: `Σ per-shot duration (${sum}s) must equal duration_seconds (${d}s)`,
+        source: 'audit/rules-h3',
+      })
+    }
+    for (const v of explicitDurs) {
+      if (v < 0.4) {
+        gates.push({
+          rule: 'shot_duration_short', target: 'h3', severity: 'minor',
+          detail: `per-shot duration ${v}s < 0.4s：H3 单镜过短，建议合并镜头或加长该镜`,
+          source: 'audit/rules-h3',
+        })
+      }
+    }
+  }
   const refCount = refs.length
   if (stage === 'ref2va') {
     if (refCount !== 1 && refCount !== 3) {

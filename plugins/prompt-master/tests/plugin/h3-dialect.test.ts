@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseRequest, max_shots, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS, MAX_PROMPT_CHARS, ContractError } from '../../src/pe-framework/schema/h3-shots.js'
 import { compileH3 } from '../../src/pe-framework/dialect/h3.js'
+import { contractGatesH3 } from '../../src/pe-framework/audit/rules-h3.js'
 import { readGolden, assertGolden } from '../fidelity/harness.js'
 
 describe('h3 contracts (contracts.py port)', () => {
@@ -114,6 +115,49 @@ describe('h3 dialect golden double-run (dialect.py port)', () => {
   it('compileH3 defaults stage to t2va', () => {
     const { text } = compileH3({ duration_seconds: 8, shots: [{ what: 'A cat sleeps.' }] })
     expect(text).toContain('integrated_multimodal_description: [Shot 1] A cat sleeps.')
+  })
+})
+
+describe('h3 per-shot duration (Phase 2 反均匀切分)', () => {
+  it('explicit durations project cumulative cut points (no equal division)', () => {
+    const { text } = compileH3({
+      duration_seconds: 10,
+      shots: [
+        { what: 'establishing wide of the harbor.', duration: 6 },
+        { what: 'close on the rope knot fraying.', duration: 2.5 },
+        { what: 'the boat lurches away.', duration: 1.5 },
+      ],
+    })
+    expect(text).toContain('At 00:06.000,')
+    expect(text).toContain('At 00:08.500,')
+  })
+
+  it('missing duration falls back to equal division (golden-compatible)', () => {
+    const { text } = compileH3({ duration_seconds: 9, shots: [{ what: 'a' }, { what: 'b' }, { what: 'c' }] })
+    expect(text).toContain('At 00:03.000,')
+    expect(text).toContain('At 00:06.000,')
+  })
+
+  it('contractGatesH3 rejects mixed explicit/implicit durations', () => {
+    const gates = contractGatesH3('t2va', { duration_seconds: 8, shots: [{ what: 'a', duration: 4 }, { what: 'b' }] }, [])
+    expect(gates.some((g) => g.rule === 'shot_duration_mixed' && g.severity === 'critical')).toBe(true)
+  })
+
+  it('contractGatesH3 rejects sums that do not equal duration_seconds', () => {
+    const gates = contractGatesH3('t2va', { duration_seconds: 8, shots: [{ what: 'a', duration: 4 }, { what: 'b', duration: 3 }] }, [])
+    expect(gates.some((g) => g.rule === 'shot_duration_sum' && g.severity === 'critical')).toBe(true)
+  })
+
+  it('contractGatesH3 flags sub-0.4s shots as minor', () => {
+    const gates = contractGatesH3('t2va', { duration_seconds: 5, shots: [{ what: 'a', duration: 0.3 }, { what: 'b', duration: 4.7 }] }, [])
+    const short = gates.find((g) => g.rule === 'shot_duration_short')
+    expect(short?.severity).toBe('minor')
+  })
+
+  it('non-positive duration throws a readable error at compile', () => {
+    expect(() =>
+      compileH3({ duration_seconds: 8, shots: [{ what: 'a', duration: 0 }, { what: 'b', duration: 8 }] }),
+    ).toThrow(/duration 必须为正数秒/)
   })
 })
 

@@ -1,0 +1,17 @@
+{
+  "id": "beach_swimwear",
+  "name": "泳装盛夏",
+  "category": "glamour_intimate",
+  "rating": "sensitive",
+  "theme": "midsummer swimwear scene at the shore",
+  "palette": "sun-warmed summer palette with aqua blue",
+  "fragments": {
+    "image": "one-piece swimsuit at the shoreline, bright beach sun, sunscreen sheen on skin, straw sun hat",
+    "video": "one-piece swimsuit at the shoreline, bright beach sun, sunscreen sheen on skin, straw sun hat"
+  },
+  "negative_hints": ["explicit nudity", "topless sunbathing"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

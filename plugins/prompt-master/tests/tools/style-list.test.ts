@@ -8,10 +8,10 @@ describe('style_list (spec §9)', () => {
   it('no filter returns all presets with the summary shape', async () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), def(), {})))
     expect(Array.isArray(raw)).toBe(true)
-    // M2 数据里程碑：55 → 批次递增（T4 +7=62；T5 +5=67；T8 收口总账收紧为 82）
-    expect(raw.length).toBe(72)
+    // M2 数据里程碑：55 → 批次递增（T4 +7=62；T5 +5=67；T6 +5=72；T7 +6=78；T8 收口总账收紧为 82）
+    expect(raw.length).toBe(78)
     const ids = new Set(raw.map((p: { id: string }) => p.id))
-    expect(ids.size).toBe(72)
+    expect(ids.size).toBe(78)
     for (const p of raw) {
       for (const k of ['id', 'name', 'category', 'rating', 'artistCount', 'negativeCount', 'source']) {
         expect(k in p, `missing key ${k}`).toBe(true)
@@ -23,18 +23,19 @@ describe('style_list (spec §9)', () => {
   it('rating filter semantics = registry maxRating (preset.rating ≤ cap)', async () => {
     const safe = JSON.parse(String(await runTool(stubCtx(), def(), { rating: 'safe' })))
     for (const p of safe) expect(p.rating).toBe('safe')
-    // 当前数据全为 safe：任一上限 ≥ safe 都应返回全量（cap 语义，非精确相等；计数随 M2 批次递增）
+    // T7 起库内含 sensitive 预设：safe 上限只返回 safe（计数随批次递减语义由批 D d.test 活体断言覆盖）；
+    // sensitive/explicit 上限 ≥ safe 均应返回全量（现库尚无 explicit 预设，T8 落 4 条后 sensitive 上限将 < 全量）
     const sensitive = JSON.parse(String(await runTool(stubCtx(), def(), { rating: 'sensitive' })))
-    expect(sensitive.length).toBe(72)
+    expect(sensitive.length).toBe(78)
     const explicit = JSON.parse(String(await runTool(stubCtx(), def(), { rating: 'explicit' })))
-    expect(explicit.length).toBe(72)
+    expect(explicit.length).toBe(78)
   })
   it('category and applies_to filters', async () => {
     const anime = JSON.parse(String(await runTool(stubCtx(), def(), { category: 'anime' })))
     expect(anime.length).toBeGreaterThan(0)
     for (const p of anime) expect(p.category).toBe('anime')
     const anima = JSON.parse(String(await runTool(stubCtx(), def(), { applies_to: 'anima' })))
-    expect(anima.length).toBe(72)
+    expect(anima.length).toBe(78)
     const graphic = JSON.parse(String(await runTool(stubCtx(), def(), { category: 'graphic' })))
     // M2-T6 起 graphic 含 hand-authored 预设（poster_constructivist）
     expect(graphic.map((p: { id: string }) => p.id).sort()).toEqual([

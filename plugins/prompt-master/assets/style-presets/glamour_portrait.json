@@ -1,0 +1,17 @@
+{
+  "id": "glamour_portrait",
+  "name": "魅惑人像",
+  "category": "glamour_intimate",
+  "rating": "sensitive",
+  "theme": "sultry glamour headshot session",
+  "palette": "high-contrast evening palette with deep red",
+  "fragments": {
+    "image": "sultry gaze with smoky eyes, deep red lips, off-shoulder evening dress, dangling earrings",
+    "video": "sultry gaze with smoky eyes, deep red lips, off-shoulder evening dress, dangling earrings"
+  },
+  "negative_hints": ["explicit nudity", "full nudity"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

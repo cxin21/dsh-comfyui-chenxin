@@ -1,0 +1,17 @@
+{
+  "id": "lingerie_fashion",
+  "name": "内衣时尚",
+  "category": "glamour_intimate",
+  "rating": "sensitive",
+  "theme": "fashion catalogue lingerie editorial",
+  "palette": "satin blush palette with black lace accents",
+  "fragments": {
+    "image": "lingerie set with fashion catalogue posing, lookbook page layout, lace and satin details, elegant heel pumps",
+    "video": "lingerie set with fashion catalogue posing, lookbook page layout, lace and satin details, elegant heel pumps"
+  },
+  "negative_hints": ["explicit nudity", "sheer see-through exposure"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

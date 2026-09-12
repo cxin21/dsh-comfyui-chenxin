@@ -1,0 +1,17 @@
+{
+  "id": "pinup_retro",
+  "name": "经典海报女郎",
+  "category": "glamour_intimate",
+  "rating": "sensitive",
+  "theme": "classic american pin-up poster revival",
+  "palette": "vintage pin-up palette with cherry red",
+  "fragments": {
+    "image": "retro pin-up pose with winking gesture, victory rolls hairstyle, polka-dot two-piece swimsuit, vintage poster composition",
+    "video": "retro pin-up pose with winking gesture, victory rolls hairstyle, polka-dot two-piece swimsuit, vintage poster composition"
+  },
+  "negative_hints": ["explicit nudity", "crude explicit pose"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

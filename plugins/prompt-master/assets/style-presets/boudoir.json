@@ -1,0 +1,17 @@
+{
+  "id": "boudoir",
+  "name": "私房写真",
+  "category": "glamour_intimate",
+  "rating": "sensitive",
+  "theme": "intimate boudoir portrait mood",
+  "palette": "warm-neutral boudoir palette with soft whites",
+  "fragments": {
+    "image": "boudoir posing on silk sheets, intimate interior with sheer curtains, lace-trim silk robe, unmade bed with tossed pillows",
+    "video": "boudoir posing on silk sheets, intimate interior with sheer curtains, lace-trim silk robe, unmade bed with tossed pillows"
+  },
+  "negative_hints": ["explicit nudity", "full nudity"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

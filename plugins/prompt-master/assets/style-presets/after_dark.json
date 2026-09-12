@@ -1,0 +1,17 @@
+{
+  "id": "after_dark",
+  "name": "夜店魅影",
+  "category": "glamour_intimate",
+  "rating": "sensitive",
+  "theme": "nightlife after-dark party scene",
+  "palette": "neon night palette with deep violet",
+  "fragments": {
+    "image": "club lighting object with disco ball, cocktail glass condensation, sequin party dress, rooftop bar skyline",
+    "video": "club lighting object with disco ball, cocktail glass condensation, sequin party dress, rooftop bar skyline"
+  },
+  "negative_hints": ["explicit nudity", "accidental exposure"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

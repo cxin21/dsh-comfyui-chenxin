@@ -47,8 +47,8 @@ describe('anima compile (anima.ts P2 core)', () => {
     expect(r.assumptions).not.toContain('safety_seed_injected:default_for_non_explicit_request')
   })
 
-  it('narrative is emitted last after all slot tags', () => {
-    const r = compileAnima({ count_gender: ['1girl'], scene: ['ruins'], narrative: 'she walks away.' }, { variant: 'base', search: realSearch })
+  it('narrative is emitted last after all slot tags (Round8 F6: 显式 allowNarrative 出口)', () => {
+    const r = compileAnima({ count_gender: ['1girl'], scene: ['ruins'], narrative: 'she walks away.' }, { variant: 'base', search: realSearch, allowNarrative: true })
     expect(r.positive.endsWith('ruins, she walks away.')).toBe(true)
   })
 
@@ -113,13 +113,14 @@ describe('anima compile (anima.ts P2 core)', () => {
     expect(gates.some((g) => g.rule === 'tag_count_out_of_range')).toBe(true)
   })
 
-  it('F1 regression: tag_count uses segment semantics — 47 slots + 5-comma narrative stays in range (48)', () => {
+  it('F1 regression: tag_count uses segment semantics — 47 slots + 5-comma narrative stays in range (48) (Round8 F6: 显式 allowNarrative 出口)', () => {
     // 47 槽标签 + 带 5 个逗号的 narrative：segment 语义 = 48（槽逐项 + narrative 计 1）→ 阈值 [12,50] 内不触发；
-    // token 拆分语义 = 47 + 6 = 53 → 会误触发 out_of_range（修复点）
+    // token 拆分语义 = 47 + 6 = 53 → 会误触发 out_of_range（修复点）。
+    // Round8 F6：默认排除时 narrative 不计 1（见 anima-f6f8.test.ts 规格8），此处显式出口保持 F1 语义
     const tags = Array.from({ length: 47 }, (_, i) => `tag${i + 1}`)
     const slots = { appearance: tags, narrative: 'alpha, beta, gamma, delta, epsilon, omega' }
-    const r = compileAnima(slots, { variant: 'base', search: realSearch })
-    const gates = auditAnima(r.positive, r.negative, { variant: 'base', search: realSearch, slots })
+    const r = compileAnima(slots, { variant: 'base', search: realSearch, allowNarrative: true })
+    const gates = auditAnima(r.positive, r.negative, { variant: 'base', search: realSearch, slots, allowNarrative: true })
     expect(gates.some((g) => g.rule === 'tag_count_out_of_range')).toBe(false)
   })
 

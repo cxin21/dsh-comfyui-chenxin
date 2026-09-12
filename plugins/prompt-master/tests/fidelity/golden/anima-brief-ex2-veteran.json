@@ -74,7 +74,7 @@
     "stage": "author",
     "result": {
       "prompt": {
-        "positive": "masterpiece, best quality, score_7, safe, 1girl, solo, mature, long hair, black hair, ponytail, red eyes, makeup, lipstick, curvy, large breasts, wide hips, pale skin, bodysuit, skin tight, torn clothes, battle damage, scratches, gauntlets, high heel boots, kneeling, hand on own hip, holding sword, expressionless, smirk, narrow eyes, cowboy shot, from below, looking at viewer, ruins, debris, cityscape, night, rain, smoke, fire, cinematic, atmospheric, a cold veteran warrior kneeling in the rain amid the wreckage of a battle just won, her skin-tight bodysuit torn and battle-damaged at the shoulder pauldron, one sleeve, the side torso just under the arm, the hip seam, the outer thigh, and one knee guard — skin showing through every jagged rip but the chest plate and lower front still intact, gauntlets scratched and dusted, sword point down resting against the debris, smoke and distant fire drifting past crumbling pillars of a destroyed city, looking up at the viewer through the rain with the unhurried composure of a regal survivor who has already counted the bodies",
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, solo, mature, long hair, black hair, ponytail, red eyes, makeup, lipstick, curvy, large breasts, wide hips, pale skin, bodysuit, skin tight, torn clothes, battle damage, scratches, gauntlets, high heel boots, kneeling, hand on own hip, holding sword, expressionless, smirk, narrow eyes, cowboy shot, from below, looking at viewer, ruins, debris, cityscape, night, rain, smoke, fire, cinematic, atmospheric",
         "negative": "worst quality, low quality, score_1, score_2, score_3, no text, no watermark, no censored, no bar censor, no mosaic",
         "notes": [
           "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
@@ -117,7 +117,8 @@
           "citation:106948:match=canonical:canonical=atmospheric:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
         "assumptions": [
-          "safety_seed_injected:default_for_non_explicit_request"
+          "safety_seed_injected:default_for_non_explicit_request",
+          "narrative_excluded:623chars"
         ],
         "advisories": []
       },
@@ -1084,15 +1085,6 @@
         },
         {
           "segment_id": "seg43",
-          "channel": "positive",
-          "text": "a cold veteran warrior kneeling in the rain amid the wreckage of a battle just won, her skin-tight bodysuit torn and battle-damaged at the shoulder pauldron, one sleeve, the side torso just under the arm, the hip seam, the outer thigh, and one knee guard — skin showing through every jagged rip but the chest plate and lower front still intact, gauntlets scratched and dusted, sword point down resting against the debris, smoke and distant fire drifting past crumbling pillars of a destroyed city, looking up at the viewer through the rain with the unhurried composure of a regal survivor who has already counted the bodies",
-          "origin": "narrative",
-          "priority": 2000,
-          "slot": null,
-          "citation": null
-        },
-        {
-          "segment_id": "seg44",
           "channel": "negative",
           "text": "worst quality",
           "origin": "policy",
@@ -1101,7 +1093,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg45",
+          "segment_id": "seg44",
           "channel": "negative",
           "text": "low quality",
           "origin": "policy",
@@ -1110,7 +1102,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg46",
+          "segment_id": "seg45",
           "channel": "negative",
           "text": "score_1",
           "origin": "policy",
@@ -1119,7 +1111,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg47",
+          "segment_id": "seg46",
           "channel": "negative",
           "text": "score_2",
           "origin": "policy",
@@ -1128,7 +1120,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg48",
+          "segment_id": "seg47",
           "channel": "negative",
           "text": "score_3",
           "origin": "policy",
@@ -1137,7 +1129,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg49",
+          "segment_id": "seg48",
           "channel": "negative",
           "text": "no text",
           "origin": "exclusion",
@@ -1146,7 +1138,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg50",
+          "segment_id": "seg49",
           "channel": "negative",
           "text": "no watermark",
           "origin": "exclusion",
@@ -1155,7 +1147,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg51",
+          "segment_id": "seg50",
           "channel": "negative",
           "text": "no censored",
           "origin": "exclusion",
@@ -1164,7 +1156,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg52",
+          "segment_id": "seg51",
           "channel": "negative",
           "text": "no bar censor",
           "origin": "exclusion",
@@ -1173,7 +1165,7 @@
           "citation": null
         },
         {
-          "segment_id": "seg53",
+          "segment_id": "seg52",
           "channel": "negative",
           "text": "no mosaic",
           "origin": "exclusion",
@@ -1186,5 +1178,5 @@
     "errors": [],
     "advisories": []
   },
-  "sha256": "9a7d53fa5377df2268e38ecfed87ffddb89d9dc04fcc01b2f52a0d4db1655cb6"
+  "sha256": "a5bb406809fc76f5e79ff2ba3926939ed2de431ec84294817a885634c000c3de"
 }

@@ -3,6 +3,8 @@
  * 行为规格（brief 六条）：全重复不追加 / 部分重复按句切分只追加未覆盖句 / 无重复原样 /
  * 无 narrative 不变 / duplicate_segment important gates 消失 / 实词归一化（小写、≥2 字符、CJK bigram）。
  * 实词集合语义与 eval/critic.ts tokensOf 一致（抽公共 util）。
+ * Round 8 F6 迁移：narrative 默认排除后，本文件全部用例显式传 `allowNarrative: true`
+ * （F1 去重路径=显式出口路径；默认排除行为归 anima-f6f8.test.ts）。
  */
 import { describe, expect, it } from 'vitest'
 import { auditAnima, compileAnima } from '../../../src/pe-framework/dialect/anima.js'
@@ -15,7 +17,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   it('规格1 全重复：narrative 实词集合被已有槽位段覆盖 → 不追加 narrative 段', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     expect(r.segments.some((s) => s.origin === 'narrative')).toBe(false)
     expect(r.positive.endsWith('moon gate')).toBe(true)
@@ -24,7 +26,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   it('规格2 部分重复：按句切分，只追加未覆盖的句子', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate. a lantern glows.' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     expect(r.positive).not.toContain('moon gate. ')
     expect(r.positive).toContain('a lantern glows')
@@ -39,7 +41,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
     const narrative = 'she drifts through drifting petals, quiet as snowfall'
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     const seg = r.segments.find((s) => s.origin === 'narrative')
     expect(seg?.text).toBe(narrative)
@@ -47,7 +49,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   })
 
   it('规格4 无 narrative 段：行为不变（无 narrative 段，positive 不含逗号尾随）', () => {
-    const r = compileAnima({ count_gender: ['1girl'], scene: ['moon gate'] }, { variant: 'base', search: nullSearch })
+    const r = compileAnima({ count_gender: ['1girl'], scene: ['moon gate'] }, { variant: 'base', search: nullSearch, allowNarrative: true })
     expect(r.segments.some((s) => s.origin === 'narrative')).toBe(false)
     expect(r.positive).not.toMatch(/,\s*$/)
   })
@@ -58,8 +60,8 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
     const pre = 'masterpiece, 1girl, moon gate, moon gate, moon gate'
     expect(auditAnima(pre, '', { variant: 'base', slots }).some((g) => g.rule === 'duplicate_segment' && g.severity === 'important')).toBe(true)
     // 修复后：narrative 被去重，重复 gate 消失
-    const r = compileAnima(slots, { variant: 'base', search: nullSearch })
-    const gates = auditAnima(r.positive, r.negative, { variant: 'base', slots })
+    const r = compileAnima(slots, { variant: 'base', search: nullSearch, allowNarrative: true })
+    const gates = auditAnima(r.positive, r.negative, { variant: 'base', slots, allowNarrative: true })
     expect(gates.some((g) => g.rule === 'duplicate_segment')).toBe(false)
   })
 
@@ -67,19 +69,19 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
     // 大小写不敏感：槽位 'Moon Gate' 覆盖 narrative 'MOON GATE'
     const r1 = compileAnima(
       { count_gender: ['1girl'], scene: ['Moon Gate'], narrative: 'MOON GATE' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     expect(r1.segments.some((s) => s.origin === 'narrative')).toBe(false)
     // 单字符词元不成词元：narrative 'a b I' 无 ≥2 字符词元 → 视为被覆盖，不追加
     const r2 = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'a b I' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     expect(r2.segments.some((s) => s.origin === 'narrative')).toBe(false)
     // CJK bigram：槽位 '水袖' 覆盖 narrative '水袖'
     const r3 = compileAnima(
       { count_gender: ['1girl'], scene: ['水袖'], narrative: '水袖' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     expect(r3.segments.some((s) => s.origin === 'narrative')).toBe(false)
   })
@@ -87,7 +89,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   it('规格7 一期会话同款形状：`Scene details:` 前缀剥离后去重仍触发', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate', 'weeping willows by the pond'], narrative: 'Scene details: moon gate, weeping willows by the pond' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     expect(r.segments.some((s) => s.origin === 'narrative')).toBe(false)
     expect(r.positive.endsWith('weeping willows by the pond')).toBe(true)
@@ -100,7 +102,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
         scene: ['Jiangnan classical garden', 'beside a moon gate', 'weeping willows by the pond', 'peach blossom petals drifting on the water', 'soft dusk light', 'thin mist around the covered bridge'],
         narrative: 'Scene details: 1girl, gentle and graceful ancient Chinese beauty, hanfu, standing, Jiangnan classical garden, beside a moon gate, weeping willows by the pond, peach blossom petals drifting on the water, soft dusk light, thin mist around the covered bridge',
       },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     // T5 同款断言：前缀剥离 + 被覆盖短语丢弃 → positive 无 'Scene details:'、1girl 只出现一次；
     // 新短语（hanfu 等）按规则2 保留（未被覆盖）
@@ -114,7 +116,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   it('规格10 fix2 混合：部分短语重复部分新短语 → 只追加新短语（保留原文，逗号重接）', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate, a lantern glows' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     const segs = r.segments.filter((s) => s.origin === 'narrative')
     expect(segs).toHaveLength(1)
@@ -125,7 +127,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   it('规格11 fix2 散文句回归：含句末标点的句子维持句级规则，不受短语级切分影响', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate stands. a lantern glows, softly lit.' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     const segs = r.segments.filter((s) => s.origin === 'narrative')
     expect(segs).toHaveLength(1)
@@ -136,7 +138,7 @@ describe('F1: narrative 兜底段与槽位段去重（compile 装配层）', () 
   it('规格8 Minor-1：小数点不切句（`.` 前后均为数字），尾片段不静默丢弃', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'score 1.5 is high. a lantern glows' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     const segs = r.segments.filter((s) => s.origin === 'narrative')
     expect(segs).toHaveLength(1)

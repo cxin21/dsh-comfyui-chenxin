@@ -6,6 +6,8 @@
  * positive 出现两个 `moon gate`（一个来自替换后的 scene 槽，一个来自 narrative 残余短语）。
  * 行为规格（brief 四条，每条一个 it）：替换后二次去重 / 幂等 / 散文句回归 / 无替换路径一致。
  * 全程零 LLM；mock catalog（纯函数注入 search），不依赖真库。
+ * Round 8 F6 迁移：narrative 默认排除后，本文件全部用例显式传 `allowNarrative: true`
+ * （两轮去重=显式出口路径；默认排除行为归 anima-f6f8.test.ts）。
  */
 import { describe, expect, it } from 'vitest'
 import { compileAnima } from '../../../src/pe-framework/dialect/anima.js'
@@ -40,7 +42,7 @@ const yiqiSlots = {
 
 describe('R7-T2: F2 grounding 替换后的第二轮 narrative 短语去重', () => {
   it('规格1 一期同款形状 + grounding 替换：narrative 残余短语被二次去重（moon gate/covered bridge 各恰一次、无 Scene details 段）', () => {
-    const r = compileAnima(yiqiSlots, { variant: 'base', search: groundingSearch })
+    const r = compileAnima(yiqiSlots, { variant: 'base', search: groundingSearch, allowNarrative: true })
     expect((r.positive.match(/moon gate/g) || []).length).toBe(1)
     expect((r.positive.match(/covered bridge/g) || []).length).toBe(1)
     expect(r.positive).not.toContain('Scene details')
@@ -50,10 +52,10 @@ describe('R7-T2: F2 grounding 替换后的第二轮 narrative 短语去重', () 
   })
 
   it('规格2 幂等：对最终 positive 的 narrative 再跑 dedup pass → 无变化', () => {
-    const r1 = compileAnima(yiqiSlots, { variant: 'base', search: groundingSearch })
+    const r1 = compileAnima(yiqiSlots, { variant: 'base', search: groundingSearch, allowNarrative: true })
     const seg1 = r1.segments.find((s) => s.origin === 'narrative')
     // 把第一轮输出的 narrative 段文本原样喂回 dedup pass（同 slots 再编译）→ 结果逐字节不变
-    const r2 = compileAnima({ ...yiqiSlots, narrative: seg1?.text ?? '' }, { variant: 'base', search: groundingSearch })
+    const r2 = compileAnima({ ...yiqiSlots, narrative: seg1?.text ?? '' }, { variant: 'base', search: groundingSearch, allowNarrative: true })
     expect(r2.positive).toBe(r1.positive)
     const seg2 = r2.segments.find((s) => s.origin === 'narrative')
     expect(seg2?.text).toBe(seg1?.text)
@@ -65,7 +67,7 @@ describe('R7-T2: F2 grounding 替换后的第二轮 narrative 短语去重', () 
   it('规格3 散文句回归：含句号新句的 narrative（部分新内容）→ 新句保留（三期 T2 规格回归）', () => {
     const r = compileAnima(
       { count_gender: ['1girl'], scene: ['moon gate'], narrative: 'moon gate stands. a lantern glows, softly lit.' },
-      { variant: 'base', search: nullSearch },
+      { variant: 'base', search: nullSearch, allowNarrative: true },
     )
     const segs = r.segments.filter((s) => s.origin === 'narrative')
     expect(segs).toHaveLength(1)
@@ -74,7 +76,7 @@ describe('R7-T2: F2 grounding 替换后的第二轮 narrative 短语去重', () 
   })
 
   it('规格4 无替换路径：第二轮去重仍执行，纯 narrative 重复同样被清，行为与第一轮一致', () => {
-    const r = compileAnima(yiqiSlots, { variant: 'base', search: nullSearch })
+    const r = compileAnima(yiqiSlots, { variant: 'base', search: nullSearch, allowNarrative: true })
     expect(r.corrections).toBe(0)
     expect(r.substitutions).toEqual([])
     // 第一轮已清除 narrative 侧的槽位重复短语（槽位原文保留是 user-fuzzy 现行为，与此无关）；

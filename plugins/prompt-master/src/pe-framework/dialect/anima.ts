@@ -33,6 +33,9 @@ export interface AnimaSlots {
 export interface CompileAnimaOptions {
   variant?: 'base' | 'aesthetic' | 'turbo'
   search?: (tag: string) => CatalogHit[]
+  /** F6（Round 8）：narrative 默认排除（false=默认，narrative 段不进 positive，留痕
+   *  `narrative_excluded:<chars>chars` advisory）；true=显式合法出口，走既有 F1 去重路径 */
+  allowNarrative?: boolean
 }
 
 export interface CompileAnimaResult {
@@ -298,14 +301,24 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       pushSeg(text, 'positive', citation && citation.match_type && GROUNDED.has(citation.match_type) ? 'grounded' : 'user-fuzzy', base + tagIndex, slotName, citation ?? null)
     })
   })
-  // 3d: narrative 最后（F1 三期 Task 2：与已有槽位段实词去重——确定性，零 LLM，发生在 audit 之前）
-  if (slots.narrative && slots.narrative.trim()) {
-    // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集；
-    // 全部被覆盖 → 不追加该 narrative 段（第一轮，与 R7-T2 第二轮共用 dedupNarrativeSegments）
-    const covered = new Set<string>()
-    for (const seg of positive) for (const t of tokensOf(seg)) covered.add(t)
-    const kept = dedupNarrativeSegments([slots.narrative.trim()], covered)
-    if (kept.length) pushSeg(kept[0], 'positive', 'narrative', 2000)
+  // 3d: narrative 最后。F6（Round 8）：默认排除——narrative 段（slot=null/origin=narrative）默认
+  // 不进 positive（实战 2/2 为伪增量冗余）。排除发生在段入列处（pushSeg 之前，非装配后删除——
+  // 后者会留下去重死代码路径）；排除时 assumptions 留痕 `narrative_excluded:<chars>chars`
+  // （envelope.result.assumptions 可见，可追溯）。allowNarrative=true 为合法出口：走既有 F1
+  // 第一轮去重路径（与 R7-T2 第二轮共用 dedupNarrativeSegments，逻辑不变）。
+  // 安全语义独立：isExplicitRequest（3b）始终扫描 narrative，排除不影响 explicit 关断判定。
+  const narrativeText = slots.narrative?.trim() ?? ''
+  if (narrativeText) {
+    if (opts?.allowNarrative === true) {
+      // 覆盖集 = narrative 之前已装配的全部 positive 段（policy/安全/槽位）的实词词元并集；
+      // 全部被覆盖 → 不追加该 narrative 段（第一轮，与 R7-T2 第二轮共用 dedupNarrativeSegments）
+      const covered = new Set<string>()
+      for (const seg of positive) for (const t of tokensOf(seg)) covered.add(t)
+      const kept = dedupNarrativeSegments([narrativeText], covered)
+      if (kept.length) pushSeg(kept[0], 'positive', 'narrative', 2000)
+    } else {
+      assumptions.push(`narrative_excluded:${narrativeText.length}chars`)
+    }
   }
   // 3e: exclusions → negative（原样）
   for (const e of slots.exclusions ?? []) pushSeg(String(e), 'negative', 'exclusion', 900)
@@ -330,7 +343,7 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM。
   // R7-T2：catalogMs 计时窗口扩展到含第二轮 narrative 去重的整个 audit 后处理阶段（纯可观测）
   const tCatalog0 = performance.now()
-  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search })
+  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search, allowNarrative: opts?.allowNarrative })
   if (subst.corrections > 0) {
     positiveText = subst.positive
     // segments 投影同步（文本级替换；citation 保持 miss 溯源）
@@ -378,8 +391,9 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
         if (removed.has(segments[i])) segments.splice(i, 1)
       }
       positiveText = segments.filter((s) => s.channel === 'positive').map((s) => s.text).join(', ')
-      // 重跑 audit 用替换后的槽位视图（subst.effectiveSlots），gates 以最终重跑为准
-      gates = auditAnima(positiveText, negativeText, { variant, slots: subst.effectiveSlots, search })
+      // 重跑 audit 用替换后的槽位视图（subst.effectiveSlots），gates 以最终重跑为准；
+      // allowNarrative 透传（contentCount 的 narrative 计 1 与装配行为保持一致）
+      gates = auditAnima(positiveText, negativeText, { variant, slots: subst.effectiveSlots, search, allowNarrative: opts?.allowNarrative })
     }
   }
   const catalogMs = performance.now() - tCatalog0
@@ -425,6 +439,12 @@ const MUTUAL_EXCLUSIONS: Array<[string, string]> = [
 
 const TAG_COUNT_MIN = 12
 const TAG_COUNT_MAX = 50
+
+/** F8（Round 8）：空泛词表——vague_tag minor gate 词源，可扩展。匹配语义：positive 逐逗号分段
+ *  后与词表项精确相等（trim + 小写），非子串——atmospheric/beautifully 等词形变化不误报 */
+export const VAGUE_TAGS: readonly string[] = [
+  'atmosphere', 'beautiful', 'stunningly beautiful', 'amazing', 'gorgeous', 'pretty', 'lovely',
+]
 
 function normalizeText(value: string): string {
   return normalizeTag(value)
@@ -488,12 +508,25 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
     gates.push({ rule: 'cjk_in_positive', target: 'anima', severity: 'critical', detail: `cjk fragment in positive (invalid for anima tag library): ${m[0]}`, source: 'dialect/anima' })
   }
   // tag count（F1：segment 语义——调用方按「槽标签逐项 + narrative 整段计 1」提供 contentCount；
-  // 缺省才回退 token 拆分估算，仅脱机近似、不进 golden 路径）
+  // 缺省才回退 token 拆分估算，仅脱机近似、不进 golden 路径。F6（Round 8）：narrative 计 1 仅在
+  // allowNarrative=true（实际参与装配）时成立——默认排除后正文无 narrative 段，计数须与之一致）
   const contentCount =
     opts?.contentCount ??
     positive.split(', ').map((s) => s.trim()).filter(Boolean).filter((t) => !new Set([...(qualityPrefix ? policy.mandatoryPositive : []), 'safe']).has(t)).length
   if (!(TAG_COUNT_MIN <= contentCount && contentCount <= TAG_COUNT_MAX)) {
     gates.push({ rule: 'tag_count_out_of_range', target: 'anima', severity: 'important', detail: `${contentCount} content tags (working range ${TAG_COUNT_MIN}-${TAG_COUNT_MAX})`, source: 'dialect/anima' })
+  }
+  // F8（Round 8）：空泛词拦截——positive 逐逗号分段与 VAGUE_TAGS 精确匹配（trim + 小写整段相等）；
+  // 质量前缀白名单豁免（masterpiece/best quality/score_x/safe 等，与 tag_count 白名单同源）。
+  // severity=minor：advisory 性质不进修正闭环（设计 §F8——空泛词删除属优化非硬伤，避免与预算修正竞争）；
+  // 同词重复只报一条（字面重复段由 duplicate_segment 另行负责）。
+  const vagueWhitelist = new Set([...(qualityPrefix ? policy.mandatoryPositive : []), 'safe'])
+  const seenVague = new Set<string>()
+  for (const piece of positive.split(', ')) {
+    const p = piece.trim().toLowerCase()
+    if (!p || vagueWhitelist.has(p) || seenVague.has(p) || !VAGUE_TAGS.includes(p)) continue
+    seenVague.add(p)
+    gates.push({ rule: 'vague_tag', target: 'anima', severity: 'minor', detail: `建议删除或替换为具象描述: ${p}`, source: 'dialect/anima' })
   }
 
   return gates
@@ -534,7 +567,8 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
     qualityPrefix: opts?.slots?.qualityPrefix ?? true,
     explicit: opts?.slots?.explicit,
     contentCount: opts?.slots
-      ? SLOT_ORDER.reduce((sum, key) => sum + (slotOf(opts.slots!, key)?.length ?? 0), 0) + (opts.slots.narrative ? 1 : 0)
+      ? SLOT_ORDER.reduce((sum, key) => sum + (slotOf(opts.slots!, key)?.length ?? 0), 0)
+        + (opts.allowNarrative === true && opts.slots.narrative ? 1 : 0)
       : undefined,
   }))
   return gates
@@ -609,7 +643,7 @@ export function applyCanonicalSubstitutions(
     return piece
   })
   if (!replacements.length) {
-    return { positive, corrections: 0, replacements, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search }), effectiveSlots: opts?.slots }
+    return { positive, corrections: 0, replacements, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search, allowNarrative: opts?.allowNarrative }), effectiveSlots: opts?.slots }
   }
   const newPositive = out.join(', ')
   // 重跑 audit 用替换后的槽位视图（原文片段已换成 canonical tag → 对应 miss gate 消失）
@@ -629,7 +663,7 @@ export function applyCanonicalSubstitutions(
     corrections: replacements.length,
     replacements,
     advisories,
-    gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, search }),
+    gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, search, allowNarrative: opts?.allowNarrative }),
     effectiveSlots,
   }
 }

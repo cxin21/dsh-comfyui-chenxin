@@ -5,7 +5,7 @@ import { KEYFRAME_STAGES, type Reference, type H3Shot, type StoryRequest, type H
 import { registerDialect } from './registry.js'
 import type { DialectContract, DialectLicense } from './contract.js'
 import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js'
-import { buildH3Budget, h3BudgetToReport, STAGE_QUALITY_CAPS } from '../audit/budget.js'
+import { buildH3Budget, h3BudgetToReport, STAGE_QUALITY_CAPS, STAGE_QUALITY_CAPS_DIRECTOR } from '../audit/budget.js'
 import { resolveKnowledgePath } from '../resources/resolve.js'
 import { readFileSync } from 'node:fs'
 import { H3_PERSONA, H3_SCHEMA } from '../intent/subagent-provider.js'
@@ -265,10 +265,11 @@ export function buildTextPair(stage: string, request: StoryRequest): { text: str
   return { text: textEn, textZh: buildTextZh(textEn) }
 }
 
-/** 供 T7/E2E 消费（brief 接口）：输入扁平 story → {text, text_zh}（Task 6 键桥接：result 键直接匹配 golden text_zh） */
+/** 供 T7/E2E 消费（brief 接口）：输入扁平 story → {text, text_zh}（Task 6 键桥接：result 键直接匹配 golden text_zh）
+ *  depth：'quick'（缺省）=golden 兼容口径；'director'=启用导演级投影（Phase 3 起：retention 外观镜号等）。 */
 export function compileH3(
   input: { duration_seconds: number; shots: H3Shot[]; references?: unknown[] },
-  opts?: { stage?: string },
+  opts?: { stage?: string; depth?: 'quick' | 'director' },
 ): { text: string; text_zh: string } {
   const stage = opts?.stage ?? 't2va'
   // F2：shot 结构前置校验——非法字段（如把 content 当 what 传）给可读错误，而不是 trimPunct(undefined) 裸崩溃
@@ -371,7 +372,7 @@ export function registerH3Dialect(): void {
     label: 'MiniMax-H3',
     auditOnlyOk: true,
     normalize: (input, opts) => normalizeH3Input(input, opts),
-    compile: (shots, opts) => compileH3(shots, { stage: opts.stage ?? 't2va' }),
+    compile: (shots, opts) => compileH3(shots, { stage: opts.stage ?? 't2va', depth: opts.depth }),
     audit: (compiled, ctx) => {
       const stage = ctx.stage ?? 't2va'
       const shots = ctx.shots as H3ShotsInput
@@ -381,7 +382,7 @@ export function registerH3Dialect(): void {
       ]
       return { gates, assumptions: [] }
     },
-    budget: (compiled, ctx) => h3BudgetToReport(buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? [])),
+    budget: (compiled, ctx) => h3BudgetToReport(buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? [], { depth: ctx.depth })),
     targetSlotHint: 't2v.prompt',
     rubric: H3_RUBRIC,
     intent: { persona: H3_PERSONA, schema: H3_SCHEMA },
@@ -396,7 +397,7 @@ export function registerH3Dialect(): void {
       duration_range: [MIN_DURATION_SECONDS, MAX_DURATION_SECONDS],
       max_shots_formula: MAX_SHOT_FORMULA,
       max_prompt_chars: MAX_PROMPT_CHARS,
-      budget_quality_cap: Math.max(...Object.values(STAGE_QUALITY_CAPS)),  // 各 stage 上限的上界（ref2va=2400）
+      budget_quality_cap: Math.max(...Object.values(STAGE_QUALITY_CAPS_DIRECTOR)),  // 各 stage 上限的上界（director ref2va=4800；quick 缺省档 2400）
     },
     constraints: {
       // 对 contractGatesH3 的薄封装（不迁移代码，audit 层继续直接引用原函数）

@@ -14,6 +14,19 @@ import type { DebateRound, PipelineInput, PipelineTrace, StageResult } from './t
  * 保持同步返回且逐字段与旧版本一致（provider 零调用）；judge=fast/strict 时异步追加评审阶段。
  */
 
+/* ── Phase 7（h3-director-depth）：depth 分档解析（formFields.depth → compile/budget）── */
+
+/** formFields.depth → 'quick' | 'director'；缺省/空 → undefined（方言取各自缺省档）。非法值显式抛错。 */
+export function resolveDepth(formFields?: Record<string, unknown>): 'quick' | 'director' | undefined {
+  const raw = formFields?.['depth']
+  if (raw === undefined || raw === null || raw === '') return undefined
+  const v = String(raw)
+  if (v !== 'quick' && v !== 'director') {
+    throw new Error(`formFields.depth 仅支持 quick|director，got ${JSON.stringify(String(raw))}`)
+  }
+  return v
+}
+
 /** judge=off / 无 rubric 时同步返回 StageResult（旧签名兼容：既有调用方零改动） */
 export function runStage(input: Omit<PipelineInput, 'judge'> & { judge?: 'off' | undefined }): StageResult
 /** judge=fast/strict 时返回 Promise<StageResult>（Task 6 消费） */
@@ -54,13 +67,15 @@ export function runStage(input: PipelineInput): StageResult | Promise<StageResul
   // normalize 单点推断的 stage（h3: references/full_reference → ref2va）优先于显式输入（Task 6：工具侧 inferH3Stage 已删）
   const stage = normalized.stage ?? input.stage
 
-  const compiled = d.compile(slots as never, { variant: input.variant, stage })
+  const depth = resolveDepth(input.formFields)
+
+  const compiled = d.compile(slots as never, { variant: input.variant, stage, depth })
   const tDialect = performance.now()
 
   const audit = d.audit(compiled as never, { stage, references: normalized.references, shots: normalized.value ?? input.shots, variant: input.variant })
   const tAudit = performance.now()
 
-  const budgetRaw = d.budget?.(compiled as never, { stage, references: normalized.references })
+  const budgetRaw = d.budget?.(compiled as never, { stage, references: normalized.references, depth })
   const tBudget = performance.now()
 
   const ok = audit.gates.every((g) => g.severity !== 'critical')

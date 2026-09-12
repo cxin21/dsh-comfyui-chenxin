@@ -61,9 +61,9 @@ export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
     stage?: string
     references?: Reference[]
   }
-  compile(slots: TSlots, opts: { variant?: string; stage?: string }): TCompiled
+  compile(slots: TSlots, opts: { variant?: string; stage?: string; depth?: 'quick' | 'director' }): TCompiled
   audit(compiled: TCompiled, ctx: { stage?: string; references?: Reference[]; shots?: unknown; variant?: string }): { gates: AuditGate[]; assumptions?: string[] }
-  budget?(compiled: TCompiled, opts: { stage?: string; references?: Reference[] }): unknown
+  budget?(compiled: TCompiled, opts: { stage?: string; references?: Reference[]; depth?: 'quick' | 'director' }): unknown
   targetSlotHint: string
   intent?: { persona: string; schema: string }
   /** 方言包声明（spec §9）：capabilities/constraints/aesthetics 为包必需；license 可选 */

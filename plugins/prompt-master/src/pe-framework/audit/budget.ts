@@ -15,7 +15,7 @@ export const DEFAULT_REFERENCE_WIDTH = 1024
 export const DEFAULT_REFERENCE_HEIGHT = 1024
 export const DEFAULT_RUNTIME_SAFETY_MARGIN = 256
 
-/** budget-policy.json limits.quality_cap 逐 stage */
+/** budget-policy.json limits.quality_cap 逐 stage（depth=quick，缺省——golden 基线口径） */
 export const STAGE_QUALITY_CAPS: Record<string, number> = {
   t2va: 1200,
   i2va: 1500,
@@ -23,6 +23,18 @@ export const STAGE_QUALITY_CAPS: Record<string, number> = {
   l2va: 1700,
   ref2va: 2400,
 }
+
+/** depth=director 档（h3-director-depth Phase 7）：导演级内容（表演肌理/声音编排/constraints）需要更大写作空间；
+ *  仍远低于 MAX_PROMPT_CHARS=7000 官方硬上限。qualityCap 只影响 budget 投影（advisory），不产生 critical gate。 */
+export const STAGE_QUALITY_CAPS_DIRECTOR: Record<string, number> = {
+  t2va: 2800,
+  i2va: 3200,
+  fl2va: 3600,
+  l2va: 3600,
+  ref2va: 4800,
+}
+
+export type H3BudgetDepth = 'quick' | 'director'
 
 /** 官方上下文帧的视觉 token 计算（visual_tokens 移植；估算口径，像素面积约束不变） */
 export function visualTokens(reference: Reference, assumptions: string[]): number {
@@ -68,9 +80,10 @@ export function buildH3Budget(
   stage: string,
   text: string,
   references: Reference[] = [],
-  options?: { textTokensOverride?: number; tokenizerSourceDir?: string },
+  options?: { textTokensOverride?: number; tokenizerSourceDir?: string; depth?: H3BudgetDepth },
 ): H3BudgetProjection {
-  const qualityCap = STAGE_QUALITY_CAPS[stage] ?? STAGE_QUALITY_CAPS.t2va
+  const caps = options?.depth === 'director' ? STAGE_QUALITY_CAPS_DIRECTOR : STAGE_QUALITY_CAPS
+  const qualityCap = caps[stage] ?? caps.t2va
   const assumptions: string[] = []
   const visual = references.reduce((sum, ref) => sum + visualTokens(ref, assumptions), 0)
   // chat 帧底（T14 精确口径：官方 user 上下文帧全量 BPE，text="" + vision pads 展开；

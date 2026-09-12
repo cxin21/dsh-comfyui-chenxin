@@ -55,6 +55,37 @@ describe('runStage', () => {
   })
 })
 
+describe('runStage depth（h3-director-depth Phase 7：formFields.depth → compile/budget 透传）', () => {
+  beforeEach(() => { __resetDialectsForTests() })
+
+  it('formFields.depth=director 透传给 compile 与 budget', () => {
+    const seen: { compile?: unknown; budget?: unknown } = {}
+    registerDialect({
+      ...fakeDialect,
+      compile: (v, opts) => { seen.compile = (opts as { depth?: string }).depth; return { positive: 'p', negative: 'n' } },
+      budget: (_c, opts) => { seen.budget = (opts as { depth?: string }).depth; return { counter: 'estimate', tokens: 1, max: 10, over: false } },
+    })
+    runStage({ target: 'anima', formFields: { depth: 'director' } } as any)
+    expect(seen.compile).toBe('director')
+    expect(seen.budget).toBe('director')
+  })
+
+  it('缺省（无 formFields.depth）→ compile/budget 收到 undefined（方言取缺省档）', () => {
+    const seen: { compile?: unknown } = {}
+    registerDialect({
+      ...fakeDialect,
+      compile: (v, opts) => { seen.compile = (opts as { depth?: string }).depth; return { positive: 'p', negative: 'n' } },
+    })
+    runStage({ target: 'anima' } as any)
+    expect(seen.compile).toBeUndefined()
+  })
+
+  it('非法 depth 显式抛错（quick|director 白名单）', () => {
+    registerDialect(fakeDialect)
+    expect(() => runStage({ target: 'anima', formFields: { depth: 'ultra' } } as any)).toThrow(/quick\|director/)
+  })
+})
+
 describe('assembleEnvelope', () => {
   it('emits P1 envelope with ok/result/audit/advisories/target_slot_hint', () => {
     const s = JSON.parse(assembleEnvelope(

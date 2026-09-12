@@ -37,4 +37,13 @@ describe('H3 budget chat-frame precision', () => {
     const available = H3_CONTEXT_LIMIT - 1024 - frame - DEFAULT_RUNTIME_SAFETY_MARGIN
     expect(b.effectiveCap).toBe(Math.min(1200, available))
   })
+
+  it('depth=director uses director caps（t2va 2800 / ref2va 4800），quick 保持 golden 基线', () => {
+    const quick = buildH3Budget('t2va', 'x'.repeat(100), [], { tokenizerSourceDir: realTokenizerDir })
+    expect(quick.qualityCap).toBe(1200)
+    const director = buildH3Budget('t2va', 'x'.repeat(100), [], { tokenizerSourceDir: realTokenizerDir, depth: 'director' })
+    expect(director.qualityCap).toBe(2800)
+    const ref2vaDirector = buildH3Budget('ref2va', 'x'.repeat(100), [], { tokenizerSourceDir: realTokenizerDir, depth: 'director' })
+    expect(ref2vaDirector.qualityCap).toBe(4800)
+  })
 })

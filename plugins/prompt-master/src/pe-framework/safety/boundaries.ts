@@ -8,6 +8,9 @@
  * bare lolita/lolitas 阻断；kids/lolis/lolitas/toddlers/infants/children(child+ren 冗余
  * 无害)/shotacons 由后缀组覆盖）；y→ies 词干变形复数无法由后缀组覆盖（babies/bestialities
  * 无 'y'），由 PLURAL_VARIANTS 显式变体表承接；CJK marker 保持 substring includes。
+ * 维护注记（M3 T3）：新增 ASCII 词表词必须跑全表 y-结尾扫描——y 结尾词的复数形不含词干尾
+ * 'y'，后缀模式 (?:s|es|ren) 不覆盖；命中者必须同步 PLURAL_VARIANTS（rating 侧词表则直录
+ * 复数形态），并留痕扫描结论。历史扫描结论见下方 PLURAL_VARIANTS 注释块与 docs/artist-provenance.md。
  */
 import type { Rating } from '../types.js'
 

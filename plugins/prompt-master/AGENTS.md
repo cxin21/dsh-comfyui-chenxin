@@ -46,4 +46,16 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 - `src/pe-framework/audit/` — H3 审计规则（rules-h3.ts，含 CJK 感知 semanticShot）
 - `src/pe-framework/intent/` — 意图分析（analyzer / subagent-provider）
 - `src/pe-framework/eval/` — LLM 评委（judge.ts，可选路径）
-- `src/tools/` — prompt_author / prompt_compile / prompt_audit 工具定义
+- `src/tools/` — prompt_author / prompt_compile / prompt_audit 工具定义（注册清单权威源 =
+  `tests/plugin/registry.test.ts` 精确名单，13 工具；M3 T2 起 +style_save 预设入库写工具，
+  spec §13——validateStylePreset fail-fast + id 白名单 + 原子写，重复 id 拒收改走 git）
+
+## 安全词表与预设维护注记
+
+- 新增 ASCII 词表词（boundaries.ts / rating.ts）必须跑全表 **y-结尾扫描**：y 结尾词的复数形
+  不含词干尾 'y'，后缀模式 (?:s|es|ren) 不覆盖——命中者同步 `PLURAL_VARIANTS`（rating 侧
+  直录复数形态），扫描结论注释留痕（boundaries.ts 头注释 + PLURAL_VARIANTS 块）。
+- 新预设 artist_hints 必须逐名过 `catalog_search`（canonical/alias 才采纳，fuzzy 候选不采信，
+  验证失败留空）；五批采纳/弃用全量台账与 rec 号留痕见 `docs/artist-provenance.md`。
+- `style_save` 写入的预设即仓库工作树内容，git 提交由用户完成（工具不碰 git）；同进程重复
+  保存未提交 id 会静默覆盖且不可恢复（缓存镜像盲区，详见 artist-provenance.md 维护注记）。

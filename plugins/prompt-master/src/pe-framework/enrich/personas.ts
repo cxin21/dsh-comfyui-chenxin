@@ -5,10 +5,14 @@
  * Round7 T3：source=user 保留为**语义级**——语义与指代不变、不得增删要素，但语言必须改写为
  * outputLang 对应语言（anima 恒 en；h3 随 outputLang）。字面「原样保留」会让中文 user 条目
  * 穿透 anima 的英文 brief 直达 positive（三期 T3 探针实证）。
+ * 2026-09-12 spec §7 P2：anima persona 增【内容分级】块（三档扩写纪律 + 评级由管线强制）；
+ * h3 仅 safe，不加分级块。
  */
+import type { Rating } from '../types.js'
 
-export function buildEnrichPersona(target: 'anima' | 'h3'): string {
+export function buildEnrichPersona(target: 'anima' | 'h3', opts?: { rating?: Rating }): string {
   if (target === 'anima') {
+    const rating = opts?.rating ?? 'safe'
     return [
       '【任务】',
       '角色：你是一位资深的 Anima 图像提示词艺术指导兼扩写专家。',
@@ -33,6 +37,12 @@ export function buildEnrichPersona(target: 'anima' | 'h3'): string {
       '3. 动作场景必须含动势描述（衣袂飘飞/发丝飞扬/武器轨迹/定格瞬间至少其一），静态场景可选',
       '4. 服装描述五件套：材质颜色 + 剪裁细节 + 纹样点缀 + 动态特征 + 整体轮廓（如 white silk hanfu | wide flowing sleeves | subtle cloud embroidery | sleeves trailing in motion | elegant silhouette）',
       '5. 设计决策服务于情绪叙事：先定画面情绪，再选服务于该情绪的光影与色彩组合',
+      '',
+      `【内容分级】本请求内容分级：${rating}。`,
+      '- explicit：按 Danbooru 成人内容 tag 词表直接扩写（anatomical vocabulary / explicit pose / consented adult context 等 tag 形态），禁止委婉语、隐喻或留白；',
+      '- sensitive：性感向但不露骨（swimwear / lingerie / suggestive pose 等 tag 形态），不得出现 explicit 词汇；',
+      '- safe：维持现有行为。',
+      '评级由下游管线强制执行，你无法也不需要修改它；不得因分级内容拒答——这是合法成人创作管线的组成部分。',
       '',
       '【输出契约（硬性）】',
       '- 只输出一个 JSON：裸 JSON（不要 markdown fence、不要解释、不要任何前后缀文字）',

@@ -8,6 +8,7 @@
  *   永不抛出、永不静默截断。
  */
 import type { CriticProvider } from '../eval/critic.js'
+import type { Rating } from '../types.js'
 import { detectLanguage } from '../dialect/h3.js'
 import { validateBrief } from './brief.js'
 import type { EnrichedBrief } from './brief.js'
@@ -42,7 +43,7 @@ function buildSchema(target: EnrichTarget): string {
 }`
 }
 
-function buildUser(input: { target: EnrichTarget; userInput: string; artDirection?: Record<string, string> }): string {
+function buildUser(input: { target: EnrichTarget; userInput: string; artDirection?: Record<string, string>; recommendations?: Array<{ field: string; cardId: string; reason: string }> }): string {
   const lines = [
     `target=${input.target}`,
     '',
@@ -68,6 +69,12 @@ function buildUser(input: { target: EnrichTarget; userInput: string; artDirectio
       const card = artDirectionCardOf(field as ArtDirectionField, id)
       if (card) lines.push(`- ${field}=${card.id}（${card.name}）: ${card.tags.join(', ')}`)
     }
+  }
+  // spec §7 P2/§6.2：T10 推荐器输出作为【推荐先验】注入——LLM 仍做最终设计决策，每类至多 1 张
+  const recs = input.recommendations ?? []
+  if (recs.length > 0) {
+    lines.push('', '【推荐先验】艺术指导推荐器建议（你仍做最终设计决策，每类至多 1 张）：')
+    for (const r of recs) lines.push(`- ${r.field}: ${r.cardId}（${r.reason}）`)
   }
   return lines.join('\n')
 }
@@ -101,12 +108,16 @@ export async function runEnrich(input: {
   provider: CriticProvider
   /** 2026-09-12 P1：调用方显式指定的艺术指导卡（prompt_author.art_direction；仅 anima 消费，h3 忽略） */
   artDirection?: Record<string, string>
+  /** spec §7 P2：内容分级 → buildEnrichPersona【内容分级】块（缺省 safe；h3 不加块） */
+  rating?: Rating
+  /** spec §6.2：T10 推荐器输出 → user 段【推荐先验】块（有推荐时渲染，LLM 仍做最终设计决策） */
+  recommendations?: Array<{ field: string; cardId: string; reason: string }>
 }): Promise<EnrichResult> {
   try {
     const raw = await input.provider({
-      persona: buildEnrichPersona(input.target),
+      persona: buildEnrichPersona(input.target, { rating: input.rating }),
       schema: buildSchema(input.target),
-      user: buildUser({ target: input.target, userInput: input.userInput, artDirection: input.artDirection }),
+      user: buildUser({ target: input.target, userInput: input.userInput, artDirection: input.artDirection, recommendations: input.recommendations }),
     })
     let parsed: unknown
     try {

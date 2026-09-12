@@ -1,0 +1,17 @@
+{
+  "id": "explicit_fantasy",
+  "name": "奇幻情欲",
+  "category": "glamour_intimate",
+  "rating": "explicit",
+  "theme": "explicit fantasy race erotica",
+  "palette": "arcane violet and gold palette",
+  "fragments": {
+    "image": "adult elf with pointed ears, ornate fantasy bedchamber, nude with spread legs, uncensored",
+    "video": "adult elf with pointed ears, ornate fantasy bedchamber, nude with spread legs, uncensored"
+  },
+  "negative_hints": ["minors traits"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

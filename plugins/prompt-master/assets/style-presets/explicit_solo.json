@@ -1,0 +1,17 @@
+{
+  "id": "explicit_solo",
+  "name": "成人独角",
+  "category": "glamour_intimate",
+  "rating": "explicit",
+  "theme": "explicit solo adult portrait",
+  "palette": "warm skin-tone palette with deep shadow",
+  "fragments": {
+    "image": "solo female with adult body type, nude, spread legs with exposed nipples, uncensored",
+    "video": "solo female with adult body type, nude, spread legs with exposed nipples, uncensored"
+  },
+  "negative_hints": ["minors traits"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "explicit_couple",
+  "name": "成人双人",
+  "category": "glamour_intimate",
+  "rating": "explicit",
+  "theme": "explicit adult couple scene",
+  "palette": "intimate low-key palette with crimson accents",
+  "fragments": {
+    "image": "hetero couple, consensual adult intimacy, sex in missionary position with vaginal penetration, uncensored",
+    "video": "hetero couple, consensual adult intimacy, sex in missionary position with vaginal penetration, uncensored"
+  },
+  "negative_hints": ["minors traits"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

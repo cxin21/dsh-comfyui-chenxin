@@ -1,0 +1,17 @@
+{
+  "id": "artistic_nude",
+  "name": "人体艺术",
+  "category": "glamour_intimate",
+  "rating": "explicit",
+  "theme": "classical fine-art nude figure study",
+  "palette": "marble white and bronze palette",
+  "fragments": {
+    "image": "artistic nude in classical sculpture pose, draped fabric over one shoulder, gallery marble pedestal backdrop, nude figure study",
+    "video": "artistic nude in classical sculpture pose, draped fabric over one shoulder, gallery marble pedestal backdrop, nude figure study"
+  },
+  "negative_hints": ["minors traits", "grotesque distortion"],
+  "artist_hints": [],
+  "artist_max": 3,
+  "applies_to": ["anima"],
+  "source": "hand-authored"
+}

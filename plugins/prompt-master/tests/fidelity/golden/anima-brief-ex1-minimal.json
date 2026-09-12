@@ -41,9 +41,7 @@
           "citation:214098:match=canonical:canonical=close-up:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:663666:match=canonical:canonical=looking_at_viewer:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [
-          "safety_seed_injected:default_for_non_explicit_request"
-        ],
+        "assumptions": [],
         "advisories": [
           "[warning] duplicate_segment: duplicate segment in positive: smile",
           "[warning] tag_count_out_of_range: 9 content tags (working range 12-50)"
@@ -395,5 +393,5 @@
       "[warning] tag_count_out_of_range: 9 content tags (working range 12-50)"
     ]
   },
-  "sha256": "495afec747de86626f4c5704153f7f89d4828749f8985da7acffcbfdfda78189"
+  "sha256": "4debba00abfc20d1fd18e3ef1bda9848fa175daff839c222dca3ac37486a0d9d"
 }

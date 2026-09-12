@@ -25,8 +25,8 @@
     "stage": "author",
     "result": {
       "prompt": {
-        "positive": "masterpiece, best quality, score_7, 1girl, solo, long hair, blush, close-up, looking at viewer",
-        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration",
+        "positive": "masterpiece, best quality, score_7, rating_explicit, 1girl, solo, long hair, blush, close-up, looking at viewer",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration, child, loli, shota, toddler, kid, preteen",
         "notes": [
           "citation:10768:match=canonical:canonical=1girl:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
@@ -35,7 +35,9 @@
           "citation:214098:match=canonical:canonical=close-up:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:663666:match=canonical:canonical=looking_at_viewer:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [],
+        "assumptions": [
+          "rating_active:explicit"
+        ],
         "advisories": [
           "[warning] tag_count_out_of_range: 6 content tags (working range 12-50)"
         ]
@@ -312,5 +314,5 @@
       "[warning] tag_count_out_of_range: 6 content tags (working range 12-50)"
     ]
   },
-  "sha256": "6f30423e4ec267fc01c94d13ac6b9a093da1dcc5cfe99fb638b21c4678feb07c"
+  "sha256": "98e80cdc021923bf46d48e635d0da4897f272a17e2a2186b3602b87c18387cd2"
 }

@@ -40,9 +40,7 @@
           "citation:775930:match=canonical:canonical=moonlight:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:118874:match=canonical:canonical=backlighting:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [
-          "safety_seed_injected:default_for_non_explicit_request"
-        ],
+        "assumptions": [],
         "advisories": [
           "[warning] lighting_term_banned: lora-internal lighting term(s) present: backlighting, moonlight",
           "[conflict] mutual_exclusion: mutually exclusive tags: from front + from behind",
@@ -356,5 +354,5 @@
       "[warning] tag_count_out_of_range: 7 content tags (working range 12-50)"
     ]
   },
-  "sha256": "fdce2f68f7c5c32783f5dd6e944c64bc2534ad97707351edfb923885d5aae140"
+  "sha256": "a082b4e9b5ae504e851e3d2b0bbbf8d9610c7baa139af168e0c7068cc85e7d3f"
 }

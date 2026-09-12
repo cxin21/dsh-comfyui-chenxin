@@ -41,10 +41,13 @@ describe('anima compile (anima.ts P2 core)', () => {
     expect(p.mandatoryNegative).toEqual(['worst quality', 'low quality'])
   })
 
-  it('explicit drops the safety seed', () => {
+  it('explicit tier swaps seed to rating_explicit + policy negative additions (M1 spec §5.3)', () => {
     const r = compileAnima({ count_gender: ['1girl'], explicit: true }, { variant: 'base', search: realSearch })
-    expect(r.positive).not.toContain('safe')
+    expect(r.positive).toContain('rating_explicit')
+    expect(r.positive).not.toContain(' safe,')
+    expect(r.assumptions).toContain('rating_active:explicit')
     expect(r.assumptions).not.toContain('safety_seed_injected:default_for_non_explicit_request')
+    expect(r.negative).toContain('loli')
   })
 
   it('narrative is emitted last after all slot tags (Round8 F6: 显式 allowNarrative 出口)', () => {

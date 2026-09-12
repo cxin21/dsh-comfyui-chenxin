@@ -117,7 +117,6 @@
           "citation:106948:match=canonical:canonical=atmospheric:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
         "assumptions": [
-          "safety_seed_injected:default_for_non_explicit_request",
           "narrative_excluded:sentence_count:1"
         ],
         "advisories": []
@@ -1214,5 +1213,5 @@
     "errors": [],
     "advisories": []
   },
-  "sha256": "f3d94e75409eb056604678b9da117d1a7decaaa2815346cd0a3fac280bbb12ae"
+  "sha256": "267778320ef08c2eaaa6cdf9a64dfbe7664dbcdf0028d9829cb2894c25714d27"
 }

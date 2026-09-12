@@ -10,8 +10,10 @@ import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
 import { ANIMA_RUBRIC } from '../eval/rubrics/anima.js'
-import type { AuditGate } from '../types.js'
+import type { AuditGate, Rating } from '../types.js'
 import { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
+import { resolveEffectiveRating, RATING_SEEDS, RATING_NEGATIVE_ADDITIONS } from '../safety/rating.js'
+import { checkBoundaries } from '../safety/boundaries.js'
 
 /** types.py EXPLICIT_SAFETY_MARKERS 逐字——M1 平移至 safety/rating.ts（spec §5.2）；此处再导出保持原位引用不断 */
 export { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
@@ -29,6 +31,8 @@ export interface AnimaSlots {
   scene?: string[]
   detail_mood?: string[]
   narrative?: string
+  /** spec §5.1/§5.3：内容分级槽（Task 7/14 确定性写入，LLM 产物不可信于安全数据）；优先级高于 explicit 布尔 */
+  rating?: Rating
   explicit?: boolean
   /** 扩展（brief 接口之外的官方 brief 字段） */
   qualityPrefix?: boolean
@@ -109,7 +113,7 @@ interface Policy {
   variant: string
   mandatoryPositive: string[]
   mandatoryNegative: string[]
-  safetySeed: string[]
+  // safetySeed 已移除（M1 Task 8，spec §5.3）：分级种子由 safety/rating.ts RATING_SEEDS 驱动（3b）
 }
 
 /** types.py ModelPolicy.for_variant 移植（variant 策略表） */
@@ -123,19 +127,16 @@ const POLICIES: Record<string, Policy> = {
       'worst quality', 'low quality', 'score_1', 'score_2', 'score_3',
       'artist name', 'blurry', 'jpeg artifacts', 'chromatic aberration',
     ],
-    safetySeed: ['safe'],
   },
   aesthetic: {
     variant: 'aesthetic',
     mandatoryPositive: ['masterpiece', 'best quality'],
     mandatoryNegative: ['worst quality', 'low quality'],
-    safetySeed: ['safe'],
   },
   turbo: {
     variant: 'turbo',
     mandatoryPositive: ['masterpiece', 'best quality'],
     mandatoryNegative: ['worst quality', 'low quality'],
-    safetySeed: ['safe'],
   },
 }
 
@@ -315,11 +316,16 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
     for (const t of policy.mandatoryPositive) pushSeg(t, 'positive', 'policy', 100)
     for (const t of policy.mandatoryNegative) pushSeg(t, 'negative', 'policy', 100)
   }
-  // 3b: 安全种子（explicit 关断）
-  if (!isExplicitRequest(slots)) {
-    for (const t of policy.safetySeed) pushSeg(t, 'positive', 'policy', 99)
-    assumptions.push('safety_seed_injected:default_for_non_explicit_request')
-  }
+  // 3b: 分级装配（spec §5.3，替换旧「explicit 关断安全种子」）：eff = resolveEffectiveRating(slots)
+  // （slots.rating > explicit 布尔 > 全槽关键词扫描 > safe，确定性零 LLM）。
+  // 三档种子均注入 positive（safe→safe / sensitive→rating_sensitive / explicit→rating_explicit）；
+  // eff!=='safe' 时记 rating_active:<tier> assumption（旧 safety_seed_injected 口径移除）。
+  const eff = resolveEffectiveRating(slots)
+  for (const t of RATING_SEEDS[eff]) pushSeg(t, 'positive', 'policy', 99)
+  if (eff !== 'safe') assumptions.push(`rating_active:${eff}`)
+  // policy 分级负向追加（unconditional，不受 qualityPrefix 门控——安全不可关）：
+  // sensitive 阻断 explicit 词汇；explicit 阻断未成年硬排除（spec §5.3 策略表）。
+  for (const t of RATING_NEGATIVE_ADDITIONS[eff]) pushSeg(t, 'negative', 'policy', 98)
   // 3c: 槽固定 SLOT_ORDER（权重即顺序）——不跨槽去重：忠实复刻上游 composition.py（无去重），
   // 跨槽重复由审计稿 duplicate_segment gate 标记（闭环里模型据 `[duplicate_segment]` 自修正）
   SLOT_ORDER.forEach((slotName, slotIndex) => {
@@ -540,7 +546,7 @@ function normalizeText(value: string): string {
 }
 
 /** inspection.py 逐函数移植：advisories → AuditGate[]（severity 映射：warning/conflict→important，info→minor；非阻断） */
-export function inspectAnima(positive: string, negative: string, opts?: { variant?: string; qualityPrefix?: boolean; explicit?: boolean; contentCount?: number }): AuditGate[] {
+export function inspectAnima(positive: string, negative: string, opts?: { variant?: string; qualityPrefix?: boolean; explicit?: boolean; rating?: Rating; contentCount?: number }): AuditGate[] {
   const gates: AuditGate[] = []
   const policy = POLICIES[opts?.variant ?? 'base'] ?? POLICIES.base
   const qualityPrefix = opts?.qualityPrefix ?? true
@@ -637,6 +643,17 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
     gates.push({ rule: 'vague_tag', target: 'anima', severity: 'minor', detail: `建议删除或替换为具象描述: ${p}`, source: 'dialect/anima' })
   }
 
+  // spec §5.3 终检：硬边界 gate（同形追加，rule = BoundaryViolation.gate；severity=critical 走既有
+  // critical 通道，inspection 相应 ADVISORY，不降级为 PASS）。minor 仅非 safe 档触发；nonconsensual/
+  // bestiality 全档触发（safety/boundaries.ts 确定性词表，零 LLM）。
+  // 语料=positive 单通道：negative 是 block-list 通道（策略负向/exclusions/分级阻断词），计入语料会让
+  // explicit 档被自己的阻断词（child/loli/…）永远误触发——计划字面 positive+' '+negative 与
+  // RATING_NEGATIVE_ADDITIONS.explicit 自相冲突，取正通道语义（偏差已记任务档案）。
+  const effBoundary = resolveEffectiveRating({ rating: opts?.rating, explicit: opts?.explicit })
+  for (const v of checkBoundaries(positive, effBoundary)) {
+    gates.push({ rule: v.gate, target: 'anima', severity: 'critical', detail: `hard boundary violation (${v.gate}): matched "${v.matched}" — 需删除或改写`, source: 'dialect/anima' })
+  }
+
   return gates
 }
 
@@ -674,6 +691,7 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
     variant,
     qualityPrefix: opts?.slots?.qualityPrefix ?? true,
     explicit: opts?.slots?.explicit,
+    rating: opts?.slots?.rating,
     // T2Q（C）：narrative 计 1 与 compile 装配一致——强制纳入（allowNarrative=true）或条件纳入
     // （质量检查通过）才计 1；被排除的 narrative 不计
     contentCount: opts?.slots

@@ -27,9 +27,7 @@
           "citation:1110119:match=canonical:canonical=solo:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:662719:match=canonical:canonical=long_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [
-          "safety_seed_injected:default_for_non_explicit_request"
-        ],
+        "assumptions": [],
         "advisories": [
           "[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"
         ]
@@ -135,5 +133,5 @@
       "[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"
     ]
   },
-  "sha256": "7bb66e29fe1ca3adb336c6599a0cf0b2de5c353b854b9c17980a36edda7a4eb3"
+  "sha256": "0f47e6f376551415e12551ce239c0b94e65ce6da38053b56269fda3ae9b30885"
 }

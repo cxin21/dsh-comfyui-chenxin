@@ -79,7 +79,6 @@
           "citation:209603:match=canonical:canonical=cinematic:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
         "assumptions": [
-          "safety_seed_injected:default_for_non_explicit_request",
           "catalog_miss:spotlights"
         ],
         "advisories": [
@@ -656,5 +655,5 @@
       "[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"
     ]
   },
-  "sha256": "f85f0e21613e7947ecc2093be32ac2e396325547bd4fa3ffec7886850d1a507c"
+  "sha256": "d112cd064255c28bccb3df168628faf930cd011bdb52325449e94989da6b46ec"
 }

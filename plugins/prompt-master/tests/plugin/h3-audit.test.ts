@@ -114,6 +114,18 @@ describe('h3 audit gates — every rule one test', () => {
     expect(auditH3(bad, t2vaMeta(6, 1)).some((g) => g.rule === 'shot_execution')).toBe(true)
   })
 
+  it('Phase 8a: model-native 转场声明（hard cut / match cut / cut to / whip pan）通过 shot_execution', () => {
+    for (const decl of ['hard cut. a door slams shut.', 'match cut. the same cup sits in a different room.', 'cut to the courtyard.', 'whip pan to the far corridor.']) {
+      const text = `integrated_multimodal_description: [Shot 1] A cat sleeps on the windowsill.\n\n[Shot 2] At 00:03.000, ${decl}\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A`
+      expect(auditH3(text, t2vaMeta(6, 2)).some((g) => g.rule === 'shot_execution'), decl).toBe(false)
+    }
+  })
+
+  it('Phase 8a: 无转场声明的正文仍被 shot_execution 拒绝', () => {
+    const text = 'integrated_multimodal_description: [Shot 1] A cat sleeps on the windowsill.\n\n[Shot 2] At 00:03.000, the room is quiet and nobody moves.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A'
+    expect(auditH3(text, t2vaMeta(6, 2)).some((g) => g.rule === 'shot_execution')).toBe(true)
+  })
+
   it('char_budget: 7001-char prompt fails', () => {
     const huge = '[Shot 1] ' + 'x'.repeat(7000)
     const bad = `integrated_multimodal_description: ${huge}\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A`

@@ -127,11 +127,15 @@ function semanticShot(text: string): string {
   return [ascii, ...bigrams].filter(Boolean).join(' ')
 }
 
+/** Phase 8a（h3-director-depth）：cut 声明白名单放宽——除 "the camera cuts to ..." 外，
+ *  接受常见 model-native 转场声明开头（hard cut / match cut / smash cut / jump cut / cut to /
+ *  whip pan / dissolve to / wipe to）。语义不变：必须声明转场 + 新视点。该闸门为 important（启发式）。 */
+const CUT_DECLARATION =
+  /^(?:(?:the camera|the shot|camera|shot)\s+(?:cuts|transitions|changes|switches)\s+to\b|(?:hard|match|smash|jump) cut\b|cut to\b|whip pan\b|dissolve to\b|wipe to\b)/i
+
 function auditShotExecution(shots: Shot[]): void {
   for (const shot of shots.slice(1)) {
-    if (
-      /^(?:the camera|the shot|camera|shot)\s+(?:cuts|transitions|changes|switches)\s+to\b/i.test(shot.text) === false
-    ) {
+    if (!CUT_DECLARATION.test(shot.text)) {
       throw new H3AuditError(
         `Shot ${shot.number} cut must declare a model-native transition and new view`,
       )

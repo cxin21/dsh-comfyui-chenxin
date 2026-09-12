@@ -746,8 +746,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           corrections++
           repaired = true
           // Task 6：feedback = 规则 critical gate + judgeFeedback（needs_revision 终态投影）
+          // F7（Round 8）：important 级 gate（如 tag_budget_exceeded 软预算裁剪指令）随 feedback
+          // 一并传达——闭环触发条件不变（critical/judgeFeedback），important 只搭车不出车
           const feedback = JSON.stringify({
-            gates: stage.gates.filter((g) => g.severity === 'critical').map((g) => ({ rule: g.rule, severity: g.severity, detail: g.detail })),
+            gates: stage.gates.filter((g) => g.severity === 'critical' || g.severity === 'important').map((g) => ({ rule: g.rule, severity: g.severity, detail: g.detail })),
             ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
           })
           const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec)
@@ -816,8 +818,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // feedback 拼接 = 规则 gate 的 `[rule] detail` 行 + judgeFeedback 行；max-2 / loop_exhausted 语义不变
       while (((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (stage.judgeFeedback?.length ?? 0) > 0) && corrections < MAX_CORRECTIONS) {
         corrections++
+        // F7（Round 8）：important 级 gate（如 tag_budget_exceeded 软预算裁剪指令）随 feedback
+        // 一并拼接——闭环触发条件不变（critical/judgeFeedback），important 只搭车不出车
         const feedback = [
-          ...stage.gates.filter((g) => g.severity === 'critical').map((g) => `[${g.rule}] ${g.detail}`),
+          ...stage.gates.filter((g) => g.severity === 'critical' || g.severity === 'important').map((g) => `[${g.rule}] ${g.detail}`),
           ...(stage.judgeFeedback ?? []),
         ].join('\n')
         draft = await provider({ ...intentBase, round: corrections, feedback }, exec)

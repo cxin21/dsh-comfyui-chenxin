@@ -480,6 +480,12 @@ const MUTUAL_EXCLUSIONS: Array<[string, string]> = [
 const TAG_COUNT_MIN = 12
 const TAG_COUNT_MAX = 50
 
+/** F7（Round 8）：tag 软预算阈值——调研档位（DTG/DART 实测：20-40 为推荐档，60+ 为最差档），
+ *  段数取推荐档上界 40；字符预算 1200 对应同推荐档 prompt 典型长度上限。常量导出供报告/测试
+ *  与后续预算子系统复用，禁止在调用点散落魔法数。 */
+export const TAG_BUDGET_MAX_SEGMENTS = 40
+export const TAG_BUDGET_MAX_CHARS = 1200
+
 /** F8（Round 8）：空泛词表——vague_tag minor gate 词源，可扩展。匹配语义：positive 逐逗号分段
  *  后与词表项精确相等（trim + 小写），非子串——atmospheric/beautifully 等词形变化不误报 */
 export const VAGUE_TAGS: readonly string[] = [
@@ -553,6 +559,19 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
     positive.split(', ').map((s) => s.trim()).filter(Boolean).filter((t) => !new Set([...(qualityPrefix ? policy.mandatoryPositive : []), 'safe']).has(t)).length
   if (!(TAG_COUNT_MIN <= contentCount && contentCount <= TAG_COUNT_MAX)) {
     gates.push({ rule: 'tag_count_out_of_range', target: 'anima', severity: 'important', detail: `${contentCount} content tags (working range ${TAG_COUNT_MIN}-${TAG_COUNT_MAX})`, source: 'dialect/anima' })
+  }
+  // F7（Round 8）：tag 软预算闸门——positive 按逗号分段（trim 后非空段）计数，段数超
+  // TAG_BUDGET_MAX_SEGMENTS 或字符数超 TAG_BUDGET_MAX_CHARS 任一即报（两者取或，单 gate；
+  // 段数优先报告）。质量前缀段（masterpiece 等）计入段数——它们同样占用权重预算（与
+  // tag_count 白名单语义相反，系本 gate 有意设计）。severity=important：不翻转 stage.ok
+  // （runStage ok 只认 critical）、不单独触发修正闭环，但随 critical/judgeFeedback 进修正
+  // feedback 拼接（裁剪指令带给 intent 修正轮，作者环已接线）。
+  const budgetSegments = positive.split(',').map((s) => s.trim()).filter(Boolean)
+  if (budgetSegments.length > TAG_BUDGET_MAX_SEGMENTS || positive.length > TAG_BUDGET_MAX_CHARS) {
+    const detail = budgetSegments.length > TAG_BUDGET_MAX_SEGMENTS
+      ? `当前 ${budgetSegments.length} 段 / 预算 ${TAG_BUDGET_MAX_SEGMENTS}；请按『场景细节>氛围词>次要动作』顺序裁剪，保留主体与核心动作`
+      : `当前 ${positive.length} 字符 / 预算 ${TAG_BUDGET_MAX_CHARS}；请按『场景细节>氛围词>次要动作』顺序裁剪，保留主体与核心动作`
+    gates.push({ rule: 'tag_budget_exceeded', target: 'anima', severity: 'important', detail, source: 'dialect/anima' })
   }
   // F8（Round 8）：空泛词拦截——positive 逐逗号分段与 VAGUE_TAGS 精确匹配（trim + 小写整段相等）；
   // 质量前缀白名单豁免（masterpiece/best quality/score_x/safe 等，与 tag_count 白名单同源）。

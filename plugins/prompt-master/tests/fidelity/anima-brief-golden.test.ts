@@ -50,7 +50,9 @@ describe('anima brief golden double-run (positive/negative 逐字节 + 投影)',
       expect(compiled.assumptions.sort()).toEqual([...(goldenPrompt.assumptions ?? [])].sort())
       const gates = auditAnima(compiled.positive, compiled.negative, { variant: brief.variant ?? 'base', search: realSearch, slots })
       // catalog_miss 在源码中经 assumptions 透出（上面已比）；此处比 advisory 投影（inspection 派生代码）
-      expect(gates.filter((g) => g.rule !== 'catalog_miss').map((g) => g.rule).sort()).toEqual(goldenCodes(goldenPrompt.advisories ?? []))
+      // tag_budget_exceeded（Round 8 F7）为 TS 原生软预算 gate，无 Python 对应规则——与 catalog_miss
+      // 同一排除口径（ex2-veteran 43 段 > 预算 40 属真实触发，gate 行为由 anima-f7.test.ts 覆盖）
+      expect(gates.filter((g) => g.rule !== 'catalog_miss' && g.rule !== 'tag_budget_exceeded').map((g) => g.rule).sort()).toEqual(goldenCodes(goldenPrompt.advisories ?? []))
     })
   }
 

@@ -62,12 +62,22 @@ describe('applyStyleV2 (spec §4.3, registry-backed)', () => {
     expect(bp).toEqual(copy)
   })
 
-  it('wires negative_hints into core.negative as soft constraints, dedup case-insensitive', () => {
-    const withDup: BlueprintV1 = { ...bp, core: { ...bp.core, negative: [{ target: 'Amateur Photography', severity: 'soft' }] } }
-    const out = applyStyle(withDup, 'cinematic_real', 1)
+  it('wires negative_hints into core.negative as soft constraints on image (anima channel), dedup case-insensitive', () => {
+    const imageBp: BlueprintV1 = { schema_version: 1, media: 'image', core: { concept: '剑客肖像', negative: [{ target: 'Amateur Photography', severity: 'soft' }] }, media_layer: { image: {} } }
+    const out = applyStyle(imageBp, 'cinematic_real', 1)
     const targets = (out.core.negative ?? []).map((n) => n.target)
     expect(targets.filter((t) => t.toLowerCase() === 'amateur photography')).toHaveLength(1)
     expect(targets).toContain('over-sharpened')
+  })
+
+  // M2-T2（spec §4.3 备注）：h3 方言无 negative 通道——video 蓝图不并入 negative_hints
+  //（M1 行为是把 soft 负向静默写进 video 蓝图 core.negative，下游 h3 投影永不消费 = 静默丢弃）。
+  it('video blueprint (h3 channel) skips negative_hints merge — no silent drop into unconsumed channel', () => {
+    const out = applyStyle(bp, 'cinematic_real', 0.6)
+    expect(bp.media).toBe('video')
+    expect(out.core.negative ?? []).toEqual([])
+    // 风格其余注入行为不变（对照：artist_hints 仍写入）
+    expect(out.core.style?.artist_hints).toEqual(['guweiz', 'wlop', 'ask (askzy)'])
   })
   it('caps artist_hints at preset artist_max', () => {
     const out = applyStyle(bp, 'nb01_2024顶级画师混搭_rella_wlop', 1)

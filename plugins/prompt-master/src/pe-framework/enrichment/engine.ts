@@ -30,6 +30,8 @@ export interface EnrichOptions {
 export interface EnrichResult {
   blueprint: BlueprintV1
   expansions: string[]
+  /** M2-T2（spec §4.3 备注）：风格应用层面的非阻塞 advisory（如 style_negative_hints_h3_ignored:<id>）——由编排层并入 envelope advisories */
+  advisories?: string[]
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -168,8 +170,18 @@ export async function enrichBlueprint(
 
     // 风格注入（确定性；用户选择优先于 LLM 隐含风格）
     // spec §4.3 ③：未知 styleId 仍返回原对象，engine 层补 advisory（applyStyle 不感知展示通道）
-    if (opts.styleId && !getStylePreset(opts.styleId)) expansions.push(`style_preset_unknown:${opts.styleId}`)
-    const enriched = opts.styleId ? applyStyle(v1, opts.styleId, opts.conformity ?? 0.6) : v1
+    let styleAdvisories: string[] = []
+    const preset = opts.styleId ? getStylePreset(opts.styleId) : undefined
+    if (opts.styleId && !preset) expansions.push(`style_preset_unknown:${opts.styleId}`)
+    let enriched = v1
+    if (opts.styleId && preset) {
+      enriched = applyStyle(v1, opts.styleId, opts.conformity ?? 0.6)
+      // M2-T2（spec §4.3 备注）：h3 通道（video 蓝图）negative_hints 被忽略必须可观测——
+      // applyStyle 不感知展示通道，advisory 由 engine 层补（与 style_preset_unknown 同口径）
+      if (v1.media === 'video' && preset.negative_hints.length > 0) {
+        styleAdvisories = [`style_negative_hints_h3_ignored:${opts.styleId}`]
+      }
+    }
 
     // 质量自检（spec §7.1 确定性项）：具体性（可感知名词比例+禁词）+ 字段完整度 + 保真
     // 任一失败追加 advisory 进 expansions，不阻断
@@ -182,7 +194,7 @@ export async function enrichBlueprint(
     const fid = checkFidelity(v0.core?.concept ?? '', enriched)
     if (!fid.pass) expansions.push(`fidelity_failed:${fid.missingEntities.join(';')}`)
 
-    return { blueprint: enriched, expansions }
+    return { blueprint: enriched, expansions, ...(styleAdvisories.length > 0 ? { advisories: styleAdvisories } : {}) }
   } catch {
     return { blueprint: v0, expansions: ['enrichment_failed:fallback_to_v0'] }
   }

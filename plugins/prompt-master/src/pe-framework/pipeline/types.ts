@@ -1,4 +1,4 @@
-import type { AuditGate, Budget } from '../types.js'
+import type { AuditGate, Budget, Rating } from '../types.js'
 import type { CriticFinding, CriticOutcome, CriticProvider } from '../eval/critic.js'
 import type { EvidenceDeps } from '../eval/evidence.js'
 
@@ -23,6 +23,8 @@ export interface PipelineInput {
     Promise<{ compiled: unknown; changes: string[]; revisionNote: string; rebuttals: CriticRebuttal[] }>
   /** 用户原意（注入评委 user 段；缺省空串） */
   originalIntent?: string
+  /** M2-T2（spec §7 P3）：声明的内容分级——透传 judgeReview，激活 buildPersona/buildRevisionPersona 评级中立尾行；缺省不加行 */
+  declaredRating?: Rating
 }
 
 export type JudgeMode = 'off' | 'fast' | 'strict'

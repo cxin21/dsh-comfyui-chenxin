@@ -33,14 +33,19 @@ export function applyStyle(bp: BlueprintV1, styleId: string, conformity: number)
     artist_hints: style.artist_hints.slice(0, style.artist_max),
   }
 
-  // spec §4.3 ①：negative_hints 并入 core.negative（soft 级；与既有 target 大小写不敏感去重）
-  const negatives = out.core.negative ?? []
-  for (const hint of style.negative_hints) {
-    if (!negatives.some((n) => n.target.toLowerCase() === hint.toLowerCase())) {
-      negatives.push({ target: hint, severity: 'soft' })
+  // spec §4.3 ①：negative_hints 并入 core.negative（soft 级；与既有 target 大小写不敏感去重）。
+  // M2-T2（spec §4.3 备注）：h3 方言无 negative 通道——video 蓝图（h3 通道）不并入，
+  // 避免静默写进下游永不消费的通道；可观测性由 engine 层 advisory
+  // style_negative_hints_h3_ignored:<id> 承担（与 style_preset_unknown 同口径）。
+  if (out.media !== 'video') {
+    const negatives = out.core.negative ?? []
+    for (const hint of style.negative_hints) {
+      if (!negatives.some((n) => n.target.toLowerCase() === hint.toLowerCase())) {
+        negatives.push({ target: hint, severity: 'soft' })
+      }
     }
+    out.core.negative = negatives
   }
-  out.core.negative = negatives
 
   if (conformity < 1) {
     // 全量（=0）或按比例（0<conformity<1）注入 fragments 到 media_layer 对应字段

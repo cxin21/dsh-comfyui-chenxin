@@ -259,6 +259,8 @@ interface JudgeStageOpts {
   criticProvider: CriticProvider
   evidenceDeps: EvidenceDeps
   originalIntent: string
+  /** M2-T2（spec §7 P3）：预检定档透传进评审通道——buildPersona/buildRevisionPersona 评级中立尾行生效 */
+  declaredRating: Rating
   revisionProvider?: AuthorRevisionProvider
 }
 
@@ -860,6 +862,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
           evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
           originalIntent: input,
+          declaredRating: resolved.rating, // M2-T2（spec §7 P3）：T13 四接线点从编排流可达
         }
         if (judgeMode === 'strict') {
           judgeOpts.revisionProvider = _judgeDeps?.revisionProvider ?? makeRevisionProvider({ target, provider, intentBase, runOpts, exec })
@@ -900,6 +903,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
 
         const e0 = await enrichBlueprint(ctx, route, draft.blueprint, enrichOpts)
         expansions.push(...e0.expansions)
+        // M2-T2（spec §4.3 备注）：applyStyle 不感知展示通道——h3 negative_hints 忽略 advisory 由 engine 层产出、此处并入 envelope
+        const styleAdvisories = new Set<string>()
+        for (const sa of e0.advisories ?? []) styleAdvisories.add(sa)
         const l1 = preflightRepair(e0.blueprint)
         if (l1.repairs.length > 0) { repaired = true; repairs.push(...l1.repairs) }
         let bp = l1.bp
@@ -923,6 +929,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           if (!d2.blueprint) break // provider 未返回蓝图 → 保留当前 stage，走 Level 3
           const e2 = await enrichBlueprint(ctx, route, d2.blueprint, enrichOpts)
           expansions.push(...e2.expansions)
+          for (const sa of e2.advisories ?? []) styleAdvisories.add(sa)
           const l2 = preflightRepair(e2.blueprint)
           repairs.push(...l2.repairs)
           bp = l2.bp
@@ -952,7 +959,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const canon = canonicalObservabilityOf(stage)
         const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
         catalogTraceEntry(stage, traceExtra)
-        const blueprintAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
+        const blueprintAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...styleAdvisories, ...trailAdvisories, ...substAdvisories]
         recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: blueprintAdvisories, enrich: enrichFlag, rating: resolved.rating })
         return assembleEnvelope(projStage, blueprintAdvisories, {
           corrections,

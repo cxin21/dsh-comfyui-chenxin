@@ -179,6 +179,7 @@ async function runJudgeStage(
         target: input.target as 'anima' | 'h3',
         rubric,
         originalIntent: input.originalIntent ?? '',
+        declaredRating: input.declaredRating, // M2-T2（spec §7 P3）：评级中立尾行
         provider,
         stage: 'revision',
         ruleGates: [],
@@ -193,6 +194,7 @@ async function runJudgeStage(
       rubric,
       bridge,
       originalIntent: input.originalIntent ?? '',
+      declaredRating: input.declaredRating, // M2-T2（spec §7 P3）：评级中立尾行
       provider,
       stage: 'first',
       compiled: opts.compiled,

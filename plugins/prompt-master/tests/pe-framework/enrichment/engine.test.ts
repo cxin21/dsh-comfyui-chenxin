@@ -44,4 +44,24 @@ describe('enrichBlueprint', () => {
     const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, { styleId: 'cinematic_real', conformity: 0.6 })
     expect(out.expansions.some((e) => e.startsWith('field_completeness'))).toBe(false)
   })
+
+  // M2-T2（spec §4.3 备注）：h3 通道 negative_hints 忽略必须可观测——advisory 由 engine 层补
+  //（applyStyle 不感知展示通道，与 style_preset_unknown 同一口径）。
+  it('emits style_negative_hints_h3_ignored:<id> advisory for video blueprints with styled negative_hints', async () => {
+    const patch = '{"set":{"core":{"concept":"黄昏荒原上的剑客"}},"expansions":[]}'
+    const stb = stubCtx({ stream: textStream(patch) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, { styleId: 'cinematic_real', conformity: 0.6 })
+    expect(out.advisories).toContain('style_negative_hints_h3_ignored:cinematic_real')
+    // 仍不注入：core.negative 保持原样（空）
+    expect(out.blueprint.core.negative ?? []).toEqual([])
+  })
+
+  it('emits no h3-ignored advisory for image blueprints (negative_hints merged as usual)', async () => {
+    const imageV0 = { schema_version: 1, media: 'image', core: { concept: '剑客肖像', negative: [] }, media_layer: { image: {} } } as any
+    const patch = '{"set":{"core":{"concept":"黄昏荒原上的剑客"}},"expansions":[]}'
+    const stb = stubCtx({ stream: textStream(patch) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, imageV0, { styleId: 'cinematic_real', conformity: 1 })
+    expect(out.advisories ?? []).not.toContain('style_negative_hints_h3_ignored:cinematic_real')
+    expect((out.blueprint.core.negative ?? []).map((n: { target: string }) => n.target)).toContain('over-sharpened')
+  })
 })

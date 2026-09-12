@@ -8,12 +8,14 @@ import {
   setAuthorIntentProvider,
   setAuthorEnrichProvider,
   setAuthorFeedbackDbPath,
+  setAuthorJudgeDeps,
   type AuthorIntentFn,
 } from '../../src/tools/prompt-author.js'
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
 import { recordGeneration, getGeneration } from '../../src/pe-framework/feedback/store.js'
 import { stubCtx, runTool, textStream } from '../plugin/helpers.js'
 import type { CriticProvider } from '../../src/pe-framework/eval/critic.js'
+import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js'
 
 const cfg = { temperature: 0.7 }
 
@@ -76,6 +78,7 @@ afterEach(() => {
   setAuthorFeedbackDbPath(null)
   setAuthorIntentProvider(null)
   setAuthorEnrichProvider(null)
+  setAuthorJudgeDeps(null)
   rmSync(tmp, { recursive: true, force: true })
 })
 
@@ -171,6 +174,63 @@ describe('prompt_author orchestration v2 (spec §8 §9)', () => {
     expect(sink[0]?.user).toContain('【推荐先验】')
     expect(v.rating).toBeDefined()
     expect(v.style).toBeDefined()
+  })
+})
+
+describe('M2-T2 declaredRating judge wiring + h3 negative_hints advisory (spec §7 P3 / §4.3)', () => {
+  // anima rubric 7 维分（与 author-judge.e2e 同形）：critic mock 的维度分必须与 ANIMA_RUBRIC 维度一致
+  const dimScores = (v: number) => ({
+    'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
+    composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,
+  })
+  const PASS_JSON = JSON.stringify({ verdict: 'pass', dimensionScores: dimScores(90), findings: [], praise: [] })
+  const mockEvidence: EvidenceDeps = {
+    catalog: (q) => [{ tag: q, kind: 'canonical', count: 1 }],
+    aesthetics: (q) => ({ concreteness: 'pass', query_len: q.length }),
+  }
+
+  it('judge persona carries declaredRating tail line from the orchestration flow (keyword-escalated sensitive)', async () => {
+    const criticReq: Array<{ persona: string; user: string }> = []
+    const critic: CriticProvider = async (req) => {
+      criticReq.push({ persona: req.persona, user: req.user })
+      return PASS_JSON
+    }
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence })
+    setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'] } }))
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    // bikini 关键词 → 预检定档 sensitive → judgeOpts.declaredRating → runStage → judgeReview → buildPersona 尾行
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '泳池边的 bikini 少女', judge_mode: 'fast', enrich: false })))
+    expect(v.ok).toBe(true)
+    expect(v.judge.verdict).toBe('pass')
+    expect(criticReq).toHaveLength(1)
+    expect(criticReq[0]?.persona).toContain('当前内容分级：sensitive')
+    expect(criticReq[0]?.persona).toContain('按评级中立条款评审')
+    // 对照：显式 rating 声明档位同样透传（source=input）
+    const criticReq2: Array<{ persona: string }> = []
+    const critic2: CriticProvider = async (req) => { criticReq2.push({ persona: req.persona }); return PASS_JSON }
+    setAuthorJudgeDeps({ criticProvider: critic2, evidenceDeps: mockEvidence })
+    const v2 = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '花园里的少女', rating: 'explicit', judge_mode: 'fast', enrich: false })))
+    expect(v2.judge.verdict).toBe('pass')
+    expect(criticReq2[0]?.persona).toContain('当前内容分级：explicit')
+  })
+
+  it('blueprint path relays style_negative_hints_h3_ignored advisory to envelope advisories; negatives not merged', async () => {
+    const { settings } = settingsRepo()
+    const repo = createBlueprintRepo({ settings } as never)
+    repo.save('bp-style-h3', MINI_BP as never)
+    const ctx = stubCtx({ stream: textStream(JSON.stringify(MINI_BP)) })
+    ;(ctx as unknown as { settings: unknown }).settings = settings
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, {
+      target: 'h3', blueprint_id: 'bp-style-h3', input: '加一个雨夜镜头', style_id: 'cinematic_real', judge_mode: 'off',
+    })))
+    expect(v.advisories).toContain('style_negative_hints_h3_ignored:cinematic_real')
+    // 仍不注入：style 摘要的 negativeAdded 为空（video 蓝图 core.negative 未被并入风格负向）
+    expect(v.style.negativeAdded).toEqual([])
+    // 风格其余接线不受影响：artist_hints 截断后写入（style 摘要可见）
+    expect(v.style.id).toBe('cinematic_real')
+    expect(v.style.artists.length).toBeGreaterThan(0)
   })
 })
 

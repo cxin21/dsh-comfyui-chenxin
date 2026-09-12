@@ -15,6 +15,7 @@ import { RATING_ORDER } from '../types.js'
 import { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
 import { resolveEffectiveRating, RATING_SEEDS, RATING_NEGATIVE_ADDITIONS } from '../safety/rating.js'
 import { checkBoundaries } from '../safety/boundaries.js'
+import { detectAestheticGates } from '../aesthetics/audit.js'
 
 /** types.py EXPLICIT_SAFETY_MARKERS 逐字——M1 平移至 safety/rating.ts（spec §5.2）；此处再导出保持原位引用不断 */
 export { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
@@ -663,6 +664,14 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
   const effBoundary = resolveEffectiveRating({ rating: opts?.rating, explicit: opts?.explicit })
   for (const v of checkBoundaries(positive, effBoundary)) {
     gates.push({ rule: v.gate, target: 'anima', severity: 'critical', detail: `hard boundary violation (${v.gate}): matched "${v.matched}" — 需删除或改写`, source: 'dialect/anima' })
+  }
+
+  // spec §6.1 确定性美学 gates（M1 Task 9）：四类锚点缺失 → advisory gate（severity=minor，
+  // 不翻转 inspection 的 PASS——派生只认 critical/important）。rule=g.id，detail 携带卡组 id
+  // 列表作为修复提示（进【推荐先验】由 LLM 做最终设计决策，spec §6.2 不硬注入）。
+  // h3 不接确定性美学 gates（spec §6.1 明示分工：其美学覆盖由评委维度承担）。
+  for (const g of detectAestheticGates(positive)) {
+    gates.push({ rule: g.id, target: 'anima', severity: 'minor', detail: `missing ${g.cardField} anchor; 可考虑卡: ${g.cardIds.join(', ')}`, source: 'dialect/anima' })
   }
 
   return gates

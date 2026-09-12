@@ -57,6 +57,8 @@ export interface Reference {
   image: string
   width: number | null
   height: number | null
+  /** 可选：主体设计描述（身份/服装/材质/风格签名），编译进 subject_definitions（<Subject N> is ... — desc.） */
+  description?: string
 }
 
 export interface VideoReference {
@@ -156,7 +158,7 @@ function coerceReference(raw: unknown, index: number): Reference {
     throw new ContractError(`${label} must be an object`)
   }
   const r = raw as Record<string, unknown>
-  const unknown = Object.keys(r).filter((k) => !['kind', 'who', 'image', 'width', 'height'].includes(k)).sort()
+  const unknown = Object.keys(r).filter((k) => !['kind', 'who', 'image', 'width', 'height', 'description'].includes(k)).sort()
   if (unknown.length) throw new ContractError(`${label} has unsupported field(s): ${unknown.join(', ')}`)
   const kind = r['kind'] ?? 'picture'
   if (kind !== 'picture') {
@@ -165,6 +167,7 @@ function coerceReference(raw: unknown, index: number): Reference {
   const whoRaw = r['who']
   const who = whoRaw != null ? stringOf(whoRaw, `${label}.who`) : null
   const image = stringOf(r['image'], `${label}.image`)
+  const description = r['description'] != null ? stringOf(r['description'], `${label}.description`) : undefined
   const widthRaw = r['width']
   const heightRaw = r['height']
   let width: number | null = null
@@ -172,7 +175,7 @@ function coerceReference(raw: unknown, index: number): Reference {
   if (widthRaw != null || heightRaw != null) {
     ;[width, height] = coercePixels(widthRaw, heightRaw, label)
   }
-  return { who, image, width, height }
+  return { who, image, width, height, ...(description !== undefined ? { description } : {}) }
 }
 
 function coerceDurationSeconds(value: unknown, label: string): number | null {

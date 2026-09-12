@@ -166,10 +166,15 @@ export function buildKeyframeText(stage: string, request: StoryRequest): string 
   return preamble ? `${preamble}\n\n${body}` : body
 }
 
-export function buildRef2vaText(request: StoryRequest): string {
+export function buildRef2vaText(request: StoryRequest, depth?: 'quick' | 'director'): string {
   const labels = subjectLabels(request.references)
+  // Phase 3（h3-director-depth）：ref.description（可选）承载主体设计规范（身份/服装/材质/风格签名）——生命核落位
   const subjectDefinitions = request.references
-    .map((ref, i) => `<Subject ${i + 1}> is ${ref.who} from <Picture ${i + 1}>.`)
+    .map((ref, i) => {
+      const head = `<Subject ${i + 1}> is ${ref.who} from <Picture ${i + 1}>`
+      const desc = ref.description?.trim()
+      return desc ? `${head} — ${desc.endsWith('.') ? desc : `${desc}.`}` : `${head}.`
+    })
     .join('\n')
   const cast = request.references
     .map((ref, i) => `${ref.who} (<Picture ${i + 1}>)`)
@@ -180,12 +185,25 @@ export function buildRef2vaText(request: StoryRequest): string {
   const summary =
     `[reference generation] ${cast} ${verb} in a ${durationText}-second, ` +
     `${request.shots.length}-shot video with synchronized audio.`
+  // Phase 3：depth=director 时 retention 按 shot.who 计算出现镜号（模型理解"谁在哪几镜出现"的关键信号）；
+  // quick（缺省）保持官方 golden 逐字节兼容文案
   const retentionAnalysis = request.references
-    .map(
-      (_, i) =>
+    .map((ref, i) => {
+      if (depth === 'director') {
+        const appear = request.shots
+          .map((s, si) => (s.who != null && s.who === ref.who ? `[Shot ${si + 1}]` : null))
+          .filter((v): v is string => v != null)
+        const prefix = appear.length > 0 ? ` (appears in ${appear.join(', ')})` : ''
+        return (
+          `<Subject ${i + 1}> from <Picture ${i + 1}>${prefix} remains fully_preserved: ` +
+          'identity, face, outfit, and styling unchanged across all shots.'
+        )
+      }
+      return (
         `<Subject ${i + 1}> from <Picture ${i + 1}> remains fully_preserved: ` +
-        'identity, face, outfit, and styling unchanged across all shots.',
-    )
+        'identity, face, outfit, and styling unchanged across all shots.'
+      )
+    })
     .join('\n')
   const detailed = buildShotLines(request, labels).join(' ')
   return [
@@ -203,10 +221,10 @@ export function buildRef2vaText(request: StoryRequest): string {
   ].join('\n')
 }
 
-export function buildText(stage: string, request: StoryRequest): string {
+export function buildText(stage: string, request: StoryRequest, depth?: 'quick' | 'director'): string {
   if (stage === 't2va') return buildThreeFieldBody(request)
   if (KEYFRAME_STAGES.has(stage)) return buildKeyframeText(stage, request)
-  if (stage === 'ref2va') return buildRef2vaText(request)
+  if (stage === 'ref2va') return buildRef2vaText(request, depth)
   throw new Error(`unknown stage: ${JSON.stringify(stage)}`)
 }
 
@@ -260,8 +278,8 @@ export function buildTextZh(textEn: string): string {
   return outLines.join('\n').trim()
 }
 
-export function buildTextPair(stage: string, request: StoryRequest): { text: string; textZh: string } {
-  const textEn = buildText(stage, request)
+export function buildTextPair(stage: string, request: StoryRequest, depth?: 'quick' | 'director'): { text: string; textZh: string } {
+  const textEn = buildText(stage, request, depth)
   return { text: textEn, textZh: buildTextZh(textEn) }
 }
 
@@ -294,6 +312,7 @@ export function compileH3(
           image: String(raw['image'] ?? ''),
           width: typeof raw['width'] === 'number' ? raw['width'] : null,
           height: typeof raw['height'] === 'number' ? raw['height'] : null,
+          ...(raw['description'] != null ? { description: String(raw['description']) } : {}),
         }
       })
     : []
@@ -305,13 +324,13 @@ export function compileH3(
     videos: [],
     audios: [],
   }
-  const pair = buildTextPair(stage, request)
+  const pair = buildTextPair(stage, request, opts?.depth)
   return { text: pair.text, text_zh: pair.textZh }
 }
 
 /* ── Task 5：方言注册（normalize 收敛 inferH3Stage/refs 归一；工具侧副本 Task 6 删）── */
 
-/** refs 归一单点（prompt-author/prompt-compile/prompt-audit 的 toRefs 收敛）：who/image 字符串化 + width/height 仅接受 number（否则 null） */
+/** refs 归一单点（prompt-author/prompt-compile/prompt-audit 的 toRefs 收敛）：who/image 字符串化 + width/height 仅接受 number（否则 null）；description 透传（Phase 3） */
 export function normalizeRefs(raw: unknown[]): Reference[] {
   return raw.map((r) => {
     const x = r as Record<string, unknown>
@@ -320,6 +339,7 @@ export function normalizeRefs(raw: unknown[]): Reference[] {
       image: String(x['image'] ?? ''),
       width: typeof x['width'] === 'number' ? x['width'] : null,
       height: typeof x['height'] === 'number' ? x['height'] : null,
+      ...(x['description'] != null ? { description: String(x['description']) } : {}),
     }
   })
 }
@@ -380,7 +400,18 @@ export function registerH3Dialect(): void {
         ...contractGatesH3(stage, shots, ctx.references ?? []),
         ...auditH3Full(compiled.text, { stage, duration: shots.duration_seconds, shotCount: shots.shots.length }, ctx.references),
       ]
-      return { gates, assumptions: [] }
+      // Phase 3：ref2va 主体声明了但没有任何 shot.who 引用 → assumption（非阻塞，提醒确认参考图是否真的入镜）
+      const assumptions: string[] = []
+      if (stage === 'ref2va' && Array.isArray(shots?.shots)) {
+        for (const ref of ctx.references ?? []) {
+          if (ref.who && !shots.shots.some((s) => s.who === ref.who)) {
+            assumptions.push(
+              `ref_unused_in_shots: ${ref.who} — subject_definitions/retention 已声明该主体，但没有任何 shot.who 引用它；请确认该参考是否真的入镜`,
+            )
+          }
+        }
+      }
+      return { gates, assumptions }
     },
     budget: (compiled, ctx) => h3BudgetToReport(buildH3Budget(ctx.stage ?? 't2va', compiled.text, ctx.references ?? [], { depth: ctx.depth })),
     targetSlotHint: 't2v.prompt',

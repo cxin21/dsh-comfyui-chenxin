@@ -161,6 +161,57 @@ describe('h3 per-shot duration (Phase 2 反均匀切分)', () => {
   })
 })
 
+describe('h3 ref2va director depth (Phase 3 retention/subject 实化)', () => {
+  it('quick（缺省）retention 保持 golden 口径（无 appears-in）', () => {
+    const { text } = compileH3(
+      { duration_seconds: 8, shots: [{ what: 'Neko waves.', who: 'Neko' }], references: [{ kind: 'picture', who: 'Neko', image: 'n.png' }] as any },
+      { stage: 'ref2va' },
+    )
+    expect(text).toContain('<Subject 1> from <Picture 1> remains fully_preserved:')
+    expect(text).not.toContain('(appears in')
+  })
+
+  it('depth=director retention 声明出现镜号（模型理解谁在哪几镜出现）', () => {
+    const { text } = compileH3(
+      {
+        duration_seconds: 10,
+        shots: [
+          { what: 'Neko waves.', who: 'Neko' },
+          { what: 'Mei waves back.', who: 'Mei' },
+          { what: 'Both stand.', who: 'Neko' },
+        ],
+        references: [
+          { kind: 'picture', who: 'Neko', image: 'n.png' },
+          { kind: 'picture', who: 'Mei', image: 'm.png' },
+        ] as any,
+      },
+      { stage: 'ref2va', depth: 'director' },
+    )
+    expect(text).toContain('<Subject 1> from <Picture 1> (appears in [Shot 1], [Shot 3]) remains fully_preserved:')
+    expect(text).toContain('<Subject 2> from <Picture 2> (appears in [Shot 2]) remains fully_preserved:')
+  })
+
+  it('ref.description 下沉进 subject_definitions（生命核：身份/服装/材质/风格签名）', () => {
+    const { text } = compileH3(
+      {
+        duration_seconds: 8,
+        shots: [{ what: 'Neko waves.', who: 'Neko' }],
+        references: [{ kind: 'picture', who: 'Neko', image: 'n.png', description: 'a silver-haired girl in a black-white uniform' }] as any,
+      },
+      { stage: 'ref2va' },
+    )
+    expect(text).toContain('<Subject 1> is Neko from <Picture 1> — a silver-haired girl in a black-white uniform.')
+  })
+
+  it('description 缺省时 subject_definitions 保持 golden 行（逐字节兼容）', () => {
+    const { text } = compileH3(
+      { duration_seconds: 8, shots: [{ what: 'Neko waves.', who: 'Neko' }], references: [{ kind: 'picture', who: 'Neko', image: 'n.png' }] as any },
+      { stage: 'ref2va' },
+    )
+    expect(text).toContain('<Subject 1> is Neko from <Picture 1>.')
+  })
+})
+
 describe('h3 dialect rendering shapes (d.h: 结构对照 t2va/ref2va 六段式)', () => {
   it('t2va renders exactly three fields in fixed order', () => {
     const { text } = compileH3({ duration_seconds: 6, shots: [{ what: 'sunrise' }] })

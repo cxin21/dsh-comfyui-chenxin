@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../../llm/complete.js'
 import type { BlueprintV1 } from '../blueprint/schema.js'
 import { applyStyle } from './style.js'
+import { getStylePreset } from '../styles/registry.js'
 import { checkConcreteness, checkFidelity, checkShotDensity } from '../aesthetics/check.js'
 import { CINEMA_LEXICON } from '../aesthetics/lexicon.js'
 
@@ -166,6 +167,8 @@ export async function enrichBlueprint(
     }
 
     // 风格注入（确定性；用户选择优先于 LLM 隐含风格）
+    // spec §4.3 ③：未知 styleId 仍返回原对象，engine 层补 advisory（applyStyle 不感知展示通道）
+    if (opts.styleId && !getStylePreset(opts.styleId)) expansions.push(`style_preset_unknown:${opts.styleId}`)
     const enriched = opts.styleId ? applyStyle(v1, opts.styleId, opts.conformity ?? 0.6) : v1
 
     // 质量自检（spec §7.1 确定性项）：具体性（可感知名词比例+禁词）+ 字段完整度 + 保真

@@ -11,6 +11,10 @@ import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
 import { ANIMA_RUBRIC } from '../eval/rubrics/anima.js'
 import type { AuditGate } from '../types.js'
+import { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
+
+/** types.py EXPLICIT_SAFETY_MARKERS 逐字——M1 平移至 safety/rating.ts（spec §5.2）；此处再导出保持原位引用不断 */
+export { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
 
 export interface AnimaSlots {
   count_gender?: string[]
@@ -134,12 +138,6 @@ const POLICIES: Record<string, Policy> = {
     safetySeed: ['safe'],
   },
 }
-
-/** types.py EXPLICIT_SAFETY_MARKERS 逐字 */
-const EXPLICIT_SAFETY_MARKERS = [
-  'explicit', 'nude', 'nudity', 'genitals', 'genital', 'vulva', 'penis',
-  '乳头', '乳房', '生殖器', '阴部', '阴茎', '阴道', '隐私部位', '裸露', '露骨', '色情', 'pornographic', 'nsfw',
-]
 
 /** types.py is_explicit_request 移植 */
 export function isExplicitRequest(slots: AnimaSlots): boolean {

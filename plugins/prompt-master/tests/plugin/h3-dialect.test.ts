@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseRequest, max_shots, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS, MAX_PROMPT_CHARS, ContractError } from '../../src/pe-framework/schema/h3-shots.js'
 import { compileH3 } from '../../src/pe-framework/dialect/h3.js'
-import { contractGatesH3 } from '../../src/pe-framework/audit/rules-h3.js'
+import { contractGatesH3, auditH3 } from '../../src/pe-framework/audit/rules-h3.js'
 import { readGolden, assertGolden } from '../fidelity/harness.js'
 
 describe('h3 contracts (contracts.py port)', () => {
@@ -209,6 +209,52 @@ describe('h3 ref2va director depth (Phase 3 retention/subject 实化)', () => {
       { stage: 'ref2va' },
     )
     expect(text).toContain('<Subject 1> is Neko from <Picture 1>.')
+  })
+})
+
+describe('h3 constraints block (Phase 4 风格/负向约束段)', () => {
+  const auditT2vaText = (text: string) => auditH3(text, { stage: 't2va', duration: 6, shotCount: 1 })
+
+  it('constraints 追加为最后一个字段（t2va 与 ref2va），text_zh 保留字段头', () => {
+    const t2va = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps.' }], constraints: 'pure live action only; no 3D renders' })
+    expect(t2va.text.trim().endsWith('constraints: pure live action only; no 3D renders')).toBe(true)
+    expect(t2va.text_zh).toContain('constraints:')
+    const ref2va = compileH3(
+      {
+        duration_seconds: 8,
+        shots: [{ what: 'Neko waves.', who: 'Neko' }],
+        references: [{ kind: 'picture', who: 'Neko', image: 'n.png' }] as any,
+        constraints: 'flat cel style only',
+      },
+      { stage: 'ref2va' },
+    )
+    expect(ref2va.text.trim().endsWith('constraints: flat cel style only')).toBe(true)
+  })
+
+  it('合法尾块不产生 constraints_block gate，字段审计不受块体污染', () => {
+    const { text } = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps on the windowsill.' }], constraints: 'no camera shake' })
+    const gates = auditT2vaText(text)
+    expect(gates.some((g) => g.rule === 'constraints_block')).toBe(false)
+    expect(gates.some((g) => g.severity === 'critical')).toBe(false)
+  })
+
+  it('重复块 → constraints_block critical', () => {
+    const { text } = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps.' }], constraints: 'no 3D' })
+    const gates = auditT2vaText(`${text}\n\nconstraints: extra block`)
+    expect(gates.some((g) => g.rule === 'constraints_block' && g.severity === 'critical')).toBe(true)
+  })
+
+  it('constraints 之后还有字段头 → constraints_block critical', () => {
+    const base = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps.' }] }).text
+    const mid = base.replace('\n\noverall_soundscape:', '\n\nconstraints: no 3D renders\n\noverall_soundscape:')
+    const gates = auditT2vaText(mid)
+    expect(gates.some((g) => g.rule === 'constraints_block' && g.severity === 'critical')).toBe(true)
+  })
+
+  it('body 含 [Shot N] 标记 → constraints_block critical', () => {
+    const { text } = compileH3({ duration_seconds: 6, shots: [{ what: 'A cat sleeps.' }], constraints: 'never introduce [Shot 2]' })
+    const gates = auditT2vaText(text)
+    expect(gates.some((g) => g.rule === 'constraints_block' && g.severity === 'critical')).toBe(true)
   })
 })
 

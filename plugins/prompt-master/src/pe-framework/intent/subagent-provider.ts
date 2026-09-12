@@ -327,7 +327,8 @@ export const H3_SCHEMA = `{
   "references": [],
   "shots": [
     { "what": "英文镜头脉冲：画面入口→新信息→主体可见变化→摄影机回应→交镜锚点（密度见 persona few-shot）", "who": "<Subject 1>", "ambient": "环境声（英文）", "music": "BGM（英文）", "dialogue": "对白原文或省略" }
-  ]
+  ],
+  "constraints": "可选。风格/负向约束段（单行英文，≤600 字符，编译为提示词最后一个字段）：只写本项目确认的风格约束与禁止项（如 pure 2D cel only; no 3D; no photorealistic faces）；不得含 [Shot N] 标记、对白或重复正文已述内容；用户未要求风格约束时省略"
 }
 
 输出规则：

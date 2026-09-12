@@ -50,6 +50,9 @@ export interface H3ShotsInput {
   duration_seconds: number
   shots: H3Shot[]
   references?: unknown[]
+  /** 可选：风格/负向约束段（WenWu hybrid 实践）。编译为最后一个字段 `constraints: ...`（单行化）；
+   *  审计要求：至多一个块、必须是最后一个字段、body 非空且不含 [Shot N] 标记。 */
+  constraints?: string
 }
 
 export interface Reference {

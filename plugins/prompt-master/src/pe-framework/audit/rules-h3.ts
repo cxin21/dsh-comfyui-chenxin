@@ -238,6 +238,33 @@ function auditL2vaPreamble(preamble: string, durationSeconds: number, shotCount:
 
 /* ── Stage dispatchers（audit.py audit_* 移植，findings → 归类 rule）── */
 
+/* ── Phase 4（h3-director-depth）：constraints 尾块审计 ──
+ * 可选特性：文本含 `constraints: ` 块时校验——至多一个、必须是最后一个字段（其后不得再出现已知字段头）、
+ * body 非空且不含 [Shot N] 标记。校验通过后把块从正文剥离再跑字段/时间线审计，避免块体污染字段切分。 */
+
+const CONSTRAINTS_MATCHER = /(^|\n)constraints: /g
+const KNOWN_FIELD_HEADERS: ReadonlySet<string> = new Set([...T2VA_FIELDS, ...REF2VA_FIELDS])
+
+export function extractTrailingConstraints(text: string): { core: string; errors: string[]; body: string | null } {
+  const matches = [...text.matchAll(CONSTRAINTS_MATCHER)]
+  if (matches.length === 0) return { core: text, errors: [], body: null }
+  const errors: string[] = []
+  if (matches.length > 1) {
+    errors.push(`multiple constraints blocks (${matches.length}): only one trailing constraints block is allowed`)
+  }
+  const first = matches[0]
+  const body = text.slice((first.index ?? 0) + first[0].length)
+  if (!body.trim()) errors.push('constraints block must have a non-empty body')
+  const laterField = [...body.matchAll(/(^|\n)([a-z_]+): /g)].find((m) => KNOWN_FIELD_HEADERS.has(m[2]))
+  if (laterField) {
+    errors.push(`constraints must be the final field (found field ${JSON.stringify(laterField[2])} after it)`)
+  }
+  if (body.includes('[Shot ')) {
+    errors.push('constraints block must not contain [Shot N] markers')
+  }
+  return { core: text.slice(0, first.index), errors, body }
+}
+
 function findingsToGates(stage: string, findings: string[], ruleOf?: (msg: string) => string): AuditGate[] {
   return findings.map((msg) => {
     const rule = ruleOf ? ruleOf(msg) : 'h3_audit'
@@ -333,6 +360,7 @@ export function contractGatesH3(stage: string, shots: { duration_seconds: number
 
 function ruleForMessage(msg: string): string {
   // 顺序即优先级：先特异性后通用
+  if (msg.includes('constraints')) return 'constraints_block'
   if (msg.includes('fields are not in the required')) return 'field_order'
   if (msg.includes('overall_soundscape') || msg.includes('non_diegetic_music')) return 'soundscape_dialogue'
   if (msg.includes('reference') || msg.includes('Subject') || msg.includes('Picture')) return 'label_resolution'
@@ -350,8 +378,10 @@ function ruleForMessage(msg: string): string {
 function auditT2va(text: string, durationSeconds: number, shotCount: number): string[] {
   const findings: string[] = []
   checkCharBudget(text, findings)
+  const { core, errors } = extractTrailingConstraints(text)
+  findings.push(...errors)
   try {
-    const fields = splitFields(text, T2VA_FIELDS)
+    const fields = splitFields(core, T2VA_FIELDS)
     auditTimeline(fields['integrated_multimodal_description'], durationSeconds, shotCount)
     auditSoundMusicSeparation(fields['overall_soundscape'], fields['non_diegetic_music'])
   } catch (e) {
@@ -364,8 +394,10 @@ function auditT2va(text: string, durationSeconds: number, shotCount: number): st
 function auditKeyframe(text: string, stage: string, durationSeconds: number, shotCount: number): string[] {
   const findings: string[] = []
   checkCharBudget(text, findings)
+  const { core, errors } = extractTrailingConstraints(text)
+  findings.push(...errors)
   try {
-    const parts = text.split('\n\n')
+    const parts = core.split('\n\n')
     if (parts.length < 2) {
       throw new H3AuditError(
         `${stage} prompt must start with the alignment preamble, followed by a blank line and the three core fields`,
@@ -390,8 +422,10 @@ function auditKeyframe(text: string, stage: string, durationSeconds: number, sho
 function auditRef2va(text: string, durationSeconds: number, shotCount: number, references: Reference[]): string[] {
   const findings: string[] = []
   checkCharBudget(text, findings)
+  const { core, errors } = extractTrailingConstraints(text)
+  findings.push(...errors)
   try {
-    const fields = splitFields(text, REF2VA_FIELDS)
+    const fields = splitFields(core, REF2VA_FIELDS)
     auditReferenceLabels(
       fields['subject_definitions'],
       `${fields['retention_analysis']}\n${fields['detailed_description']}`,

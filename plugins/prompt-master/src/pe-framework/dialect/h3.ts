@@ -278,15 +278,27 @@ export function buildTextZh(textEn: string): string {
   return outLines.join('\n').trim()
 }
 
-export function buildTextPair(stage: string, request: StoryRequest, depth?: 'quick' | 'director'): { text: string; textZh: string } {
-  const textEn = buildText(stage, request, depth)
+/** Phase 4：constraints（可选）追加为最后一个字段（官方外壳内的风格/负向约束段，参照 WenWu hybrid 实践）；内部换行单行化 */
+export function withConstraints(text: string, constraints?: string): string {
+  const c = constraints?.trim()
+  if (!c) return text
+  const singleLine = c.replace(/\r?\n/g, '; ').replace(/\s+/g, ' ').trim()
+  return `${text}\n\nconstraints: ${singleLine}`
+}
+
+export function buildTextPair(
+  stage: string,
+  request: StoryRequest,
+  opts?: { depth?: 'quick' | 'director'; constraints?: string },
+): { text: string; textZh: string } {
+  const textEn = withConstraints(buildText(stage, request, opts?.depth), opts?.constraints)
   return { text: textEn, textZh: buildTextZh(textEn) }
 }
 
 /** 供 T7/E2E 消费（brief 接口）：输入扁平 story → {text, text_zh}（Task 6 键桥接：result 键直接匹配 golden text_zh）
  *  depth：'quick'（缺省）=golden 兼容口径；'director'=启用导演级投影（Phase 3 起：retention 外观镜号等）。 */
 export function compileH3(
-  input: { duration_seconds: number; shots: H3Shot[]; references?: unknown[] },
+  input: { duration_seconds: number; shots: H3Shot[]; references?: unknown[]; constraints?: string },
   opts?: { stage?: string; depth?: 'quick' | 'director' },
 ): { text: string; text_zh: string } {
   const stage = opts?.stage ?? 't2va'
@@ -324,7 +336,7 @@ export function compileH3(
     videos: [],
     audios: [],
   }
-  const pair = buildTextPair(stage, request, opts?.depth)
+  const pair = buildTextPair(stage, request, { depth: opts?.depth, constraints: input.constraints })
   return { text: pair.text, text_zh: pair.textZh }
 }
 
@@ -359,7 +371,12 @@ export function normalizeH3Input(
   const references = normalizeRefs(refs.length > 0 ? refs : formRefs)
   // F1：当 shots.references 为空时，把 formFields.references 合并进编译入参 value.shots.references——
   // 否则 normalize.exit references 只喂给 audit/budget，compileH3 仍看到 refs=[] → subject_definitions 空 → 审计必炸
-  const mergedShots: H3ShotsInput = refs.length > 0 ? shots : { ...shots, references }
+  const baseShots: H3ShotsInput = refs.length > 0 ? shots : { ...shots, references }
+  // Phase 4：constraints 合并（shots.constraints 优先，formFields.constraints 兜底），空串视为缺省
+  const rawConstraints = (shots as { constraints?: unknown }).constraints
+    ?? (opts.formFields as Record<string, unknown> | undefined)?.constraints
+  const constraints = typeof rawConstraints === 'string' && rawConstraints.trim() ? rawConstraints.trim() : undefined
+  const mergedShots: H3ShotsInput = constraints ? { ...baseShots, constraints } : baseShots
   // 优先级与现 prompt-author.ts inferH3Stage 一致：显式 stage > references 存在 > scenarioId==='full_reference' > t2va
   const stage = opts.stage || (references.length > 0 ? 'ref2va' : opts.scenarioId === 'full_reference' ? 'ref2va' : 't2va')
   return { value: mergedShots, stage, references }
@@ -410,6 +427,13 @@ export function registerH3Dialect(): void {
             )
           }
         }
+      }
+      // Phase 4：constraints 超建议上限 → assumption（非阻塞；硬闸门由文本审计的 constraints_block 负责）
+      const constraintsText = typeof shots?.constraints === 'string' ? shots.constraints.trim() : ''
+      if (constraintsText.length > 600) {
+        assumptions.push(
+          `constraints_too_long: constraints ${constraintsText.length} 字符 > 建议上限 600（易稀释正文预算）；建议精简为项目确认的风格禁令`,
+        )
       }
       return { gates, assumptions }
     },

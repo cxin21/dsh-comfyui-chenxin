@@ -388,7 +388,7 @@ describe('T4 规格3 h3 镜头段 patch', () => {
     }
     const NEEDS_H3 = JSON.stringify({
       verdict: 'needs_revision',
-      dimensionScores: { 'shot-structure': 40, 'shot-increment': 40, 'cross-shot-consistency': 40, 'duration-fit': 40, pacing: 40, 'atmosphere-coupling': 40 },
+      dimensionScores: { 'shot-structure': 40, 'shot-increment': 40, 'cross-shot-consistency': 40, 'duration-fit': 40, pacing: 40, 'atmosphere-coupling': 40, 'performance-causality': 40, 'continuity-exit-entry': 40, 'camera-motivation': 40 },
       findings: [finding], praise: [],
     })
     const critic = criticOf([NEEDS_H3, REV_CLOSE_F1])

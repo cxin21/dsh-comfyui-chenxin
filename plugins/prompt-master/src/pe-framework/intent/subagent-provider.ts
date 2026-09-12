@@ -44,6 +44,14 @@ export interface SubagentLikeRun {
   dispose: () => Promise<unknown> | unknown
 }
 
+/**
+ * subagent 一次产出（intent/critic 共用）的默认超时。
+ * 演进：60s（首版）→ 180s（R9，session-97f3819d 三连超时）→ 300s（2026-09 外部基准升级，
+ * persona 3075 字符 + B7 候选块后实测 60s 不足；「改 src 未重建 dist 致运行主机停留在旧默认」
+ * 是本次 60s 双连超时的直接根因）。覆盖顺序：显式 opts.timeoutMs > PM_SUBAGENT_TIMEOUT_MS > 本常量。
+ */
+export const DEFAULT_SUBAGENT_TIMEOUT_MS = 300_000
+
 export interface SubagentProviderOptions {
   persona?: string
   schema?: string
@@ -62,9 +70,12 @@ export function createSubagentIntentProvider(
   ownerCtx: any,
   opts: SubagentProviderOptions = {},
 ): AuthorIntentFn {
-  // R9：默认 60s 实战连续超时（session-97f3819d 三连失败）→ 180s，支持 PM_SUBAGENT_TIMEOUT_MS 覆盖
+  // R9：默认 60s 实战连续超时（session-97f3819d 三连失败）→ 180s。
+  // 2026-09 外部基准升级：persona 900→3075 字符 + B7 候选块后，intent 子代理实测 60s 双连超时
+  // （旧 dist 钉 60s 的根因即「R9 改了 src 未及时重建 dist」，运行主机载入过期产物），默认提至 300s。
+  // 优先级：opts.timeoutMs（显式传入）> PM_SUBAGENT_TIMEOUT_MS 环境变量 > 300s 默认。
   const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '')
-  const timeoutMs = opts.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 180_000)
+  const timeoutMs = opts.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_SUBAGENT_TIMEOUT_MS)
   const provider = opts.provider ?? 'spawn'
 
   if (!ownerCtx?.subagents?.start) {

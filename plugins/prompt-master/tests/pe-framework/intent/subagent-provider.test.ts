@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { createSubagentIntentProvider } from '../../../src/pe-framework/intent/subagent-provider.js'
+import { createSubagentIntentProvider, DEFAULT_SUBAGENT_TIMEOUT_MS } from '../../../src/pe-framework/intent/subagent-provider.js'
+
+describe('DEFAULT_SUBAGENT_TIMEOUT_MS', () => {
+  // 2026-09 外部基准：默认超时 60s → 180s（R9）→ 300s。60s 时代实测双连超时
+  // （根因：改 src 未重建 dist，运行主机载入旧默认）；钉住常量防回退
+  it('默认 300s，且不低于 R9 的 180s（防「改 src 未重建 dist」式回退再犯）', () => {
+    expect(DEFAULT_SUBAGENT_TIMEOUT_MS).toBe(300_000)
+    expect(DEFAULT_SUBAGENT_TIMEOUT_MS).toBeGreaterThanOrEqual(180_000)
+  })
+})
 
 function makeFakeOwnerCtx(fakeRun: any) {
   return {

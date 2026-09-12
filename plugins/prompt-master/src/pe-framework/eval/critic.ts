@@ -13,6 +13,7 @@ import type { DialectRubric } from './rubrics/contract.js'
 import type { EvidenceBridge, EvidenceResult, EvidenceToolId } from './evidence.js'
 import type { AuditGate } from '../types.js'
 import { tokensOf } from '../tokens.js'
+import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js'
 
 export type CriticFinding = {
   /** 首轮内稳定编号 f1…fN（LLM 不产 id，parse 后由代码编号；复审/rebuttal/回查引用此 id） */
@@ -434,9 +435,10 @@ interface SubagentLikeRun {
  * ctx 不可用/抛错由调用方 catch 后走 skipped 降级。
  */
 export function createSubagentCriticProvider(ownerCtx: any, opts?: { timeoutMs?: number }): CriticProvider {
-  // R9：默认 60s 实战连续超时 → 180s，支持 PM_SUBAGENT_TIMEOUT_MS 覆盖
+  // 与 intent 同源默认（见 DEFAULT_SUBAGENT_TIMEOUT_MS 演进注释）：60s → 180s → 300s；
+  // PM_SUBAGENT_TIMEOUT_MS 可覆盖；两处默认值保持一致
   const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '')
-  const timeoutMs = opts?.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 180_000)
+  const timeoutMs = opts?.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_SUBAGENT_TIMEOUT_MS)
   const providerName = 'spawn'
 
   return async function subagentCritic(req: { persona: string; schema: string; user: string }): Promise<string> {

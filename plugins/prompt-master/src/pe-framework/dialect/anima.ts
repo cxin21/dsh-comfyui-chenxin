@@ -11,6 +11,7 @@ import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
 import { ANIMA_RUBRIC } from '../eval/rubrics/anima.js'
 import type { AuditGate, Rating } from '../types.js'
+import { RATING_ORDER } from '../types.js'
 import { EXPLICIT_MARKERS as EXPLICIT_SAFETY_MARKERS } from '../safety/rating.js'
 import { resolveEffectiveRating, RATING_SEEDS, RATING_NEGATIVE_ADDITIONS } from '../safety/rating.js'
 import { checkBoundaries } from '../safety/boundaries.js'
@@ -138,6 +139,15 @@ const POLICIES: Record<string, Policy> = {
     mandatoryPositive: ['masterpiece', 'best quality'],
     mandatoryNegative: ['worst quality', 'low quality'],
   },
+}
+
+/** repair r3（TR8-1 残缝审计，captain 分支③）：档位取高——装配档位（3b 已按原始 slots 提交种子到
+ *  文本）与重算档位（effectiveSlots 视图，生产丢弃/F2 采纳可能移除升档词）取 RATING_ORDER 高者。
+ *  终检档位恒 ≥ 装配档位：种子与终检同源，minor gate 不因升档词被移除而逃逸。 */
+function maxTier(a?: Rating, b?: Rating): Rating | undefined {
+  if (a === undefined) return b
+  if (b === undefined) return a
+  return RATING_ORDER.indexOf(a) >= RATING_ORDER.indexOf(b) ? a : b
 }
 
 /** types.py is_explicit_request 移植 */
@@ -395,7 +405,7 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   // 替换产生的 gates 以重跑为准（applyCanonicalSubstitutions 内部已重跑 audit），零 LLM。
   // R7-T2：catalogMs 计时窗口扩展到含第二轮 narrative 去重的整个 audit 后处理阶段（纯可观测）
   const tCatalog0 = performance.now()
-  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, search, allowNarrative: opts?.allowNarrative, dropUnresolvedMiss: opts?.dropUnresolvedMiss === true })
+  const subst = applyCanonicalSubstitutions(positiveText, negativeText, { variant, slots, rating: eff, search, allowNarrative: opts?.allowNarrative, dropUnresolvedMiss: opts?.dropUnresolvedMiss === true })
   if (subst.corrections > 0 || subst.dropped.length > 0) {
     positiveText = subst.positive
     // segments 投影同步（文本级替换；citation 保持 miss 溯源）
@@ -458,8 +468,9 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
       }
       positiveText = segments.filter((s) => s.channel === 'positive').map((s) => s.text).join(', ')
       // 重跑 audit 用替换后的槽位视图（subst.effectiveSlots），gates 以最终重跑为准；
-      // allowNarrative 透传（contentCount 的 narrative 计 1 与装配行为保持一致）
-      gates = auditAnima(positiveText, negativeText, { variant, slots: subst.effectiveSlots, search, allowNarrative: opts?.allowNarrative })
+      // allowNarrative 透传（contentCount 的 narrative 计 1 与装配行为保持一致）；
+      // repair r3：透传装配档位 eff——生产丢弃/F2 采纳移除升档词时终检档位不回落（max 与重算取高）
+      gates = auditAnima(positiveText, negativeText, { variant, slots: subst.effectiveSlots, rating: eff, search, allowNarrative: opts?.allowNarrative })
     }
   }
   const catalogMs = performance.now() - tCatalog0
@@ -658,7 +669,7 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
 }
 
 /** auditAnima：audit gates（含 catalog_miss —— 需要 slots+search 时生成） */
-export function auditAnima(positive: string, negative: string, opts?: CompileAnimaOptions & { slots?: AnimaSlots }): AuditGate[] {
+export function auditAnima(positive: string, negative: string, opts?: CompileAnimaOptions & { slots?: AnimaSlots; rating?: Rating }): AuditGate[] {
   const gates: AuditGate[] = []
   const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
   const variant = opts?.variant ?? 'base'
@@ -691,10 +702,10 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
     variant,
     qualityPrefix: opts?.slots?.qualityPrefix ?? true,
     explicit: opts?.slots?.explicit,
-    // repair r2（Task 8 验收评审）：终检档位恒等于装配档位——传 resolveEffectiveRating(slots) 全档位
-    // 而非裸 slots.rating；与 3b 复用同一纯函数保证同序同值。否则关键词升档（如 detail_mood/narrative
-    // 含 explicit 标记但未声明 rating）的编译在终检回落 safe 档，minor gate 被跳过（漏检）。
-    rating: opts?.slots ? resolveEffectiveRating(opts.slots) : opts?.slots?.rating,
+    // repair r3：终检档位 = max(装配档位 opts.rating, effectiveSlots 重算)——装配档位由 compile 透传
+    // （3b 已把该档位种子提交进文本），重算视图在生产丢弃/F2 采纳下可能移除升档词，取高堵死回落窗；
+    // 无透传（standalone audit）时维持纯重算语义不变。与 3b 复用同一 resolveEffectiveRating。
+    rating: maxTier(opts?.rating, opts?.slots ? resolveEffectiveRating(opts.slots) : undefined),
     // T2Q（C）：narrative 计 1 与 compile 装配一致——强制纳入（allowNarrative=true）或条件纳入
     // （质量检查通过）才计 1；被排除的 narrative 不计
     contentCount: opts?.slots
@@ -735,7 +746,7 @@ export interface CanonicalSubstitutionResult {
 export function applyCanonicalSubstitutions(
   positive: string,
   negative: string,
-  opts?: CompileAnimaOptions & { slots?: AnimaSlots },
+  opts?: CompileAnimaOptions & { slots?: AnimaSlots; rating?: Rating },
 ): CanonicalSubstitutionResult {
   const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
   const variant = opts?.variant ?? 'base'
@@ -809,7 +820,7 @@ export function applyCanonicalSubstitutions(
     return piece
   })
   if (!replacements.length && !dropped.length) {
-    return { positive, corrections: 0, replacements, dropped, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, search, allowNarrative: opts?.allowNarrative }), effectiveSlots: opts?.slots }
+    return { positive, corrections: 0, replacements, dropped, advisories, gates: auditAnima(positive, negative, { variant, slots: opts?.slots, rating: opts?.rating, search, allowNarrative: opts?.allowNarrative }), effectiveSlots: opts?.slots }
   }
   const newPositive = out.filter((s) => s !== '').join(', ')
   // 重跑 audit 用替换/丢弃后的槽位视图（原文片段已换 canonical 或移除 → 对应 miss gate 消失）
@@ -833,7 +844,7 @@ export function applyCanonicalSubstitutions(
     replacements,
     dropped,
     advisories,
-    gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, search, allowNarrative: opts?.allowNarrative }),
+    gates: auditAnima(newPositive, negative, { variant, slots: effectiveSlots, rating: opts?.rating, search, allowNarrative: opts?.allowNarrative }),
     effectiveSlots,
   }
 }

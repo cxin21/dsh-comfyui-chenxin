@@ -31,3 +31,7 @@ export interface SchemaIO { target: Target; slots?: Record<string, string[]>; sh
 export interface DialectIO { target: Target; positive?: string; negative?: string; text?: string; textZh?: string }
 export interface AuditIO { target: Target; report: AuditReport }
 export interface RenderIO { target: Target; payload: string; targetSlotHint?: string }   // targetSlotHint 如 "t2i.prompt"/"t2v.prompt"
+
+/** spec §5：内容分级档位（序：safe < sensitive < explicit） */
+export type Rating = 'safe' | 'sensitive' | 'explicit'
+export const RATING_ORDER: readonly Rating[] = ['safe', 'sensitive', 'explicit']

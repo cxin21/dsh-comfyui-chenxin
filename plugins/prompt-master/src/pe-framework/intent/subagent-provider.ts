@@ -62,7 +62,9 @@ export function createSubagentIntentProvider(
   ownerCtx: any,
   opts: SubagentProviderOptions = {},
 ): AuthorIntentFn {
-  const timeoutMs = opts.timeoutMs ?? 60_000
+  // R9：默认 60s 实战连续超时（session-97f3819d 三连失败）→ 180s，支持 PM_SUBAGENT_TIMEOUT_MS 覆盖
+  const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '')
+  const timeoutMs = opts.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 180_000)
   const provider = opts.provider ?? 'spawn'
 
   if (!ownerCtx?.subagents?.start) {

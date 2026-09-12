@@ -434,7 +434,9 @@ interface SubagentLikeRun {
  * ctx 不可用/抛错由调用方 catch 后走 skipped 降级。
  */
 export function createSubagentCriticProvider(ownerCtx: any, opts?: { timeoutMs?: number }): CriticProvider {
-  const timeoutMs = opts?.timeoutMs ?? 60_000
+  // R9：默认 60s 实战连续超时 → 180s，支持 PM_SUBAGENT_TIMEOUT_MS 覆盖
+  const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '')
+  const timeoutMs = opts?.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 180_000)
   const providerName = 'spawn'
 
   return async function subagentCritic(req: { persona: string; schema: string; user: string }): Promise<string> {

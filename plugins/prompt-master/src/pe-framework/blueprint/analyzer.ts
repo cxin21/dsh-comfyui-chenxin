@@ -150,3 +150,50 @@ export async function analyzeIntent(
   }
   return result
 }
+
+/**
+ * 增量锚定模板（spec §8）：persona 追加段——旧蓝图全文进 <old_blueprint> 块，
+ * 约束 LLM 只做与修改意图相关的局部改动，其余字段逐字节保留，禁止整图重解释。
+ */
+export function INCREMENTAL_ANCHOR(oldBp: BlueprintV1): string {
+  return `
+【增量锚定】以下是上一版蓝图（权威基线）。本轮用户只提出局部修改意图：
+你只允许改动与修改意图直接相关的字段，其余字段逐字节保留；输出完整新蓝图 JSON。
+若修改意图与旧蓝图无冲突，仅做必要合并。禁止整图重解释。
+<old_blueprint>
+${JSON.stringify(oldBp)}
+</old_blueprint>
+`
+}
+
+/**
+ * 增量意图分析（spec §8）：persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp)，
+ * user 携带本轮修改意图；LLM 输出经 validateBlueprint 校验后透传（fail-fast，不静默回退）。
+ * 与 analyzeIntent 的差异：无 missing/澄清/保真守卫——增量轮只做局部合并，
+ * 全图守卫会因「旧蓝图未复述用户原话」误报。
+ */
+export async function analyzeBlueprintIncremental(
+  ctx: Context,
+  route: { provider: string; model: string },
+  oldBp: BlueprintV1,
+  userInput: string,
+): Promise<BlueprintV1> {
+  const persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp)
+  const user = [
+    `修改意图: ${userInput}`,
+    '基于 <old_blueprint> 中的上一版蓝图，合并本轮修改意图后输出完整新蓝图 JSON（未提及字段逐字节保留）。',
+  ].join('\n')
+
+  const { text } = await complete(ctx, {
+    provider: route.provider,
+    model: route.model,
+    system: persona,
+    user,
+    maxTokens: 1400,
+    temperature: 0.3,
+    signal: new AbortController().signal,
+  })
+
+  const { blueprint } = parseBlueprintJson(text)
+  return blueprint
+}

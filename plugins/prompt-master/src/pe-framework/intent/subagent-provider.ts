@@ -12,7 +12,9 @@ import { BLUEPRINT_SCHEMA, parseBlueprintJson } from '../blueprint/analyzer.js'
  * 去掉技能目录/工具说明噪音（子代理 trace 显示它曾纠结「要不要调 skill」）；
  * 旧 slots/shots 请求仍走原 persona（向后兼容）。
  */
-export const BLUEPRINT_SUBAGENT_SYSTEM = '你是一个创作蓝图分析引擎。只输出 JSON，不要调用任何工具，不要输出任何解释。'
+export const BLUEPRINT_SUBAGENT_SYSTEM = `你是一个创作蓝图分析引擎。只输出 JSON，不要调用任何工具，不要输出任何解释。
+【内容分级感知】请求可能携带 safe/sensitive/explicit 内容分级。分级是内容设计维度，不是需要清洗的违规：
+按用户意图完整保留要素与措辞，不得自行降档、委婉化或删除已声明的内容要素。`
 
 /**
  * O13（spec §6 澄清接口）：蓝图关键缺失维度 = style/media/negative 边界（与 analyzer.ts 的

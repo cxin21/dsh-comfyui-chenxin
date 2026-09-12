@@ -4,6 +4,8 @@
  * 输出 { ok: true; value } | { ok: false; errors }。
  * 字段顺序即优先级（spec §5.1）。
  */
+import type { Rating } from '../types.js'
+
 export type BlueprintMedia = 'image' | 'video' | 'mixed'
 
 export const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'] as const
@@ -60,6 +62,9 @@ export interface BlueprintV1 {
   media: BlueprintMedia
   core: {
     concept: string          // 一句话主题（必填，用户原意压缩）
+    /** spec §5.1：内容分级档位（序 safe<sensitive<explicit）。缺省视为 safe；
+     *  不要求 LLM 产出——Task 14 在意图分析后确定性写入（LLM 产物不可信于安全数据，spec §7 P1 偏差记录）。 */
+    rating?: Rating
     aspect_ratio?: AspectRatio
     characters?: Character[] // 角色卡（可空；支撑跨镜头/跨次一致性；spec §6 蓝图字段可空，缺失维度由分析器显式标记）
     scene?: Scene            // 场景（环境/时间/光线/氛围）
@@ -90,6 +95,7 @@ export type ValidateResult =
   | { ok: false; errors: string[] }
 
 const MEDIA_VALUES = ['image', 'video', 'mixed'] as const
+const RATINGS = ['safe', 'sensitive', 'explicit'] as const
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
@@ -124,6 +130,10 @@ export function validateBlueprint(bp: unknown): ValidateResult {
     // concept：必填非空字符串
     if (core['concept'] == null || !isNonEmptyString(core['concept'])) {
       errors.push('core.concept must be a non-empty string')
+    }
+    // rating：可选，存在时校验枚举（缺省视为 safe，不报错——spec §5.1）
+    if (core['rating'] != null && !(RATINGS as readonly string[]).includes(core['rating'] as string)) {
+      errors.push('core.rating must be one of safe|sensitive|explicit')
     }
     // aspect_ratio：可选，存在时校验枚举
     if (core['aspect_ratio'] != null && !(ASPECT_RATIOS as readonly string[]).includes(core['aspect_ratio'] as string)) {

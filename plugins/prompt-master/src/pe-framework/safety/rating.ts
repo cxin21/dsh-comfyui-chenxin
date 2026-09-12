@@ -8,9 +8,16 @@ import type { AnimaSlots } from '../dialect/anima.js'
 
 /** types.py EXPLICIT_SAFETY_MARKERS 逐字（自 dialect/anima.ts 平移，原位再导出保兼容）。
  *  M1 审计 ⑤a 裁决增补：pussy（vulva 的 catalog alias 形态，与 vulva 同类 explicit 解剖俚语，
- *  保守方向扩表——补齐「替换形态/直用」两路径的档位语义统一，消 direct-usage safe 档渲染缺口）。 */
+ *  保守方向扩表——补齐「替换形态/直用」两路径的档位语义统一，消 direct-usage safe 档渲染缺口）。
+ *  M2 T1b 增补（词干变形复数，y→ies 在 substring 语义下逃逸——复数形不含词干尾 'y'）：
+ *  pussies（pussy 复数，captain 点名关键点——升档失效连带 minor gate 在 safe 档失活）、
+ *  nudities（nudity 复数，罕见形态按保守方向一并收录）。
+ *  全表 y 结尾 ASCII 词扫描结论留痕：EXPLICIT 表 y 结尾词 = nudity、pussy（两条均入变体）；
+ *  SENSITIVE 表无 y 结尾 ASCII 词（swimsuit/bikini/lingerie/underwear/cleavage/seductive）；
+ *  boundaries 侧 MINOR/BESTIALITY 表的 y→ies（baby/bestiality）走 boundaries.ts 后缀模式 +
+ *  PLURAL_VARIANTS 编译机制（\b 通道），两文件口径分工见各自注释。 */
 export const EXPLICIT_MARKERS: readonly string[] = [
-  'explicit', 'nude', 'nudity', 'genitals', 'genital', 'vulva', 'pussy', 'penis',
+  'explicit', 'nude', 'nudity', 'nudities', 'genitals', 'genital', 'vulva', 'pussy', 'pussies', 'penis',
   '乳头', '乳房', '生殖器', '阴部', '阴茎', '阴道', '隐私部位', '裸露', '露骨', '色情', 'pornographic', 'nsfw',
 ]
 

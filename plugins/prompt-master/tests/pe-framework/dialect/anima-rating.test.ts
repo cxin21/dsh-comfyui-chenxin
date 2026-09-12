@@ -1,7 +1,7 @@
 import { describe, expect, it, afterAll } from 'vitest'
 import { compileAnima, auditAnima } from '../../../src/pe-framework/dialect/anima.js'
 import { searchCatalog, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
-import { EXPLICIT_MARKERS, SENSITIVE_MARKERS } from '../../../src/pe-framework/safety/rating.js'
+import { EXPLICIT_MARKERS, SENSITIVE_MARKERS, resolveRating } from '../../../src/pe-framework/safety/rating.js'
 
 const realSearch = (t: string) => searchCatalog(t, { limit: 5 })
 
@@ -96,6 +96,17 @@ describe('rating integration (spec §5.3)', () => {
       }
     }
     expect(escapers).toEqual([])
+  })
+  it('M2 T1b: stem-changing plurals escalate — pussies/nudities → explicit (y→ies variant disposition)', () => {
+    // y→ies 词干变形在 substring 语义下逃逸（pussies 不含 pussy、nudities 不含 nudity——均无 'y'），
+    // 升档失效会连带 minor gate 在 safe 档失活（rating!=='safe' 才触发）——安全面收口。
+    // 词表侧处置：EXPLICIT_MARKERS 显式收录复数形态（rating.ts 全表 y 结尾扫描结论注释留痕；
+    // boundaries 侧机制见 boundaries.test.ts 后缀模式 + 变体表）。
+    expect(resolveRating(undefined, '1girl, pussies, close-up').rating).toBe('explicit')
+    expect(resolveRating(undefined, 'multiple nudities in frame').rating).toBe('explicit')
+    // 对照：单数既有覆盖与 sensitive 通道不受变体扩充影响
+    expect(resolveRating(undefined, '1girl, pussy, close-up').rating).toBe('explicit')
+    expect(resolveRating(undefined, 'bikini at the pool').rating).toBe('sensitive')
   })
   afterAll(() => closeCatalog())
 })

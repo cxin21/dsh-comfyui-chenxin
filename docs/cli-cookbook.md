@@ -622,7 +622,7 @@ temp/camera-multiview/multiview-1/
 { "category": "oriental", "rating": "safe", "query": "wuxia" }
 ```
 
-参数全可选（`category` / `rating` / `applies_to` / `query`；枚举非法 fail-fast），返回风格预设摘要数组 `{id, name, category, rating, artistCount, negativeCount, source}`（现库 55 条）。`rating` 语义 = 会话档位上限：只返回 `preset.rating ≤ 上限` 的预设。拿到 id 后传给 `prompt_author` 的 `style_id`。
+参数全可选（`category` / `rating` / `applies_to` / `query`；枚举非法 fail-fast），返回风格预设摘要数组 `{id, name, category, rating, artistCount, negativeCount, source}`（现库 82 条；sensitive/explicit 预设仅 `anima`）。`rating` 语义 = 会话档位上限：只返回 `preset.rating ≤ 上限` 的预设（safe 会话不可见 sensitive/explicit 预设，三档 72/78/82 递进可见）。拿到 id 后传给 `prompt_author` 的 `style_id`。
 
 ### `audit_only` 已移除（迁移说明）
 

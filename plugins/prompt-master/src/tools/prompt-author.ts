@@ -726,7 +726,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       scenario_id: { type: 'string', default: '', description: 'h3 场景 id（如 full_reference；可配合 form_fields）' },
       form_fields: { type: 'object', description: 'h3 场景表单字段（含 references 可选）', default: {}, additionalProperties: true },
       rating: { type: 'string', enum: ['safe', 'sensitive', 'explicit'], default: 'safe', description: '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错' },
-      style_id: { type: 'string', default: '', description: '风格预设 id（style_list 可查，55 条；M2 扩容后更新）' },
+      style_id: { type: 'string', default: '', description: '风格预设 id（style_list 可查，82 条）' },
       conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
       clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
       blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时以 <old_blueprint> 锚定运行增量意图分析（仅做与修改意图相关的局部改动，禁止整图重解释）→扩展→投影' },

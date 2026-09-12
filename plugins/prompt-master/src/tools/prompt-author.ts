@@ -725,7 +725,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       stage: { type: 'string', default: '', description: 'h3 stage（t2va/ref2va…；缺省按 references/场景推断）' },
       scenario_id: { type: 'string', default: '', description: 'h3 场景 id（如 full_reference；可配合 form_fields）' },
       form_fields: { type: 'object', description: 'h3 场景表单字段（含 references 可选）', default: {}, additionalProperties: true },
-      rating: { type: 'string', enum: ['safe', 'sensitive', 'explicit'], default: 'safe', description: '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错' },
+      rating: { type: 'string', enum: ['safe', 'sensitive', 'explicit'], default: 'safe', description: '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错；target=h3 仅支持 safe（MiniMax 政策，spec §5.5），非 safe 拒收不降级' },
       style_id: { type: 'string', default: '', description: '风格预设 id（style_list 可查，82 条）' },
       conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
       clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
@@ -771,6 +771,17 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const resolved = resolveRating(a.rating, input)
       const preflightAdvisories: string[] = []
       if (resolved.escalatedFrom) preflightAdvisories.push(`rating_escalated:${resolved.rating}`)
+      // M3-T1b（spec §5.5 L185）：h3 rating 硬约束——MiniMax 官方内容政策只支持 safe。
+      // gate 挂在 resolved.rating 上（显式声明与关键词升档两路径同拦），不做降级猜测；
+      // 0 token（预检段，与硬边界检查同层）。与 t62 minimax_scenario 的 h3_rating_unsupported
+      // 同语义（h3 场景工具面先行落地，本处补全 author 面）。
+      if (target === 'h3' && resolved.rating !== 'safe') {
+        throw new Error(
+          `h3_rating_unsupported: MiniMax H3 内容政策只支持 safe（spec §5.5）——target=h3 且 rating=${resolved.rating}` +
+            `（${resolved.source === 'input' ? '显式声明' : '关键词升档'}）被拒绝，不做降级猜测。` +
+            '需要 sensitive/explicit 内容分级请改走 prompt_author target=anima。',
+        )
+      }
       const violations = checkBoundaries(input, resolved.rating)
       if (violations.length > 0) throw new Error(violations.map((v) => `${v.gate}:${v.matched}`).join('; '))
 

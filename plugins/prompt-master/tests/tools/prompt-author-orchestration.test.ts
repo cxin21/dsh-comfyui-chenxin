@@ -134,16 +134,18 @@ describe('prompt_author orchestration v2 (spec §8 §9)', () => {
     const ctx = stubCtx({ stream: textStream(JSON.stringify(MINI_BP)) })
     ;(ctx as unknown as { settings: unknown }).settings = settings
     const def = registerAuthorTool(ctx as never, cfg as never)
+    // M3-T1b 载体修正：原载体 h3+explicit 与 spec §5.5 L185 冲突（h3 rating gate 落地后非法），
+    // 换合法载体 h3+safe——core.rating 确定性注入与 envelope 三字段断言语义不变
     const v = JSON.parse(String(await runTool(ctx, def, {
-      target: 'h3', blueprint_id: 'bp-inc', input: '把第二镜改成雨夜', rating: 'explicit', judge_mode: 'off',
+      target: 'h3', blueprint_id: 'bp-inc', input: '把第二镜改成雨夜', rating: 'safe', judge_mode: 'off',
     })))
     // call#0 = 增量意图分析：persona 含 <old_blueprint> 锚定块与旧蓝图全文
     expect(ctx.llm.calls[0]?.system).toContain('<old_blueprint>')
     expect(ctx.llm.calls[0]?.system).toContain('三镜头打斗CG')
     // call#1 = enrichBlueprint：v0 携带确定性注入的 core.rating
-    expect(userTextOf(ctx.llm.calls[1])).toContain('"rating":"explicit"')
+    expect(userTextOf(ctx.llm.calls[1])).toContain('"rating":"safe"')
     // 三字段齐备（蓝图出口）
-    expect(v.rating.resolved).toBe('explicit')
+    expect(v.rating.resolved).toBe('safe')
     expect(v.rating.source).toBe('input')
     expect(Array.isArray(v.aesthetics.recommendedCards)).toBe(true)
     expect(v.style).toBeDefined()
@@ -232,6 +234,39 @@ describe('M2-T2 declaredRating judge wiring + h3 negative_hints advisory (spec �
     expect(v.style.id).toBe('cinematic_real')
     expect(v.style.artists.length).toBeGreaterThan(0)
   })
+})
+
+describe('M3-T1b h3 rating gate at preflight (spec §5.5 L185)', () => {
+  // t62 核实备案兑现：spec L185「target=h3 且 rating≠safe → argument error」在 prompt_author
+  // 从未实现（原测试④曾把 h3+explicit 蓝图成功钉为绿——spec 与实现冲突由本轮核实）。
+  // gate 语义与 t62 minimax_scenario 同源：resolved.rating≠safe（显式声明或关键词升档皆然）
+  // → h3_rating_unsupported，政策依据 + 指路 target=anima，不做降级猜测，0 token。
+  it.each(['sensitive', 'explicit'] as const)('h3 + explicit %s → h3_rating_unsupported before any LLM call (no downgrade guessing)', async (rating) => {
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    await expect(
+      runTool(ctx, def, { target: 'h3', input: '花园里的少女', rating, judge_mode: 'off' }),
+    ).rejects.toThrow(/h3_rating_unsupported/)
+    await expect(
+      runTool(ctx, def, { target: 'h3', input: '花园里的少女', rating, judge_mode: 'off' }),
+    ).rejects.toThrow(/MiniMax/)
+    await expect(
+      runTool(ctx, def, { target: 'h3', input: '花园里的少女', rating, judge_mode: 'off' }),
+    ).rejects.toThrow(/target=anima/)
+    // 0 token：拒收发生在任何 LLM 调用之前（预检段，与硬边界检查同层）
+    expect(ctx.llm.calls.length).toBe(0)
+  })
+
+  it('h3 keyword escalation (bikini → sensitive) hits the same gate — gate is on resolved rating, not raw input', async () => {
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    await expect(
+      runTool(ctx, def, { target: 'h3', input: '泳池边的 bikini 少女', judge_mode: 'off' }),
+    ).rejects.toThrow(/h3_rating_unsupported/)
+    expect(ctx.llm.calls.length).toBe(0)
+  })
+  // 「h3 + safe 放行」半边由测试④（h3+safe 蓝图全流程：resolved='safe'/source='input'/
+  // core.rating 注入）活体覆盖，不在此重复。
 })
 
 describe('generations store rating column (Task 14 ⑥)', () => {

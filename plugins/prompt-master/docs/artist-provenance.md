@@ -54,7 +54,7 @@ hokusai→@hokusai(452301)、anmi→@anmi(75427)；复用 wlop(1299120)/greg rut
 
 采纳（新 5 名 + 复用 6 名）：abigail larson→@abigail larson(29397)、alphonse mucha→@alphonse mucha(58901)、
 gustave dore→@gustave dore(397092)、edward gorey→edward gorey(288947)、terada katsuya→@terada katsuya(1183599)；
-复用 greg rutkowski(397364)/loundraw(665973)/ross tran(998912)/wlop(1299120)/loish(661432)/mika pikazo(735625)。
+复用 greg rutkowski(389496)/loundraw(665973)/ross tran(998912)/wlop(1299120)/loish(661432)/mika pikazo(735625)。
 
 弃用（3 名）：mary blair（仅 fuzzy 'blair'）、katsuhiro otomo（仅 fuzzy otomo_katsuhiro_(style)）、
 egon schiele（仅 fuzzy egon_spengler）——均 fuzzy_below_threshold。

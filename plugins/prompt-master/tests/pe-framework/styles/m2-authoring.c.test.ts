@@ -20,7 +20,7 @@ const dir = resolve(here, '../../../assets/style-presets')
  *  本批新增 5 名：abigail larson→@abigail larson(29397) / alphonse mucha→@alphonse mucha(58901) /
  *  gustave dore→@gustave dore(397092) / edward gorey→edward gorey(288947) /
  *  terada katsuya→@terada katsuya(1183599)。
- *  复用已验证池（批 A a.test / 批 B b.test 各自 rec 号留痕）：greg rutkowski(397364) /
+ *  复用已验证池（批 A a.test / 批 B b.test 各自 rec 号留痕）：greg rutkowski(389496) /
  *  loundraw(665973) / ross tran(998912) / wlop(1299120) / loish(661432) / mika pikazo(735625)。
  *  验证未过（miss / fuzzy-only）：mary blair（仅 fuzzy 'blair'）、katsuhiro otomo（仅 fuzzy
  *  otomo_katsuhiro_(style)）、egon schiele（仅 fuzzy egon_spengler）——均 fuzzy_below_threshold 不采纳。 */

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { loadStylePresets, getStylePreset, listStylePresets, stylePresetCount } from '../../../src/pe-framework/styles/registry.js'
+import { loadStylePresets, getStylePreset, listStylePresets, stylePresetCount, assertAppliesToElements } from '../../../src/pe-framework/styles/registry.js'
+import type { StylePresetV2 } from '../../../src/pe-framework/styles/schema.js'
+
+/** 十类分类学（spec §4.4）——registry 层 category 断言用（captain 附加项②） */
+const TAXONOMY = ['photography', 'anime', 'illustration', 'cg_3d', 'oriental', 'dark_supernatural', 'scifi_fantasy', 'retro', 'graphic', 'glamour_intimate']
 
 describe('style registry (spec §4.2)', () => {
   const loaded = loadStylePresets()
@@ -21,5 +25,17 @@ describe('style registry (spec §4.2)', () => {
     expect(listStylePresets({ category: 'anime' }).every((p) => p.category === 'anime')).toBe(true)
     expect(listStylePresets({ appliesTo: 'h3' }).every((p) => p.applies_to.includes('h3'))).toBe(true)
     expect(listStylePresets({ query: 'rella' }).length).toBeGreaterThanOrEqual(1)
+  })
+  it('captain addendum ①: applies_to elements are enum-checked (anima|h3|sd only, fail-fast)', () => {
+    const bad = { ...getStylePreset('cinematic_real')!, applies_to: ['anima', 'weibo'] } as unknown as StylePresetV2
+    expect(() => assertAppliesToElements(bad, 'fixture.json')).toThrow(/applies_to/)
+    expect(() => assertAppliesToElements(getStylePreset('cinematic_real')!, 'fixture.json')).not.toThrow()
+    // 全量 55 条经 load 通道隐式过检（loadStylePresets 内逐条调用）
+    expect(stylePresetCount()).toBe(55)
+  })
+  it('captain addendum ②: every loaded preset carries a category from the ten-class taxonomy', () => {
+    const all = listStylePresets()
+    expect(all.length).toBe(55)
+    for (const p of all) expect(TAXONOMY, `${p.id}: ${p.category}`).toContain(p.category)
   })
 })

@@ -14,6 +14,20 @@ import type { Rating } from '../types.js'
 
 const RATING_RANK: Record<Rating, number> = { safe: 0, sensitive: 1, explicit: 2 }
 
+const MODE_TARGETS = ['anima', 'h3', 'sd'] as const
+
+/**
+ * captain 附加项①（t15 加固）：applies_to 元素枚举校验——validateStylePreset 只校验数组形状，
+ * 元素值在此收紧为 'anima'|'h3'|'sd'，非法元素 fail-fast（与非法文件同等对待，不静默丢弃）。
+ */
+export function assertAppliesToElements(preset: StylePresetV2, file: string): void {
+  for (const t of preset.applies_to) {
+    if (!(MODE_TARGETS as readonly string[]).includes(t)) {
+      throw new Error(`style preset invalid (${file}): applies_to contains non-enum element "${String(t)}" (allowed: anima|h3|sd)`)
+    }
+  }
+}
+
 let _cache: { presets: StylePresetV2[]; advisories: string[] } | undefined
 let _byId: Map<string, StylePresetV2> | undefined
 
@@ -50,6 +64,7 @@ export function loadStylePresets(): { presets: StylePresetV2[]; advisories: stri
     const checked = validateStylePreset(raw)
     if (!checked.ok) throw new Error(`style preset invalid (${file}): ${checked.errors.join('; ')}`)
     let preset = checked.value
+    assertAppliesToElements(preset, file)
     const n = seen.get(preset.id) ?? 0
     seen.set(preset.id, n + 1)
     if (n > 0) {

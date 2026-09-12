@@ -1,6 +1,7 @@
 import { inspectOutput } from './inspect.js'
 import { mergeContinuedText } from './merge.js'
 import type { OutputContract, ContinueSeed, ContinueOutcome } from './contract.js'
+import type { Rating } from '../types.js'
 
 type FinishKind = 'stop' | 'tool-calls' | 'max-tokens' | 'aborted' | 'error'
 
@@ -29,6 +30,9 @@ export async function continueUntilComplete(params: {
   onContinue?: (round: number, maxRounds: number) => void
   /** Request form fields, passed through to contract.expectedGroups (spec §3.2.3). */
   formFields?: Record<string, unknown>
+  /** spec §7 P4：declaredRating 存在时，每轮 instruction 尾部追加评级行（修订不得降档/清洗）；
+   *  缺省不追加——H3 既有调用方（minimax-scenario）零改动。 */
+  declaredRating?: Rating
 }): Promise<ContinueOutcome> {
   const max = params.maxRounds ?? 3
   const warnings: string[] = []
@@ -43,9 +47,12 @@ export async function continueUntilComplete(params: {
     rounds++
     params.onContinue?.(rounds, max)
     const missingList = inspection.missing.length > 0 ? inspection.missing.join(', ') : '（结构未知，可能有暗截断）'
-    const instruction = params.seed.outputLang === 'en'
+    const baseInstruction = params.seed.outputLang === 'en'
       ? `Already written (do NOT rewrite; continue from it): -----\n${text}\n-----\n\nMissing: ${missingList}. Continue from where it stops.`
       : `已写出（不要重写，基于它继续）：-----\n${text}\n-----\n\n缺失内容：${missingList}。请从缺失处继续输出，不要重复已有内容。`
+    const instruction = params.declaredRating !== undefined
+      ? `${baseInstruction}\n当前内容分级：${params.declaredRating}——修订不得降档、不得清洗或委婉化已声明内容、不得触碰硬边界负向。`
+      : baseInstruction
     let piece: string
     try {
       const gen = await params.generate({ system: params.seed.system, user: instruction })

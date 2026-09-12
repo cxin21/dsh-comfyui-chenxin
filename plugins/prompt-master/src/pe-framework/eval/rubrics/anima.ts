@@ -32,5 +32,7 @@ export const ANIMA_RUBRIC: DialectRubric = {
   boundary: `【评审边界（硬性）】
 被评审产物由「槽位编译」生成。修复层只能修改槽位与 narrative，不能修改负面提示词模板与编译行为。因此：
 - 每条 requiredFix 必须指明作用槽位与目标形式（如 clothing: swordsman→删除，语义并入 holding sword），不得要求修复层做槽位之外的操作
-- tag-evidence 维度的 miss 判定以产物 citations 为准；substitutions 产生的未验证形式按 minor 计（编译层责任），requiredFix 给出应采用的规范形式`,
+- tag-evidence 维度的 miss 判定以产物 citations 为准；substitutions 产生的未验证形式按 minor 计（编译层责任），requiredFix 给出应采用的规范形式
+【评级中立】被评审产物若声明了内容分级（rating 档位），该档位下的合法词汇与要素不得作为 finding：
+评委只评该档位内的结构/一致性/美学质量；对 explicit 档产出「违反内容政策」类 finding 属无效死信，禁止输出。`,
 }

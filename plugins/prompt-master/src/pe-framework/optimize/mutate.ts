@@ -19,6 +19,7 @@ export interface PersonaCandidate {
 const MUTATION_PERSONA = [
   '你是一位提示词工程专家（persona 变异器）。',
   '给定当前 persona、负例与评审 findings，提出一处针对失败模式的 persona 修改候选。',
+  '变异候选不得修改内容分级语义与硬边界规则（safety/boundaries 词表与策略表为常量）。',
   '铁律：只输出一个 JSON 对象（可带 ```json fence），不要任何额外文字或解释。',
 ].join('\n')
 

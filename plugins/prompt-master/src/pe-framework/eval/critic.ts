@@ -11,7 +11,7 @@
  */
 import type { DialectRubric } from './rubrics/contract.js'
 import type { EvidenceBridge, EvidenceResult, EvidenceToolId } from './evidence.js'
-import type { AuditGate } from '../types.js'
+import type { AuditGate, Rating } from '../types.js'
 import { tokensOf } from '../tokens.js'
 import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js'
 
@@ -61,6 +61,8 @@ export interface JudgeReviewInput {
   firstScore?: number
   /** stage='revision' 时继承首轮 praise（A2 CriticOutcome 映射） */
   firstPraise?: string[]
+  /** spec §7 P3：declaredRating 存在时，buildPersona/buildRevisionPersona 产物尾部追加评级中立行；缺省不加（既有调用零改动） */
+  declaredRating?: Rating
 }
 
 /* ── stripFences（自 eval/judge.ts 抄，纯函数） ── */
@@ -156,11 +158,11 @@ function dimensionScoresOf(raw: unknown, rubric: DialectRubric): Record<string, 
   return out
 }
 
-function buildPersona(rubric: DialectRubric): string {
+function buildPersona(rubric: DialectRubric, declaredRating?: Rating): string {
   const dims = rubric.dimensions
     .map((d) => `- [${d.id}] ${d.instruction}${d.evidenceOptional === true ? '（证据可选：该维度 finding 无证据也可输出）' : ''}`)
     .join('\n')
-  return [
+  const lines = [
     '你是一位资深的提示词质量评审评委（EvidenceCritic）。',
     '对给定「编译产物 + 用户原意」按以下维度逐条评审：',
     dims,
@@ -175,7 +177,9 @@ function buildPersona(rubric: DialectRubric): string {
     'result 写你判断该查询应返回的证据摘要；主进程会逐条回查复核，无法核实的 finding 会被标注',
     'evidenceUnverified 并降权处理。没有 evidence 的 finding 一律不要输出；标注「证据可选」的维度例外。',
     '输出：只输出一个 JSON，直接输出裸 JSON（不要 markdown fence，不要解释），形状见 schema。',
-  ].join('\n')
+  ]
+  if (declaredRating !== undefined) lines.push(`当前内容分级：${declaredRating}——按评级中立条款评审。`)
+  return lines.join('\n')
 }
 
 function buildSchema(rubric: DialectRubric): string {
@@ -220,14 +224,16 @@ function buildUser(input: JudgeReviewInput): string {
 
 /* ── A2 revision 独立契约（spec §10.1-A2, §2.3）：只验 findings 关闭 + 反驳裁决，非全量重评 ── */
 
-function buildRevisionPersona(): string {
-  return [
+function buildRevisionPersona(declaredRating?: Rating): string {
+  const lines = [
     '你是一位资深的提示词质量评审评委（EvidenceCritic）。',
     '本轮是修订稿复审：你不做全量重评、不打维度分，只做两件事：',
     '1. 逐条核对首轮 findings 是否已在修正稿中关闭；',
     '2. 对修订者提出的反驳逐条裁决是否成立（accepted=true 表示反驳成立，该 finding 视为被推翻）。',
     '输出：只输出一个 JSON，直接输出裸 JSON（不要 markdown fence，不要解释），形状见 schema。',
-  ].join('\n')
+  ]
+  if (declaredRating !== undefined) lines.push(`当前内容分级：${declaredRating}——按评级中立条款评审。`)
+  return lines.join('\n')
 }
 
 function buildRevisionSchema(): string {
@@ -306,7 +312,7 @@ async function judgeRevision(input: JudgeReviewInput): Promise<CriticOutcome> {
   const firstScore: number = input.firstScore
   const firstFindings = input.firstFindings ?? []
   const raw = await input.provider({
-    persona: buildRevisionPersona(),
+    persona: buildRevisionPersona(input.declaredRating),
     schema: buildRevisionSchema(),
     user: buildRevisionUser(input),
   })
@@ -342,7 +348,7 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
     }
 
     const req = {
-      persona: buildPersona(input.rubric),
+      persona: buildPersona(input.rubric, input.declaredRating),
       schema: buildSchema(input.rubric),
       user: buildUser(input),
     }

@@ -34,5 +34,15 @@ describe('rating integration (spec §5.3)', () => {
     const gates = auditAnima(r.positive, r.negative, { variant: 'base', search: realSearch, slots: s })
     expect(gates.some((g) => g.rule === 'minor_content_conflict')).toBe(true)
   })
+  it('repair r2: terminal tier mirrors assembly tier (keyword-escalated, undeclared rating)', () => {
+    // 无显式 rating 声明：detail_mood 'nude' 关键词升档 → 装配档位 explicit（3b）；
+    // 终检档位必须恒等于装配档位，否则 appearance 'loli' 的 minor gate 在 safe 档被跳过（漏检）。
+    const s = slots({ detail_mood: ['nude'], appearance: ['loli'] })
+    const r = compileAnima(s, { variant: 'base', search: realSearch })
+    expect(r.positive).toContain('rating_explicit')
+    expect(r.assumptions).toContain('rating_active:explicit')
+    const gates = auditAnima(r.positive, r.negative, { variant: 'base', search: realSearch, slots: s })
+    expect(gates.some((g) => g.rule === 'minor_content_conflict')).toBe(true)
+  })
   afterAll(() => closeCatalog())
 })

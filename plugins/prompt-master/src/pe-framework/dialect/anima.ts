@@ -691,7 +691,10 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
     variant,
     qualityPrefix: opts?.slots?.qualityPrefix ?? true,
     explicit: opts?.slots?.explicit,
-    rating: opts?.slots?.rating,
+    // repair r2（Task 8 验收评审）：终检档位恒等于装配档位——传 resolveEffectiveRating(slots) 全档位
+    // 而非裸 slots.rating；与 3b 复用同一纯函数保证同序同值。否则关键词升档（如 detail_mood/narrative
+    // 含 explicit 标记但未声明 rating）的编译在终检回落 safe 档，minor gate 被跳过（漏检）。
+    rating: opts?.slots ? resolveEffectiveRating(opts.slots) : opts?.slots?.rating,
     // T2Q（C）：narrative 计 1 与 compile 装配一致——强制纳入（allowNarrative=true）或条件纳入
     // （质量检查通过）才计 1；被排除的 narrative 不计
     contentCount: opts?.slots

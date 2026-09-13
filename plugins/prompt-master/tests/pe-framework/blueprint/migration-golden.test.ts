@@ -36,6 +36,7 @@ import {
 import { createBlueprintRepo } from '../../../src/pe-framework/blueprint/repo.js'
 import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js'
 import { projectToAnima } from '../../../src/pe-framework/blueprint/project.js'
+import { getGeneration } from '../../../src/pe-framework/feedback/store.js'
 import { applyArtDirectionCards } from '../../../src/pe-framework/enrichment/art-direction-apply.js'
 import { applyStyle } from '../../../src/pe-framework/enrichment/style.js'
 import { compileAnima } from '../../../src/pe-framework/dialect/anima.js'
@@ -222,6 +223,10 @@ describe('golden L3: envelope skeleton + F2 blueprint_id conditional key', () =>
       expect(oldKeys.has('next_action'), `${c.id} 旧路径无 next_action（既有不对称，见 replay doc）`).toBe(false)
       expect(newRun.v.observability?.blueprint?.form, `${c.id} 新路径 blueprint 痕迹（增量①）`).toBe('blueprint')
       expect(oldRun.v.observability?.blueprint, `${c.id} 旧路径无 blueprint 痕迹`).toBeUndefined()
+      // T4 附录（T2R nit）：落库 enrich 列两态对照钉死——蓝图形态 enrichFlag=0（D4 增量④：
+      // runEnrich swap 后 generations.enrich 恒 0），slots 兼容态 enrich=1（brief 走通）
+      expect(getGeneration(join(tmp, 'feedback.sqlite'), newRun.v.generation_id)?.enrich, `${c.id} 新路径 generations.enrich=0`).toBe(0)
+      expect(getGeneration(join(tmp, 'feedback.sqlite'), oldRun.v.generation_id)?.enrich, `${c.id} 旧路径 generations.enrich=1`).toBe(1)
       // 新路径 critical gate 家族 ⊆ 旧路径（无新增 critical 家族）
       const fams = (v: Record<string, any>) =>
         new Set(((v.audit?.gates ?? []) as Array<{ severity: string; rule: string }>).filter((g) => g.severity === 'critical').map((g) => String(g.rule).split(':')[0]))

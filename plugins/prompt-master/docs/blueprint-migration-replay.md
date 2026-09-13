@@ -94,6 +94,7 @@ h3 legacy（shots 直译）路径：intent persona === H3_PERSONA 原样、无 `
 
 1. `next_action`/`repair_hints` 装配不对称：blueprint 分支（含 h3）自始装配 nextAction（含空 repair_hints 数组），legacy slots/shots 分支自始不装配——**迁移前既存**、迁移零贡献；L3 白名单已显式扩为 `{enrichment, next_action, repair_hints}` 并双向断言（新路径必有、旧路径必无）。若需拉平属 src 行为变更，建议 M5 台账单列任务定夺（影响 legacy 回滚面的 envelope 消费方）。
 2. L1 实现扩展（从严披露）：内容槽 Jaccard 集在设计稿六槽外并入 `camera`/`exclusions`；rating「逐字节」操作化为 `rating.resolved` 相等（种子 token 一致由 L2/L4 字节面承载）；narrative 在设计稿「存在性一致+非空」上加逐字节相等（fixtures 可满足）。
+3. T2R-1 strict 修订路径档位回落证据：12 案例均 `judge_mode:'off'`（§2.6 args 要点），无 strict 模式样本 → 档位回落证据采集不适用（captain 裁定：T2R-1 入台账与缺口#1 合并扩面双载体，不随 T4 闭合）。若台账后续需要 mock 采集，可经 V5/R6 与清单⑤的 fast 闭环载体改 strict 双档复用同一 mock 面获取。T4 附录（T2R nit）已补：golden L3 每案例显式断言 `generations.enrich` 两态对照（新路径=0 / 旧路径=1）。
 
 ## 11. 本任务交付物
 

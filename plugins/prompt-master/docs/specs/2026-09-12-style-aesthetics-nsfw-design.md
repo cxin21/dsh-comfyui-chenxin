@@ -284,3 +284,24 @@ MINIMAL_STYLES 11 条 → JSON（source: 'builtin-migrated'），TS 侧保留 de
 - 预设管理写工具（style_save 等——style_list 只读先行，反存走 feedback 二期）
 - 风格预设的 token 预算 gate（现有 budget 审计已覆盖）
 - expand/reverse 内置 profile 的 rating 变体（用户自定义 profile 范畴）
+
+---
+
+## 勘误（2026-09-12 审计）
+
+spec-vs-code 全面审计对本文与实现的对账结论备案。**实现为准**；原文留痕不改写，仅逐条勘误如下。
+
+### #2 prompt_audit 的 rating 经 slots 槽位承载（§9 L254）
+
+§9 原文「prompt_audit：承接原 audit_only 用法（结构化输入直接审计），补 rating 输入」易读作新增顶层 `rating` 参数。实现为 **rating 经 `slots` 槽位承载**：`prompt_audit` 无顶层 `rating` 参数（参数面 = target/positive/negative/variant/slots/text/stage/duration/shotCount/references）；anima 审计的档位语义由 `auditAnima` → `inspectAnima` 的 `rating: maxTier(透传, resolveEffectiveRating(slots))` 重算（`dialect/anima.ts`），`resolveEffectiveRating` 消费 `slots.rating`（`slots.explicit` 布尔兼容映射保留，`safety/rating.ts`）。审计调用的档位声明写在 `slots` 里。
+
+### #4 envelope `aesthetics.gates` 经 audit 面可见（§9 L251）
+
+§9 原文 envelope 顶层 `aesthetics: { gates: [...], recommendedCards: [...] }`。实现中顶层 `aesthetics` 仅含 `recommendedCards`；确定性美学 gates（§6.1 四类 `aesthetic_*_missing`）由 `detectAestheticGates` 并入 `inspectAnima` 的 AuditGate 列表（advisory 级，minor），**经 envelope 的 `audit.gates` 面可见**——即 §6.1 L198「输出并入现有 inspectAnima AuditGate 列表」的既有语义，`aesthetics.gates` 独立顶层字段未实现。
+
+### #6 四处演进备案
+
+1. **style_save 已实现（M3）**：§13「预设管理写工具（style_save 等）显式不做」已被推翻——`style_save` 于 M3 实现（validateStylePreset fail-fast + id 白名单 + 原子写，commit fe78f0b），M4 T2 追加 exists-check 加固（commit 833afb7）；§13 该行按 M3 时点失效。
+2. **两级匹配（M2 T1）**：§5.4 词表交叉判定的匹配机制在实现期收紧为两级——ASCII marker 走 `\b<marker>(?:s|es|ren)?\b` 词边界（y 结尾词复数形入 PLURAL_VARIANTS）+ CJK substring（`safety/boundaries.ts` 头注与 `tests/pe-framework/safety/boundaries.test.ts` M2 T1 留痕），消 `kid` 词边界误中 artist `kidmo` 类假阳性；spec 原文只定义词表与交叉判定，未约定匹配机制。
+3. **cg_3d 迁移行标法**：§4.4 迁移表「cg_3d（2）｜ game_cg + nb15, nb19」括注 (2) 与所列条目不符——实为 **3 条**（game_cg + nb15 + nb19）；类别总账行「cg_3d 6」（3 迁移 + 3 新增）与库内实测一致，以总账为准。
+4. **NSFW 10 条**：§4.4「NSFW 新增 10 条（sensitive 6 + explicit 4）」正确（库内实测 sensitive 6 / explicit 4，glamour_intimate 10）；§12 M2 里程碑行「含 NSFW 11 条」为笔误，以 **10 条**为准。

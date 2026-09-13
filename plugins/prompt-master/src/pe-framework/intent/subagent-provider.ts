@@ -5,7 +5,8 @@ import type {
 } from '../../tools/prompt-author.js'
 import type { H3ShotsInput } from '../schema/h3-shots.js'
 import type { AnimaSlots } from '../dialect/anima.js'
-import { BLUEPRINT_SCHEMA, parseBlueprintJson } from '../blueprint/analyzer.js'
+import { BLUEPRINT_SCHEMA, INCREMENTAL_ANCHOR, parseBlueprintJson } from '../blueprint/analyzer.js'
+import type { BlueprintV1 } from '../blueprint/schema.js'
 
 /**
  * Task 12 Step 3b（spec §14）：intent 子代理瘦身——蓝图模式注入最小 system，
@@ -71,7 +72,9 @@ export interface SubagentProviderOptions {
  * - 空 catalogCandidates 剔除（空数组 + 「仅可从中选择」规则并存是噪音）。
  */
 function dumpIntentRequest(req: AuthorIntentRequest, candidates: string[]): Record<string, unknown> {
-  const { persona: _persona, schema: _schema, ...rest } = req as unknown as Record<string, unknown>
+  // persona/schema 由 taskText 前缀承载（不再重复序列化）；anchorBlueprint 由 INCREMENTAL_ANCHOR
+  // 专用块承载（M5-T2 D5a，同样不进 User Input JSON 防重复）
+  const { persona: _persona, schema: _schema, anchorBlueprint: _anchor, ...rest } = req as unknown as Record<string, unknown>
   return { ...rest, ...(candidates.length > 0 ? { catalogCandidates: candidates } : {}) }
 }
 
@@ -98,9 +101,15 @@ export function createSubagentIntentProvider(
   return async function subagentIntent(req: AuthorIntentRequest, exec?: any): Promise<AuthorDraft> {
     // persona/schema 解析（Task 7 方言化）：req（author 按 dialect.intent 注入）> opts（插件配置）> 全局 DEFAULT 兜底
     // Task 12 Step 3b：蓝图模式（target='blueprint'）强制 BLUEPRINT_SUBAGENT_SYSTEM + BLUEPRINT_SCHEMA（最小 system，不含技能/工具噪音）
-    const isBlueprint = req.target === 'blueprint'
-    const persona = isBlueprint ? BLUEPRINT_SUBAGENT_SYSTEM : ((req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA)
-    const schema = isBlueprint ? BLUEPRINT_SCHEMA : ((req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA)
+    // M5-T2（D1）：blueprintMode = anima 默认路径蓝图形态（prompt-author 唯一读取点下行）——
+    // persona/schema 优先取 req（registry intent.blueprintPersona/Schema 的 ANIMA 蓝图版），缺省回落通用蓝图常量
+    const isBlueprint = req.target === 'blueprint' || req.blueprintMode === true
+    const persona = isBlueprint
+      ? ((req as { persona?: string }).persona ?? BLUEPRINT_SUBAGENT_SYSTEM)
+      : ((req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA)
+    const schema = isBlueprint
+      ? ((req as { schema?: string }).schema ?? BLUEPRINT_SCHEMA)
+      : ((req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA)
     // parent 必须是当前调用 Agent：工具执行上下文（exec.agent）优先，
     // 回退到 apply 绑定的 ownerCtx.agent（仅在插件确实在 agent scope 下 apply 时可用）。
     const parent = exec?.agent ?? ownerCtx?.agent
@@ -113,6 +122,11 @@ export function createSubagentIntentProvider(
     const candidates = (Array.isArray(req.catalogCandidates) ? req.catalogCandidates : []).filter((c) => typeof c === 'string' && c.trim())
     const taskText = [
       persona,
+      // M5-T2（D5a/V6）：修复轮增量锚定——旧蓝图全文进 <old_blueprint> 专用块（复用 analyzer
+      // INCREMENTAL_ANCHOR 模板），禁整图重解释；首轮无锚（无上一版蓝图）
+      ...(isBlueprint && req.anchorBlueprint !== undefined && req.anchorBlueprint !== null
+        ? [INCREMENTAL_ANCHOR(req.anchorBlueprint as BlueprintV1)]
+        : []),
       '',
       '输出 JSON Schema:',
       schema,
@@ -206,9 +220,10 @@ export function createSubagentIntentProvider(
  * （关键维度 = style/media/negative，见 KEY_CLARIFY_DIMS）在关键缺失时产出 clarify_questions，
  * 随 draft 完整返回给调用方（不吞不丢）。非蓝图 / clarify 非 'ask' / 无关键缺失 → 原样返回
  * （无 req.clarify 时与现状完全一致，默认不产生 clarify_questions）。
+ * M5-T2（D1）：blueprintMode（anima 默认蓝图形态）与 target='blueprint' 同待遇。
  */
 function applyBlueprintClarify(draft: AuthorDraft, req: AuthorIntentRequest): AuthorDraft {
-  if (req.target !== 'blueprint' || req.clarify !== 'ask') return draft
+  if ((req.target !== 'blueprint' && req.blueprintMode !== true) || req.clarify !== 'ask') return draft
   const missing = (draft as { missing?: string[] }).missing ?? []
   const keyMissing = missing.filter((m) => KEY_CLARIFY_DIMS.includes(m))
   if (keyMissing.length === 0) return draft
@@ -221,8 +236,13 @@ function applyBlueprintClarify(draft: AuthorDraft, req: AuthorIntentRequest): Au
 
 function parseIntentJson(text: string, req: AuthorIntentRequest): AuthorDraft {
   // Task 12 Step 3b：蓝图模式走 analyzer 的蓝图解析（stripFences + validateBlueprint + missing 计算）
-  if (req.target === 'blueprint') {
-    return parseBlueprintJson(text)
+  // M5-T2（D1/D2）：blueprintMode = anima 默认路径蓝图形态；expectedMedia 守卫透传（parse 层
+  // media 方向校验，错误文案可机检可反馈——D5c 反馈重试的输入）
+  if (req.target === 'blueprint' || req.blueprintMode === true) {
+    const expected = (req as { blueprintExpectedMedia?: string }).blueprintExpectedMedia
+    return parseBlueprintJson(text, {
+      ...(expected === 'image' || expected === 'video' || expected === 'mixed' ? { expectedMedia: expected } : {}),
+    })
   }
   // 剥离 markdown code fence 与前后非 JSON 杂质（LLM 常见 ```json ... ``` 包裹）
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)

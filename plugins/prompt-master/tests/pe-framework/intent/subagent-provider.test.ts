@@ -208,3 +208,81 @@ describe('createSubagentIntentProvider', () => {
     expect((draft as any).clarify_questions).toBeUndefined()
   })
 })
+
+/* ── M5-T2（D1/D2/D5a）：blueprintMode = anima 默认路径蓝图形态（provider 路由面）── */
+describe('M5-T2 D1: blueprintMode routing', () => {
+  const animaImageJson = JSON.stringify({
+    schema_version: 1,
+    media: 'image',
+    core: { concept: '黄昏天台的少女', negative: [] },
+    media_layer: { image: { count_gender: ['1girl'], pose_action: ['standing'], expression: ['smile'], scene_anchors: ['rooftop', 'sunset'] } },
+  })
+  const videoJson = JSON.stringify({
+    schema_version: 1,
+    media: 'video',
+    core: { concept: '打斗 CG', negative: [] },
+    media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }] } },
+  })
+
+  it('blueprintMode: persona/schema 取 req（ANIMA 蓝图版），taskText 不含 slots persona 兜底', async () => {
+    let captured: any = null
+    const run = makeFakeRun({ outputText: animaImageJson })
+    const ctx = { subagents: { start: async (_p: string, request: any) => { captured = request; return run.run } }, agent: { options: { delegationDepth: 0 } } } as any
+    const fn = createSubagentIntentProvider(ctx, { timeoutMs: 2000 })
+    const draft = await fn({ target: 'anima', input: 'x', round: 0, blueprintMode: true, persona: 'ANIMA_BLUEPRINT_PERSONA_MARK', schema: 'ANIMA_BLUEPRINT_SCHEMA_MARK' } as any)
+    expect((draft as any).blueprint?.media).toBe('image')
+    const c = String(captured.prompt?.[0]?.text ?? '')
+    expect(c).toContain('ANIMA_BLUEPRINT_PERSONA_MARK')
+    expect(c).toContain('ANIMA_BLUEPRINT_SCHEMA_MARK')
+    expect(c).not.toContain('资深') // slots persona（DEFAULT_ANIMA）不回落
+  })
+
+  it('blueprintMode 无 req persona → 通用蓝图常量兜底（BLUEPRINT_SUBAGENT_SYSTEM，非 slots persona）', async () => {
+    let captured: any = null
+    const run = makeFakeRun({ outputText: animaImageJson })
+    const ctx = { subagents: { start: async (_p: string, request: any) => { captured = request; return run.run } }, agent: { options: { delegationDepth: 0 } } } as any
+    const fn = createSubagentIntentProvider(ctx, { timeoutMs: 2000 })
+    await fn({ target: 'anima', input: 'x', round: 0, blueprintMode: true } as any)
+    const c = String(captured.prompt?.[0]?.text ?? '')
+    expect(c).toContain('创作蓝图分析引擎') // BLUEPRINT_SUBAGENT_SYSTEM 开头
+    expect(c).not.toContain('资深')
+  })
+
+  it('D5a: anchorBlueprint → <old_blueprint> 专用块（INCREMENTAL_ANCHOR 渲染，禁整图重解释）', async () => {
+    let captured: any = null
+    const run = makeFakeRun({ outputText: animaImageJson })
+    const ctx = { subagents: { start: async (_p: string, request: any) => { captured = request; return run.run } }, agent: { options: { delegationDepth: 0 } } } as any
+    const fn = createSubagentIntentProvider(ctx, { timeoutMs: 2000 })
+    const anchor = { schema_version: 1, media: 'image', core: { concept: '旧概念', negative: [] }, media_layer: { image: { count_gender: ['1girl'] } } }
+    await fn({ target: 'anima', input: 'x', round: 1, blueprintMode: true, anchorBlueprint: anchor } as any)
+    const c = String(captured.prompt?.[0]?.text ?? '')
+    expect(c).toContain('<old_blueprint>')
+    expect(c).toContain('旧概念')
+    expect(c).toContain('禁止整图重解释') // INCREMENTAL_ANCHOR 模板约束行（逐字）
+    // User Input JSON 不再重复序列化 anchor（INCREMENTAL_ANCHOR 专用块承载）
+    expect(c).not.toContain('"anchorBlueprint"')
+  })
+
+  it('D2: blueprintExpectedMedia 透传 parse 守卫 — video 蓝图 × expected image → media mismatch（可机检文案）', async () => {
+    const run = makeFakeRun({ outputText: videoJson })
+    const fn = createSubagentIntentProvider(makeFakeOwnerCtx(run.run), { timeoutMs: 2000 })
+    await expect(
+      fn({ target: 'anima', input: 'x', round: 0, blueprintMode: true, blueprintExpectedMedia: 'image' } as any),
+    ).rejects.toThrow(/blueprint media mismatch: expected image got video/)
+  })
+
+  it('D1: blueprintMode + clarify=ask → 关键缺失产出 clarify_questions（与 target=blueprint 同待遇）', async () => {
+    const noStyleImage = JSON.stringify({
+      schema_version: 1, media: 'image',
+      core: { concept: '一个场景', negative: [] }, // 无 style/scene/emotion → 关键缺失
+      media_layer: { image: {} },
+    })
+    const run = makeFakeRun({ outputText: noStyleImage })
+    const fn = createSubagentIntentProvider(makeFakeOwnerCtx(run.run), { timeoutMs: 2000 })
+    const draft = await fn({ target: 'anima', input: 'x', round: 0, blueprintMode: true, clarify: 'ask' } as any)
+    const questions = (draft as any).clarify_questions as string[] | undefined
+    expect(Array.isArray(questions)).toBe(true)
+    expect((questions ?? []).length).toBeGreaterThan(0)
+    expect(run.disposed).toBe(true)
+  })
+})

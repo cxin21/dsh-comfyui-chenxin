@@ -14,6 +14,8 @@ import {
 } from '../../src/tools/prompt-author.js'
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
 import { recordGeneration, getGeneration } from '../../src/pe-framework/feedback/store.js'
+import { ANIMA_PERSONA } from '../../src/pe-framework/intent/subagent-provider.js'
+import { ANIMA_BLUEPRINT_PERSONA, ANIMA_BLUEPRINT_SCHEMA } from '../../src/pe-framework/blueprint/analyzer.js'
 import { stubCtx, runTool, textStream } from '../plugin/helpers.js'
 import type { CriticProvider } from '../../src/pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js'
@@ -61,6 +63,29 @@ function settingsRepo() {
   }
 }
 
+// M5-T2（D8 双态 + D1 回滚面）：编码「anima 默认路径 enrich-brief/slots 直译」旧行为的既有用例
+// 用 env kill-switch 钉回 slots 形态——这些用例验证的是被保留的兼容态语义（回滚面 R2 本身也是被测对象）
+function pinSlotsForm() {
+  beforeEach(() => { process.env.PM_AUTHOR_INTENT_FORM = 'slots' })
+  afterEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
+}
+
+/** M5-T2 测试载体：最小合法 anima 蓝图（image 形态，D3 增补字段齐备；scene 齐备保 checkFieldCompleteness 通过 → expansions_count=0 可断言） */
+const MINI_IMAGE_BP = {
+  schema_version: 1,
+  media: 'image',
+  core: { concept: '黄昏天台的少女', scene: { environment: 'rooftop', lighting: 'golden hour' }, negative: [] },
+  media_layer: {
+    image: {
+      count_gender: ['1girl'],
+      pose_action: ['standing'],
+      expression: ['smile'],
+      scene_anchors: ['rooftop', 'sunset'],
+      camera_angle: 'cowboy shot',
+    },
+  },
+}
+
 // stubCtx 捕获的是 dsh-llm GenerateOptions：system 直挂顶层，user 文本在 messages[0].content[] 块内
 function userTextOf(c: unknown): string {
   const msgs = (c as { messages?: Array<{ content?: unknown }> })?.messages ?? []
@@ -84,6 +109,7 @@ afterEach(() => {
 })
 
 describe('prompt_author orchestration v2 (spec §8 §9)', () => {
+  pinSlotsForm() // M5-T2（D8）：anima 默认路径 enrich-brief 旧行为用例钉回 slots 兼容态
   it('① preflight: explicit rating + loli input throws minor_content_conflict with zero LLM calls', async () => {
     let providerCalls = 0
     setAuthorIntentProvider(async () => { providerCalls++; return {} as ReturnType<AuthorIntentFn> })
@@ -241,6 +267,7 @@ describe('M2-T2 declaredRating judge wiring + h3 negative_hints advisory (spec �
 // 语义回退（enrich_skipped + user brief 直拆照常出稿）之外，增发档位可观测 advisory
 // `enrich_refused_at_rating:explicit`；safe/sensitive 档不打（spec 仅明文 explicit 档）。
 describe('audit-fix #1: enrich refusal advisory at declared rating (spec §7 L223)', () => {
+  pinSlotsForm() // M5-T2（D8）：enrich-brief 层用例钉回 slots 兼容态（蓝图形态下 runEnrich 被 swap 掉）
   const refusingEnrich: CriticProvider = async () => { throw new Error('provider refused this content') }
 
   it('enrich refusal at explicit → enrich_refused_at_rating:explicit present alongside enrich_skipped', async () => {
@@ -301,6 +328,7 @@ describe('M3-T1b h3 rating gate at preflight (spec §5.5 L185)', () => {
 })
 
 describe('generations store rating column (Task 14 ⑥)', () => {
+  pinSlotsForm() // M5-T2（D8）：本组验证 slots 兼容态下的 generations 落库语义
   it('recordGenerationSafe persists rating; repeated opens stay idempotent', async () => {
     setAuthorEnrichProvider(async () => validBriefJson())
     setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'] } }))
@@ -439,5 +467,240 @@ describe('P0-fix t1: declared rating reaches anima assembly on the standard slot
     // 投影映射（修复前 projectToAnima 丢 rating → 组装层关键词回退 safe）
     expect(String(v.result.positive)).toContain('rating_explicit')
     expect(String(v.result.negative)).toContain('preteen')
+  })
+})
+
+/* ── M5-T2：默认路径蓝图形态迁移（design §2.4，D1-D5/D7/D9）──
+ * 默认 anima 路径 = 蓝图形态（registry intent.form='blueprint'）：provider 收 blueprintMode/
+ * blueprintExpectedMedia → parseBlueprintJson(+expectedMedia) → {blueprint} → core.rating 注入
+ * 天然生效 → enrichBlueprint 扩展层（runEnrich swap，D4）→ projectToAnima（D3 扩展）→ runStage。
+ * 修复轮三合一（D5）：anchorBlueprint 增量锚定 + core.rating 重注入（缺口#2）+ validate 单次反馈重试。 */
+describe('M5-T2: blueprint-form default path (D1/D3/D4/D9)', () => {
+  afterEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
+
+  function imageBpProvider(seen: AuthorIntentRequest[]) {
+    return async (req: AuthorIntentRequest) => {
+      seen.push(req)
+      return { blueprint: JSON.parse(JSON.stringify(MINI_IMAGE_BP)), missing: [] }
+    }
+  }
+
+  it('D1/D3/D4: registry default routes blueprint form — provider receives blueprintMode/expectedMedia/blueprint persona; envelope carries blueprint trace; enrichment field absent', async () => {
+    const seen: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(imageBpProvider(seen))
+    const { settings } = settingsRepo()
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    ;(ctx as unknown as { settings: unknown }).settings = settings
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })))
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.blueprintMode).toBe(true)
+    expect(seen[0]?.blueprintExpectedMedia).toBe('image')
+    // D1：ANIMA 蓝图 persona（registry blueprintPersona 下行，Q3 常量本体）
+    expect(seen[0]?.persona).toBe(ANIMA_BLUEPRINT_PERSONA)
+    expect(seen[0]?.schema).toBe(ANIMA_BLUEPRINT_SCHEMA)
+    // D3：D3 增补字段经投影进产物（主干槽位不再塌陷）
+    expect(String(v.result.positive)).toContain('1girl')
+    expect(String(v.result.positive)).toContain('rooftop')
+    expect(String(v.result.positive)).toContain('standing')
+    // D4 增量①：observability.blueprint 痕迹；增量③：enrichment 字段消失（runEnrich swap）
+    expect(v.observability?.blueprint?.form).toBe('blueprint')
+    expect(v.observability?.blueprint?.media).toBe('image')
+    expect(v.observability?.blueprint?.expansions_count).toBe(0)
+    expect(v.enrichment).toBeUndefined()
+    // D4 增量②：trace 含 blueprint_enrich 子条目
+    expect((v.observability?.traceStages ?? []).some((s: { name: string }) => s.name === 'blueprint_enrich')).toBe(true)
+    // D9：settings 存在 → 落库成功 → 条件顶层键 blueprint_id（可回读同一蓝图）
+    expect(typeof v.blueprint_id).toBe('string')
+    const repo = createBlueprintRepo({ settings } as never)
+    const saved = repo.load(v.blueprint_id as string)
+    expect(saved?.media).toBe('image')
+    // 落库的是最终蓝图（含 D5b 注入档位——确定性注入先于落库）
+    expect(['safe', 'sensitive', 'explicit']).toContain(saved?.core.rating)
+  })
+
+  it('D9 fail-open: settings missing → no blueprint_id key, no save advisory, still ok', async () => {
+    const seen: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(imageBpProvider(seen))
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })))
+    expect(v.blueprint_id).toBeUndefined()
+    expect(v.advisories).not.toContain('blueprint_save_failed')
+    expect(v.ok).toBe(true)
+  })
+
+  it('D9 fail-open: repo.save failure → advisory blueprint_save_failed, no throw', async () => {
+    const seen: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(imageBpProvider(seen))
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    ;(ctx as unknown as { settings: unknown }).settings = {
+      get: () => ({}),
+      update: () => { throw new Error('disk full') },
+      replace: () => ({}),
+    }
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })))
+    expect(v.advisories).toContain('blueprint_save_failed')
+    expect(v.blueprint_id).toBeUndefined()
+  })
+
+  it('D1 kill-switch: PM_AUTHOR_INTENT_FORM=slots reverts to slots form + advisory (rollback surface R2)', async () => {
+    process.env.PM_AUTHOR_INTENT_FORM = 'slots'
+    const seen: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => { seen.push(req); return { slots: { count_gender: ['1girl'] } } })
+    const ctx = stubCtx({ stream: textStream(JSON.stringify(validBriefJson())) })
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })))
+    expect(seen[0]?.blueprintMode).toBeUndefined()
+    expect(seen[0]?.persona).toBe(ANIMA_PERSONA) // registry slots persona 原样
+    expect(v.advisories).toContain('intent_form_override:slots')
+    expect(v.observability?.blueprint).toBeUndefined()
+  })
+
+  it('D1 kill-switch: invalid env value → fail-fast before any LLM call', async () => {
+    process.env.PM_AUTHOR_INTENT_FORM = 'bogus'
+    let providerCalls = 0
+    setAuthorIntentProvider(async () => { providerCalls++; return {} as ReturnType<AuthorIntentFn> })
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    await expect(
+      runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' }),
+    ).rejects.toThrow(/PM_AUTHOR_INTENT_FORM/)
+    expect(providerCalls).toBe(0)
+    expect(ctx.llm.calls.length).toBe(0)
+  })
+
+  it('D2: expectedMedia guard — video-shaped blueprint rejected at parse layer（守卫在 parse 层：mock provider 直返 draft 绕过解析，生产 subagent/defaultIntent 两路均经守卫；解析面单测归 analyzer/subagent-provider 套件）', async () => {
+    // 编排层用 mock provider 验证「video 形蓝图未在编排层误闯」之外的语义无意义——
+    // parseBlueprintJson(expectedMedia) 守卫的机检见 tests/pe-framework/blueprint/analyzer.test.ts
+    // 与 tests/pe-framework/intent/subagent-provider.test.ts（本用例保留作为行为锚：mock 直返 video
+    // 蓝图时编排层不做二次守卫——fail-fast 边界在 parse 层，非编排层）。
+    setAuthorIntentProvider(async () => ({ blueprint: JSON.parse(JSON.stringify(MINI_BP)), missing: [] }))
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off', enrich: false })))
+    expect(v.observability?.blueprint?.media).toBe('video') // mock 直返绕过 parse 守卫（编排层零二次防御，边界单一）
+  })
+
+  it('D5c: blueprint validate failure → single feedback retry (advisory blueprint_repair_retry, counts 1 correction) then success', async () => {
+    let calls = 0
+    const seen: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => {
+      seen.push(req)
+      calls++
+      if (calls === 1) throw new Error('blueprint media mismatch: expected image got video')
+      return { blueprint: JSON.parse(JSON.stringify(MINI_IMAGE_BP)), missing: [] }
+    })
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', rating: 'explicit', judge_mode: 'off' })))
+    expect(calls).toBe(2)
+    expect(seen[1]?.round).toBe(1)
+    expect(seen[1]?.feedback).toContain('blueprint media mismatch')
+    expect(v.advisories).toContain('blueprint_repair_retry')
+    expect(v.observability?.corrections).toBe(1)
+    // L2 explicit 档一致性（D5b 注入 + 投影映射）
+    expect(String(v.result.positive)).toContain('rating_explicit')
+    const neg = String(v.result.negative)
+    for (const w of ['child', 'loli', 'shota', 'toddler', 'kid', 'preteen']) expect(neg).toContain(w)
+  })
+
+  it('D5c: second failure → original error rethrown (fail-closed, no slots silent downgrade)', async () => {
+    setAuthorIntentProvider(async () => { throw new Error('蓝图校验失败：core.concept must be a non-empty string') })
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    await expect(
+      runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' }),
+    ).rejects.toThrow(/蓝图校验失败/)
+  })
+
+  it('D7/F1: explicit cards deterministic injection (perspective whitelist / lighting separator / motion / color→recommendation channel)', async () => {
+    const seen: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(imageBpProvider(seen))
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, {
+      target: 'anima', input: '黄昏天台的少女', judge_mode: 'off',
+      art_direction: { perspective: 'close_up', lighting: 'golden_hour', motion: 'flowing_hair', color: 'warm_cool_contrast' },
+    })))
+    // 注入发生在 provider 之后 enrich 之前 → enrichBlueprint user 段 v0 JSON 携带注入结果
+    const enrichUser = userTextOf(ctx.llm.calls[0])
+    expect(enrichUser).toContain('close-up')             // F1 白名单词（close_up 卡）
+    expect(enrichUser).not.toContain('detailed face')    // F1 非白名单词丢弃
+    expect(enrichUser).toContain('golden hour')          // lighting 卡 tags 追加（A7 安全词表）
+    expect(enrichUser).toContain('hair flowing in wind') // motion 卡 → pose_action
+    expect(enrichUser).toContain('【推荐先验】')           // F1：color 卡走推荐先验通道
+    expect(enrichUser).toContain('warm_cool_contrast')
+    expect(enrichUser).not.toContain('teal against orange accents') // color 卡 tags 不假注入（推荐先验只带 id）
+    // advisory：实际注入卡逐条 + 丢弃词留痕
+    expect(v.advisories).toContain('art_direction_applied:perspective:close_up')
+    expect(v.advisories).toContain('art_direction_dropped:perspective:close_up:shallow depth of field,detailed face')
+    expect(v.advisories).toContain('art_direction_applied:lighting:golden_hour')
+    expect(v.advisories).toContain('art_direction_applied:motion:flowing_hair')
+    expect(v.advisories).toContain('art_direction_applied:color:warm_cool_contrast')
+    // 产物面：motion 卡进 pose_action 槽（投影直映射；tag 经 catalog grounding 取规范形
+    // 'hair flowing in wind' → 'hair in wind'）
+    expect(String(v.result.positive)).toContain('hair in wind')
+  })
+})
+
+/* ── M5-T2 V5/R6：修复轮死路复活专测（TDD RED 先行）──
+ * 验尸 V5：修复轮 provider 按 target 返回 slots/shots → d2.blueprint 恒空 → L950 必 break（死路）。
+ * 修复：intentBase 携带 blueprintMode（D1）→ provider 蓝图形态返回；D5a anchor 增量锚定；
+ * D5b 修复轮 core.rating 重注入（缺口#2）。mock provider 记录 blueprintMode + anchorBlueprint。 */
+describe('M5-T2 V5/R6: repair-round closure revival (D5a anchor + D5b rating re-injection)', () => {
+  const dimScores = (v: number) => ({
+    'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
+    composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,
+  })
+  const PASS_JSON = JSON.stringify({ verdict: 'pass', dimensionScores: dimScores(90), findings: [], praise: [] })
+  const NEEDS_JSON = JSON.stringify({
+    verdict: 'needs_revision', dimensionScores: dimScores(50),
+    findings: [{
+      severity: 'major', dimension: 'tag-order', problem: 'tag order wrong',
+      evidence: { tool: 'catalog', query: '1girl', result: 'canonical,n=1' },
+      requiredFix: 'move quality tags before subject',
+    }],
+    praise: [],
+  })
+  const v56Evidence: EvidenceDeps = {
+    catalog: (q) => [{ tag: q, kind: 'canonical', count: 1 }],
+    aesthetics: (q) => ({ concreteness: 'pass', query_len: q.length }),
+  }
+
+  it('repair round receives blueprintMode + anchorBlueprint; core.rating re-injected despite untrusted LLM output (缺口#2)', async () => {
+    const critic = (() => {
+      const fn = (async () => {
+        fn.calls++
+        return [NEEDS_JSON, PASS_JSON][Math.min(fn.calls - 1, 1)]
+      }) as unknown as CriticProvider & { calls: number }
+      fn.calls = 0
+      return fn
+    })()
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: v56Evidence })
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => {
+      intentCalls.push(req)
+      // 修复轮产物不带 rating（LLM 产物不可信）——D5b 重注入必须兜住
+      return { blueprint: JSON.parse(JSON.stringify(MINI_IMAGE_BP)), missing: [] }
+    })
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', rating: 'explicit', judge_mode: 'fast' })))
+    expect(intentCalls).toHaveLength(2) // 首轮 + judgeFeedback 触发的 1 轮修正
+    // V5：修复轮 provider 收到蓝图形态路由（死路修复的判据）
+    expect(intentCalls[1]?.blueprintMode).toBe(true)
+    // V6/D5a：修复轮携带增量锚定（当前蓝图 → <old_blueprint> 语义）
+    expect(intentCalls[1]?.anchorBlueprint).toBeDefined()
+    expect(JSON.stringify(intentCalls[1]?.anchorBlueprint)).toContain('rooftop')
+    // D5b 缺口#2：修复轮 rating 重注入 → 最终产物按声明档位组装（修复轮 LLM 产物不含 rating）
+    expect(String(v.result.positive)).toContain('rating_explicit')
+    expect(String(v.result.positive)).not.toContain('rating_sensitive')
+    const neg = String(v.result.negative)
+    for (const w of ['child', 'loli', 'shota', 'toddler', 'kid', 'preteen']) expect(neg).toContain(w)
+    // 可观测：anchor_rounds=1 + trace 含 blueprint_enrich
+    expect(v.observability?.blueprint?.anchor_rounds).toBe(1)
+    expect((v.observability?.traceStages ?? []).filter((s: { name: string }) => s.name === 'blueprint_enrich')).toHaveLength(2)
   })
 })

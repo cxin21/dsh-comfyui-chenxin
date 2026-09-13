@@ -76,6 +76,20 @@ export interface EnvelopeObservability {
   substitutions?: string[]
   /** A6（外部基准 2026-09）：design_notes 设计说明投影（anima segments 槽位汇总，零 LLM） */
   designNotes?: string[]
+  /**
+   * M5-T2（D4/D9，design §2.4 envelope 增量①）：默认路径蓝图形态痕迹（T1R 验收草案「envelope
+   * 出现 blueprint 痕迹」载体）。仅蓝图载体出现（runEnrich 跳过/修复轮锚定/落库计数一屏可见）；
+   * slots 形态（含 rollback）不产出该字段。F2：顶层条件键 blueprint_id（落库成功时）由编排层装配，
+   * 不在本接口。
+   */
+  blueprint?: {
+    form: 'blueprint' | 'slots'
+    media?: string
+    missing_count?: number
+    expansions_count?: number
+    repairs_count?: number
+    anchor_rounds?: number
+  }
 }
 
 export interface EnvelopeNextAction {

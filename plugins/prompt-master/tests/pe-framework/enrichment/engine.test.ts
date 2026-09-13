@@ -167,3 +167,64 @@ describe('enrichBlueprint recommendations (M5-T3 D7)', () => {
     expect(user).not.toContain('【推荐先验】')
   })
 })
+
+// ─── M5-T3b：applyAdditions 对象分支合并语义修复 ───
+// 缺陷（t4 随行报备、captain 立项修复）：对象分支把 deepMerge 的 void 返回值赋给键 →
+// 对象值 additions 写入把键覆成 undefined 摧毁节点（additions.media_layer 等，core 已由 t4 wholeCore strip 护住）。
+describe('applyAdditions object-branch merge semantics (M5-T3b)', () => {
+  const patchOf = (additions: Record<string, unknown>) => JSON.stringify({ set: {}, additions, expansions: [] })
+
+  it('对象值 additions 不再把键写成 undefined：additions.media_layer 正确合并（新增子节点）', async () => {
+    const v0 = {
+      schema_version: 1,
+      media: 'image',
+      core: { concept: '剑客肖像', negative: [] },
+      media_layer: { image: { lighting_detail: '黄金时刻' } },
+    } as any
+    const stb = stubCtx({ stream: textStream(patchOf({ media_layer: { video: { pacing: '渐强' } } })) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    // 修复前：v1.media_layer 被覆成 undefined（质量自检异常则整体回退 v0）——两种路径都不是合并
+    expect(out.blueprint.media_layer).toEqual({ image: { lighting_detail: '黄金时刻' }, video: { pacing: '渐强' } })
+  })
+
+  it('对象值 additions 落在既有对象节点：既有键内容保留、patch 键并入', async () => {
+    const v0 = {
+      schema_version: 1,
+      media: 'image',
+      core: { concept: '剑客肖像', negative: [] },
+      media_layer: { image: { lighting_detail: '黄金时刻', focal_length: '85mm' } },
+    } as any
+    const stb = stubCtx({ stream: textStream(patchOf({ media_layer: { image: { depth_of_field: '浅景深' } } })) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect(out.blueprint.media_layer.image).toEqual({ lighting_detail: '黄金时刻', focal_length: '85mm', depth_of_field: '浅景深' })
+  })
+
+  it('数组/标量通道零行为变化：数组追加、标量覆盖', async () => {
+    const v0 = { schema_version: 1, media: 'video', core: { concept: '剑客决斗', negative: [] }, media_layer: { video: { total_duration_seconds: 10, shots: [{ beat: '对峙' }] } }, extraTags: ['a'], extraScalar: 1 } as any
+    const stb = stubCtx({ stream: textStream(patchOf({ extraTags: ['b'], extraScalar: 2 })) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect((out.blueprint as any).extraTags).toEqual(['a', 'b'])
+    expect((out.blueprint as any).extraScalar).toBe(2)
+  })
+
+  it('组合专测：t4 wholeCore strip 先行 + 对象合并修复不冲突——恶意 core.rating 与良性 media_layer 对象 additions 同 patch', async () => {
+    const ratedV0 = {
+      schema_version: 1,
+      media: 'image',
+      core: { concept: '剑客肖像', rating: 'explicit', negative: [] },
+      media_layer: { image: { lighting_detail: '伦勃朗光' } },
+    } as any
+    const patch = JSON.stringify({
+      set: { core: { rating: 'safe' } },
+      additions: { core: { rating: 'sensitive' }, media_layer: { image: { depth_of_field: '浅景深' } } },
+      expansions: [],
+    })
+    const stb = stubCtx({ stream: textStream(patch) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, ratedV0, {})
+    // strip 先行：set.core.rating 删键 + additions.core 整键阻断 → rating 保全 + advisory
+    expect(out.blueprint.core.rating).toBe('explicit')
+    expect(out.advisories).toContain('enrich_rating_overwrite_blocked')
+    // 对象合并修复：良性 media_layer 对象 additions 正确合并，既有内容保留
+    expect(out.blueprint.media_layer.image).toEqual({ lighting_detail: '伦勃朗光', depth_of_field: '浅景深' })
+  })
+})

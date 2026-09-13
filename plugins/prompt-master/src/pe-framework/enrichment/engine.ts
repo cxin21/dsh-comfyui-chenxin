@@ -66,7 +66,12 @@ function applyAdditions(target: Record<string, unknown>, additions: Record<strin
     if (Array.isArray(pv)) {
       target[k] = [...(Array.isArray(target[k]) ? (target[k] as unknown[]) : []), ...pv]
     } else if (isPlainObject(pv)) {
-      target[k] = deepMerge({ ...(isPlainObject(target[k]) ? (target[k] as Record<string, unknown>) : {}) }, pv)
+      // M5-T3b：对象值 additions 合并进既有节点（修复 void 赋值缺陷——旧实现把 deepMerge 的 void
+      // 返回值赋给键，把节点覆成 undefined 摧毁既有内容，如 additions.media_layer）。
+      // target[k] 为对象时就地深合并（既有键保留、patch 键并入），否则以空对象承接。
+      const base = isPlainObject(target[k]) ? (target[k] as Record<string, unknown>) : {}
+      deepMerge(base, pv)
+      target[k] = base
     } else {
       target[k] = pv
     }
@@ -85,10 +90,9 @@ const RATING_OVERWRITE_ADVISORY = 'enrich_rating_overwrite_blocked'
  * ① patch.core 为对象 → 仅删除其 rating 键（其余键保留，良性 core 扩写不受影响）——即 set.core.rating 嵌套全形态；
  * ② patch.core 存在但非对象（标量/数组）→ 任何应用语义都会整体顶掉 core 节点（连带 rating）→ 整键删除；
  * ③ additions 通道（wholeCore=true）对 core 整体不信任：additions 语义是数组追加/标量覆盖，对 core
- *    （rating 载体节点）的任何写入都按覆写企图整键阻断——additions 对象分支现状把 deepMerge 的 void
- *    返回值赋给键，additions.core 对象写入实际会摧毁整个 core 节点（连带 rating），故 strip 只删 rating 键
- *    并不足以保住 rating，必须整键阻断（见 applyAdditions L60-62；该缺陷影响面超出 rating，不在本任务
- *    三件事内，已单独报 captain）。
+ *    （rating 载体节点）的任何写入都按覆写企图整键阻断——历史上对象值 additions 曾因 void 赋值缺陷
+ *    摧毁整个 core 节点（M5-T3b 已修为节点合并，见 applyAdditions），但信任边界不因修复放宽：
+ *    additions 通道对 rating 载体节点零写权限。
  *
  * strip 面论证（acceptance：rating 必挡；是否扩面给结论留痕）：strip 面收敛为 core.rating 一项，
  * 不扩到其他 core 字段——concept/scene/style/emotion/composition/negative/narrative/characters/aspect_ratio

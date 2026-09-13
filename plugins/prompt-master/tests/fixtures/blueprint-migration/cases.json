@@ -1,0 +1,869 @@
+{
+  "$meta": {
+    "purpose": "M5-T4 golden 对照抽样集（design §2.6 定版）：旧路径产物（recorded slots 转录，mock provider 返回）vs 新路径产物（同案例蓝图 JSON + 空 patch，走 projectToAnima→compileAnima）。全部判定用 mock provider（确定性、CI 可跑）；真实 LLM 重放归设计稿 §2.7 清单 4。",
+    "recordingProvenance": "expectedCompile 由 compileAnima(slotsBaseline, {variant:'base', dropUnresolvedMiss:true}) 在方言层零改动的迁移后树上录制（T2R 已核验方言编译路径零触碰），录制脚本经 dist 产物执行；方言层任何未来漂移将使 L4 失败。",
+    "layers": {
+      "L1": "主干等价：身份槽 count_gender/character/artist 集合严格相等；内容槽 appearance/clothing/pose_action/expression/scene/detail_mood Jaccard≥0.6 + allowed_missing/allowed_extra 白名单（先剔除再算）；扩展（实现留痕，从严）：camera/exclusions 并入内容槽 Jaccard 集；narrative 双方存在性一致+非空+逐字节相等；rating 逐字节相等（操作化为 oldV.rating.resolved === newV.rating.resolved + 种子 token 一致）。",
+      "L2": "explicit 档端到端（c07）：positive 含 rating_explicit 不含 rating_sensitive；negative 六负向词逐字；rating.resolved==='explicit' 且 source==='input'；assumptions 含 rating_active:explicit。",
+      "L3": "envelope 骨架：双路径顶层键集差异 ⊆ {enrichment}（observability.blueprint 为嵌套字段，断言其存在于新路径、不存在于旧路径——合起来即设计稿白名单 {enrichment, observability.blueprint}）；F2 条件顶层键 blueprint_id 单列专测（settings 存在→落库成功→新路径独有）；新路径 critical gate 家族集合 ⊆ 旧路径。",
+      "L4": "编译层逐字节：compileAnima(slotsBaseline) 产物与 expectedCompile 逐字节一致（照妖镜：方言层未越界）。"
+    },
+    "slotExtractionNote": "L1 在 slots 层对照（设计稿原文：recorded slots 转录 vs projectToAnima 产物，均为 grounding 前槽位）；grounding 层等价由 L4 逐字节与 compile 通道既有 fidelity 套件覆盖。"
+  },
+  "cases": [
+    {
+      "id": "c01",
+      "focus": "单人 safe 基础（锚定补全下限）",
+      "args": {
+        "input": "黄昏天台的少女，长发，水手服，微笑，牛仔景别",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "long hair"
+        ],
+        "clothing": [
+          "sailor uniform"
+        ],
+        "pose_action": [
+          "standing"
+        ],
+        "expression": [
+          "smile"
+        ],
+        "scene": [
+          "rooftop",
+          "sunset"
+        ],
+        "detail_mood": [
+          "golden hour"
+        ],
+        "camera": [
+          "cowboy shot"
+        ],
+        "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "黄昏天台的少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "long hair"
+              ],
+              "outfit": "sailor uniform"
+            }
+          ],
+          "scene": {
+            "environment": "rooftop",
+            "lighting": "golden hour"
+          },
+          "negative": [],
+          "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "standing"
+            ],
+            "expression": [
+              "smile"
+            ],
+            "scene_anchors": [
+              "sunset"
+            ],
+            "camera_angle": "cowboy shot"
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, long hair, sailor uniform, standing, smile, cowboy shot, rooftop, sunset, golden hour",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c02",
+      "focus": "多人物分离",
+      "args": {
+        "input": "学校天台上并肩的两位少女，一个黑发站立微笑，一个银发坐着生气",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "2girls"
+        ],
+        "appearance": [
+          "black hair",
+          "silver hair"
+        ],
+        "pose_action": [
+          "standing",
+          "sitting"
+        ],
+        "expression": [
+          "smile",
+          "angry"
+        ],
+        "scene": [
+          "school rooftop"
+        ],
+        "detail_mood": [
+          "afternoon light"
+        ],
+        "narrative": "Two students share a quiet rooftop; one stands smiling, one sits sulking; side light splits the frame."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "天台上的两位少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "黑发少女",
+              "appearance_anchors": [
+                "black hair"
+              ]
+            },
+            {
+              "id": "c2",
+              "name": "银发少女",
+              "appearance_anchors": [
+                "silver hair"
+              ]
+            }
+          ],
+          "scene": {
+            "lighting": "afternoon light"
+          },
+          "negative": [],
+          "narrative": "Two students share a quiet rooftop; one stands smiling, one sits sulking; side light splits the frame."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "2girls"
+            ],
+            "pose_action": [
+              "standing",
+              "sitting"
+            ],
+            "expression": [
+              "smile",
+              "angry"
+            ],
+            "scene_anchors": [
+              "school rooftop"
+            ]
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 2girls, black hair, standing, sitting, smile, angry, school rooftop",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c03",
+      "focus": "场景主导（无人物）",
+      "args": {
+        "input": "雨夜霓虹都市，湿漉漉的街道倒影，无人",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "scene": [
+          "cityscape",
+          "night",
+          "neon"
+        ],
+        "detail_mood": [
+          "rain"
+        ],
+        "narrative": "A rain-soaked neon cityscape at night; no people; wet asphalt mirrors the signage."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "雨夜霓虹都市",
+          "scene": {
+            "environment": "cityscape"
+          },
+          "composition": [
+            "rain"
+          ],
+          "negative": [],
+          "narrative": "A rain-soaked neon cityscape at night; no people; wet asphalt mirrors the signage."
+        },
+        "media_layer": {
+          "image": {
+            "scene_anchors": [
+              "night",
+              "neon"
+            ]
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, cityscape, night, neon, rain",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c04",
+      "focus": "画师暗示（artist 槽 + catalog grounding）",
+      "args": {
+        "input": "wlop 画风的白裙少女，花园",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "white dress"
+        ],
+        "artist": [
+          "wlop"
+        ],
+        "scene": [
+          "garden"
+        ],
+        "narrative": "A girl in a white dress in a garden; painterly soft light; elegant flowing composition."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "花园里的白裙少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "white dress"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "garden"
+          },
+          "style": {
+            "artist_hints": [
+              "wlop"
+            ]
+          },
+          "negative": [],
+          "narrative": "A girl in a white dress in a garden; painterly soft light; elegant flowing composition."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "scene_anchors": []
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, @wlop, white dress, garden",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c05",
+      "focus": "style_id 预设 + conformity=0（全量注入；白名单机制主载体）",
+      "args": {
+        "input": "黄昏天台的少女，长发，微笑",
+        "judge_mode": "off",
+        "style_id": "figure_model",
+        "conformity": 0
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "long hair"
+        ],
+        "pose_action": [
+          "standing"
+        ],
+        "expression": [
+          "smile"
+        ],
+        "scene": [
+          "rooftop",
+          "sunset"
+        ],
+        "detail_mood": [
+          "golden hour"
+        ],
+        "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "黄昏天台的少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "long hair"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "rooftop",
+            "lighting": "golden hour"
+          },
+          "negative": [],
+          "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "standing"
+            ],
+            "expression": [
+              "smile"
+            ],
+            "scene_anchors": [
+              "sunset"
+            ]
+          }
+        }
+      },
+      "allowed_extra": {
+        "detail_mood": [
+          "collectible pvc figure aesthetic",
+          "pvc figure, glossy coat, display base, studio product photography"
+        ],
+        "exclusions": [
+          "2d lineart",
+          "flat paper illustration"
+        ]
+      },
+      "whitelistNote": "figure_model 预设经 enrichBlueprint→applyStyle 注入：fragments.image→lighting_detail、theme→core.style.theme（均投影进 detail_mood）；negative_hints→soft negative→exclusions。旧 slots 路径不消费 style 片段（applyStyle 仅蓝图面）——注入差异即设计稿 §2.6 预告的 c05 白名单面。artist_hints=[] 保身份槽严格相等。",
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, long hair, standing, smile, rooftop, sunset, golden hour",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c06",
+      "focus": "style_id 预设 + conformity=1（仅引用：fragments 不注入）",
+      "args": {
+        "input": "黄昏天台的少女，长发，微笑",
+        "judge_mode": "off",
+        "style_id": "figure_model",
+        "conformity": 1
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "long hair"
+        ],
+        "pose_action": [
+          "standing"
+        ],
+        "expression": [
+          "smile"
+        ],
+        "scene": [
+          "rooftop",
+          "sunset"
+        ],
+        "detail_mood": [
+          "golden hour"
+        ],
+        "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "黄昏天台的少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "long hair"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "rooftop",
+            "lighting": "golden hour"
+          },
+          "negative": [],
+          "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "standing"
+            ],
+            "expression": [
+              "smile"
+            ],
+            "scene_anchors": [
+              "sunset"
+            ]
+          }
+        }
+      },
+      "allowed_extra": {
+        "detail_mood": [
+          "collectible pvc figure aesthetic"
+        ],
+        "exclusions": [
+          "2d lineart",
+          "flat paper illustration"
+        ]
+      },
+      "whitelistNote": "conformity=1 → fragments 不注入（lighting_detail 无片段）；但 applyStyle 的 core.style 补缺合并（theme）与 negative_hints 并入仍发生（与 slots 旧路径的结构差）——白名单照实声明，fragments 差异不再出现是本例的判据点。",
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, long hair, standing, smile, rooftop, sunset, golden hour",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c07",
+      "focus": "explicit 显式声明（L2 端到端断言主载体）",
+      "args": {
+        "input": "黄昏天台的少女，长发，微笑",
+        "judge_mode": "off",
+        "rating": "explicit"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "long hair"
+        ],
+        "pose_action": [
+          "standing"
+        ],
+        "expression": [
+          "smile"
+        ],
+        "scene": [
+          "rooftop",
+          "sunset"
+        ],
+        "detail_mood": [
+          "golden hour"
+        ],
+        "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "黄昏天台的少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "long hair"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "rooftop",
+            "lighting": "golden hour"
+          },
+          "negative": [],
+          "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "standing"
+            ],
+            "expression": [
+              "smile"
+            ],
+            "scene_anchors": [
+              "sunset"
+            ]
+          }
+        }
+      },
+      "whitelistNote": "蓝图不含 rating（安全数据确定性注入，D5b）；基线 slots 亦不含（P0 注入发生在 provider 返回后）——双路径 resolved 档位均由注入决定，逐字节相等由 L1 rating 断言承载。",
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, long hair, standing, smile, rooftop, sunset, golden hour",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c08",
+      "focus": "sensitive 关键词升档（bikini 载体）",
+      "args": {
+        "input": "泳池边的比基尼少女，微笑",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "bikini"
+        ],
+        "pose_action": [
+          "sitting"
+        ],
+        "expression": [
+          "smile"
+        ],
+        "scene": [
+          "poolside"
+        ],
+        "narrative": "A girl in a bikini by the pool; bright summer light; casual summer mood."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "泳池边的比基尼少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "bikini"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "poolside"
+          },
+          "negative": [],
+          "narrative": "A girl in a bikini by the pool; bright summer light; casual summer mood."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "sitting"
+            ],
+            "expression": [
+              "smile"
+            ]
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, rating_sensitive, 1girl, bikini, sitting, smile, poolside",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration, nude, nudity, genitals, rating_explicit"
+      }
+    },
+    {
+      "id": "c09",
+      "focus": "<Picture N> 引用语义（角色锚定）",
+      "args": {
+        "input": "<Picture 1> 里的银发转学生，红瞳，校服，教室",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "character": [
+          "Subject 1 from <Picture 1>"
+        ],
+        "appearance": [
+          "silver hair",
+          "red eyes"
+        ],
+        "clothing": [
+          "school uniform"
+        ],
+        "pose_action": [
+          "standing"
+        ],
+        "scene": [
+          "classroom"
+        ],
+        "narrative": "The silver-haired transfer student from the reference stands in an empty classroom; window light rakes across the desks."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "教室里的银发转学生",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "银发转学生",
+              "reference_slots": [
+                "<Picture 1>"
+              ],
+              "appearance_anchors": [
+                "silver hair",
+                "red eyes"
+              ],
+              "outfit": "school uniform"
+            }
+          ],
+          "scene": {
+            "environment": "classroom"
+          },
+          "negative": [],
+          "narrative": "The silver-haired transfer student from the reference stands in an empty classroom; window light rakes across the desks."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "standing"
+            ]
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, Subject 1 from <Picture 1>, red eyes, school uniform, standing, classroom",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c10",
+      "focus": "CJK 长叙事 brief",
+      "args": {
+        "input": "竹林深处的黑发少女，晨雾，回望",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "black hair"
+        ],
+        "scene": [
+          "bamboo forest"
+        ],
+        "narrative": "竹林深处，一名黑发少女驻足回望；晨雾未散，光斑落在叶隙之间；画面前景留白，背景竹影层层退远，色彩以青绿为主、米白为辅。"
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "竹林深处的黑发少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "black hair"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "bamboo forest"
+          },
+          "negative": [],
+          "narrative": "竹林深处，一名黑发少女驻足回望；晨雾未散，光斑落在叶隙之间；画面前景留白，背景竹影层层退远，色彩以青绿为主、米白为辅。"
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "scene_anchors": []
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, black hair, bamboo forest",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c11",
+      "focus": "art_direction 显式双卡（lighting+motion；R4 观测面）",
+      "args": {
+        "input": "黄昏天台的少女，长发，微笑，风吹起头发",
+        "judge_mode": "off",
+        "art_direction": {
+          "lighting": "golden_hour",
+          "motion": "flowing_hair"
+        }
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "long hair"
+        ],
+        "pose_action": [
+          "standing",
+          "hair in wind"
+        ],
+        "expression": [
+          "smile"
+        ],
+        "scene": [
+          "rooftop",
+          "sunset"
+        ],
+        "detail_mood": [
+          "golden hour"
+        ],
+        "narrative": "A girl on a windy rooftop at sunset; her hair streams in the wind; warm backlight and long shadows carve the scene."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "黄昏天台的少女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "少女",
+              "appearance_anchors": [
+                "long hair"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "rooftop"
+          },
+          "negative": [],
+          "narrative": "A girl on a windy rooftop at sunset; her hair streams in the wind; warm backlight and long shadows carve the scene."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ],
+            "pose_action": [
+              "standing"
+            ],
+            "expression": [
+              "smile"
+            ],
+            "scene_anchors": [
+              "sunset"
+            ]
+          }
+        }
+      },
+      "allowed_missing": {
+        "pose_action": [
+          "hair in wind"
+        ],
+        "detail_mood": [
+          "golden hour"
+        ]
+      },
+      "allowed_extra": {
+        "pose_action": [
+          "hair flowing in wind",
+          "dynamic hair",
+          "hair strands floating"
+        ],
+        "detail_mood": [
+          "golden hour, long shadows, warm amber tones"
+        ]
+      },
+      "whitelistNote": "新路径显式卡确定性注入（F1）：golden_hour tags 连接进 scene.lighting（空基线→整串单 tag）、flowing_hair tags 追加进 pose_action；旧路径语义 = 卡进 enrich brief 软约束（recorded 基线取其 grounded 形态 'hair in wind'）。卡面差异由白名单机制承载——这正是 c11 的判据点。",
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, long hair, standing, hair in wind, smile, rooftop, sunset, golden hour",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration"
+      }
+    },
+    {
+      "id": "c12",
+      "focus": "soft 负向意图（「无现代元素」）",
+      "args": {
+        "input": "黄昏神社的巫女，无现代元素",
+        "judge_mode": "off"
+      },
+      "slotsBaseline": {
+        "count_gender": [
+          "1girl"
+        ],
+        "appearance": [
+          "kimono"
+        ],
+        "scene": [
+          "shrine"
+        ],
+        "exclusions": [
+          "modern elements"
+        ],
+        "narrative": "A shrine maiden scene at dusk; paper charms flutter; nothing modern anywhere in frame."
+      },
+      "blueprint": {
+        "schema_version": 1,
+        "media": "image",
+        "core": {
+          "concept": "黄昏神社的巫女",
+          "characters": [
+            {
+              "id": "c1",
+              "name": "巫女",
+              "appearance_anchors": [
+                "kimono"
+              ]
+            }
+          ],
+          "scene": {
+            "environment": "shrine"
+          },
+          "negative": [
+            {
+              "target": "modern elements",
+              "severity": "soft"
+            }
+          ],
+          "narrative": "A shrine maiden scene at dusk; paper charms flutter; nothing modern anywhere in frame."
+        },
+        "media_layer": {
+          "image": {
+            "count_gender": [
+              "1girl"
+            ]
+          }
+        }
+      },
+      "expectedCompile": {
+        "positive": "masterpiece, best quality, score_7, safe, 1girl, kimono, shrine",
+        "negative": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration, modern elements"
+      }
+    }
+  ]
+}

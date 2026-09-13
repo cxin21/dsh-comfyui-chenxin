@@ -157,6 +157,21 @@ describe('projectToAnima', () => {
     const withoutArtists = projectToAnima(fightBp as any)
     expect(withoutArtists.artist).toBeUndefined()
   })
+
+  // P0 修复（t1 验收④，spec §5.1 链路完整性）：core.rating（prompt_author 确定性注入）必须
+  // 映射到 slots.rating——此前投影丢弃 rating，蓝图路径组装层回退关键词扫描（同源静默降档）。
+  it('maps core.rating to slots.rating (deterministic rating write must reach assembly)', () => {
+    const explicit = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'explicit' } })
+    expect(explicit.rating).toBe('explicit')
+    const sensitive = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'sensitive' } })
+    expect(sensitive.rating).toBe('sensitive')
+    const safe = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'safe' } })
+    expect(safe.rating).toBe('safe')
+  })
+  it('absent core.rating → no rating slot (bare blueprints keep keyword-fallback semantics)', () => {
+    const s = projectToAnima(fightBp as any)
+    expect(s.rating).toBeUndefined()
+  })
 })
 
 describe('preflightRepair', () => {

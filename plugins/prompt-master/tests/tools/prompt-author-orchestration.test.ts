@@ -10,6 +10,7 @@ import {
   setAuthorFeedbackDbPath,
   setAuthorJudgeDeps,
   type AuthorIntentFn,
+  type AuthorIntentRequest,
 } from '../../src/tools/prompt-author.js'
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
 import { recordGeneration, getGeneration } from '../../src/pe-framework/feedback/store.js'
@@ -332,5 +333,111 @@ describe('generations store rating column (Task 14 ⑥)', () => {
     })
     expect(getGeneration(dbPath, 'gen_legacy2')?.rating).toBe('safe')
     rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+/* ── P0 修复（t1，style-aesthetics-audit-fix）：声明档位在标准 anima 路径直达组装层 ──
+ * 根因（captain 实证）：provider 返回 {slots}（无 blueprint）→ core.rating 注入（blueprint 分支）
+ * 不触发 → slots 无 rating → compileAnima resolveEffectiveRating 回退全槽关键词扫描 →
+ * slots 内容（如 cleavage）命中 SENSITIVE_MARKERS → 声明 explicit 被静默降档为 sensitive 组装
+ * （真实会话 8e31ff2a：envelope 报 explicit、产物 rating_sensitive 种子 + sensitive 负向）。
+ * 修复：slots.rating 确定性写入（首轮 + 修复轮 mergeRepairSlots 后重写）+ 蓝图投影映射（验收④）。 */
+describe('P0-fix t1: declared rating reaches anima assembly on the standard slots path (spec §5.1)', () => {
+  // critic mock 维度分必须与 ANIMA_RUBRIC 7 维精确一致（M2-T2 同款）
+  const dimScores = (v: number) => ({
+    'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
+    composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,
+  })
+  const PASS_JSON = JSON.stringify({ verdict: 'pass', dimensionScores: dimScores(90), findings: [], praise: [] })
+  const NEEDS_JSON = JSON.stringify({
+    verdict: 'needs_revision', dimensionScores: dimScores(50),
+    findings: [{
+      severity: 'major', dimension: 'tag-order', problem: 'tag order wrong',
+      evidence: { tool: 'catalog', query: '1girl', result: 'canonical,n=1' },
+      requiredFix: 'move quality tags before subject',
+    }],
+    praise: [],
+  })
+  const t1Evidence: EvidenceDeps = {
+    catalog: (q) => [{ tag: q, kind: 'canonical', count: 1 }],
+    aesthetics: (q) => ({ concreteness: 'pass', query_len: q.length }),
+  }
+  function criticOf(responses: string[]) {
+    const fn = (async () => {
+      fn.calls++
+      return responses[Math.min(fn.calls - 1, responses.length - 1)]
+    }) as unknown as CriticProvider & { calls: number }
+    fn.calls = 0
+    return fn
+  }
+
+  it('slots-mock provider + rating=explicit → rating_explicit seed + explicit negative group (no silent downgrade)', async () => {
+    // slots 内容含 cleavage：复现 8e31ff2a 降档载体（关键词回退在 slots 上命中 sensitive）
+    setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'], clothing: ['cleavage'] } }))
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黑裙礼服少女', rating: 'explicit', judge_mode: 'off', enrich: false })))
+    expect(v.ok).toBe(true)
+    expect(v.rating.resolved).toBe('explicit')
+    // envelope rating.resolved 与产物种子档位一致性（修复前此处是 rating_sensitive）
+    expect(String(v.result.positive)).toContain('rating_explicit')
+    expect(String(v.result.positive)).not.toContain('rating_sensitive')
+    // explicit 档策略负向全组（RATING_NEGATIVE_ADDITIONS.explicit）
+    const neg = String(v.result.negative)
+    for (const w of ['child', 'loli', 'shota', 'toddler', 'kid', 'preteen']) expect(neg).toContain(w)
+  })
+
+  it('no rating param + cleavage input → sensitive keyword fallback preserved; envelope/product consistent', async () => {
+    setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'] } }))
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '泳池边的 cleavage 少女', judge_mode: 'off', enrich: false })))
+    // 关键词回退语义保持（预检定档不变）
+    expect(v.rating.resolved).toBe('sensitive')
+    expect(v.rating.escalatedFrom).toBe('safe')
+    expect(v.rating.source).toBe('keyword')
+    // 一致性：修复前 slots 无 rating → 产物档位回落 safe（'safe' 种子、无 sensitive 阻断负向）
+    expect(String(v.result.positive)).toContain('rating_sensitive')
+    const neg = String(v.result.negative)
+    for (const w of ['nude', 'nudity', 'genitals', 'rating_explicit']) expect(neg).toContain(w)
+  })
+
+  it('repair round: judgeFeedback-driven re-split + mergeRepairSlots keeps declared rating (re-write effective)', async () => {
+    const critic = criticOf([NEEDS_JSON, PASS_JSON])
+    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: t1Evidence })
+    const intentCalls: AuthorIntentRequest[] = []
+    setAuthorIntentProvider(async (req) => {
+      intentCalls.push(req)
+      // 修正轮产物不带 rating（LLM 产物不可信）且改写 clothing——迫使 mergeRepairSlots 真参与
+      return req.round === 0
+        ? { slots: { count_gender: ['1girl'], clothing: ['cleavage'] } }
+        : { slots: { count_gender: ['1girl'], clothing: ['evening gown'] } }
+    })
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '晚礼服少女', rating: 'explicit', judge_mode: 'fast', enrich: false })))
+    expect(intentCalls).toHaveLength(2) // 首轮 + judgeFeedback 触发的 1 轮修正
+    expect(v.rating.resolved).toBe('explicit')
+    // 修复轮重写生效：最终产物仍按声明档位组装（修复前回落关键词档）
+    expect(String(v.result.positive)).toContain('rating_explicit')
+    expect(String(v.result.positive)).not.toContain('rating_sensitive')
+    const neg = String(v.result.negative)
+    for (const w of ['child', 'loli', 'shota', 'toddler', 'kid', 'preteen']) expect(neg).toContain(w)
+  })
+
+  it('anima blueprint path: core.rating injection survives projectToAnima → assembly tier consistent (acceptance ④)', async () => {
+    const { settings } = settingsRepo()
+    const repo = createBlueprintRepo({ settings } as never)
+    repo.save('bp-anima-rating', MINI_BP as never)
+    const ctx = stubCtx({ stream: textStream(JSON.stringify(MINI_BP)) })
+    ;(ctx as unknown as { settings: unknown }).settings = settings
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', blueprint_id: 'bp-anima-rating', input: '一张概念图', rating: 'explicit', judge_mode: 'off' })))
+    expect(v.rating.resolved).toBe('explicit')
+    // call#1 = enrichBlueprint：v0 已携带确定性注入的 core.rating（与 h3 版测试④同款断言）
+    expect(userTextOf(ctx.llm.calls[1])).toContain('"rating":"explicit"')
+    // 投影映射（修复前 projectToAnima 丢 rating → 组装层关键词回退 safe）
+    expect(String(v.result.positive)).toContain('rating_explicit')
+    expect(String(v.result.negative)).toContain('preteen')
   })
 })

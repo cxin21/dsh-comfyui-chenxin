@@ -903,6 +903,12 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       }
       // Task 14 ③：core.rating 确定性注入（安全数据不信任 LLM 产物，t7 交接）——两条蓝图来源统一
       if (draft.blueprint) draft.blueprint.core.rating = resolved.rating
+      // P0 修复（t1，spec §5.1 链路完整性）：标准 slots 路径同样确定性写入——此前该路径无任何
+      // 注入点，compileAnima resolveEffectiveRating 回退全槽关键词扫描，声明 explicit 会被 slots
+      // 内容（cleavage 命中 SENSITIVE_MARKERS）静默降档为 sensitive 组装（真实会话 8e31ff2a 实证）。
+      // 与上一行同理由：安全数据不信任 LLM 产物，声明档位必须确定性直达组装层。
+      // h3 不适用（shots 无 rating 槽；h3 仅 safe，预检 gate 已挡非 safe）。
+      else if (target === 'anima' && draft.slots) draft.slots.rating = resolved.rating
       traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
 
       // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
@@ -1021,7 +1027,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const prevDraft = draft
         draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
         // P2：未点名槽回滚（两轮真实样本中修复 LLM 均越权删除 artist 槽）
-        if (target === 'anima' && draft.slots) draft.slots = mergeRepairSlots(prevDraft?.slots, draft.slots, feedback)
+        if (target === 'anima' && draft.slots) {
+          const merged = mergeRepairSlots(prevDraft?.slots, draft.slots, feedback) ?? draft.slots
+          // P0 修复（t1）：mergeRepairSlots 以 provider 新产物为底重建（SLOT_ORDER 不含 rating，
+          // LLM 产物亦不可信）——合并后重写声明档位，防降档在修复轮回归
+          merged.rating = resolved.rating
+          draft.slots = merged
+        }
         stage = await runDraftThroughStage(target, draft, runOpts, repairJudgeOpts)
         if (repairJudgeOpts) lastJudged = stage
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered

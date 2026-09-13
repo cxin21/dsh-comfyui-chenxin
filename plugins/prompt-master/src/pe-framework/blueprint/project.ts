@@ -160,6 +160,10 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
     ...(camera.length > 0 ? { camera } : {}),
     ...(exclusions.length > 0 ? { exclusions } : {}),
     ...(bp.core.narrative ? { narrative: bp.core.narrative } : {}),
+    // P0 修复（t1 验收④，spec §5.1 链路完整性）：core.rating（prompt_author 确定性注入）必须
+    // 映射到 slots.rating——此前投影丢弃 rating，蓝图路径组装层回退关键词扫描（同源静默降档）。
+    // 缺省不写槽：裸蓝图（未经 prompt_author 注入）维持「无声明 → 关键词回退」既有语义。
+    ...(bp.core.rating ? { rating: bp.core.rating } : {}),
   }
   return slots
 }

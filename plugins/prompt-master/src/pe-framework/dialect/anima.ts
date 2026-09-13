@@ -885,7 +885,7 @@ const ANIMA_SLOT_KEYS = new Set(['count_gender', 'character', 'artist', 'appeara
 /** brief 扩展字段（composition.py _coerce_brief 契约）：exclusions string[]；qualityPrefix/explicit boolean */
 const ANIMA_BOOL_KEYS = new Set(['qualityPrefix', 'explicit'])
 
-/** composition.py _coerce_brief 移植：槽位键白名单 + 类型校验（narrative string、exclusions string[]、qualityPrefix/explicit boolean、其余槽 string[]） */
+/** composition.py _coerce_brief 移植：槽位键白名单 + 类型校验（narrative string、exclusions string[]、qualityPrefix/explicit boolean、rating 三档枚举、其余槽 string[]） */
 export function validateAnimaSlots(slots: unknown): string | undefined {
   if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return 'anima 需要 slots 对象'
   const s = slots as Record<string, unknown>
@@ -894,6 +894,10 @@ export function validateAnimaSlots(slots: unknown): string | undefined {
     if (k === 'exclusions') { if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return 'exclusions 需为 string[]'; continue }
     if (k === 'subject') { if (typeof s[k] !== 'string') return 'subject 需为 string'; continue }
     if (ANIMA_BOOL_KEYS.has(k)) { if (typeof s[k] !== 'boolean') return `${k} 需为 boolean`; continue }
+    // P0 修复（t1，spec §5.1 链路完整性）：rating 是 AnimaSlots 正式安全槽（接口 Task 8 已含），
+    // 白名单此前缺失 → 编排层确定性写入 slots.rating 后在 normalize 即被拒（未知槽位: rating），
+    // 声明档位无法直达组装层。类型 = Rating 三档枚举（安全数据只接受合法档位字面量）。
+    if (k === 'rating') { if (s[k] !== 'safe' && s[k] !== 'sensitive' && s[k] !== 'explicit') return 'rating 需为 safe|sensitive|explicit'; continue }
     if (!ANIMA_SLOT_KEYS.has(k)) return `未知槽位: ${k}`
     if (!Array.isArray(s[k]) || (s[k] as unknown[]).some((x) => typeof x !== 'string')) return `槽位 ${k} 需为 string[]`
   }

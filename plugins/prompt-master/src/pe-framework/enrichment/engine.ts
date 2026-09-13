@@ -14,6 +14,9 @@
  * M5-DIAG（真实会话 6/6 fallback 诊断，docs/enrich-channel-diagnosis.md）：①maxTokens 1024→4096
  * （max-tokens 正常终止的截断文本 parse 失败 = 100% fallback 主因）；②三处 catch 的失败原因进
  * expansions（enrichment_failed_reason:{llm|parse|apply}:…，legacy token 首位不变）；③opts.signal 透传。
+ * M5-HOTFIX2（输出失控二波热修）：4096 仍被吃满（38.7s 实测）——persona 增输出纪律（最小 diff/
+ * 禁散文/字段白名单/总长上限 ≤1200 字符 + 紧凑 few-shot 样板），maxTokens 量化回调 1400（纪律目标
+ * ~550 tok 的 2.5× 头寸，先例 analyzer/judge 同值）；越界兜底 = v0 fallback + reason 可观测不变。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../../llm/complete.js'
@@ -169,6 +172,15 @@ function buildExpansionPersona(media: BlueprintMedia): string {
     `构图: ${CINEMA_LEXICON.composition.join('/')}`,
     '输出契约（硬性）：本任务为 one-shot 结构产出，不要调用任何工具；只输出一个增量 JSON patch——裸 JSON（不要代码块、不要解释）。形状：',
     '{"set": {...要覆盖的蓝图字段...}, "additions": {...要追加的数组字段...}, "expansions": ["改写记录1", ...]}',
+    // M5-HOTFIX2（输出纪律）：t16 实测 4096 预算仍被吃满截断（gen_1789343516953_l2vs0lav，38.7s）——
+    // 形状契约零收敛约束 + 裸部分蓝图兼容规则使「完整回显 v0 + 扩写」语义合法 + user 段递入完整
+    // JSON.stringify(v0) 作模板 → 模型输出失控。纪律四条 + 紧凑 few-shot 样板压回增量 patch 形态。
+    '输出纪律（硬性）：',
+    '7. 最小 diff：输出的是增量 patch，不是完整蓝图——只写需要改写/补全的字段；未变更的 v0 字段禁止回显（引擎按 deepMerge 合并，未提及字段自动保留，回显不会带来任何收益）。',
+    '8. 禁散文：只输出裸 JSON 对象，任何解释、前后缀文字、markdown 代码块都算失败。',
+    '9. 字段白名单：顶层只允许 set/additions/expansions 三键；字段只允许蓝图结构内既有路径（core.* / media_layer.*），不自造顶层键。',
+    '10. 总长上限目标：输出 JSON 全文 ≤ 1200 字符（含空白）；expansions ≤ 8 条、每条 ≤ 24 字符。',
+    '紧凑样板（形状示范——注意它有多小；内容按 v0 实际增量替换）：{"set":{"core":{"style":{"base":"赛博朋克霓虹夜景，冷青主调","theme":"霓虹都市"},"scene":{"lighting":"霓虹灯牌逆光，湿地面反光"}}},"expansions":["scene.lighting 重写"]}',
   ].join('\n')
 }
 
@@ -219,11 +231,13 @@ export async function enrichBlueprint(
       model: route.model,
       system: buildExpansionPersona(v0.media),
       user,
-      // M5-DIAG（真实会话 6/6 fallback 主因）：maxTokens=1024 时 patch 回显/推理吃满预算 →
-      // max-tokens finish 是正常终止（非 error）→ 截断文本 JSON.parse 失败 → 旧代码三处 catch
-      // 吞掉真实原因只剩 generic fallback。量化吻合：~10.3-11.3s ≈ 1024 tok @ ~100 tok/s。
-      // 4096 留足增量 patch + expansions 余量（intent 通道 analog = analyzer 1400 起步仍成功）。
-      maxTokens: 4096,
+      // M5-HOTFIX2（输出纪律 + 量化回调）：persona 已带最小 diff 纪律（增量 patch ≤1200 字符目标）。
+      // 量化依据：≤1200 字符 CJK+JSON 混合 ≈ 450-550 tok（~2.2-2.8 字符/tok），+ expansions ≤8 条
+      // （~80 tok）+ fence 余量 → 1400 ≈ 纪律目标 2.5× 头寸；对照插件先例 analyzer/judge 均 1400
+      // （one-shot JSON 生产者，真实会话成功）。旧 4096 无纪律时被回显式输出吃满
+      // （38.7s，gen_1789343516953_l2vs0lav 实测）；纪律收敛后典型输出 ~400-500 tok ≈ 4-5s。
+      // 越界兜底不变：max-tokens → v0 fallback + reason 可观测（M5-DIAG 机制）。
+      maxTokens: 1400,
       temperature: 0.4,
       // M5-DIAG：opts.signal 透传（缺省孤儿 controller，行为不变）
       signal: opts.signal ?? new AbortController().signal,

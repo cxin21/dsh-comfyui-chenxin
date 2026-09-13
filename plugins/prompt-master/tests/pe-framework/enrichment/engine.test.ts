@@ -242,10 +242,10 @@ describe('M5-DIAG: enrich direct-channel failure observability', () => {
   const LEGACY = 'enrichment_failed:fallback_to_v0'
   const okPatch = '{"set":{"core":{"concept":"黄昏荒原上的剑客"}},"expansions":[]}'
 
-  it('maxTokens 4096 透传（1024 截断是 100% fallback 主因：max-tokens 正常终止 → 截断文本 parse 失败）', async () => {
+  it('maxTokens 1400 透传（M5-HOTFIX2 量化回调：纪律目标 ≤1200 字符 ≈ ≤550 tok，1400 ≈ 2.5× 头寸 + 插件先例 analyzer/judge 同值）', async () => {
     const stb = stubCtx({ stream: textStream(okPatch) })
     await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
-    expect(stb.llm.calls[0]?.maxTokens).toBe(4096)
+    expect(stb.llm.calls[0]?.maxTokens).toBe(1400)
   })
 
   it('error finish → legacy token 首位不变 + reason entry 携带 failure code/message（不再静默吞掉）', async () => {
@@ -290,5 +290,65 @@ describe('M5-DIAG: enrich direct-channel failure observability', () => {
     const ac = new AbortController()
     await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, { signal: ac.signal })
     expect(stb.llm.calls[0]?.signal).toBe(ac.signal)
+  })
+})
+
+/* ═══ M5-HOTFIX2：enrichBlueprint 输出纪律 + maxTokens 量化回调 ═══
+ * 现象：t16 修复后真实会话 c04 探针（d0a9fe1 dist，gen_1789343516953_l2vs0lav）
+ * blueprint_enrich 38.7s 吃满 4096 tok 仍 max-tokens 截断（reason=parse:max-tokens）——
+ * 1024→4096 只移天花板：persona 只有形状契约、零收敛纪律，且裸部分蓝图兼容规则（整对象视为 set）
+ * 使「完整回显 v0 + 扩写」语义合法，user 段又把完整 JSON.stringify(v0) 递到眼前当模板。
+ * 修复 = persona 输出纪律（最小 diff/禁散文/字段白名单/总长上限目标 + 紧凑 few-shot 样板）
+ * + maxTokens 4096→1400 量化回调；v0 fallback + reason 透传（M5-DIAG 机制）保持兜底。
+ */
+describe('M5-HOTFIX2: expansion output discipline', () => {
+  const personaOf = async (media: 'image' | 'video' = 'image'): Promise<string> => {
+    const v0bp = {
+      schema_version: 1,
+      media,
+      core: { concept: '剑客决斗', negative: [] },
+      media_layer: media === 'image' ? { image: { count_gender: ['1girl'] } } : { video: { total_duration_seconds: 10, shots: [{ beat: '对峙' }] } },
+    } as any
+    const stb = stubCtx({ stream: textStream('{"set":{},"expansions":[]}') })
+    await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0bp, {})
+    return stb.llm.calls[0]?.system ?? ''
+  }
+
+  it('persona 带最小 diff 输出纪律：禁回显未变更字段 + 禁散文 + 字段白名单 + 总长上限目标', async () => {
+    const system = await personaOf('image')
+    expect(system).toContain('最小 diff')
+    expect(system).toContain('禁止回显')
+    expect(system).toContain('增量 patch')
+    expect(system).toContain('禁散文')
+    expect(system).toContain('白名单')
+    expect(system).toContain('1200')
+    // 纪律在输出契约段内（形状契约之后），不是孤立的散句
+    expect(system.indexOf('输出契约（硬性）')).toBeLessThan(system.indexOf('最小 diff'))
+  })
+
+  it('persona 带紧凑 few-shot 样板：可解析 JSON、含 set/expansions、体积证明其小（<300 字符）', async () => {
+    const system = await personaOf('image')
+    const m = system.match(/紧凑样板[^\n{]*(\{.*\})/)
+    expect(m).not.toBeNull()
+    const sample = JSON.parse(m![1]) as { set?: unknown; expansions?: unknown }
+    expect(typeof sample.set).toBe('object')
+    expect(Array.isArray(sample.expansions)).toBe(true)
+    expect(m![1].length).toBeLessThan(300)
+  })
+
+  it('纪律对 video persona 同样在场（media 分支不丢失纪律块）', async () => {
+    const system = await personaOf('video')
+    expect(system).toContain('最小 diff')
+    expect(system).toContain('1200')
+  })
+
+  it('mock 重放真实失败形状（截断 → 优雅 fallback + reason）保持绿（纪律不加严解析面）', async () => {
+    const truncated = '{"set":{"core":{"concept":"黄昏荒原上的剑客"},' // 刻意截断
+    const stream = [...textStream(truncated).slice(0, -1), { type: 'finish', reason: { kind: 'max-tokens' } } as any]
+    const stb = stubCtx({ stream })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect(out.blueprint).toEqual(v0)
+    expect(out.expansions[0]).toBe('enrichment_failed:fallback_to_v0')
+    expect(out.expansions.some((e) => e.startsWith('enrichment_failed_reason:parse:max-tokens:'))).toBe(true)
   })
 })

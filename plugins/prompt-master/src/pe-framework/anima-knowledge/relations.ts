@@ -58,6 +58,15 @@ CREATE TABLE IF NOT EXISTS relation_proposals (
 );
 CREATE INDEX IF NOT EXISTS idx_relation_overlay_from ON relation_proposals(from_record_id, status, relation_type);
 CREATE INDEX IF NOT EXISTS idx_relation_overlay_to ON relation_proposals(to_record_id, status, relation_type);
+CREATE TABLE IF NOT EXISTS artist_registry (
+    name_normalized TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    evidence TEXT NOT NULL,
+    model TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 `
 
 // ---------- 路径解析（env ANIMA_OVERLAY_PATH 优先，其次 setOverlayPath 注入，最后 preset temp 默认） ----------
@@ -319,4 +328,93 @@ export function decideProposal(
     db.close()
   }
   return { proposal_id: proposalId, status }
+}
+
+// ---------- artist 存在性登记（M4 T1：overlay 同库新表 artist_registry） ----------
+// 背景：M2 五批 authoring 的 miss/fuzzy 画师（xu beihong、good smile company 等）无法走
+// relation 提案（端点存在性前置校验挡死）——本表补齐「验证失败→登记→search 复验」闭环。
+// 定夺注记：与 relation_proposals 同库（同一 overlay sqlite、openOverlayDb 统一 SCHEMA 建
+// 表、同一 overlayStatus 探针）而非另立文件——一个 overlay 一个状态面。源 tags.sqlite 零
+// 改动（catalog 连接 readOnly）。幂等 = UPSERT 更新 evidence/confidence（证据链可增补），
+// created_at 不变、updated_at 刷新（与「no-op」分支的取舍已钉死于测试）。
+// evidence 必填非空：与 relation.submitProposal 的 ['llm-submission'] 缺省不同——本登记面
+// 防灌水（LLM 提案必须带真实证据链），缺省即拒。
+
+export interface ArtistRegistration {
+  name: string
+  name_normalized: string
+  confidence: number
+  evidence: string[]
+  model: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ArtistInput {
+  name: string
+  evidence: string[]
+  confidence?: number
+  model?: string
+}
+
+/** 登记画师存在性（幂等 UPSERT）。纯库面：校验（name/evidence/confidence）在本层完成，
+ *  tool wrapper 透传。返回 created=false 表示幂等更新命中既有行。 */
+export function registerArtist(input: ArtistInput): { created: boolean } & ArtistRegistration {
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  if (!name) throw new Error('artist name is required (non-empty)')
+  const evidence = Array.isArray(input.evidence) ? input.evidence.map((e) => String(e).trim()).filter(Boolean) : []
+  if (!evidence.length) throw new Error('artist evidence is required: at least one non-empty evidence item (anti-LLM-flooding; no default)')
+  const confidence = input.confidence === undefined ? 0.5 : Number(input.confidence)
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    throw new Error(`artist confidence invalid: ${String(input.confidence)} (must be within [0,1])`)
+  }
+  const normalized = normalizeTag(name)
+  const now = new Date().toISOString()
+  const db = openOverlayDb()
+  try {
+    const existing = db.prepare('SELECT created_at FROM artist_registry WHERE name_normalized=?').get(normalized) as { created_at: string } | undefined
+    const created = existing === undefined
+    db.prepare(
+      `INSERT INTO artist_registry (name_normalized, name, confidence, evidence, model, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(name_normalized) DO UPDATE SET
+         name=excluded.name, confidence=excluded.confidence, evidence=excluded.evidence,
+         model=excluded.model, updated_at=excluded.updated_at`,
+    ).run(normalized, name, confidence, JSON.stringify(evidence), input.model ?? null, existing?.created_at ?? now, now)
+    return {
+      created,
+      name,
+      name_normalized: normalized,
+      confidence,
+      evidence,
+      model: input.model ?? null,
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+    }
+  } finally {
+    db.close()
+  }
+}
+
+/** 登记清单（maintain/审计面）：confidence DESC, name_normalized 排序 */
+export function listArtists(limit = 100): ArtistRegistration[] {
+  const cap = limit < 1 ? 0 : limit
+  if (cap === 0) return []
+  const db = openOverlayDb()
+  try {
+    const rows = db
+      .prepare('SELECT name, name_normalized, confidence, evidence, model, created_at, updated_at FROM artist_registry ORDER BY confidence DESC, name_normalized LIMIT ?')
+      .all(cap) as Array<Record<string, unknown>>
+    return rows.map((r) => ({
+      name: String(r.name),
+      name_normalized: String(r.name_normalized),
+      confidence: Number(r.confidence),
+      evidence: JSON.parse(String(r.evidence)) as string[],
+      model: r.model === null || r.model === undefined ? null : String(r.model),
+      created_at: String(r.created_at),
+      updated_at: String(r.updated_at),
+    }))
+  } finally {
+    db.close()
+  }
 }

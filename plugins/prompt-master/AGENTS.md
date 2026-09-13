@@ -47,8 +47,10 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 - `src/pe-framework/intent/` — 意图分析（analyzer / subagent-provider）
 - `src/pe-framework/eval/` — LLM 评委（judge.ts，可选路径）
 - `src/tools/` — prompt_author / prompt_compile / prompt_audit 工具定义（注册清单权威源 =
-  `tests/plugin/registry.test.ts` 精确名单，13 工具；M3 T2 起 +style_save 预设入库写工具，
-  spec §13——validateStylePreset fail-fast + id 白名单 + 原子写，重复 id 拒收改走 git）
+  `tests/plugin/registry.test.ts` 精确名单，14 工具；M3 T2 起 +style_save 预设入库写工具，
+  spec §13——validateStylePreset fail-fast + id 白名单 + 原子写，重复 id 拒收改走 git；
+  M4 T1 起 +catalog_artist_add 画师存在性登记（overlay 同库新表，evidence 必填防灌水，
+  catalog_search 以 alias+source=overlay_artist_registry 填隙消费，源 tags.sqlite 零改动）
 
 ## 安全词表与预设维护注记
 

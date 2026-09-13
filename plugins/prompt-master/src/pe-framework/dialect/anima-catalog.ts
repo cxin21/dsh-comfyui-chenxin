@@ -16,6 +16,9 @@ export interface CatalogHit {
   record_id?: string
   usage_count?: number
   raw?: string
+  /** M4 T1：来源标记——仅 overlay artist registry 命中携带 'overlay_artist_registry'；
+   *  catalog 原生命中不带此字段（undefined = 真实 catalog 记录）。 */
+  source?: string
 }
 
 export interface CatalogQueryOptions {
@@ -242,8 +245,32 @@ function overlayAliasHits(normalized: string, limit: number, categories?: string
   }
 }
 
+/** M4 T1 artist registry 命中：normalized 精确匹配 overlay artist_registry（填隙语义——
+ *  仅在 canonical/alias 级联零命中时消费；match_type 'alias' 对齐 G7 overlay-alias 消费
+ *  先例，source 字段 'overlay_artist_registry' 明确标记；无 record_id/usage_count——
+ *  登记的是存在性而非 catalog 记录）。 */
+function artistRegistryHits(normalized: string, limit: number): CatalogHit[] {
+  if (!existsSync(overlayLibraryPath())) return []
+  const odb = openOverlayDb()
+  try {
+    const rows = odb
+      .prepare('SELECT name FROM artist_registry WHERE name_normalized=? LIMIT ?')
+      .all(normalized, limit) as Array<{ name: string }>
+    return rows.map((r) => ({
+      match_type: 'alias' as const,
+      prompt_form: r.name,
+      raw: r.name,
+      source: 'overlay_artist_registry',
+    }))
+  } finally {
+    odb.close()
+  }
+}
+
 /** 匹配语义对齐 catalog/search.py：auto=canonical→alias→fuzzy 级联；exact=canonical→alias（无 fuzzy）；
- *  G7：canonical/alias/fuzzy 单级直查；auto/exact 级联落空后追加 overlay accepted 别名命中。 */
+ *  G7：canonical/alias/fuzzy 单级直查；auto/exact 级联落空后追加 overlay accepted 别名命中。
+ *  M4 T1：canonical/alias 零命中时插位 artist registry 填隙命中（alias 级 + source 标记，
+ *  auto/exact 均消费；单级直查不注入；真命中永不遮蔽）。 */
 export function searchCatalog(tag: string, opts?: CatalogQueryOptions): CatalogHit[] {
   const normalized = normalizeTag(tag)
   const limit = opts?.limit === undefined ? 20 : opts.limit
@@ -253,10 +280,15 @@ export function searchCatalog(tag: string, opts?: CatalogQueryOptions): CatalogH
   if (single === 'fuzzy') return fuzzyQuery(tag, limit, opts?.categories, opts?.sources)
   if (single) return exactQuery(normalized, single, limit, opts?.categories, opts?.sources)
   const mode = modeRaw === 'exact' ? 'exact' : 'auto'
-  const modes = mode === 'exact' ? (['canonical', 'alias'] as const) : (['canonical', 'alias', 'fuzzy'] as const)
+  const levels: Array<() => CatalogHit[]> = [
+    () => exactQuery(normalized, 'canonical', limit, opts?.categories, opts?.sources),
+    () => exactQuery(normalized, 'alias', limit, opts?.categories, opts?.sources),
+    () => artistRegistryHits(normalized, limit),
+  ]
+  if (mode === 'auto') levels.push(() => fuzzyQuery(tag, limit, opts?.categories, opts?.sources))
   let cascadeHits: CatalogHit[] = []
-  for (const m of modes) {
-    const hits = m === 'fuzzy' ? fuzzyQuery(tag, limit, opts?.categories, opts?.sources) : exactQuery(normalized, m, limit, opts?.categories, opts?.sources)
+  for (const level of levels) {
+    const hits = level()
     if (hits.length) { cascadeHits = hits.slice(0, limit); break }
   }
   // G7：级联结果之后追加 overlay accepted 别名命中（alias 级；canonical/alias 命中在前，永不降级）

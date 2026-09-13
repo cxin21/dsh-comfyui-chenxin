@@ -10,6 +10,7 @@ import { registerCompileTool } from '../tools/prompt-compile.js'
 import { registerCatalogSearchTool } from '../tools/catalog-search.js'
 import { registerCatalogRelationsTool } from '../tools/catalog-relations.js'
 import { registerCatalogBuildTool } from '../tools/catalog-build.js'
+import { registerCatalogArtistAddTool } from '../tools/catalog-artist-add.js'
 import { registerAuditTool } from '../tools/prompt-audit.js'
 import { registerFeedbackTool } from '../tools/prompt-feedback.js'
 import { registerStyleListTool } from '../tools/style-list.js'
@@ -70,6 +71,7 @@ export function apply(ctx: Context, config: ConfigShape) {
     disposers.push(ctx.tools.register(registerCatalogSearchTool(ctx, config)))
     disposers.push(ctx.tools.register(registerCatalogRelationsTool(ctx, config)))
     disposers.push(ctx.tools.register(registerCatalogBuildTool(ctx, config)))
+    disposers.push(ctx.tools.register(registerCatalogArtistAddTool(ctx, config)))
     disposers.push(ctx.tools.register(registerAuditTool(ctx, config)))
     disposers.push(ctx.tools.register(registerFeedbackTool(ctx, config)))
     disposers.push(ctx.tools.register(registerStyleListTool(ctx, config)))

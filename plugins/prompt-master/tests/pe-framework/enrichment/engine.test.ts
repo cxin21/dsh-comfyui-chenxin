@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { enrichBlueprint } from '../../../src/pe-framework/enrichment/engine.js'
-import { textStream, stubCtx } from '../../plugin/helpers.js'
+import { textStream, errorStream, stubCtx } from '../../plugin/helpers.js'
 
 const ctx = {
   llm: { async *stream() { for (const c of textStream('{"core":{"concept":"黄昏荒原上的剑客","negative":[{"target":"现代元素"}]}}')) yield c } },
@@ -226,5 +226,69 @@ describe('applyAdditions object-branch merge semantics (M5-T3b)', () => {
     expect(out.advisories).toContain('enrich_rating_overwrite_blocked')
     // 对象合并修复：良性 media_layer 对象 additions 正确合并，既有内容保留
     expect(out.blueprint.media_layer.image).toEqual({ lighting_detail: '伦勃朗光', depth_of_field: '浅景深' })
+  })
+})
+
+/* ═══ M5-DIAG：enrich 直连通道真实会话 100% 失败诊断（清单④重放实锤）═══
+ * 现象：真实会话 enrichBlueprint 6/6 fallback_to_v0（~10-11s/次，两代 dist、多案例一致），
+ * intent 子代理通道同期正常；mock 全绿（stub route 不暴露）。诊断结论（docs/enrich-channel-diagnosis.md）：
+ * ①主因 maxTokens=1024 截断——max-tokens finish 是正常终止（非 error），截断文本 JSON.parse 失败
+ *   → 三处 catch {} 吞掉真实原因 → generic fallback；~10.4s ≈ 1024 tok @ ~100 tok/s 量化吻合。
+ * ②可观测性缺陷：失败原因（auth/timeout/truncation/parse）四类不可区分——本 describe 把 reason
+ *   进 expansions（legacy token 保持首位不变 = 既有断言面零漂移）。
+ * ③c04 artist 槽丢失（随迁 analyzer.ts，见该文件）：蓝图 persona/schema 零 artist_hints 引导。
+ */
+describe('M5-DIAG: enrich direct-channel failure observability', () => {
+  const LEGACY = 'enrichment_failed:fallback_to_v0'
+  const okPatch = '{"set":{"core":{"concept":"黄昏荒原上的剑客"}},"expansions":[]}'
+
+  it('maxTokens 4096 透传（1024 截断是 100% fallback 主因：max-tokens 正常终止 → 截断文本 parse 失败）', async () => {
+    const stb = stubCtx({ stream: textStream(okPatch) })
+    await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect(stb.llm.calls[0]?.maxTokens).toBe(4096)
+  })
+
+  it('error finish → legacy token 首位不变 + reason entry 携带 failure code/message（不再静默吞掉）', async () => {
+    const stb = stubCtx({ stream: errorStream('provider unauthorized', 'AUTH') })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect(out.blueprint).toEqual(v0)
+    expect(out.expansions[0]).toBe(LEGACY)
+    const reason = out.expansions.find((e) => e.startsWith('enrichment_failed_reason:llm:'))
+    expect(reason).toBeDefined()
+    expect(reason).toContain('AUTH')
+    expect(reason).toContain('provider unauthorized')
+  })
+
+  it('max-tokens finish（截断）→ parse reason entry 携带 finish kind + 截断文本 head', async () => {
+    const truncated = '{"set":{"core":{"concept":"黄昏荒原上的剑客"},' // 刻意截断
+    const stream = [...textStream(truncated).slice(0, -1), { type: 'finish', reason: { kind: 'max-tokens' } } as any]
+    const stb = stubCtx({ stream })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect(out.expansions[0]).toBe(LEGACY)
+    expect(out.expansions.some((e) => e.startsWith('enrichment_failed_reason:parse:max-tokens:'))).toBe(true)
+  })
+
+  it('非对象 JSON → parse reason entry 标注 non-object + finish kind', async () => {
+    const stb = stubCtx({ stream: textStream('"just a string"') })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    expect(out.expansions[0]).toBe(LEGACY)
+    expect(out.expansions.some((e) => e.startsWith('enrichment_failed_reason:parse:stop:non-object:string'))).toBe(true)
+  })
+
+  it('apply 阶段 throw → apply reason entry 携带错误消息（structuredClone 不可克隆数据触发）', async () => {
+    const evilV0 = { ...v0, uncloneable: () => 'fn' } as any // 函数属性 → structuredClone DataCloneError
+    const stb = stubCtx({ stream: textStream(okPatch) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, evilV0, {})
+    expect(out.blueprint).toEqual(evilV0)
+    expect(out.expansions[0]).toBe(LEGACY)
+    const reason = out.expansions.find((e) => e.startsWith('enrichment_failed_reason:apply:'))
+    expect(reason).toBeDefined()
+  })
+
+  it('opts.signal 透传：调用方 signal 到达 GenerateOptions（取消可传播；缺省行为不变）', async () => {
+    const stb = stubCtx({ stream: textStream(okPatch) })
+    const ac = new AbortController()
+    await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, { signal: ac.signal })
+    expect(stb.llm.calls[0]?.signal).toBe(ac.signal)
   })
 })

@@ -11,6 +11,9 @@
  * spec §5.1 偏差记录），覆写企图 advisory enrich_rating_overwrite_blocked；
  * ②V8 persona media 分支——video shot 五维密度规则仅 video/mixed，image 换画面密度纪律；
  * ③D7 recommendations 推荐先验通道——user 段【推荐先验】块（与 enrich/engine.ts buildUser 同源逐字，LLM 仍终决）。
+ * M5-DIAG（真实会话 6/6 fallback 诊断，docs/enrich-channel-diagnosis.md）：①maxTokens 1024→4096
+ * （max-tokens 正常终止的截断文本 parse 失败 = 100% fallback 主因）；②三处 catch 的失败原因进
+ * expansions（enrichment_failed_reason:{llm|parse|apply}:…，legacy token 首位不变）；③opts.signal 透传。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../../llm/complete.js'
@@ -33,6 +36,9 @@ export interface EnrichOptions {
    *  文案与 enrich/engine.ts buildUser（spec §7 P2/§6.2）同源逐字，改动必须两处同步；LLM 仍做最终设计决策。
    *  消费方：M5-T2 编排接线（prompt-author 推荐卡透传）。 */
   recommendations?: Array<{ field: string; cardId: string; reason: string }>
+  /** M5-DIAG：调用方取消信号透传（取消可传播到 ctx.llm.stream；prompt-author exec.signal 接线
+   *  留待后续任务，缺省行为不变——孤儿 AbortController 兜底）。 */
+  signal?: AbortSignal
 }
 
 export interface EnrichResult {
@@ -44,6 +50,11 @@ export interface EnrichResult {
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+/** M5-DIAG：诊断条目净化——单行化 + 截断，保证 expansions 条目可进 envelope（不携带原始多行文本） */
+function clip(s: string, n = 160): string {
+  return s.replace(/\s+/g, ' ').trim().slice(0, n)
 }
 
 /** set 语义：深合并对象字段，数组整体替换（保留未提及的既有字段） */
@@ -200,31 +211,50 @@ export async function enrichBlueprint(
       : []),
   ].join('\n')
 
-  let raw: string
+  let raw = ''
+  let finishKind = 'unknown'
   try {
-    const signal = new AbortController().signal
     const res = await complete(ctx, {
       provider: route.provider,
       model: route.model,
       system: buildExpansionPersona(v0.media),
       user,
-      maxTokens: 1024,
+      // M5-DIAG（真实会话 6/6 fallback 主因）：maxTokens=1024 时 patch 回显/推理吃满预算 →
+      // max-tokens finish 是正常终止（非 error）→ 截断文本 JSON.parse 失败 → 旧代码三处 catch
+      // 吞掉真实原因只剩 generic fallback。量化吻合：~10.3-11.3s ≈ 1024 tok @ ~100 tok/s。
+      // 4096 留足增量 patch + expansions 余量（intent 通道 analog = analyzer 1400 起步仍成功）。
+      maxTokens: 4096,
       temperature: 0.4,
-      signal,
+      // M5-DIAG：opts.signal 透传（缺省孤儿 controller，行为不变）
+      signal: opts.signal ?? new AbortController().signal,
     })
     raw = res.text
-  } catch {
-    return { blueprint: v0, expansions: ['enrichment_failed:fallback_to_v0'] }
+    finishKind = res.finish.kind
+  } catch (error) {
+    // M5-DIAG：失败原因进 expansions（legacy token 首位不变 = 既有断言面零漂移）——
+    // 真实会话据此直接分类（AUTH/NO_ADAPTER/TIMEOUT/...），不再需要盲猜
+    const err = error as Error & { code?: string }
+    return {
+      blueprint: v0,
+      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:llm:${err.code ?? 'unknown'}:${clip(err.message || 'no message')}`],
+    }
   }
 
   let parsed: unknown
   try {
     parsed = JSON.parse(stripFences(raw))
   } catch {
-    return { blueprint: v0, expansions: ['enrichment_failed:fallback_to_v0'] }
+    // M5-DIAG：截断/非 JSON 文本诊断面——finish kind（max-tokens=预算截断）+ 文本 head（≤200 字符）
+    return {
+      blueprint: v0,
+      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:parse:${finishKind}:${clip(JSON.stringify(raw), 200)}`],
+    }
   }
   if (!isPlainObject(parsed)) {
-    return { blueprint: v0, expansions: ['enrichment_failed:fallback_to_v0'] }
+    return {
+      blueprint: v0,
+      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:parse:${finishKind}:non-object:${typeof parsed}`],
+    }
   }
 
   let expansions: string[] = []
@@ -280,7 +310,12 @@ export async function enrichBlueprint(
     if (ratingOverwriteBlocked) advisories.push(RATING_OVERWRITE_ADVISORY)
 
     return { blueprint: enriched, expansions, ...(advisories.length > 0 ? { advisories } : {}) }
-  } catch {
-    return { blueprint: v0, expansions: ['enrichment_failed:fallback_to_v0'] }
+  } catch (error) {
+    // M5-DIAG：应用阶段 throw（strip/deepMerge/applyAdditions/自检）同样携带原因，不再静默
+    const err = error as Error
+    return {
+      blueprint: v0,
+      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:apply:${clip(err?.message || 'no message')}`],
+    }
   }
 }

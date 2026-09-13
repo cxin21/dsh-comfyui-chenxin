@@ -83,6 +83,7 @@ export const ANIMA_BLUEPRINT_PERSONA = `你是一个创作蓝图分析引擎。�
 8. 角色锚点 discipline：无参考图时 characters[].reference_slots 留空，识别信息全部进 appearance_anchors/outfit
 9. 多模态：references 传入时提取参考物美学特征进蓝图核心字段（光线→core.scene.lighting、配色→core.style.palette、氛围→core.scene.atmosphere、构图→core.composition），保持 ref 标签稳定（<Picture N>/<Subject N>），不要替换
 10. narrative 四类信息（只写 tag 表达不了的）：①景别与主体占比 ②光源物件与人物曝光（写物件名，禁光效词）③空间纵深与视线引导 ④色彩主次（一个主色 + 至多两个辅助色）与情绪基调；已入 tag/蓝图结构字段的概念禁止在 narrative 复述；core.style.palette/core.emotion 可作设计注记填写
+11. 画师暗示（M5-DIAG 补：c04 实录 artist 槽丢失——蓝图面无 artist_hints 引导，wlop 落入文本字段）：用户 brief 明确提及画师名/以画师指代画风时，画师裸名原样写入 core.style.artist_hints 数组（如 ["wlop"]）；不写进 narrative 或其它文本字段（画师名是结构化字段，投影器单独消费）；不确定是否真实存在的画师名一律不写（防编造），改以三个风格形容词进 narrative
 
 输出：只输出一个蓝图 v0 JSON（裸 JSON，不要 markdown fence、不要解释）。
 `
@@ -92,7 +93,9 @@ export const ANIMA_BLUEPRINT_PERSONA = `你是一个创作蓝图分析引擎。�
  * 直接复用会让 anima LLM 高概率产出 video 形蓝图：validate 通过但 projectToAnima 拿不到
  * media_layer.image → camera/detail_mood 全空 + applyStyle 注入错分支）。core 与 BLUEPRINT_SCHEMA
  * 同构；不含 rating（安全数据确定性注入，spec §5.1 偏差记录延续）。media_layer.image 含 D3 增补的
- * 四个主干槽位来源字段。
+ * 四个主干槽位来源字段。M5-DIAG 补：core.style 增 artist_hints（c04 实录 artist 槽丢失——schema 无此
+ * 字段 + persona 零画师引导，LLM 把画师名写入文本字段；projectToAnima 的 artist 槽消费
+ * core.style.artist_hints，槽位语义见 persona 规则 11）。
  */
 export const ANIMA_BLUEPRINT_SCHEMA = `{
   "schema_version": 1,
@@ -104,7 +107,7 @@ export const ANIMA_BLUEPRINT_SCHEMA = `{
       { "id": "c1", "name": "角色名", "appearance_anchors": ["可见锚点"], "outfit": "服装" }
     ],
     "scene": { "environment": "环境", "lighting": "光线基调" },
-    "style": { "base": "基底风格", "theme": "主题风格", "palette": "配色" },
+    "style": { "base": "基底风格", "theme": "主题风格", "palette": "配色", "artist_hints": ["画师裸名；用户未提及画师则省略整个键"] },
     "emotion": "情绪基调",
     "composition": ["构图语言"],
     "negative": [{ "target": "负向对象", "severity": "soft" }],

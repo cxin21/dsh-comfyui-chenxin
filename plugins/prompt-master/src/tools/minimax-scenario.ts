@@ -1,4 +1,5 @@
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { h3RatingUnsupportedError } from './h3-rating-gate.js'
 import { listScenarios, getScenarioById, resolveMinimaxScenarioExpand } from '../resolver/minimax/index.js'
 import { countChars } from '../utils/length.js'
 import { complete } from '../llm/complete.js'
@@ -61,10 +62,8 @@ export function registerMinimaxTool(ctx: Context, config: Config) {
       }
       const rating = ratingArg as (typeof RATING_TIERS)[number]
       if (rating !== 'safe') {
-        throw new Error(
-          `h3_rating_unsupported: MiniMax H3 内容政策只支持 safe（spec §5.5）——本工具为 H3 场景面，rating=${rating} 被拒绝，不做降级猜测。` +
-            '需要 sensitive/explicit 内容分级请改走 prompt_author(target=anima)。',
-        )
+        // M4-T2：错误串共享常量（h3-rating-gate.ts 单一来源，文案零变化）
+        throw h3RatingUnsupportedError(`本工具为 H3 场景面，rating=${rating} `, '(target=anima)')
       }
       const scenarioId = String(args.scenario_id || '').trim()
       if (!scenarioId) return JSON.stringify({ scenarios: listScenarios(), hint: '请指定 scenario_id 选择一个场景' })

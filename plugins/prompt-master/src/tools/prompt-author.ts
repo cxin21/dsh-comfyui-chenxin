@@ -30,6 +30,7 @@ import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
 import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js'
 import { catalogCandidatesForText } from '../pe-framework/dialect/catalog-recall.js'
 import { resolveRating } from '../pe-framework/safety/rating.js'
+import { h3RatingUnsupportedError } from './h3-rating-gate.js'
 import { checkBoundaries } from '../pe-framework/safety/boundaries.js'
 import { recommendArtDirection } from '../pe-framework/aesthetics/recommend.js'
 import { analyzeBlueprintIncremental } from '../pe-framework/blueprint/analyzer.js'
@@ -773,13 +774,12 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       if (resolved.escalatedFrom) preflightAdvisories.push(`rating_escalated:${resolved.rating}`)
       // M3-T1b（spec §5.5 L185）：h3 rating 硬约束——MiniMax 官方内容政策只支持 safe。
       // gate 挂在 resolved.rating 上（显式声明与关键词升档两路径同拦），不做降级猜测；
-      // 0 token（预检段，与硬边界检查同层）。与 t62 minimax_scenario 的 h3_rating_unsupported
-      // 同语义（h3 场景工具面先行落地，本处补全 author 面）。
+      // 0 token（预检段，与硬边界检查同层）。M4-T2：错误串共享常量（h3-rating-gate.ts
+      // 单一来源，与 t62 minimax_scenario 同源，文案零变化）。
       if (target === 'h3' && resolved.rating !== 'safe') {
-        throw new Error(
-          `h3_rating_unsupported: MiniMax H3 内容政策只支持 safe（spec §5.5）——target=h3 且 rating=${resolved.rating}` +
-            `（${resolved.source === 'input' ? '显式声明' : '关键词升档'}）被拒绝，不做降级猜测。` +
-            '需要 sensitive/explicit 内容分级请改走 prompt_author target=anima。',
+        throw h3RatingUnsupportedError(
+          `target=h3 且 rating=${resolved.rating}（${resolved.source === 'input' ? '显式声明' : '关键词升档'}）`,
+          ' target=anima',
         )
       }
       const violations = checkBoundaries(input, resolved.rating)

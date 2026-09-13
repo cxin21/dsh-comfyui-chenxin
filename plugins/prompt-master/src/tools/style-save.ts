@@ -16,7 +16,7 @@
  * 进程内热失效留给未来按需演进）。
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { validateStylePreset, type StylePresetV2 } from '../pe-framework/styles/schema.js'
@@ -82,6 +82,17 @@ export function registerStyleSaveTool(_ctx: Context, _config: Config) {
       const finalPath = resolve(join(dir, `${id}.json`))
       if (!finalPath.startsWith(dir + sep)) {
         throw new Error(`style_save: resolved path escapes the style-presets whitelist dir (id="${id}")`)
+      }
+      // M4-T2 existsSync 预检（TR2 minor / T3 注记的缓存镜像盲区闭合）：缓存只镜像已提交库，
+      // 同进程对刚写入 id 的二次保存绕过缓存检查直达原子写——静默覆盖且不可恢复。写前磁盘
+      // 预检把覆盖变显式冲突（与缓存层「重复 id 即拒」两层独立：该层只捕缓存外的未提交
+      // 工作树文件；重启后此类 id 进缓存改由缓存层拦截）。
+      if (existsSync(finalPath)) {
+        throw new Error(
+          `style_save: uncommitted_file_conflict — "plugins/prompt-master/assets/style-presets/${id}.json" already exists on disk ` +
+            'but is not in the registry cache (uncommitted working-tree file from a previous in-process save; ' +
+            'silent overwrite disabled by M4-T2 hardening). Inspect with git diff / git status and commit or remove the file first (工具不碰 git)',
+        )
       }
       const diff = {
         id: preset.id,

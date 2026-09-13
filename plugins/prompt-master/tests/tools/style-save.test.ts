@@ -101,4 +101,37 @@ describe('style_save (M3 T2, spec §13)', () => {
     expect(Array.isArray(out.advisories)).toBe(true)
     expect(out.advisories.length).toBeGreaterThanOrEqual(1)
   })
+
+  // ---------- M4-T2 existsSync 预检（TR2 minor / T3 注记的缓存镜像盲区闭合） ----------
+  describe('M4-T2 uncommitted-file conflict layer (existsSync pre-check)', () => {
+    it('same-process re-save of an uncommitted id → explicit conflict (silent overwrite eliminated), first write preserved byte-for-byte', async () => {
+      getStylePreset(SEEDED_ID) // 先行填缓存（写前态：仅播种文件）——钉死磁盘层判定路径
+      await runTool({} as never, def(), { preset: VALID_PRESET }) // 首写成功（缓存外）
+      const first = readFileSync(join(dir, `${VALID_PRESET.id}.json`), 'utf8')
+      await expect(
+        runTool({} as never, def(), { preset: { ...VALID_PRESET, name: '覆盖尝试' } }),
+      ).rejects.toThrow(/already exists on disk/)
+      await expect(
+        runTool({} as never, def(), { preset: { ...VALID_PRESET, name: '覆盖尝试' } }),
+      ).rejects.toThrow(/git diff/)
+      // 静默覆盖消除：首写字节原样保留（不可恢复覆盖不再可能）
+      expect(readFileSync(join(dir, `${VALID_PRESET.id}.json`), 'utf8')).toBe(first)
+    })
+
+    it('two conflict layers are independent: committed id → registry cache layer; uncommitted id → disk layer', async () => {
+      getStylePreset(SEEDED_ID) // 填缓存（含播种文件）
+      // 层 1（已提交库）：缓存命中 → style_preset_id_conflict
+      await expect(runTool({} as never, def(), { preset: { ...VALID_PRESET, id: SEEDED_ID } })).rejects.toThrow(
+        /style_preset_id_conflict/,
+      )
+      // 层 2（缓存外未提交工作树文件）：磁盘命中 → 独立错误码（非 style_preset_id_conflict）
+      await runTool({} as never, def(), { preset: VALID_PRESET })
+      await expect(runTool({} as never, def(), { preset: VALID_PRESET })).rejects.toThrow(
+        /uncommitted_file_conflict/,
+      )
+      await expect(runTool({} as never, def(), { preset: VALID_PRESET })).rejects.not.toThrow(
+        /style_preset_id_conflict/,
+      )
+    })
+  })
 })

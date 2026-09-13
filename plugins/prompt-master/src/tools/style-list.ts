@@ -1,5 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { listStylePresets } from '../pe-framework/styles/registry.js'
+import { listStylePresets, loadStylePresets } from '../pe-framework/styles/registry.js'
 import { RATING_ORDER, type StyleCategory } from '../pe-framework/styles/schema.js'
 import type { Rating } from '../pe-framework/types.js'
 import type { Config } from '../plugin/config.js'
@@ -13,10 +13,13 @@ const APPLIES_TO = ['anima', 'h3', 'sd'] as const
 
 /** 只读查询（无 LLM）：风格预设库检索（spec §9）→ JSON 摘要数组 */
 export function registerStyleListTool(_ctx: Context, _config: Config) {
+  // 审计 #5（2026-09-12）：描述条数不再硬编码——注册时经 loadStylePresets().presets.length
+  // 动态插值（registry 模块内缓存，注册期一次性零额外成本；库增减后重启自愈，消漂移类）。
+  const presetCount = loadStylePresets().presets.length
   return defineTool({
     name: 'style_list',
     description:
-      '风格预设库查询（spec §9）：按 category/rating/applies_to/关键字过滤 55 条 v2 风格预设；只读零 LLM。rating 为会话内容分级上限（序 safe < sensitive < explicit，preset.rating ≤ 上限才可见），缺省不过滤。',
+      `风格预设库查询（spec §9）：按 category/rating/applies_to/关键字过滤 ${presetCount} 条 v2 风格预设；只读零 LLM。rating 为会话内容分级上限（序 safe < sensitive < explicit，preset.rating ≤ 上限才可见），缺省不过滤。`,
     parameters: {
       category: { type: 'string', enum: [...CATEGORIES], description: '风格大类过滤（十类之一）' },
       rating: { type: 'string', enum: [...RATING_ORDER], description: '会话内容分级上限（safe/sensitive/explicit）：preset.rating ≤ 上限才可见；缺省不过滤' },

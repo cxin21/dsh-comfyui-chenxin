@@ -236,6 +236,36 @@ describe('M2-T2 declaredRating judge wiring + h3 negative_hints advisory (spec �
   })
 })
 
+// 2026-09-12 审计 #1（spec §7 L223 降级语义）：enrich 在 explicit 档被 LLM 拒绝 → 现有故障
+// 语义回退（enrich_skipped + user brief 直拆照常出稿）之外，增发档位可观测 advisory
+// `enrich_refused_at_rating:explicit`；safe/sensitive 档不打（spec 仅明文 explicit 档）。
+describe('audit-fix #1: enrich refusal advisory at declared rating (spec §7 L223)', () => {
+  const refusingEnrich: CriticProvider = async () => { throw new Error('provider refused this content') }
+
+  it('enrich refusal at explicit → enrich_refused_at_rating:explicit present alongside enrich_skipped', async () => {
+    setAuthorEnrichProvider(refusingEnrich)
+    setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'] } }))
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '花园里的少女', rating: 'explicit', judge_mode: 'off' })))
+    // 通用 enrich_skipped 语义不动（故障回退路径不变）
+    expect(v.advisories).toContain('enrich_skipped')
+    // 档位可观测 advisory（本修复新增）
+    expect(v.advisories).toContain('enrich_refused_at_rating:explicit')
+    expect(v.enrichment.skipped).toBe(true)
+  })
+
+  it('enrich refusal at safe → enrich_skipped only, no rating advisory', async () => {
+    setAuthorEnrichProvider(refusingEnrich)
+    setAuthorIntentProvider(async () => ({ slots: { count_gender: ['1girl'] } }))
+    const ctx = stubCtx()
+    const def = registerAuthorTool(ctx as never, cfg as never)
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '花园里的少女', judge_mode: 'off' })))
+    expect(v.advisories).toContain('enrich_skipped')
+    expect(v.advisories).not.toContain('enrich_refused_at_rating:explicit')
+  })
+})
+
 describe('M3-T1b h3 rating gate at preflight (spec §5.5 L185)', () => {
   // t62 核实备案兑现：spec L185「target=h3 且 rating≠safe → argument error」在 prompt_author
   // 从未实现（原测试④曾把 h3+explicit 蓝图成功钉为绿——spec 与实现冲突由本轮核实）。

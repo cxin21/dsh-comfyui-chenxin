@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { registerStyleListTool } from '../../src/tools/style-list.js'
+import { loadStylePresets } from '../../src/pe-framework/styles/registry.js'
 import { stubCtx, runTool } from '../plugin/helpers.js'
 
 const def = () => registerStyleListTool(null as never, {} as never)
@@ -62,5 +63,13 @@ describe('style_list (spec §9)', () => {
       expect(p.category).toBe('anime')
       expect(p.rating).toBe('safe')
     }
+  })
+  it('audit #5: description interpolates the live preset count at registration (no hardcoded count)', () => {
+    // 2026-09-12 审计 #5：描述硬编码「55 条」随库增长陈旧（实际 82）。修复后注册时经
+    // loadStylePresets().presets.length 动态插值——库增减后描述重启自愈（消漂移类）。
+    const { presets } = loadStylePresets()
+    const d = def()
+    expect(d.description).toContain(`过滤 ${presets.length} 条`)
+    expect(d.description).not.toContain('55 条')
   })
 })

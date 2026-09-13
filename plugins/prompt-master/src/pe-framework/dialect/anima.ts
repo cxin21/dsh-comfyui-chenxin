@@ -334,6 +334,10 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   const eff = resolveEffectiveRating(slots)
   for (const t of RATING_SEEDS[eff]) pushSeg(t, 'positive', 'policy', 99)
   if (eff !== 'safe') assumptions.push(`rating_active:${eff}`)
+  // 审计 #3（2026-09-12，spec §5.1 L153 原文「rating 与 explicit 同给时 rating 优先 + advisory」）：
+  // 兼容映射被覆盖必须可观测——advisory 走 assumptions 面（与 rating_active:* 同通道 push 模式）。
+  // 胜出语义零改动：resolveEffectiveRating（safety/rating.ts）本体不动，仅补留痕。
+  if (slots.rating !== undefined && slots.explicit === true) assumptions.push('rating_overrides_explicit')
   // policy 分级负向追加（unconditional，不受 qualityPrefix 门控——安全不可关）：
   // sensitive 阻断 explicit 词汇；explicit 阻断未成年硬排除（spec §5.3 策略表）。
   for (const t of RATING_NEGATIVE_ADDITIONS[eff]) pushSeg(t, 'negative', 'policy', 98)

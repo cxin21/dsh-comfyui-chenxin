@@ -846,6 +846,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           enrichmentTop = { brief }
         } else {
           enrichAdvisories.push('enrich_skipped')
+          // 审计 #1（2026-09-12，spec §7 L223 降级语义原文）：enrich 在 explicit 档被 LLM 拒绝 →
+          // 现有故障语义回退不变（enrich_skipped + user brief 直拆照常出稿），增发档位可观测
+          // advisory——兼容/拒绝路径的静默降级必须可见。safe/sensitive 档不打（spec 仅明文 explicit）。
+          if (resolved.rating === 'explicit') enrichAdvisories.push('enrich_refused_at_rating:explicit')
           enrichFlag = 0
           enrichmentTop = { skipped: true, reason: eRes.reason }
         }

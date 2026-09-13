@@ -23,6 +23,11 @@ import { stubCtx, runTool } from './helpers.js'
 
 const cfg = { temperature: 0.7 }
 
+// M5-T2（D8 双态 / D1 回滚面）：trace/canonical 替换的 enrich-brief 规格钉回 slots 兼容态
+// （蓝图形态 runEnrich 被 swap 掉，trace 语义由蓝图分支的 blueprint_enrich 条目承载——见 orchestration 套件）
+beforeEach(() => { process.env.PM_AUTHOR_INTENT_FORM = 'slots' })
+afterEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
+
 function tool() {
   return registerAuthorTool(stubCtx() as never, cfg as never)
 }

@@ -3,7 +3,7 @@
  * 七条行为规格，全部 mock enrich provider / intent provider（不打真连）。
  * 最高约束（T9 后）：显式 `judge_mode:'off', enrich:false` 与一期缺省逐字段一致；缺省=fast+enrich 见 T9 describe。
  */
-import { describe, expect, it, afterAll, beforeEach } from 'vitest'
+import { describe, expect, it, afterAll, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,6 +24,12 @@ import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
 
 const cfg = { temperature: 0.7 }
 const GOOD_SLOTS = { slots: { count_gender: ['1girl'], appearance: ['long hair'] } }
+
+// M5-T2（D8 双态 / D1 回滚面）：本文件编码「anima 默认路径 enrich-brief + slots 直译」行为规格
+// ——用 env kill-switch 钉回 slots 兼容态（回滚面 R2 本体也是被测对象）；蓝图形态规格由
+// tests/tools/prompt-author-orchestration.test.ts「M5-T2」组承载
+beforeEach(() => { process.env.PM_AUTHOR_INTENT_FORM = 'slots' })
+afterEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
 
 function tool() {
   return registerAuthorTool(stubCtx() as never, cfg as never)

@@ -305,3 +305,7 @@ spec-vs-code 全面审计对本文与实现的对账结论备案。**实现为�
 2. **两级匹配（M2 T1）**：§5.4 词表交叉判定的匹配机制在实现期收紧为两级——ASCII marker 走 `\b<marker>(?:s|es|ren)?\b` 词边界（y 结尾词复数形入 PLURAL_VARIANTS）+ CJK substring（`safety/boundaries.ts` 头注与 `tests/pe-framework/safety/boundaries.test.ts` M2 T1 留痕），消 `kid` 词边界误中 artist `kidmo` 类假阳性；spec 原文只定义词表与交叉判定，未约定匹配机制。
 3. **cg_3d 迁移行标法**：§4.4 迁移表「cg_3d（2）｜ game_cg + nb15, nb19」括注 (2) 与所列条目不符——实为 **3 条**（game_cg + nb15 + nb19）；类别总账行「cg_3d 6」（3 迁移 + 3 新增）与库内实测一致，以总账为准。
 4. **NSFW 10 条**：§4.4「NSFW 新增 10 条（sensitive 6 + explicit 4）」正确（库内实测 sensitive 6 / explicit 4，glamour_intimate 10）；§12 M2 里程碑行「含 NSFW 11 条」为笔误，以 **10 条**为准。
+
+### M5 补录（2026-09-13，蓝图形态迁移 D4）：§7 P2 enrich persona 的存活面收窄
+
+§7 P2（`enrich/personas.ts` buildEnrichPersona(anima)：+【内容分级】块、+【推荐先验】块）默认承载于 anima 路径的 runEnrich 七维 brief 扩写。M5 D4 取舍（`docs/specs/2026-09-13-blueprint-form-migration-design.md` §2.4）后，标准 anima 路径已迁移蓝图形态，runEnrich 整块退出默认路径（`enrich` 参数在蓝图形态下忽略，advisory `enrich_ignored_blueprint` 同步适用于默认路径）。**§7 P2 enrich persona 的存活面收敛为三类：h3 目标 / blueprint_id 增量入口 / 未迁移方言（registry form 缺省 `'slots'` 者，含回滚态 `PM_AUTHOR_INTENT_FORM=slots`）**——blueprint_id 路径的扩写由 enrichBlueprint 扩展层承担（蓝图 core 字段结构上覆盖七维 brief），非 §7 P2 brief 层。【内容分级】语义不受影响：声明档位在蓝图路径由 `injectBlueprintCoreRating` 确定性注入 `core.rating`；【推荐先验】在蓝图路径由 enrichBlueprint user 段等价承载（与 runEnrich 同源逐字）。原文留痕不改写，以本条为准。

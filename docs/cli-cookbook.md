@@ -616,6 +616,10 @@ temp/camera-multiview/multiview-1/
 - 预检在**任何 LLM 调用之前**：声明 rating 与内容关键词定档，硬边界违规（未成年/非自愿/兽）直接抛错——0 token。
 - 声明的 rating 确定性注入蓝图（`core.rating`）并透传 enrich/评审；成功 envelope 顶层新增 `rating` / `aesthetics` / `style` 三字段（spec §9）。
 
+### `prompt_author` 默认流（M5 起蓝图形态，2026-09-13）
+
+标准 `target=anima` 默认走蓝图链：intent 子代理产出 BlueprintV1（image 形 + expectedMedia 守卫）→ 确定性 `core.rating` 注入 → art_direction 显式卡注入 → `enrichBlueprint` 美学扩展 → `projectToAnima` 投影 → 编译/审计；七维 brief 扩写（runEnrich）退出默认路径，`enrich` 参数在蓝图形态下被忽略（advisory `enrich_ignored_blueprint`）。运行时回滚开关：环境变量 `PM_AUTHOR_INTENT_FORM=slots` 切回旧 slots 直译路径（无需发版，advisory `intent_form_override` 可观测）。成功出口蓝图落库（fail-open：settings 缺失/写失败仅 advisory `blueprint_save_failed`）；落库成功时 envelope 顶层出现条件键 `blueprint_id`（=generation_id），可直接作为下一次 `prompt_author` 的 `blueprint_id` 输入做增量锚定续链；envelope 另增 `observability.blueprint` 痕迹，anima 默认路径顶层 `enrichment` 字段消失（brief 层退出）。设计稿：`plugins/prompt-master/docs/specs/2026-09-13-blueprint-form-migration-design.md`。
+
 ### `style_list`（M1，spec §9）
 
 ```json

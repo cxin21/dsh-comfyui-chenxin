@@ -51,6 +51,23 @@ export interface DialectLicense {
   territory_restrictions?: string
 }
 
+/**
+ * 方言意图层配置（Task 7 方言化 + M5-T2 D1 形态标志，design §2.1）。
+ * form = 意图形态：'slots'（缺省，槽位/shots 直译）| 'blueprint'（蓝图 v0）。
+ * blueprintPersona/Schema = form='blueprint' 时的子代理 persona/schema（缺省回落
+ * subagent-provider 的 BLUEPRINT_SUBAGENT_SYSTEM / blueprint/analyzer 的 BLUEPRINT_SCHEMA）；
+ * blueprintExpectedMedia = 期望蓝图 media（parse 层守卫，design §2.2 D2）。
+ * 单一读取点 = prompt-author intentBase 构造处（env kill-switch 同点生效）。
+ */
+export interface DialectIntent {
+  persona: string
+  schema: string
+  form?: 'slots' | 'blueprint'
+  blueprintPersona?: string
+  blueprintSchema?: string
+  blueprintExpectedMedia?: 'image' | 'video' | 'mixed'
+}
+
 export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
   id: Target
   label: string
@@ -65,7 +82,7 @@ export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
   audit(compiled: TCompiled, ctx: { stage?: string; references?: Reference[]; shots?: unknown; variant?: string }): { gates: AuditGate[]; assumptions?: string[] }
   budget?(compiled: TCompiled, opts: { stage?: string; references?: Reference[]; depth?: 'quick' | 'director' }): unknown
   targetSlotHint: string
-  intent?: { persona: string; schema: string }
+  intent?: DialectIntent
   /** 方言包声明（spec §9）：capabilities/constraints/aesthetics 为包必需；license 可选 */
   capabilities?: DialectCapabilities
   constraints?: DialectConstraints

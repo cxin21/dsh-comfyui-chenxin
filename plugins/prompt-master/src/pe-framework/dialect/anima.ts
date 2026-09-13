@@ -9,6 +9,9 @@ import { normalizeTag, searchCatalog, overlayStatus, queryCatalogInternal, type 
 import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
+// M5-T2（D1/Q3 裁定）：ANIMA 蓝图 persona/schema 落 blueprint/analyzer.ts（与 BLUEPRINT_* 同居）；
+// analyzer 不回 import dialect → 无环
+import { ANIMA_BLUEPRINT_PERSONA, ANIMA_BLUEPRINT_SCHEMA } from '../blueprint/analyzer.js'
 import { ANIMA_RUBRIC } from '../eval/rubrics/anima.js'
 import type { AuditGate, Rating } from '../types.js'
 import { RATING_ORDER } from '../types.js'
@@ -928,7 +931,17 @@ export function registerAnimaDialect(): void {
     },
     targetSlotHint: 't2i.prompt',
     rubric: ANIMA_RUBRIC,
-    intent: { persona: ANIMA_PERSONA, schema: ANIMA_SCHEMA },
+    // M5-T2（D1，design §2.1）：意图形态 = 蓝图（默认路径蓝图形态迁移）。
+    // 回滚面：本行 form 改 'slots'（revert 单行）或运行时 env PM_AUTHOR_INTENT_FORM=slots（读取点
+    // 覆盖 + advisory，design §2.5 D8 双态）。persona/schema 保留（rollback 时 slots 直译原样可用）。
+    intent: {
+      persona: ANIMA_PERSONA,
+      schema: ANIMA_SCHEMA,
+      form: 'blueprint',
+      blueprintPersona: ANIMA_BLUEPRINT_PERSONA,
+      blueprintSchema: ANIMA_BLUEPRINT_SCHEMA,
+      blueprintExpectedMedia: 'image',
+    },
     // 方言包声明（spec §9，Task 4）：能力/约束/审美（license 无官方资产声明）
     capabilities: {
       native_negative: true,           // anima 有独立 negative 通道

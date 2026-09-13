@@ -86,6 +86,12 @@ export interface BlueprintV1 {
       focal_length?: string     // 焦段（24/35/85mm）
       depth_of_field?: string   // 景深
       camera_angle?: string     // 机位角度
+      // ── M5-T2（D3，design §2.3 投影缺口清点）：anima 主干槽位来源（v1 字段新增，spec §5.3）──
+      // projectToAnima 直映射进既有 AnimaSlots 槽；validateAnimaSlots/ANIMA_SLOT_KEYS 零改动（硬边界）
+      count_gender?: string[]   // 人数锚 tag（["1girl"]/["1girl","1boy"]；用户未暗示多人 → 单人数）
+      pose_action?: string[]    // 动作峰值瞬间的单一画面（核心动作 + 1-2 姿态原子词）
+      expression?: string[]     // 表情（≤2 个具体可感表情词）
+      scene_anchors?: string[]  // 高影响场景锚点（≤3：地点/时段/天气各取最代表，保序）
     }
   }
 }

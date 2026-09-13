@@ -56,6 +56,62 @@ const fightBp: BlueprintV1 = {
   },
 }
 
+/* ── M5-T2（D3）：projectToAnima 主干槽位来源扩展（media_layer.image 增补四字段直映射）── */
+const animaImageBp: BlueprintV1 = {
+  schema_version: 1, media: 'image',
+  core: {
+    concept: '黄昏天台的少女',
+    characters: [{ id: 'c1', name: '少女', appearance_anchors: ['黑色长发'], outfit: '水手服' }],
+    scene: { environment: 'rooftop', lighting: 'golden hour' },
+    style: { palette: 'teal and orange', theme: 'urban' },
+    emotion: 'melancholic',
+    negative: [{ target: 'modern elements', severity: 'soft' }],
+  },
+  media_layer: {
+    image: {
+      count_gender: ['1girl'],
+      pose_action: ['standing', 'looking at viewer'],
+      expression: ['smile'],
+      scene_anchors: ['rooftop', 'sunset', 'wind'],
+      camera_angle: 'cowboy shot',
+    },
+  },
+}
+
+describe('M5-T2 D3: projectToAnima trunk-slot sources', () => {
+  it('count_gender/pose_action/expression 直映射；scene = environment + scene_anchors 保序去重', () => {
+    const s = projectToAnima(animaImageBp)
+    expect(s.count_gender).toEqual(['1girl'])
+    expect(s.pose_action).toEqual(['standing', 'looking at viewer'])
+    expect(s.expression).toEqual(['smile'])
+    // environment 'rooftop' 与 scene_anchors[0] 重复 → 去重保序（首次出现位）
+    expect(s.scene).toEqual(['rooftop', 'sunset', 'wind'])
+    expect(s.appearance).toEqual(['黑色长发'])
+    expect(s.clothing).toEqual(['水手服'])
+    expect(s.camera).toEqual(['cowboy shot'])
+  })
+
+  it('deliberate non-mapping：palette/emotion/aspect_ratio 不产出槽位（design §2.3 P1 留痕）', () => {
+    const s = projectToAnima(animaImageBp)
+    expect(JSON.stringify(s)).not.toContain('teal and orange')
+    expect(JSON.stringify(s)).not.toContain('melancholic')
+    expect('aspect_ratio' in s).toBe(false)
+  })
+
+  it('空 image 层蓝图 → 主干槽缺省不产出（既有语义零变化）', () => {
+    const bare: BlueprintV1 = {
+      schema_version: 1, media: 'image',
+      core: { concept: 'x', negative: [] },
+      media_layer: { image: {} },
+    }
+    const s = projectToAnima(bare)
+    expect('count_gender' in s).toBe(false)
+    expect('pose_action' in s).toBe(false)
+    expect('expression' in s).toBe(false)
+    expect('scene' in s).toBe(false)
+  })
+})
+
 describe('projectToH3', () => {
   it('maps duration to total and preserves 3 shots', () => {
     const s = projectToH3(h3BpSoft)

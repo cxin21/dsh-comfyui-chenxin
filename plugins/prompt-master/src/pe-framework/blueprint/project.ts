@@ -124,6 +124,16 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
   const hard = (bp.core.negative ?? []).find((n) => n.severity === 'hard')
   if (hard) throw new BlueprintHardNegativeError(hard.target)
 
+  // M5-T2（D3，design §2.3）deliberate non-mapping 留痕（防后人当 bug 修）——以下蓝图字段
+  // **有意**不映射进 anima slots：
+  // - core.style.palette / core.emotion：色彩主次与情绪由 narrative 职责表承载（ANIMA 蓝图 persona
+  //   规则 10）；F1 裁定 color 卡走推荐先验通道，否决 palette 确定性写入（P1 non-mapping 字段
+  //   零表面效果 = 假注入）。
+  // - core.scene.time / core.scene.atmosphere / characters.props / characters.distinctive /
+  //   characters.variant：spec §8.2 映射表无此行；时段/氛围经 scene_anchors 与 persona 引导
+  //   进 scene/narrative。
+  // - core.aspect_ratio：不属提示词表面（camera-anima 请求面参数，工作流层处理）。
+  const image = bp.media_layer.image
   const characters = bp.core.characters ?? []
   const appearance = characters.flatMap((c) => c.appearance_anchors)
   const clothing = characters.map((c) => c.outfit).filter((o): o is string => typeof o === 'string' && o.trim().length > 0)
@@ -132,18 +142,27 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
   )
   // B8（外部基准 2026-09）：风格画师候选 → artist 槽（裸名；grounding 命中后升 @形）
   const artist = (bp.core.style?.artist_hints ?? []).filter((a) => typeof a === 'string' && a.trim().length > 0)
-  const scene = bp.core.scene?.environment && bp.core.scene.environment.trim() ? [bp.core.scene.environment] : []
+  // M5-T2（D3）：scene = environment（自然语言）+ scene_anchors（≤3 高影响锚点 tag），保序去重
+  const scene = [...new Set([
+    ...(bp.core.scene?.environment && bp.core.scene.environment.trim() ? [bp.core.scene.environment] : []),
+    ...((image?.scene_anchors ?? []).map((s) => String(s).trim()).filter((s) => s.length > 0)),
+  ])]
+  // M5-T2（D3）：主干槽位来源——count_gender / pose_action / expression 直映射（此前无来源，
+  // 主干槽位塌陷）
+  const countGender = (image?.count_gender ?? []).map((t) => String(t).trim()).filter((t) => t.length > 0)
+  const poseAction = (image?.pose_action ?? []).map((t) => String(t).trim()).filter((t) => t.length > 0)
+  const expression = (image?.expression ?? []).map((t) => String(t).trim()).filter((t) => t.length > 0)
   const detailMood = [
     ...(bp.core.scene?.lighting ? [bp.core.scene.lighting] : []),
-    ...(bp.media_layer.image?.lighting_detail ? [bp.media_layer.image.lighting_detail] : []),
+    ...(image?.lighting_detail ? [image.lighting_detail] : []),
     ...(bp.core.composition ?? []),
     ...(bp.core.style?.base ? [bp.core.style.base] : []),
     ...(bp.core.style?.theme ? [bp.core.style.theme] : []),
   ]
   const camera = [
-    ...(bp.media_layer.image?.focal_length ? [bp.media_layer.image.focal_length] : []),
-    ...(bp.media_layer.image?.depth_of_field ? [bp.media_layer.image.depth_of_field] : []),
-    ...(bp.media_layer.image?.camera_angle ? [bp.media_layer.image.camera_angle] : []),
+    ...(image?.focal_length ? [image.focal_length] : []),
+    ...(image?.depth_of_field ? [image.depth_of_field] : []),
+    ...(image?.camera_angle ? [image.camera_angle] : []),
   ]
   const exclusions = (bp.core.negative ?? [])
     .filter((n) => n.severity === 'soft')
@@ -151,10 +170,13 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
     .filter((t) => t.trim().length > 0)
 
   const slots: AnimaSlots = {
+    ...(countGender.length > 0 ? { count_gender: countGender } : {}),
     ...(appearance.length > 0 ? { appearance } : {}),
     ...(clothing.length > 0 ? { clothing } : {}),
     ...(character.length > 0 ? { character } : {}),
     ...(artist.length > 0 ? { artist } : {}),
+    ...(poseAction.length > 0 ? { pose_action: poseAction } : {}),
+    ...(expression.length > 0 ? { expression } : {}),
     ...(scene.length > 0 ? { scene } : {}),
     ...(detailMood.length > 0 ? { detail_mood: detailMood } : {}),
     ...(camera.length > 0 ? { camera } : {}),

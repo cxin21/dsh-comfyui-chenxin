@@ -53,14 +53,33 @@ const MINI_BP = {
 }
 
 function settingsRepo() {
+  // 修订留痕（M5-HOTFIX）：返回形状迁移——ctx.settings 现在必须是 settings 服务（register 返回
+  // owner scope，值形状 {blueprints: Record<string,string>}）；repoScope = 服务内 store 的
+  // RepoSettingsScope 投影，供测试侧直接 seed/read-back。旧裸 owner-scope 直传形状依赖 Bug B
+  // 断言（生产 = parseSettingsNamespace TypeError 进程死亡），接线修复后不可达。
   const store: Record<string, string> = {}
-  return {
-    settings: {
-      get: () => ({ ...store }),
-      async update(p: Record<string, string>) { Object.assign(store, p) },
-      async replace(s: Record<string, string>) { Object.assign(store, s) },
+  const service = {
+    register(ns: string, _schema: unknown) {
+      return {
+        get: () => ({ blueprints: { ...store } }),
+        watch: () => () => {},
+        update: async (patch: { blueprints?: Record<string, string> }) => { Object.assign(store, patch.blueprints ?? {}) },
+        replace: async (section: { blueprints?: Record<string, string> }) => {
+          for (const k of Object.keys(store)) delete store[k]
+          Object.assign(store, section.blueprints ?? {})
+        },
+      }
     },
+    update: async () => undefined,
+    get: async () => ({ blueprints: { ...store } }),
+    replace: async () => undefined,
   }
+  const repoScope = {
+    get: () => ({ ...store }),
+    update: async (p: Record<string, string>) => { Object.assign(store, p) },
+    replace: async (s: Record<string, string>) => { for (const k of Object.keys(store)) delete store[k]; Object.assign(store, s) },
+  }
+  return { settings: service, repoScope }
 }
 
 // M5-T2（D8 双态 + D1 回滚面）：编码「anima 默认路径 enrich-brief/slots 直译」旧行为的既有用例
@@ -155,8 +174,8 @@ describe('prompt_author orchestration v2 (spec §8 §9)', () => {
   })
 
   it('④ blueprint_id: incremental intent carries <old_blueprint> anchor; core.rating deterministically injected; three envelope fields', async () => {
-    const { settings } = settingsRepo()
-    const repo = createBlueprintRepo({ settings } as never)
+    const { settings, repoScope } = settingsRepo()
+    const repo = createBlueprintRepo({ settings: repoScope } as never)
     repo.save('bp-inc', MINI_BP as never)
     const ctx = stubCtx({ stream: textStream(JSON.stringify(MINI_BP)) })
     ;(ctx as unknown as { settings: unknown }).settings = settings
@@ -245,8 +264,8 @@ describe('M2-T2 declaredRating judge wiring + h3 negative_hints advisory (spec �
   })
 
   it('blueprint path relays style_negative_hints_h3_ignored advisory to envelope advisories; negatives not merged', async () => {
-    const { settings } = settingsRepo()
-    const repo = createBlueprintRepo({ settings } as never)
+    const { settings, repoScope } = settingsRepo()
+    const repo = createBlueprintRepo({ settings: repoScope } as never)
     repo.save('bp-style-h3', MINI_BP as never)
     const ctx = stubCtx({ stream: textStream(JSON.stringify(MINI_BP)) })
     ;(ctx as unknown as { settings: unknown }).settings = settings
@@ -454,8 +473,8 @@ describe('P0-fix t1: declared rating reaches anima assembly on the standard slot
   })
 
   it('anima blueprint path: core.rating injection survives projectToAnima → assembly tier consistent (acceptance ④)', async () => {
-    const { settings } = settingsRepo()
-    const repo = createBlueprintRepo({ settings } as never)
+    const { settings, repoScope } = settingsRepo()
+    const repo = createBlueprintRepo({ settings: repoScope } as never)
     repo.save('bp-anima-rating', MINI_BP as never)
     const ctx = stubCtx({ stream: textStream(JSON.stringify(MINI_BP)) })
     ;(ctx as unknown as { settings: unknown }).settings = settings
@@ -488,9 +507,13 @@ describe('M5-T2: blueprint-form default path (D1/D3/D4/D9)', () => {
   it('D1/D3/D4: registry default routes blueprint form — provider receives blueprintMode/expectedMedia/blueprint persona; envelope carries blueprint trace; enrichment field absent', async () => {
     const seen: AuthorIntentRequest[] = []
     setAuthorIntentProvider(imageBpProvider(seen))
-    const { settings } = settingsRepo()
+    // 修订留痕（M5-HOTFIX）：ctx.settings 形状由裸 owner scope（settingsRepo()）迁移为 settings
+    // 服务（register 返回 scope）——旧形状之所以能落库，正是因为 Bug B 把裸服务断言成
+    // RepoSettingsScope 直调 update(patch)（生产 = parseSettingsNamespace TypeError 进程死亡）。
+    // 接线修复后唯一合法入口 = settings.register('prompt-master-blueprints') owner scope。
+    const { service, store } = settingsServiceSpy()
     const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
-    ;(ctx as unknown as { settings: unknown }).settings = settings
+    ;(ctx as unknown as { settings: unknown }).settings = service
     const def = registerAuthorTool(ctx as never, cfg as never)
     const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })))
     expect(seen).toHaveLength(1)
@@ -512,7 +535,11 @@ describe('M5-T2: blueprint-form default path (D1/D3/D4/D9)', () => {
     expect((v.observability?.traceStages ?? []).some((s: { name: string }) => s.name === 'blueprint_enrich')).toBe(true)
     // D9：settings 存在 → 落库成功 → 条件顶层键 blueprint_id（可回读同一蓝图）
     expect(typeof v.blueprint_id).toBe('string')
-    const repo = createBlueprintRepo({ settings } as never)
+    const repo = createBlueprintRepo({ settings: {
+      get: () => ({ ...store }),
+      update: async (p: Record<string, string>) => { Object.assign(store, p) },
+      replace: async (s: Record<string, string>) => { for (const k of Object.keys(store)) delete store[k]; Object.assign(store, s) },
+    } as never })
     const saved = repo.load(v.blueprint_id as string)
     expect(saved?.media).toBe('image')
     // 落库的是最终蓝图（含 D5b 注入档位——确定性注入先于落库）
@@ -702,5 +729,118 @@ describe('M5-T2 V5/R6: repair-round closure revival (D5a anchor + D5b rating re-
     // 可观测：anchor_rounds=1 + trace 含 blueprint_enrich
     expect(v.observability?.blueprint?.anchor_rounds).toBe(1)
     expect((v.observability?.traceStages ?? []).filter((s: { name: string }) => s.name === 'blueprint_enrich')).toHaveLength(2)
+  })
+})
+
+/* ═══ M5-HOTFIX（P0，真实会话 DSH 进程死亡）：蓝图落库 settings 接线 + save rejection 逃逸 ═══
+ * 缺陷（captain 定罪堆栈：fatal TypeError settings namespace "[object Object]" must match
+ * /^[a-z][a-z0-9-]*$/，栈 = repo.js save → cordis Proxy.update → parseSettingsNamespace）：
+ * ① Bug B（根因）：prompt-author 落库块把裸 ctx.settings（dsh-settings 服务，服务级签名
+ *    update(ns: string, patch, expectedRevision?)）断言成 RepoSettingsScope（owner scope 形状
+ *    update(patch)）→ patch 对象落进 ns 位 → 一调即炸；设计稿 §2.4 D9 与 repo.ts 头注要求的
+ *    「真实 namespace 解包接线」从未实现（V7「生产零调用」真相 = 一调即炸）。
+ * ② Bug A（放大器）：repo.save void 丢弃 promise + 调用方不 await → rejection 无主 →
+ *    Node 默认 unhandledRejection = 进程退出。
+ * 修复契约：settings.register('prompt-master-blueprints', z.dict…) owner scope 惰性接线
+ * （register-or-reuse + 按服务复用，防重复注册）；repo.save 返回 promise，调用方 await 于
+ * try/catch 内——任何 rejection 落 advisory blueprint_save_failed（fail-open 语义真正成立）。
+ */
+function settingsServiceSpy(opts: { rejectUpdate?: boolean } = {}) {
+  const store: Record<string, string> = {}
+  const calls = { register: 0, serviceUpdate: 0, registerNamespaces: [] as string[] }
+  const service = {
+    register(ns: string, _schema: unknown) {
+      calls.register++
+      calls.registerNamespaces.push(ns)
+      return {
+        get: () => ({ blueprints: { ...store } }),
+        watch: () => () => {},
+        update: async (patch: { blueprints?: Record<string, string> }) => {
+          if (opts.rejectUpdate) throw new Error('disk full')
+          Object.assign(store, patch.blueprints ?? {})
+        },
+        replace: async (section: { blueprints?: Record<string, string> }) => {
+          for (const k of Object.keys(store)) delete store[k]
+          Object.assign(store, section.blueprints ?? {})
+        },
+      }
+    },
+    // 真实堆栈形状：服务级 update(ns, patch)——误传裸服务时 patch 对象落进 ns 位（本次 P0 堆栈形状）
+    update: async (_ns: unknown, _patch: unknown) => { calls.serviceUpdate++; return undefined },
+    get: async (_ns: unknown) => ({ blueprints: { ...store } }),
+    replace: async (_ns: unknown, _section: unknown) => undefined,
+  }
+  return { service, calls, store }
+}
+
+async function runBlueprintOnce(service: unknown, input = '黄昏天台的少女'): Promise<Record<string, any>> {
+  delete process.env.PM_AUTHOR_INTENT_FORM // 蓝图形态（默认路径）
+  setAuthorIntentProvider(async () => ({ blueprint: JSON.parse(JSON.stringify(MINI_IMAGE_BP)), missing: [] }) as never)
+  setAuthorEnrichProvider(async () => validBriefJson()) // 蓝图形态不消费；slots 形态用
+  const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+  ;(ctx as unknown as { settings: unknown }).settings = service
+  const def = registerAuthorTool(ctx as never, cfg as never)
+  return JSON.parse(String(await runTool(ctx, def, { target: 'anima', input, judge_mode: 'off' })))
+}
+
+describe('M5-HOTFIX: blueprint settings wiring + save rejection containment', () => {
+  beforeEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
+  afterEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
+
+  it('① scope.update rejection → advisory blueprint_save_failed + 无 blueprint_id + ok 仍 true + 无未处理 rejection 逃逸', async () => {
+    const { service } = settingsServiceSpy({ rejectUpdate: true })
+    const rejections: unknown[] = []
+    const onUnhandled = (r: unknown) => { rejections.push(r) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const v = await runBlueprintOnce(service)
+      expect(v.ok).toBe(true) // fail-open：落库故障不阻塞出稿
+      expect(v.advisories).toContain('blueprint_save_failed')
+      expect(v.blueprint_id).toBeUndefined()
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(rejections).toEqual([]) // 杜绝浮空 rejection（本次进程死亡根因）
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('② 同一 settings 服务重复出稿 → register 恰一次（惰性注册 + 复用，防重复注册）', async () => {
+    const { service, calls } = settingsServiceSpy()
+    await runBlueprintOnce(service)
+    await runBlueprintOnce(service)
+    expect(calls.register).toBe(1)
+    expect(calls.registerNamespaces).toEqual(['prompt-master-blueprints'])
+  })
+
+  it('③ 落库真实可达：envelope.blueprint_id → 同服务 store 存蓝图 JSON（media image；save→load 往返）', async () => {
+    const { service, store } = settingsServiceSpy()
+    const v = await runBlueprintOnce(service)
+    expect(typeof v.blueprint_id).toBe('string')
+    const saved = JSON.parse(store[v.blueprint_id as string])
+    expect(saved.media).toBe('image')
+    expect(saved.core.concept).toContain('黄昏天台')
+    const repo = createBlueprintRepo({ settings: {
+      get: () => ({ ...store }),
+      update: async (p: Record<string, string>) => { Object.assign(store, p) },
+      replace: async (s: Record<string, string>) => { for (const k of Object.keys(store)) delete store[k]; Object.assign(store, s) },
+    } as never })
+    expect(repo.load(v.blueprint_id as string)?.media).toBe('image') // 生产接线产物可被 repo 读回
+  })
+
+  it('④ 真实堆栈反例：服务级 update(ns,patch) 通道零直调（接线必须走 register owner scope，ns 合法）', async () => {
+    const { service, calls } = settingsServiceSpy()
+    const v = await runBlueprintOnce(service)
+    expect(calls.serviceUpdate).toBe(0) // 误传裸服务（update 直吃 patch）= 本次 P0 堆栈形状，必须绝迹
+    expect(typeof v.blueprint_id).toBe('string')
+    expect(calls.registerNamespaces[0]).toMatch(/^[a-z][a-z0-9-]*$/)
+  })
+
+  it('⑤ settings 服务缺 register（异常形状）→ 运行期可检：fail-open advisory + 不炸进程', async () => {
+    const bareScope = { get: () => ({}), update: async () => undefined, replace: async () => undefined } // 无 register
+    const v = await runBlueprintOnce(bareScope)
+    expect(v.ok).toBe(true)
+    expect(v.advisories).toContain('blueprint_save_failed')
+    expect(v.blueprint_id).toBeUndefined()
   })
 })

@@ -95,14 +95,34 @@ function jaccard(oldTags: string[] | undefined, newTags: string[] | undefined, a
 }
 
 function settingsRepo() {
+  // 修订留痕（M5-HOTFIX）：ctx.settings 形状由裸 owner scope 迁移为 settings 服务（register 返回
+  // owner scope，blueprints 段嵌套）——落库接线修复后（settings.register('prompt-master-blueprints')
+  // 惰性注册），旧 owner-scope 直传形状已不可达（会落 blueprint_save_failed advisory 且不落库），
+  // 本套件 F2 与清单⑤随迁。repoScope = 服务内 store 的 RepoSettingsScope 投影，供断言侧读回。
   const store: Record<string, string> = {}
-  return {
-    settings: {
-      get: () => ({ ...store }),
-      async update(p: Record<string, string>) { Object.assign(store, p) },
-      async replace(s: Record<string, string>) { Object.assign(store, s) },
+  const service = {
+    register(ns: string, _schema: unknown) {
+      if (ns !== 'prompt-master-blueprints') throw new Error(`unexpected settings namespace: ${ns}`)
+      return {
+        get: () => ({ blueprints: { ...store } }),
+        watch: () => () => {},
+        update: async (patch: { blueprints?: Record<string, string> }) => { Object.assign(store, patch.blueprints ?? {}) },
+        replace: async (section: { blueprints?: Record<string, string> }) => {
+          for (const k of Object.keys(store)) delete store[k]
+          Object.assign(store, section.blueprints ?? {})
+        },
+      }
     },
+    update: async () => undefined,
+    get: async () => ({ blueprints: { ...store } }),
+    replace: async () => undefined,
   }
+  const repoScope = {
+    get: () => ({ ...store }),
+    update: async (p: Record<string, string>) => { Object.assign(store, p) },
+    replace: async (s: Record<string, string>) => { for (const k of Object.keys(store)) delete store[k]; Object.assign(store, s) },
+  }
+  return { settings: service, repoScope }
 }
 
 interface CaseRun { v: Record<string, any>; intentCalls: AuthorIntentRequest[] }
@@ -236,14 +256,14 @@ describe('golden L3: envelope skeleton + F2 blueprint_id conditional key', () =>
 
   it('F2 (design §5): settings → repo.save 成功 → 条件顶层键 blueprint_id 仅出现在新路径且可回读（旧路径恒无）', async () => {
     const c = CASES.find((x) => x.id === 'c01')!
-    const { settings } = settingsRepo()
+    const { settings, repoScope } = settingsRepo()
     const [oldRun, newRun] = await Promise.all([
       runCase(c, 'slots', { settings }),
       runCase(c, 'blueprint', { settings }),
     ])
     expect(oldRun.v.blueprint_id).toBeUndefined()
     expect(typeof newRun.v.blueprint_id).toBe('string')
-    const repo = createBlueprintRepo({ settings } as never)
+    const repo = createBlueprintRepo({ settings: repoScope } as never)
     const saved = repo.load(newRun.v.blueprint_id as string)
     expect(saved?.media).toBe('image')
     // 落库键 = generation_id（Q2）：与 envelope.generation_id 同值
@@ -285,14 +305,14 @@ describe('replay item 5: blueprint_id chain (save → increment → anchored rep
 
   it('blueprint_id 链：落库 → 增量（provider 收蓝图形态路由）→ judge needs → 修复轮收 anchorBlueprint（= 落库蓝图）→ 闭环推进 → 二次落库', async () => {
     const c = CASES.find((x) => x.id === 'c01')!
-    const { settings } = settingsRepo()
+    const { settings, repoScope } = settingsRepo()
     // 第一程：默认路径 + settings → blueprint_id
     const run1 = await runCase(c, 'blueprint', { settings })
     const id = run1.v.blueprint_id as string
     expect(typeof id).toBe('string')
     // 第二程：blueprint_id 增量入口 + judge fast（NEEDS→PASS）→ 修复轮锚定。
     // 增量分析走 analyzeBlueprintIncremental（ctx stream），provider seam 仅在修复轮被调。
-    const repo = createBlueprintRepo({ settings } as never)
+    const repo = createBlueprintRepo({ settings: repoScope } as never)
     const savedBp = repo.load(id)
     expect(savedBp).toBeDefined()
     const critic = (() => {

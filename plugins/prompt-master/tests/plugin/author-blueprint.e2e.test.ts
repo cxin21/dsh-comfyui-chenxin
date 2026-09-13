@@ -28,16 +28,35 @@ describe('prompt_author blueprint pipeline', () => {
   })
 })
 
-// 预存蓝图到 repo（stub settings 作为 repo 后端），再传 blueprint_id 走增量路径
+// 预存蓝图到 repo（stub settings 作为 repo 后端），再传 blueprint_id 走增量路径。
+// 修订留痕（M5-HOTFIX）：返回形状迁移——ctx.settings 现在必须是 settings 服务（register 返回
+// owner scope，值形状 {blueprints: Record<string,string>}），repoScope 供测试侧直接 seed。
+// 旧裸 owner-scope 直传形状依赖 Bug B 断言（生产 = parseSettingsNamespace TypeError），接线
+// 修复后不可达；本文件 3 个 blueprint_id 用例随迁（断言语义不变）。
 function settingsRepo() {
   const store: Record<string, string> = {}
-  return {
-    settings: {
-      get: () => ({ ...store }),
-      async update(p: Record<string, string>) { Object.assign(store, p) },
-      async replace(s: Record<string, string>) { Object.assign(store, s) },
+  const service = {
+    register(ns: string, _schema: unknown) {
+      return {
+        get: () => ({ blueprints: { ...store } }),
+        watch: () => () => {},
+        update: async (patch: { blueprints?: Record<string, string> }) => { Object.assign(store, patch.blueprints ?? {}) },
+        replace: async (section: { blueprints?: Record<string, string> }) => {
+          for (const k of Object.keys(store)) delete store[k]
+          Object.assign(store, section.blueprints ?? {})
+        },
+      }
     },
+    update: async () => undefined,
+    get: async () => ({ blueprints: { ...store } }),
+    replace: async () => undefined,
   }
+  const repoScope = {
+    get: () => ({ ...store }),
+    update: async (p: Record<string, string>) => { Object.assign(store, p) },
+    replace: async (s: Record<string, string>) => { for (const k of Object.keys(store)) delete store[k]; Object.assign(store, s) },
+  }
+  return { settings: service, repoScope }
 }
 
 // Task 14：blueprint_id 路径改走 <old_blueprint> 锚定的增量意图分析——stub stream 文本需为
@@ -51,8 +70,8 @@ const BP_JSON = JSON.stringify({
 
 describe('prompt_author blueprint_id incremental path', () => {
   it('reload by blueprint_id skips analyzeIntent (provider not called)', async () => {
-    const { settings } = settingsRepo()
-    const repo = createBlueprintRepo({ settings } as any)
+    const { settings, repoScope } = settingsRepo()
+    const repo = createBlueprintRepo({ settings: repoScope } as any)
     repo.save('fight-15s', {
       schema_version: 1, media: 'video',
       core: { concept: '三镜头打斗CG', aspect_ratio: '9:16', negative: [] },
@@ -101,8 +120,8 @@ describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁)', () => {
 // 显式 enrich=true 时必须补 advisory 消除静默忽略；不传 enrich（缺省忽略）不打扰
 describe('prompt_author blueprint_id enrich advisory (Round7 T6)', () => {
   function savedRepo() {
-    const { settings } = settingsRepo()
-    const repo = createBlueprintRepo({ settings } as any)
+    const { settings, repoScope } = settingsRepo()
+    const repo = createBlueprintRepo({ settings: repoScope } as any)
     repo.save('bp-enrich-check', {
       schema_version: 1, media: 'video',
       core: { concept: '三镜头打斗CG', aspect_ratio: '9:16', negative: [] },

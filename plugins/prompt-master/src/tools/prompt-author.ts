@@ -18,6 +18,11 @@ import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blu
 import { projectToH3, projectToAnima, preflightRepair } from '../pe-framework/blueprint/project.js'
 import { enrichBlueprint } from '../pe-framework/enrichment/engine.js'
 import type { BlueprintV1 } from '../pe-framework/blueprint/schema.js'
+// M5-HOTFIX（P0）：蓝图落库真实 settings 接线——register-or-reuse owner scope（与 plugin/index.ts
+// custom-profiles 同款成熟模式），替代对裸 ctx.settings 的危险类型断言（本次 DSH 进程死亡根因）
+import z from '@deepseek-ai/schemastery'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js'
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js'
 import type { Config } from '../plugin/config.js'
@@ -753,6 +758,66 @@ function styleSummaryOf(styleId: string | undefined, bp: BlueprintV1 | undefined
   }
 }
 
+/* ═══ M5-HOTFIX（P0）：蓝图落库真实 settings 接线 ═══
+ * 缺陷史（DSH 进程死亡，堆栈 = repo.js save → cordis Proxy.update → parseSettingsNamespace
+ * "[object Object]"）：落库块曾把裸 ctx.settings（dsh-settings 服务，服务级签名
+ * update(ns: string, patch, expectedRevision?)）类型断言成 RepoSettingsScope（owner scope 形状
+ * update(patch)）→ patch 对象落进 ns 位 → parseSettingsNamespace TypeError 一调即炸；叠加
+ * repo.save void 丢弃 promise + 调用方不 await → rejection 无主 → unhandledRejection 杀进程。
+ * 修复：owner scope 只能来自 settings.register(ns, schema) 的返回值（register 校验 ns 合法性
+ * ^[a-z][a-z0-9-]*$ 并持有 schema 判定权）——本插件内已有成熟先例（plugin/index.ts custom-profiles
+ * 的 registerOrReuseNamespace + z.dict 模式）。此处同款接线：
+ *   - namespace 'prompt-master-blueprints'（合法 ^[a-z][a-z0-9-]*$）；
+ *   - schema z.object({ blueprints: z.dict(z.string(), z.string()).default({}) })——schemastery
+ *     纪律「无 default 即 optional-by-default」（storage-v2 注），根用 z.object 与两个既有
+ *     namespace 形状一致；
+ *   - 惰性注册：首次落库才 register；按 settings 服务对象 WeakMap 缓存复用（同进程重复出稿
+ *     零二次注册）——registerOrReuseNamespace 再兜一层 "already registered" 复用（同进程
+ *     重复 mount 场景），双层防重复注册；
+ *   - owner scope ↔ RepoSettingsScope 适配：读写收敛在 blueprints 段（读 `?.blueprints ?? {}`、
+ *     写 read-merge-write 整段——与 overrides 层 set() 同款语义，不依赖 dict patch 合并细节）；
+ *     RepoSettingsScope 契约本身不变（repo.ts 对 scope 形状零假设增量）。
+ * 失败语义（fail-open）：settings 缺失 → undefined 静默跳过（D9 原语义）；服务在场但缺
+ * register（异常形状/误传 owner scope 假扮服务——运行期可检反例）或 register 抛非 already
+ * registered 错 → undefined，由调用方落 advisory blueprint_save_failed，绝不阻塞出稿。
+ */
+const BLUEPRINT_SETTINGS_NS = 'prompt-master-blueprints'
+const blueprintScopeCache = new WeakMap<object, RepoSettingsScope | undefined>()
+
+function blueprintSettingsScope(ctx: Context): RepoSettingsScope | undefined {
+  const service = (ctx as unknown as { settings?: unknown }).settings
+  if (!service || typeof service !== 'object' || typeof (service as { register?: unknown }).register !== 'function') {
+    // 无 settings → undefined（D9 静默跳过）；有 settings 但缺 register（异常形状/误传 owner
+    // scope 假扮服务）→ 同样 undefined，由调用方落 advisory（运行期可检，不炸进程）
+    return undefined
+  }
+  if (blueprintScopeCache.has(service)) return blueprintScopeCache.get(service)
+  let scope: RepoSettingsScope | undefined
+  try {
+    const owner = registerOrReuseNamespace<{ blueprints: Record<string, string> }>(
+      ctx,
+      settingsNamespace(BLUEPRINT_SETTINGS_NS),
+      z.object({ blueprints: z.dict(z.string(), z.string()).default({}) }),
+    )
+    const read = (): Record<string, string> =>
+      (owner.get() as unknown as { blueprints?: Record<string, string> } | undefined)?.blueprints ?? {}
+    scope = {
+      get: () => read(),
+      update: async (patch) => {
+        const next = { ...read(), ...patch }
+        await owner.update({ blueprints: next })
+      },
+      replace: async (section) => {
+        await owner.replace({ blueprints: section })
+      },
+    }
+  } catch {
+    scope = undefined // 注册失败 → 不可接线 → fail-open（调用方 advisory）
+  }
+  blueprintScopeCache.set(service, scope)
+  return scope
+}
+
 export function registerAuthorTool(ctx: Context, config: Config) {
   return defineTool({
     name: 'prompt_author',
@@ -967,9 +1032,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       let draft: AuthorDraft
       let blueprintRepairRetried = false // M5-T2（D5c）：validate 失败单次反馈重试是否发生（计 1 次 correction）
       if (a.blueprint_id) {
-        const settings = (ctx as unknown as { settings?: RepoSettingsScope }).settings
-        if (!settings) throw new Error('blueprint_id 需要 repo 后端（ctx.settings 不可用）')
-        const repo = createBlueprintRepo({ settings })
+        // M5-HOTFIX（P0）：增量入口与落库同源接线——blueprintSettingsScope（register owner scope），
+        // 废除裸 ctx.settings 的 RepoSettingsScope 断言（同款 Bug B：服务级 get(ns)/update(ns,patch)
+        // 形状被当 owner scope 用，load 恒拿不到表 → blueprint_id 入口在生产一调即报「blueprint 不存在」）。
+        // settings 缺失/不可接线 → 显式报错（fail-closed：增量入口无锚定即无意义，错误文案可机检）。
+        const repoScope = blueprintSettingsScope(ctx)
+        if (!repoScope) throw new Error('blueprint_id 需要 repo 后端（ctx.settings 缺失或不可注册 blueprints namespace）')
+        const repo = createBlueprintRepo({ settings: repoScope })
         const oldBp = repo.load(a.blueprint_id)
         if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
         draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input) }
@@ -1101,12 +1170,22 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         // M5-T2（D9，design §2.4）：蓝图落库（fail-open）——blueprint_id 增量入口从此有料（V7 验尸：
         // 此前 repo.save 生产零调用）；落库键 = generation_id（Q2 裁定）。settings 缺失 → 静默跳过；
         // 写失败 → advisory blueprint_save_failed，均不阻塞出稿。
+        // M5-HOTFIX（P0）：接线改 blueprintSettingsScope（settings.register owner scope 惰性注册 +
+        // 按服务复用），废除裸 ctx.settings 的 RepoSettingsScope 断言（patch 落 ns 位 →
+        // parseSettingsNamespace TypeError = 本次 DSH 进程死亡根因）；save 返回 promise 且此处
+        // await 于 try/catch 内——任何 rejection（含 scope.update 磁盘故障）落 advisory
+        // blueprint_save_failed，杜绝浮空 rejection（unhandledRejection 杀进程根因②）。
         let savedBlueprintId: string | undefined
         try {
-          const repoSettings = (ctx as unknown as { settings?: RepoSettingsScope }).settings
-          if (repoSettings) {
-            createBlueprintRepo({ settings: repoSettings }).save(generationId, bp)
+          const settingsPresent = (ctx as unknown as { settings?: unknown }).settings !== undefined
+          const repoScope = blueprintSettingsScope(ctx)
+          if (repoScope) {
+            await createBlueprintRepo({ settings: repoScope }).save(generationId, bp)
             savedBlueprintId = generationId
+          } else if (settingsPresent) {
+            // 服务在场但不可接线（缺 register / 注册失败）→ 可观测 fail-open（运行期可检反例：
+            // 误传裸服务或 owner-scope 形状对象都会落到这条 advisory，而非静默假成功或崩溃）
+            trailAdvisories.push('blueprint_save_failed')
           }
         } catch {
           trailAdvisories.push('blueprint_save_failed')

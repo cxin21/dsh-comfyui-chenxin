@@ -34,4 +34,26 @@ describe('blueprint repo', () => {
     expect(after.core.aspect_ratio).toBe('9:16')
     expect(after.media_layer.video!.shots).toHaveLength(2)
   })
+
+  // ── M5-HOTFIX（P0）：save 异步面统一——rejection 必须经返回的 promise 透传，绝不浮空 ──
+  it('save 透传 scope.update rejection（返回 promise，调用方可 await）', async () => {
+    const repo = createBlueprintRepo({
+      settings: { get: () => ({}), update: async () => { throw new Error('disk full') }, replace: async () => {} },
+    } as any)
+    const bp = { schema_version: 1, media: 'image', core: { concept: 'x', negative: [] } }
+    await expect(repo.save('b1', bp as any)).rejects.toThrow('disk full')
+  })
+  it('save 把同步 throw 也转为 rejected promise（异步面统一，无同步逃逸）', async () => {
+    const repo = createBlueprintRepo({
+      settings: { get: () => ({}), update: () => { throw new Error('sync boom') }, replace: async () => {} },
+    } as any)
+    const bp = { schema_version: 1, media: 'image', core: { concept: 'x', negative: [] } }
+    await expect(repo.save('b1', bp as any)).rejects.toThrow('sync boom')
+  })
+  it('await save 后落库可读（Promise 语义往返）', async () => {
+    const repo = createBlueprintRepo({ settings: stubSettings() } as any)
+    const bp = { schema_version: 1, media: 'image', core: { concept: 'y', negative: [] } }
+    await repo.save('b2', bp as any)
+    expect(repo.load('b2')?.core.concept).toBe('y')
+  })
 })

@@ -7,10 +7,14 @@
  * （无则用 opts.missing 生成占位记录）；patch 应用失败 → 回退 v0 + expansions:['enrichment_failed:fallback_to_v0']（不抛错）；
  * v1 产出后必须过质量自检（spec §7.1 确定性项：checkConcreteness 可感知名词比例+禁词、checkFieldCompleteness 字段完整度、
  * checkFidelity 保真）——任一失败追加 advisory 进 expansions 但不阻断。
+ * M5-T3 三件事：①D6/R7 core.rating 信任边界——patch 应用前 strip（LLM 产物不可信于确定性注入的安全数据，
+ * spec §5.1 偏差记录），覆写企图 advisory enrich_rating_overwrite_blocked；
+ * ②V8 persona media 分支——video shot 五维密度规则仅 video/mixed，image 换画面密度纪律；
+ * ③D7 recommendations 推荐先验通道——user 段【推荐先验】块（与 enrich/engine.ts buildUser 同源逐字，LLM 仍终决）。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../../llm/complete.js'
-import type { BlueprintV1 } from '../blueprint/schema.js'
+import type { BlueprintMedia, BlueprintV1 } from '../blueprint/schema.js'
 import { applyStyle } from './style.js'
 import { getStylePreset } from '../styles/registry.js'
 import { checkConcreteness, checkFidelity, checkShotDensity } from '../aesthetics/check.js'
@@ -25,6 +29,10 @@ export interface EnrichOptions {
   styleId?: string
   conformity?: number
   missing?: string[]
+  /** M5-T3（D7 推荐先验通道）：T10 推荐器输出（recommendArtDirection）→ user 段【推荐先验】块。
+   *  文案与 enrich/engine.ts buildUser（spec §7 P2/§6.2）同源逐字，改动必须两处同步；LLM 仍做最终设计决策。
+   *  消费方：M5-T2 编排接线（prompt-author 推荐卡透传）。 */
+  recommendations?: Array<{ field: string; cardId: string; reason: string }>
 }
 
 export interface EnrichResult {
@@ -65,23 +73,75 @@ function applyAdditions(target: Record<string, unknown>, additions: Record<strin
   }
 }
 
+/** M5-T3（D6/R7）：core.rating 覆写企图 advisory token（契约原文，勿改——T2/T4 断言面） */
+const RATING_OVERWRITE_ADVISORY = 'enrich_rating_overwrite_blocked'
+
+/**
+ * M5-T3（D6/R7）core.rating 信任边界：patch 应用前 strip 会写入 core.rating 的路径。
+ * core.rating 是确定性注入的安全数据（spec §5.1 偏差记录：LLM 产物不可信于安全数据，声明档位由注入方独占）。
+ *
+ * 覆盖形态（写入面 = deepMerge(set 通道，含裸部分蓝图形态——normalize 后即 set) 与 applyAdditions
+ * (additions 通道) 两条应用通道；patch 契约无独立 unset 通道，若未来新增应用通道必须同样先过本 strip）：
+ * ① patch.core 为对象 → 仅删除其 rating 键（其余键保留，良性 core 扩写不受影响）——即 set.core.rating 嵌套全形态；
+ * ② patch.core 存在但非对象（标量/数组）→ 任何应用语义都会整体顶掉 core 节点（连带 rating）→ 整键删除；
+ * ③ additions 通道（wholeCore=true）对 core 整体不信任：additions 语义是数组追加/标量覆盖，对 core
+ *    （rating 载体节点）的任何写入都按覆写企图整键阻断——additions 对象分支现状把 deepMerge 的 void
+ *    返回值赋给键，additions.core 对象写入实际会摧毁整个 core 节点（连带 rating），故 strip 只删 rating 键
+ *    并不足以保住 rating，必须整键阻断（见 applyAdditions L60-62；该缺陷影响面超出 rating，不在本任务
+ *    三件事内，已单独报 captain）。
+ *
+ * strip 面论证（acceptance：rating 必挡；是否扩面给结论留痕）：strip 面收敛为 core.rating 一项，
+ * 不扩到其他 core 字段——concept/scene/style/emotion/composition/negative/narrative/characters/aspect_ratio
+ * 是扩展层的目标业务字段，strip 它们等于废掉扩展层；后续若有新的确定性注入字段，在本函数白名单式显式追加，
+ * 不做模糊匹配。
+ *
+ * @returns 是否发生 strip（true = 覆写企图成立，调用方补 advisory enrich_rating_overwrite_blocked）
+ */
+function stripCoreRatingFromPatch(patch: Record<string, unknown>, opts: { wholeCore?: boolean } = {}): boolean {
+  const core = patch['core']
+  if (core == null) return false
+  if (isPlainObject(core) && !opts.wholeCore) {
+    if ('rating' in core) {
+      delete core['rating']
+      return true
+    }
+    return false
+  }
+  delete patch['core']
+  return true
+}
+
 function stripFences(text: string): string {
   return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 }
 
-function buildExpansionPersona(): string {
+/** M5-T3（V8）：video shot 五维密度规则——video/mixed 保持原文逐字不动（mixed 可能含 video.shots，checkShotDensity video 分支同样适用） */
+const VIDEO_SHOT_DENSITY_RULES = [
+  '3. 镜头细节密度（硬性）：每个 video shot 的 action 必须完整覆盖 5 个维度，缺一不可——',
+  '   ① 主体（谁/什么在动，具体名词，≥8 字）',
+  '   ② 环境（场景/空间，具体名词，≥8 字）',
+  '   ③ 光影（时间/光源/明暗，具体名词，≥6 字）',
+  '   ④ 运镜（景别/机位/镜头运动，从候选词库选，或填 shot_size/camera）',
+  '   ⑤ 情绪（氛围/气氛，具体可感，≥4 字）',
+  '   禁止一句话带过（如「两名女剑客持剑对峙」缺环境/光影/情绪即不合格）；用「，」连接各维度描述。',
+]
+
+/**
+ * M5-T3（V8）：image 蓝图的画面密度纪律——与设计稿 §2.2 ANIMA 蓝图 persona discipline 同源
+ * （景别 discipline/角色锚点 discipline/场景锚点语义），防 video 五维规则对 image 蓝图空转
+ * 甚至诱导 LLM 给 image 蓝图编造 video.shots。
+ */
+const IMAGE_DETAIL_DENSITY_RULES = [
+  '3. 画面细节密度（硬性，image）：media_layer.image.pose_action 写动作峰值瞬间的单一画面（主体+动作，具体名词，≥8 字）；expression ≤2 个具体可感表情词；scene_anchors ≤3 个高影响场景锚点（保序）；camera_angle 只允许 anima 景别词（full body / cowboy shot / upper body / close-up）+ 至多 1 个视角词；focal_length/depth_of_field 不确定规范写法时留空（camera 是结构槽，脏词会全文穿透）；光源物件/曝光/空间纵深/色彩主次写进 core.scene.lighting 与 core.narrative。',
+]
+
+function buildExpansionPersona(media: BlueprintMedia): string {
   return [
     '你是一个创作蓝图美学扩展引擎（spec §7.1）。',
     '规则：',
     '1. 具体名词化：把空泛形容词改写为可感知名词短语（如「电影感」→「IMAX 胶片机 + Panavision C 系 35mm f4」）。',
     '2. 禁空泛词：输出不得含 cinematic/beautiful/amazing/stunning/epic/大气/高级/电影感 等空泛词。',
-    '3. 镜头细节密度（硬性）：每个 video shot 的 action 必须完整覆盖 5 个维度，缺一不可——',
-    '   ① 主体（谁/什么在动，具体名词，≥8 字）',
-    '   ② 环境（场景/空间，具体名词，≥8 字）',
-    '   ③ 光影（时间/光源/明暗，具体名词，≥6 字）',
-    '   ④ 运镜（景别/机位/镜头运动，从候选词库选，或填 shot_size/camera）',
-    '   ⑤ 情绪（氛围/气氛，具体可感，≥4 字）',
-    '   禁止一句话带过（如「两名女剑客持剑对峙」缺环境/光影/情绪即不合格）；用「，」连接各维度描述。',
+    ...(media === 'image' ? IMAGE_DETAIL_DENSITY_RULES : VIDEO_SHOT_DENSITY_RULES),
     '4. 负向推断：从用户语境推断合理负向（如「无现代元素」）→ negative[]（severity: soft）。',
     '5. 角色卡锚点补全：同一角色跨镜头时补齐 appearance_anchors（可见/可生成/可比较）。',
     '6. 保留事实：用户原词必须保留在 v1 的某字段（保真守卫），不编造情节。',
@@ -119,11 +179,21 @@ export async function enrichBlueprint(
   v0: BlueprintV1,
   opts: EnrichOptions = {},
 ): Promise<EnrichResult> {
+  const recs = opts.recommendations ?? []
   const user = [
     'v0 蓝图：',
     JSON.stringify(v0),
     ...(opts.styleId ? [`用户风格: ${opts.styleId}（conformity=${opts.conformity ?? 0.6}）`] : []),
     ...(opts.missing && opts.missing.length > 0 ? [`缺失维度: ${opts.missing.join(', ')}`] : []),
+    // M5-T3（D7 推荐先验通道）：推荐器输出注入——与 enrich/engine.ts buildUser（spec §7 P2/§6.2）
+    // 同源逐字（空行 + 头行 + 条目行），文案改动必须两处同步；LLM 仍做最终设计决策。
+    ...(recs.length > 0
+      ? [
+          '',
+          '【推荐先验】艺术指导推荐器建议（你仍做最终设计决策，每类至多 1 张）：',
+          ...recs.map((r) => `- ${r.field}: ${r.cardId}（${r.reason}）`),
+        ]
+      : []),
   ].join('\n')
 
   let raw: string
@@ -132,7 +202,7 @@ export async function enrichBlueprint(
     const res = await complete(ctx, {
       provider: route.provider,
       model: route.model,
-      system: buildExpansionPersona(),
+      system: buildExpansionPersona(v0.media),
       user,
       maxTokens: 1024,
       temperature: 0.4,
@@ -158,6 +228,13 @@ export async function enrichBlueprint(
     const v1 = structuredClone(v0) as BlueprintV1
     // patch 形状：{set, additions, expansions}；兼容裸部分蓝图（整个对象视为 set）
     const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed
+    // M5-T3（D6/R7）：core.rating 信任边界——patch 应用前 strip（set 含裸形态 + additions 两通道全覆盖）。
+    // 两条通道都要实际执行 strip（不可短路），advisory 只出一次。
+    let ratingOverwriteBlocked = stripCoreRatingFromPatch(set)
+    if (isPlainObject(parsed['additions'])) {
+      // additions 通道整键阻断（wholeCore）：只删 rating 键不足以保住 rating（见 stripCoreRatingFromPatch ③）
+      ratingOverwriteBlocked = stripCoreRatingFromPatch(parsed['additions'] as Record<string, unknown>, { wholeCore: true }) || ratingOverwriteBlocked
+    }
     deepMerge(v1 as unknown as Record<string, unknown>, set)
     if (isPlainObject(parsed['additions'])) {
       applyAdditions(v1 as unknown as Record<string, unknown>, parsed['additions'] as Record<string, unknown>)
@@ -194,7 +271,11 @@ export async function enrichBlueprint(
     const fid = checkFidelity(v0.core?.concept ?? '', enriched)
     if (!fid.pass) expansions.push(`fidelity_failed:${fid.missingEntities.join(';')}`)
 
-    return { blueprint: enriched, expansions, ...(styleAdvisories.length > 0 ? { advisories: styleAdvisories } : {}) }
+    // M5-T3（D6/R7）：core.rating 覆写企图 → advisory（与 styleAdvisories 同通道并入 envelope advisories）
+    const advisories = [...styleAdvisories]
+    if (ratingOverwriteBlocked) advisories.push(RATING_OVERWRITE_ADVISORY)
+
+    return { blueprint: enriched, expansions, ...(advisories.length > 0 ? { advisories } : {}) }
   } catch {
     return { blueprint: v0, expansions: ['enrichment_failed:fallback_to_v0'] }
   }

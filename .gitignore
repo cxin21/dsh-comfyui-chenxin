@@ -25,4 +25,9 @@ temp/
 # (tag v0.1.0) and place them back at these paths before use:
 assets/knowledge/anima-prompt-v1/tag-catalog.sqlite
 assets/knowledge/anima-prompt-v1/tags.sqlite
+# tag-vector build artifact + its atomic-write tmp variant (build_tag_vector.py tmp+rename)
+assets/knowledge/anima-prompt-v1/tag-vector.sqlite
+assets/knowledge/anima-prompt-v1/tag-vector.sqlite.tmp
+# HF model cache pinned by anima-vector.ts resolveHfCacheDir (T14-002, ~129MB e5 q8)
+data/runtime/hf-cache/
 assets/knowledge/minimax-h3-prompt/tokenizer.json

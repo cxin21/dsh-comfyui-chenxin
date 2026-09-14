@@ -8,14 +8,14 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
   return defineTool({
     name: 'catalog_search',
     description:
-      'Anima tag-catalog 证据查询（canonical/alias/fuzzy/miss 级联；不自动改写）。返回命中列表与 overlay 状态。',
+      'Anima tag-catalog 证据查询（canonical/alias/fuzzy/semantic/miss 级联；semantic 仅 auto 模式前级全空时末位追加，不自动改写）。返回命中列表与 overlay 状态；semantic 命中携带 score/text_source。',
     parameters: {
       tag: { type: 'string', description: '待查询标签（必填）' },
-      mode: { type: 'string', default: 'auto', description: 'auto（canonical→alias→fuzzy 级联）/ exact（无 fuzzy）' },
+      mode: { type: 'string', default: 'auto', description: 'auto（canonical→alias→fuzzy→semantic 级联）/ exact（无 fuzzy，无 semantic）' },
       limit: { type: 'integer', default: 5, description: '返回命中数上限（1-20）' },
     },
     output: {
-      schema: { type: 'string', description: 'JSON 字符串 {hits[].candidate, advisories?, manifest, overlay}' },
+      schema: { type: 'string', description: 'JSON 字符串 {hits[].candidate, hits[].score?, hits[].text_source?, advisories?, manifest, overlay}' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: { tag?: string; mode?: string; limit?: number }) {
@@ -26,8 +26,15 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
       if (!(limit >= 1 && limit <= 20)) limit = 5
       const hits: CatalogHit[] = await searchCatalog(tag, { mode, limit })
       const status = overlayStatus()
-      // G5：fuzzy 命中仅作候选参考；usage_count 低于采纳阈值时给出 advisory
-      const flagged = hits.map((h) => ({ ...h, candidate: h.match_type === 'fuzzy' }))
+      // G5：fuzzy 命中仅作候选参考；usage_count 低于采纳阈值时给出 advisory。
+      // spec §3.2：semantic 命中的 score/text_source 透传进 result.hits（显式列出契约字段，
+      // 防未来映射重构静默丢字段）；candidate 标记仍只认 fuzzy。
+      const flagged = hits.map((h) => ({
+        ...h,
+        candidate: h.match_type === 'fuzzy',
+        ...(h.score !== undefined ? { score: h.score } : {}),
+        ...(h.text_source !== undefined ? { text_source: h.text_source } : {}),
+      }))
       const advisories = flagged
         .filter((h) => h.match_type === 'fuzzy' && (h.usage_count ?? 0) < 1000)
         .map((h) => `fuzzy_below_threshold: usage_count=${h.usage_count ?? 0} 低于采纳阈值 1000，仅作候选参考`)

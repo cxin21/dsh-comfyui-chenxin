@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { registerCatalogSearchTool } from '../../src/tools/catalog-search.js'
 import { stubCtx, runTool } from './helpers.js'
-import { closeCatalog, setVectorSearch } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { closeCatalog, searchCatalogSync, setVectorSearch } from '../../src/pe-framework/dialect/anima-catalog.js'
 import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
 
 const cfg = { temperature: 0.7 }
@@ -82,6 +82,39 @@ describe('catalog_search', () => {
     const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: '1girl' })))
     expect(raw.manifest).toBeDefined()
     expect(typeof raw.manifest.ok).toBe('boolean')
+  })
+
+  it('semantic passthrough: score/text_source flow into result.hits (spec §3.2)', async () => {
+    // 真实 catalog 必 miss 的 tag + stub 向量层指向真实 record（JOIN 一定成功）
+    const seed = searchCatalogSync('silvery hair', { mode: 'canonical', limit: 1 })[0]
+    if (!seed?.record_id) throw new Error('fixture seed missing: silvery hair')
+    const seedId: string = seed.record_id
+    setVectorSearch(async (q) => (q === 'zzzzzzzzq' ? [{ record_id: seedId, score: 0.82, text_source: 'wiki' as const }] : []))
+    try {
+      const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'zzzzzzzzq' })))
+      expect(raw.hits[0].match_type).toBe('semantic')
+      expect(raw.hits[0].score).toBe(0.82)
+      expect(raw.hits[0].text_source).toBe('wiki')
+      expect(raw.hits[0].prompt_form).toBe('silvery hair')
+      expect(raw.hits[0].candidate).toBe(false) // candidate 标记仍只认 fuzzy
+    } finally {
+      setVectorSearch(null)
+    }
+  })
+
+  it('semantic passthrough: mode values unchanged — exact never reaches semantic level (YAGNI: no semantic mode)', async () => {
+    let semanticQueried = false
+    setVectorSearch(async () => {
+      semanticQueried = true
+      return []
+    })
+    try {
+      const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'zzzzzzzzq', mode: 'exact' })))
+      expect(raw.hits).toEqual([])
+      expect(semanticQueried).toBe(false)
+    } finally {
+      setVectorSearch(null)
+    }
   })
 
   afterAll(() => closeCatalog())

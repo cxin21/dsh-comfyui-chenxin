@@ -36,7 +36,9 @@ async function runStream(ctx: Context, opts: { provider: string; model: string; 
   }
   const text = assembler.blocks()
     .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-    .map((b) => b.text.trim()).join('\n')
+    // M5-DIAG2 续：适配器可能产出 text 块但 text 字段 undefined（流首 delta.content 空场景）——
+    // 防御性空串合并（真实会话 trim 崩溃点，aecb720 后 text 流首次到达时暴露）
+    .map((b) => (b.text ?? '').trim()).join('\n')
   return { text, usage: assembler.usage, finish: assembler.finish }
 }
 

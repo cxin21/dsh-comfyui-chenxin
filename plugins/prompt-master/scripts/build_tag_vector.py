@@ -78,27 +78,40 @@ def fetch_all_wiki_pages():
                 have[p["title"]] = p
     import requests
     s = requests.Session()
+    # CF 反爬实测定案（t5 fix round 1）：requests 默认 UA（python-requests/2.x）是 Cloudflare
+    # challenge 的首要打击目标 → 403 "Just a moment"；browser-like UA 可过。
+    # 代理与凭据由调用方 env 注入（DANBOORU_LOGIN / DANBOORU_API_KEY / HTTPS_PROXY），
+    # 本脚本不硬编码。
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    })
     if os.environ.get("DANBOORU_LOGIN"):
         s.auth = (os.environ["DANBOORU_LOGIN"], os.environ.get("DANBOORU_API_KEY", ""))
+    retryable = {429, 403, 500, 502, 503}  # CF challenge 是瞬态：403 必须与 429 同列可重试
     page, done = 1, False
     new_count = 0
     with CACHE.open("a", encoding="utf-8") as f:
         while not done:
             r = None
+            last_status = None
             for attempt in range(5):
                 try:
                     r = s.get(WIKI_URL, params={"limit": 1000, "page": page}, timeout=30)
-                    if r.status_code == 429:
+                    last_status = r.status_code
+                    if r.status_code in retryable:
                         time.sleep(2 ** attempt)
                         continue
                     r.raise_for_status()
                     break
                 except requests.RequestException as e:
+                    last_status = getattr(getattr(e, "response", None), "status_code", None) or last_status
                     if attempt == 4:
-                        sys.exit(f"wiki fetch failed at page {page}: {e}")
+                        sys.exit(f"wiki fetch failed at page {page} (last status {last_status}): {e}")
                     time.sleep(2 ** attempt)
-            if r is None:
-                sys.exit(f"wiki fetch failed at page {page}")
+            if r is None or (r.status_code in retryable):
+                sys.exit(f"wiki fetch failed at page {page} (last status {last_status})")
             items = r.json()
             if not items:
                 done = True

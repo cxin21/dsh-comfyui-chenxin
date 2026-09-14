@@ -242,10 +242,10 @@ describe('M5-DIAG: enrich direct-channel failure observability', () => {
   const LEGACY = 'enrichment_failed:fallback_to_v0'
   const okPatch = '{"set":{"core":{"concept":"黄昏荒原上的剑客"}},"expansions":[]}'
 
-  it('maxTokens 1400 透传（M5-HOTFIX2 量化回调：纪律目标 ≤1200 字符 ≈ ≤550 tok，1400 ≈ 2.5× 头寸 + 插件先例 analyzer/judge 同值）', async () => {
+  it('maxTokens 缺省不传（M5-DIAG2 用户裁定：不设上限——reasoning 模型思考预算不可预支，宿主 defaultMaxTokens 语义）', async () => {
     const stb = stubCtx({ stream: textStream(okPatch) })
     await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
-    expect(stb.llm.calls[0]?.maxTokens).toBe(1400)
+    expect(stb.llm.calls[0]?.maxTokens).toBeUndefined()
   })
 
   it('error finish → legacy token 首位不变 + reason entry 携带 failure code/message（不再静默吞掉）', async () => {
@@ -300,6 +300,8 @@ describe('M5-DIAG: enrich direct-channel failure observability', () => {
  * 使「完整回显 v0 + 扩写」语义合法，user 段又把完整 JSON.stringify(v0) 递到眼前当模板。
  * 修复 = persona 输出纪律（最小 diff/禁散文/字段白名单/总长上限目标 + 紧凑 few-shot 样板）
  * + maxTokens 4096→1400 量化回调；v0 fallback + reason 透传（M5-DIAG 机制）保持兜底。
+ * M5-DIAG2 续：1400 仍打满且文本头恒空（reasoning 预算吞噬指纹）→ 用户裁定不设上限，
+ * maxTokens 缺省不传（宿主 defaultMaxTokens 语义）；纪律与兜底保留。
  */
 describe('M5-HOTFIX2: expansion output discipline', () => {
   const personaOf = async (media: 'image' | 'video' = 'image'): Promise<string> => {

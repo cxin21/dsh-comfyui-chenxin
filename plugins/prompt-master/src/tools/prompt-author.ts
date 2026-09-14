@@ -178,7 +178,7 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
       model: route.model,
       system: req.persona ?? ANIMA_BLUEPRINT_PERSONA,
       user,
-      maxTokens: 1400,
+      // M5-DIAG2（用户裁定：不设 maxTokens 上限）——reasoning 模型思考预算不可预支，交由宿主 defaultMaxTokens
       temperature: 0.3,
       signal: new AbortController().signal,
     })
@@ -201,7 +201,7 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
     model: route.model,
     system,
     user,
-    maxTokens: 1400,
+    // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
     temperature: 0.3,
     signal: new AbortController().signal,
   })

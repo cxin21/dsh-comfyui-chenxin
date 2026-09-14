@@ -6,7 +6,8 @@ export interface CompleteOptions {
   model: string
   system: string
   user: string
-  maxTokens: number
+  /** M5-DIAG2（用户裁定 2026-09-14）：缺省不设上限——reasoning 模型思考预算不可预支，省略即宿主 defaultMaxTokens 语义 */
+  maxTokens?: number
   temperature?: number
   signal: AbortSignal
 }
@@ -15,7 +16,7 @@ export interface CompleteWithBlocksOptions extends Omit<CompleteOptions, 'user'>
   blocks: ContentBlock[]
 }
 
-async function runStream(ctx: Context, opts: { provider: string; model: string; system?: string; content: ContentBlock[]; maxTokens: number; temperature?: number; signal: AbortSignal }) {
+async function runStream(ctx: Context, opts: { provider: string; model: string; system?: string; content: ContentBlock[]; maxTokens?: number; temperature?: number; signal: AbortSignal }) {
   const assembler = new BlockAssembler()
   const stream = ctx.llm.stream({
     provider: opts.provider,

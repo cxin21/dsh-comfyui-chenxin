@@ -209,7 +209,7 @@ export async function analyzeIntent(
     model: route.model,
     system: BLUEPRINT_PERSONA,
     user,
-    maxTokens: 1400,
+    // M5-DIAG2（用户裁定：不设 maxTokens 上限）——reasoning 模型思考预算不可预支，交由宿主 defaultMaxTokens
     temperature: 0.3,
     signal: new AbortController().signal,
   })
@@ -270,7 +270,7 @@ export async function analyzeBlueprintIncremental(
     model: route.model,
     system: persona,
     user,
-    maxTokens: 1400,
+    // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
     temperature: 0.3,
     signal: new AbortController().signal,
   })

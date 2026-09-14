@@ -17,6 +17,10 @@
  * M5-HOTFIX2（输出失控二波热修）：4096 仍被吃满（38.7s 实测）——persona 增输出纪律（最小 diff/
  * 禁散文/字段白名单/总长上限 ≤1200 字符 + 紧凑 few-shot 样板），maxTokens 量化回调 1400（纪律目标
  * ~550 tok 的 2.5× 头寸，先例 analyzer/judge 同值）；越界兜底 = v0 fallback + reason 可观测不变。
+ * M5-DIAG2（用户裁定 2026-09-14：不设 maxTokens 上限）：1400 仍打满（13.6s）且文本头恒空——
+ * 直连路由跟随会话模型（reasoning 类），思考 token 计入 maxTokens 预算且不产出 text 块，任何上限
+ * 都会在思考期被吃满（1024/4096/1400 三档同指纹）。故插件直连通道全面省略 maxTokens，交由宿主
+ * defaultMaxTokens 语义（主对话同路径正常出内容）；输出纪律保留，兜底机制不变。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { complete } from '../../llm/complete.js'
@@ -231,13 +235,12 @@ export async function enrichBlueprint(
       model: route.model,
       system: buildExpansionPersona(v0.media),
       user,
-      // M5-HOTFIX2（输出纪律 + 量化回调）：persona 已带最小 diff 纪律（增量 patch ≤1200 字符目标）。
-      // 量化依据：≤1200 字符 CJK+JSON 混合 ≈ 450-550 tok（~2.2-2.8 字符/tok），+ expansions ≤8 条
-      // （~80 tok）+ fence 余量 → 1400 ≈ 纪律目标 2.5× 头寸；对照插件先例 analyzer/judge 均 1400
-      // （one-shot JSON 生产者，真实会话成功）。旧 4096 无纪律时被回显式输出吃满
-      // （38.7s，gen_1789343516953_l2vs0lav 实测）；纪律收敛后典型输出 ~400-500 tok ≈ 4-5s。
-      // 越界兜底不变：max-tokens → v0 fallback + reason 可观测（M5-DIAG 机制）。
-      maxTokens: 1400,
+      // M5-DIAG2（用户裁定 2026-09-14：不设 maxTokens 上限）：三轮实测（1024@~10.5s / 4096@38.7s /
+      // 1400@13.6s）预算恒打满且文本头恒空（reason=parse:max-tokens:""，gen_1789344503021_z22g7861）
+      // —— 直连路由跟随会话模型（fangzhou/ark-code-latest），reasoning token 计入 maxTokens 预算
+      // 且不产出 text 块，任何上限都会被思考期吃满后截断。故省略 maxTokens → 宿主 defaultMaxTokens
+      // 语义（主对话同路径正常出内容）。persona 输出纪律保留（内容紧凑性仍有效）；越界兜底不变：
+      // max-tokens → v0 fallback + reason 可观测（M5-DIAG 机制）。
       temperature: 0.4,
       // M5-DIAG：opts.signal 透传（缺省孤儿 controller，行为不变）
       signal: opts.signal ?? new AbortController().signal,

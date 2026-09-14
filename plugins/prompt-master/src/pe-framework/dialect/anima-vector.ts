@@ -40,8 +40,8 @@ export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
 }
 
 // ---------------------------------------------------------------------------
-// 量化与 fixture 工具（spec §3.1 int8 口径）：per-vector max-abs 缩放到 int8，
-// 127 为满幅、+128 偏移存为 uint8 —— 建库（Python build_tag_vector.py）与查询
+// 量化与 fixture 工具（spec §3.1 int8 口径）：per-vector max-abs 缩放到**有符号**
+// int8，127 为满幅（二进制补码，无偏移）—— 建库（Python build_tag_vector.py）与查询
 // （Node 查询期）共用同一口径，量化不对称即向量错配。导出供测试 fixture 复用。
 // ---------------------------------------------------------------------------
 
@@ -68,12 +68,18 @@ export function unitVec(seed: number, dim = 384): Float32Array {
   return v
 }
 
-/** float32 → int8 量化 uint8 字节（per-vector max-abs 缩放，127 满幅，+128 偏移，clamp 0..255） */
+/**
+ * float32 → 有符号 int8 量化（存为 uint8 字节）。
+ * 口径（controller ruling，impl-build t5 实测定案）：per-vector max-abs 缩放，127 满幅，
+ * **有符号 int8（二进制补码）**——负值写入 Uint8Array 时自动按补码回绕，无 +128 偏移。
+ * 偏移编码会破坏 int8 cosine 几何（实测距离误差达 1.6，补码 ≤0.005）。
+ * 建库侧（Python build_tag_vector.py）使用逐字节一致的同一公式；SQL 绑定一律 vec_int8(?)。
+ */
 export function quantizeInt8(v: Float32Array): Uint8Array {
   let max = 0
   for (const x of v) max = Math.max(max, Math.abs(x))
   const out = new Uint8Array(v.length)
-  for (let i = 0; i < v.length; i++) out[i] = Math.min(255, Math.max(0, Math.round((v[i] / (max || 1)) * 127) + 128))
+  for (let i = 0; i < v.length; i++) out[i] = Math.round((v[i] / (max || 1)) * 127)
   return out
 }
 

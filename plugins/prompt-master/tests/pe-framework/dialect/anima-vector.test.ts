@@ -91,7 +91,7 @@ describe('createVectorSearch', () => {
 
   it('below-threshold hits are dropped, not padded', async () => {
     const p = makeFixtureDb()
-    const stub: EmbedFn = async (texts) => texts.map(() => unitVec(999)) // 与所有 fixture 向量近正交
+    const stub: EmbedFn = async (texts) => texts.map(() => unitVec(999)) // 与 fixture 向量 cos≈0.757~0.775（LCG 非正交），threshold 0.9 下全部低于阈值
     const search = createVectorSearch({ dbPath: p, embed: stub, threshold: 0.9 })
     expect(await search('未知词', 5)).toEqual([])
   })

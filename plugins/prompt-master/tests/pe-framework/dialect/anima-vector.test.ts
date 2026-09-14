@@ -93,11 +93,11 @@ describe('createVectorSearch', () => {
   it('returns nearest tag with score and text_source (stub embed)', async () => {
     const p = makeFixtureDb()
     const stub: EmbedFn = async (texts) => {
-      const seedBy: Record<string, number> = { 水手服: 101, 兔耳朵: 303, 未知词: 999 }
+      const seedBy: Record<string, number> = { 'sailor uniform': 101, 'bunny ears': 303, 'unknown thing': 999 }
       return texts.map((t) => unitVec(seedBy[t] ?? 999))
     }
     const search = createVectorSearch({ dbPath: p, embed: stub })
-    const hits = await search('水手服', 3)
+    const hits = await search('sailor uniform', 3)
     expect(hits[0]).toMatchObject({ record_id: 'serafuku', text_source: 'wiki' })
     expect(hits[0].score).toBeGreaterThan(0.9)
     expect(hits.length).toBeLessThanOrEqual(3)
@@ -112,20 +112,33 @@ describe('createVectorSearch', () => {
     const p = makeFixtureDb()
     const stub: EmbedFn = async (texts) => texts.map(() => unitVec(999)) // 与 fixture 向量 cos≈0.757~0.775（LCG 非正交），threshold 0.9 下全部低于阈值
     const search = createVectorSearch({ dbPath: p, embed: stub, threshold: 0.9 })
-    expect(await search('未知词', 5)).toEqual([])
+    expect(await search('unknown thing', 5)).toEqual([])
+  })
+
+  it('CJK queries are rejected at the entry (English-only constraint) without calling the embedder', async () => {
+    const p = makeFixtureDb()
+    let embedCalls = 0
+    const spy: EmbedFn = async (texts) => {
+      embedCalls += texts.length
+      return texts.map(() => unitVec(101))
+    }
+    const search = createVectorSearch({ dbPath: p, embed: spy })
+    expect(await search('水手服', 3)).toEqual([])
+    expect(await search('school uniform 制服', 3)).toEqual([]) // 混入 CJK 同样拒绝
+    expect(embedCalls).toBe(0)
   })
 
   it('mtime change reopens stale handle (G4)', async () => {
     const p = makeFixtureDb()
-    const stub: EmbedFn = async () => [unitVec(101)] // 水手服 → serafuku 方向
+    const stub: EmbedFn = async () => [unitVec(101)] // sailor uniform → serafuku 方向
     const search = createVectorSearch({ dbPath: p, embed: stub })
-    expect((await search('水手服', 3))[0]?.record_id).toBe('serafuku')
+    expect((await search('sailor uniform', 3))[0]?.record_id).toBe('serafuku')
     // 同路径重建库（内容换成仅 neon_signs）并强制 mtime 前移 → 陈旧句柄必须被重开
     makeFixtureDbAt(p, [['neon_signs', 'wiki', 505]])
     const t = new Date(Date.now() + 10_000)
     utimesSync(p, t, t)
     // 陈旧句柄仍会从旧 vec_items 命中 serafuku；重开后旧行已不存在 → 命中集必不含 serafuku
-    const hits = await search('水手服', 3)
+    const hits = await search('sailor uniform', 3)
     expect(hits.map((h) => h.record_id)).not.toContain('serafuku')
   })
 
@@ -133,6 +146,6 @@ describe('createVectorSearch', () => {
     const p = makeFixtureDb()
     const search = createVectorSearch({ dbPath: p, embed: async () => [unitVec(101)] })
     expect(await search('', 3)).toEqual([])
-    expect(await search('水手服', 0)).toEqual([])
+    expect(await search('sailor uniform', 0)).toEqual([])
   })
 })

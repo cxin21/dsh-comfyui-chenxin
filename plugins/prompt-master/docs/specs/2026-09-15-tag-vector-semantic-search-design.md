@@ -139,3 +139,15 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 | 阈值校准无效：0.50–0.60 全区间排名逐位不变（命中分挤 0.85–0.88 窄带） | 缺省 0.55 维持；gibberish `zzzzzzzzq` 10 hits ≥0.55 属实——阈值只能截尾不能排序，精度提升须靠重排/换模型 |
 | semantic 层缺 `@` 画师剔除（§3.2 契约缺口，探针暴露） | 修复归属后续任务（semantic 命中过滤 `display.startsWith('@')` 即可，改动面小）；t6 只记录，不改代码 |
 | 退化 fallback passage（usage 0 拼接串/带逗号 tag）与规范 tag 同分带竞争 | 85.5% 行无 wiki 是语料现实；候选缓解同上（usage 重排 / wiki 覆盖提升 / passage v2） |
+
+---
+
+## 附录：后合并修订（2026-09-15，用户定案）
+
+本 spec 合并（main @ 9854da7）后，基于 Task 8 探针实证与用户决策，模型与匹配策略做如下修订：
+
+1. **放弃跨语言**：中文跨语言映射（水手服→serafuku）被用户显式放弃——中文 tag 回到 catalog_miss advisory 既有路径（ZH 概念桥接表 / recall 英文注入兜底不变）。
+2. **模型换装**：multilingual-e5-small（384 维，探针 3/4 不达标）→ **bge-base-en-v1.5（768 维，英文单语）**。建库端 BAAI/bge-base-en-v1.5（sentence-transformers，CLS 池化），查询端 Xenova/bge-base-en-v1.5（ONNX，fp16 可选），DIM=768；PM_EMBED_MODEL / PM_EMBED_DIM 可配置，e5 系列可经 env 切回（前缀/池化按模型名条件化）。选型依据：bge-m3（1024 维）在本机笔记本 GPU 热节流至 ~9 行/s（ETA 37h）不可接受，e5-base 同参数级（109M）建库 ~2-3h。
+3. **英文匹配约束**：查询含 CJK（汉字/假名，正则 /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/）时在向量入口直接拒绝——不编码、不检索。实现于 nima-vector.ts 查询函数入口，单测覆盖（spy 断言 embedder 零调用）。
+4. **在线 API 嵌入通道（env 可插拔，默认不启用）**：PM_EMBED_PROVIDER=api + PM_EMBED_API_BASE/KEY/MODEL 走 OpenAI 兼容 /embeddings；Python 建库侧同通道（批次断点续跑）。用户实测 Ark doubao-embedding-vision（2048 维）单请求上限 10 条、持续限速 ~5.8 行/s（全量 4 天）后弃用在线路线，保留通道作为升级路径。此为对 §5「查询期零网络」底线的**可选扩展**——默认路径仍离线。
+5. **@ 画师剔除缺口**（§8 表第 3 行）已在合并后修复（91dc763，semantic JOIN 点过滤 + TDD + live-index 实测），不再列为已知限制。

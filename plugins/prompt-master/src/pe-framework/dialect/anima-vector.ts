@@ -227,6 +227,9 @@ export function createVectorSearch(opts?: {
   }
   return async (query: string, k: number): Promise<SemanticHit[]> => {
     if (!query || k < 1) return []
+    // 英文匹配约束（用户定案）：查询含 CJK（汉字/假名）时直接拒绝——不编码、不检索，
+    // 中文 tag 走 catalog_miss advisory 既有路径。索引与查询必须同语域，跨语言不在本层。
+    if (/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(query)) return []
     try {
       const d = open()
       if (!d) {

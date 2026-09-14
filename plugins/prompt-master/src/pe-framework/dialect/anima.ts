@@ -703,7 +703,21 @@ export function auditAnima(positive: string, negative: string, opts?: CompileAni
         const text = String(raw)
         const hits = search(text)
         const top = hits[0]
-        if (!top || !top.match_type || !GROUNDED.has(top.match_type)) {
+        if (top && top.match_type === 'semantic' && top.prompt_form) {
+          // spec §3.2 semantic_fallback（A14 语义延伸）：语义近似命中 → 不发 catalog_miss assumption，
+          // 改发 advisory（原文保留不替换——grounding/F2 只认 canonical/alias，semantic 不参与采纳）
+          const nkey = normalizeTag(text)
+          if (nkey && !missed.has(nkey)) {
+            missed.add(nkey)
+            gates.push({
+              rule: 'semantic_fallback',
+              target: 'anima',
+              severity: 'minor',
+              detail: `semantic_fallback:${text}→${top.prompt_form}（保留原文未替换）`,
+              source: 'dialect/anima',
+            })
+          }
+        } else if (!top || !top.match_type || !GROUNDED.has(top.match_type)) {
           const nkey = normalizeTag(text)
           if (nkey && !missed.has(nkey)) {
             missed.add(nkey)

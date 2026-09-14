@@ -207,6 +207,24 @@ describe('applyAdditions object-branch merge semantics (M5-T3b)', () => {
     expect((out.blueprint as any).extraScalar).toBe(2)
   })
 
+  it('LLM 负向越权 hard → 确定性降格 soft + advisory（M5-DIAG2 c12 实证：hard 是安全通道专属域）', async () => {
+    const v0 = { schema_version: 1, media: 'image', core: { concept: '神社巫女', negative: [] }, media_layer: { image: {} } } as any
+    const patch = JSON.stringify({
+      set: { core: { negative: [{ target: 'modern elements', severity: 'hard' }, { target: 'text', severity: 'soft' }] } },
+      additions: { core: { negative: [{ target: 'vehicles', severity: 'hard' }] } },
+      expansions: [],
+    })
+    const stb = stubCtx({ stream: textStream(patch) })
+    const out = await enrichBlueprint(stb as any, { provider: 'p', model: 'm' }, v0, {})
+    const negs = (out.blueprint as any).core.negative
+    expect(negs.every((n: { severity: string }) => n.severity === 'soft')).toBe(true)
+    // additions 对 core 整键阻断（D6/R7 wholeCore strip）——仅 set 通道的 1 条 hard 被降格
+    expect(out.advisories).toContain('llm_hard_negative_downgraded:1')
+    // 良性 soft 条目原样保留
+    expect(negs.some((n: { target: string }) => n.target === 'text')).toBe(true)
+    expect(negs.some((n: { target: string }) => n.target === 'vehicles')).toBe(false)
+  })
+
   it('组合专测：t4 wholeCore strip 先行 + 对象合并修复不冲突——恶意 core.rating 与良性 media_layer 对象 additions 同 patch', async () => {
     const ratedV0 = {
       schema_version: 1,

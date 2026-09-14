@@ -324,9 +324,25 @@ export async function enrichBlueprint(
     const fid = checkFidelity(v0.core?.concept ?? '', enriched)
     if (!fid.pass) expansions.push(`fidelity_failed:${fid.missingEntities.join(';')}`)
 
+    // M5-DIAG2（真实会话 c12 实证）：LLM 创意负向推断越权声明 severity:'hard'（复合 target 6 项粘连）
+    // → 投影器按 spec §8.1 档 3 拒绝 hard。hard 是内容安全通道的专属域（boundaries/rating seeds），
+    // 与 core.rating strip（D6/R7）同一条信任边界哲学：安全分级数据由管线独占，LLM 产物不可信。
+    // 确定性降格 soft（创意负向的合法档位）+ advisory 留痕；单点收口覆盖 set/additions/v0 自带/预设四来源。
+    let hardDowngraded = 0
+    if (Array.isArray(enriched.core?.negative)) {
+      enriched.core.negative = enriched.core.negative.map((n) => {
+        if (n != null && n.severity === 'hard') {
+          hardDowngraded++
+          return { ...n, severity: 'soft' as const }
+        }
+        return n
+      })
+    }
+
     // M5-T3（D6/R7）：core.rating 覆写企图 → advisory（与 styleAdvisories 同通道并入 envelope advisories）
     const advisories = [...styleAdvisories]
     if (ratingOverwriteBlocked) advisories.push(RATING_OVERWRITE_ADVISORY)
+    if (hardDowngraded > 0) advisories.push(`llm_hard_negative_downgraded:${hardDowngraded}`)
 
     return { blueprint: enriched, expansions, ...(advisories.length > 0 ? { advisories } : {}) }
   } catch (error) {

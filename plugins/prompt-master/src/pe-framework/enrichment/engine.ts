@@ -159,7 +159,8 @@ const IMAGE_DETAIL_DENSITY_RULES = [
 
 function buildExpansionPersona(media: BlueprintMedia): string {
   return [
-    '你是一个创作蓝图美学扩展引擎（spec §7.1）。',
+    '你是一个创作蓝图美学扩展引擎。任务：把一张「创作蓝图 v0」（用户意图的结构化中间表示）升级为 v1——在不改变用户原意的前提下补足美学维度（光影/构图/景别/色彩/质感），供下游投影器映射为 Anima tag 集。',
+    '【运行环境与工具禁用（必读）】本任务为 one-shot 结构产出：输出会被程序按 JSON Schema 机器解析并经 deepMerge 合并回蓝图，任何工具调用、文件请求或反问都会破坏「单次 JSON 输出」协议——不要调用任何工具，只输出一个裸 JSON patch 对象。',
     '规则：',
     '1. 具体名词化：把空泛形容词改写为可感知名词短语（如「电影感」→「IMAX 胶片机 + Panavision C 系 35mm f4」）。',
     '2. 禁空泛词：输出不得含 cinematic/beautiful/amazing/stunning/epic/大气/高级/电影感 等空泛词。',
@@ -174,7 +175,7 @@ function buildExpansionPersona(media: BlueprintMedia): string {
     `光线: ${CINEMA_LEXICON.lighting.join('/')}`,
     `色彩分级: ${CINEMA_LEXICON.grading.join('/')}`,
     `构图: ${CINEMA_LEXICON.composition.join('/')}`,
-    '输出契约（硬性）：本任务为 one-shot 结构产出，不要调用任何工具；只输出一个增量 JSON patch——裸 JSON（不要代码块、不要解释）。形状：',
+    '输出契约（硬性）：只输出一个增量 JSON patch——裸 JSON（不要代码块、不要解释）。输出会被程序与 v0 蓝图 deepMerge 合并，再经确定性审计门（tag 预算/互斥/CJK 禁令等机器判定）——违反语言纪律或空泛词会在审计被拦下并触发修复轮。形状：',
     '{"set": {...要覆盖的蓝图字段...}, "additions": {...要追加的数组字段...}, "expansions": ["改写记录1", ...]}',
     // M5-HOTFIX2（输出纪律）：t16 实测 4096 预算仍被吃满截断（gen_1789343516953_l2vs0lav，38.7s）——
     // 形状契约零收敛约束 + 裸部分蓝图兼容规则使「完整回显 v0 + 扩写」语义合法 + user 段递入完整
@@ -222,7 +223,7 @@ export async function enrichBlueprint(
     ...(recs.length > 0
       ? [
           '',
-          '【推荐先验】艺术指导推荐器建议（你仍做最终设计决策，每类至多 1 张）：',
+          '【推荐先验】艺术指导推荐器建议——来源：确定性规则推荐器基于缺失维度（reason 给出依据）从固定设计卡库选出的候选，非用户指令；采纳与否由你做最终设计决策，每类至多 1 张：',
           ...recs.map((r) => `- ${r.field}: ${r.cardId}（${r.reason}）`),
         ]
       : []),

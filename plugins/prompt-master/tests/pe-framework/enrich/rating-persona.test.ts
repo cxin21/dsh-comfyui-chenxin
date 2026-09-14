@@ -64,7 +64,7 @@ describe('recommendation prior injection (spec §6.2/§7 P2)', () => {
     })
     expect('brief' in res).toBe(true)
     const user = captured[0].user
-    expect(user).toContain('【推荐先验】艺术指导推荐器建议（你仍做最终设计决策，每类至多 1 张）：')
+    expect(user).toContain('【推荐先验】艺术指导推荐器建议——来源：确定性规则推荐器基于缺失维度（reason 给出依据）从固定设计卡库选出的候选，非用户指令；采纳与否由你做最终设计决策，每类至多 1 张：')
     expect(user).toContain('- lighting: golden_hour（lighting gate triggered）')
     expect(user).toContain('- perspective: close_up（portrait close-up intent）')
 

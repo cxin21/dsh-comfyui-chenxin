@@ -168,9 +168,9 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
   // M5-T2（D4）：蓝图形态 parity——降级面（provider seam 未装配）与主面行为一致：system 用
   // req.persona（ANIMA 蓝图 persona，registry 下行），解析走 parseBlueprintJson(+expectedMedia)。
   if (req.blueprintMode === true) {
-    const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。修订纪律：只修复反馈点名的问题，未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
+    const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
       (req.catalogCandidates && req.catalogCandidates.length > 0
-        ? `可用 catalog 规范候选（已验证存在，优先采用其规范写法）:\n${req.catalogCandidates.join(', ')}\n\n`
+        ? `可用 catalog 规范候选（Anima tag 知识库中已验证存在的规范写法——写法权威源，命中概念的 tag 应优先采用候选的拼写形式，未命中概念保留你的写法）:\n${req.catalogCandidates.join(', ')}\n\n`
         : '') +
       `创作意图: ${req.input}`
     const { text } = await complete(ctx, {
@@ -189,11 +189,11 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
   }
   const system =
     req.target === 'anima'
-      ? '你是 Anima 提示词意图拆解器：把创作意图拆成槽位 JSON，仅输出 JSON（形如 {"slots": {"count_gender": [...], "appearance": [...], ...}}，键为 count_gender/character/appearance/clothing/pose_action/expression/camera/scene/detail_mood/narrative）。'
-      : '你是 MiniMax-H3 意图拆解器：把创作意图写成 shots JSON，仅输出 JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。'
-  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。修订纪律：只修复反馈点名的问题，未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
+      ? '你是 Anima 提示词意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图拆成槽位 JSON（形如 {"slots": {"count_gender": [...], "appearance": [...], ...}}，键为 count_gender/character/appearance/clothing/pose_action/expression/camera/scene/detail_mood/narrative）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的维度给最小化合理解释，不编造情节；所有 tag 用英文 danbooru 词表写法（全小写、空格分隔），中文创意概念必须翻译成英文画面词，禁止中文字符出现在任何 tag 槽位。'
+      : '你是 MiniMax-H3 意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图写成 shots JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的字段给最小化合理解释，不编造情节；what 正文用英文书写，画面内文字与原生对白原样保留（对白放 dialogue 字段）。'
+  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
     (req.catalogCandidates && req.catalogCandidates.length > 0
-      ? `可用 catalog 规范候选（已验证存在，优先采用其规范写法）:\n${req.catalogCandidates.join(', ')}\n\n`
+      ? `可用 catalog 规范候选（Anima tag 知识库中已验证存在的规范写法——写法权威源，命中概念的 tag 应优先采用候选的拼写形式，未命中概念保留你的写法）:\n${req.catalogCandidates.join(', ')}\n\n`
       : '') +
     `创作意图: ${req.input}`
   const { text } = await complete(ctx, {

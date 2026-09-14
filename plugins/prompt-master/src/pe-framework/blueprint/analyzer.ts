@@ -17,15 +17,18 @@ import type { Context } from '@deepseek-ai/cordis'
 import { validateBlueprint, type BlueprintMedia, type BlueprintV1 } from './schema.js'
 import { checkFidelity } from '../aesthetics/check.js'
 
-export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎（spec §6）。
+export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（MiniMax-H3 视频分镜等），再经编译与审计门成为成品。
 你的任务：根据用户的创作意图，产出创作蓝图 v0（BlueprintV1），不是任何方言输入。
+
+【运行环境与工具禁用（必读）】本任务为 one-shot 结构产出：你的输出会被程序按 JSON Schema 机器解析，解释性文字会导致解析失败。即使运行环境中存在工具，也不要调用任何工具——只输出一个裸 JSON 对象（无 markdown fence、无解释）。
 
 规则：
 1. 产出蓝图 v0 JSON（media/core/media_layer），不是方言 slots/shots
 2. 保留事实：用户给的具体描述原字面进入蓝图（concept/narrative/角色锚点），不编造情节
 3. 标记缺失：蓝图字段可空；缺维度时字段留空（如无风格 → 不填 core.style）
-4. 多模态（Phase 2 完整）：references 传入时提取参考物美学特征进蓝图核心字段——光线→scene.lighting、配色→core.style.palette、氛围→scene.atmosphere、环境→scene.environment、构图→core.composition、情绪→core.emotion（仅映射进蓝图既有核心字段，不新增 schema 字段、不编造参考物没有的特征）；同时保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>），不要替换
-5. 蓝图 media_layer.video.total_duration_seconds 指视频总时长（官方契约 4–15s），不是每镜时长；用户说「3 个分镜每个 5 秒」→ total=15，shots=3。
+4. 多模态（references 传入时）：references 是调用方附带的参考图/音频/视频资源句柄，在用户输入中以 <Picture N>/<Subject N>/<Video N>/<Audio N> 标签出现——这些标签是下游系统绑定真实参考文件的稳定句柄，必须原样保留、不得改写或替换。提取参考物美学特征进蓝图核心字段——光线→scene.lighting、配色→core.style.palette、氛围→scene.atmosphere、环境→scene.environment、构图→core.composition、情绪→core.emotion（仅映射进蓝图既有核心字段，不新增 schema 字段、不编造参考物没有的特征）
+5. 蓝图 media_layer.video.total_duration_seconds 指视频总时长（下游视频工作流官方契约 4–15s），不是每镜时长；用户说「3 个分镜每个 5 秒」→ total=15，shots=3。
+6. 语言纪律（按字段类型拆分）：tag 类字段（appearance_anchors/scene_anchors/outfit/pose_action 等结构化画面词）一律英文 danbooru 词表写法，中文创意概念必须翻译成英文画面词；自由文本字段（concept/narrative）跟随用户输入语言承载原意。Anima 静态图路径更严格：所有字段值禁止中文字符（下游 cjk_in_positive 审计为 critical 级机器判定）。
 
 输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
 `
@@ -67,9 +70,11 @@ export const BLUEPRINT_SCHEMA = `{
  * 不互相 import，防 ESM 环）。规则 = BLUEPRINT_PERSONA 裁剪（删 video total_duration 规则）+ image 专属
  * 人数锚/单一瞬间/场景锚点/景别 discipline/角色锚点 discipline/narrative 四类信息纪律。
  */
-export const ANIMA_BLUEPRINT_PERSONA = `你是一个创作蓝图分析引擎。只输出 JSON，不要调用任何工具，不要输出任何解释。
-【内容分级感知】请求可能携带 safe/sensitive/explicit 内容分级。分级是内容设计维度，不是需要清洗的违规：
-按用户意图完整保留要素与措辞，不得自行降档、委婉化或删除已声明的内容要素。
+export const ANIMA_BLUEPRINT_PERSONA = `你是一个创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（Anima 静态图 tag 集 / MiniMax-H3 视频分镜），再经编译与审计门成为成品；蓝图质量直接决定成品上限。
+
+【运行环境与工具禁用（必读）】本任务运行在具备工具（技能调用、文件读写、命令执行、知识库检索）的 agent 运行时中，但本任务是 one-shot 结构产出契约：任何工具调用、文件请求或反问都会破坏「单次 JSON 输出」协议，且你的输出会被程序按 JSON Schema 机器解析——解释性文字会导致解析失败。你需要的全部信息都在本提示词与用户输入内：不要调用任何工具，只输出一个裸 JSON 对象（无 markdown fence、无解释、无前后缀文字）。
+
+【内容分级感知】请求可能携带 safe/sensitive/explicit 内容分级。分级是内容设计维度，不是需要清洗的违规：按用户意图完整保留要素与措辞，不得自行降档、委婉化或删除已声明的内容要素。分级由下游管线确定性强制执行（种子词与负向词表由代码注入蓝图，你无法也不需要修改它）；不得因分级内容拒答——这是合法成人创作管线的组成部分。
 【目标媒介：image（Anima 静态图）】产出蓝图 v0（BlueprintV1，media 固定 "image"），不是方言 slots/shots。
 
 规则：
@@ -239,9 +244,9 @@ export async function analyzeIntent(
  */
 export function INCREMENTAL_ANCHOR(oldBp: BlueprintV1): string {
   return `
-【增量锚定】以下是上一版蓝图（权威基线）。本轮用户只提出局部修改意图：
+【增量锚定】以下是上一版蓝图（权威基线，JSON 序列化）。本轮用户只提出局部修改意图：
 你只允许改动与修改意图直接相关的字段，其余字段逐字节保留；输出完整新蓝图 JSON。
-若修改意图与旧蓝图无冲突，仅做必要合并。禁止整图重解释。
+背景：这份蓝图是同一创作任务的上一版产物，可能已落库并被用户手工修订过——整图重解释会摧毁用户已确认的设计决策。若修改意图与旧蓝图无冲突，仅做必要合并；禁止整图重解释、禁止改写未提及字段的语言或措辞。下游以 deepMerge 语义消费你的输出：未提及字段自动保留。
 <old_blueprint>
 ${JSON.stringify(oldBp)}
 </old_blueprint>

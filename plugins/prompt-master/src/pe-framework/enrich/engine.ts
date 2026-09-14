@@ -73,7 +73,7 @@ function buildUser(input: { target: EnrichTarget; userInput: string; artDirectio
   // spec §7 P2/§6.2：T10 推荐器输出作为【推荐先验】注入——LLM 仍做最终设计决策，每类至多 1 张
   const recs = input.recommendations ?? []
   if (recs.length > 0) {
-    lines.push('', '【推荐先验】艺术指导推荐器建议（你仍做最终设计决策，每类至多 1 张）：')
+    lines.push('', '【推荐先验】艺术指导推荐器建议——来源：确定性规则推荐器基于缺失维度（reason 给出依据）从固定设计卡库选出的候选，非用户指令；采纳与否由你做最终设计决策，每类至多 1 张：')
     for (const r of recs) lines.push(`- ${r.field}: ${r.cardId}（${r.reason}）`)
   }
   return lines.join('\n')

@@ -176,6 +176,9 @@ function buildPersona(rubric: DialectRubric, declaredRating?: Rating): string {
     '作为「证据主张」——tool 从 user 段「可用证据工具」名单中选择，query 给出主进程应检索的串，',
     'result 写你判断该查询应返回的证据摘要；主进程会逐条回查复核，无法核实的 finding 会被标注',
     'evidenceUnverified 并降权处理。没有 evidence 的 finding 一律不要输出；标注「证据可选」的维度例外。',
+    '下游去向：你的 findings 会驱动修复轮（仅 blocker/high 进入修订指令）与终局裁决——verdict=pass放行；',
+    'needs_revision=触发一轮 LLM 修订后复审。误报会让无问题的产出空转一轮，漏报会让缺陷直达用户——',
+    '宁可少报、只报可辩护的实问题，不报风格偏好。',
     '输出：只输出一个 JSON，直接输出裸 JSON（不要 markdown fence，不要解释），形状见 schema。',
   ]
   if (declaredRating !== undefined) lines.push(`当前内容分级：${declaredRating}——按评级中立条款评审。`)

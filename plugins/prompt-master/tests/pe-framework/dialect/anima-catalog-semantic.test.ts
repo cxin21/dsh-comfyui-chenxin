@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest'
-import { searchCatalog, searchCatalogSync, setVectorSearch, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalog, searchCatalogSync, setVectorSearch, closeCatalog, queryCatalogInternal } from '../../../src/pe-framework/dialect/anima-catalog.js'
 
 /** 取一条真实 canonical 记录作为 semantic stub 的 JOIN 目标（record_id 形态不对测试硬编码） */
 function seedRecordId(tag: string): { record_id: string; prompt_form: string } {
@@ -55,6 +55,22 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
   it('semantic 命中 JOIN 不到 records → 丢弃（不凑数）', async () => {
     setVectorSearch(async () => [{ record_id: 'no-such-record-xyz', score: 0.9, text_source: 'fallback' }])
     expect(await searchCatalog('zzzzzzzzq', { mode: 'auto', limit: 5 })).toEqual([])
+  })
+
+  it('semantic 层剔除 @ 画师命中（spec §3.2 补齐，与 fuzzy F3 的 @ 剔除同口径）', async () => {
+    // 取真实 @ 画师记录作 JOIN 目标——证明剔除来自 @ 过滤而非 JOIN-miss 巧合
+    const atRows = queryCatalogInternal("SELECT record_id, prompt_form FROM records WHERE prompt_form LIKE '@%' LIMIT 1") as Array<{ record_id: string; prompt_form: string }>
+    if (!atRows.length) throw new Error('fixture missing: no @-prefixed record in catalog')
+    expect((atRows[0].prompt_form ?? '').startsWith('@')).toBe(true)
+    const seed = seedRecordId('silvery hair')
+    setVectorSearch(async () => [
+      { record_id: atRows[0].record_id, score: 0.95, text_source: 'wiki' },
+      { record_id: seed.record_id, score: 0.82, text_source: 'wiki' },
+    ])
+    const hits = await searchCatalog('zzzzzzzzq', { mode: 'auto', limit: 5 })
+    expect(hits.some((h) => (h.prompt_form ?? h.raw ?? '').startsWith('@'))).toBe(false)
+    // 非 @ 命中保留且前移（@ 命中不再占位）
+    expect(hits[0]).toMatchObject({ match_type: 'semantic', prompt_form: seed.prompt_form, score: 0.82 })
   })
 
   it('向量层故障降级为空，不阻塞级联（增强层纪律）', async () => {

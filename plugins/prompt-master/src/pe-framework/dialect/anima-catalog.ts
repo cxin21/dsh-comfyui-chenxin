@@ -328,7 +328,9 @@ export function searchCatalogSync(tag: string, opts?: CatalogQueryOptions): Cata
 }
 
 /** semantic 命中 → catalog records JOIN（spec §3.2）：按 record_id 取 prompt_form/usage_count，
- *  JOIN 不到的丢弃（不凑数——向量库与 catalog 重建时间差可能产生悬空 record_id）。 */
+ *  JOIN 不到的丢弃（不凑数——向量库与 catalog 重建时间差可能产生悬空 record_id）；
+ *  @ 画师命中剔除（spec §3.2：semantic 层与 fuzzy F3 同口径——'@' 用户名/画师型记录不得进入
+ *  语义近似结果；t6 探针实证 @-artist 占位 5/10 槽位后补齐）。 */
 function joinWithCatalog(sem: SemanticHit[]): CatalogHit[] {
   const out: CatalogHit[] = []
   for (const s of sem) {
@@ -338,6 +340,7 @@ function joinWithCatalog(sem: SemanticHit[]): CatalogHit[] {
       .all(s.record_id) as Array<{ prompt_form: string; usage_count: number }>
     const row = rows[0]
     if (!row) continue
+    if ((row.prompt_form ?? '').trim().startsWith('@')) continue
     out.push({
       match_type: 'semantic',
       record_id: s.record_id,

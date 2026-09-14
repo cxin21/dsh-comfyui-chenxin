@@ -89,6 +89,29 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
   - `twintail` → `twintails`（词形变体）
   - `兔耳朵` → 各耳型变体发散（模糊发散）
 
+#### 验收探针结果（2026-09-15 收口实测，Task 8 / t6）
+
+**环境**：真实 ONNX 模型（`Xenova/multilingual-e5-small` q8，118MB，本地缓存离线）+ 全量库 `tag-vector.sqlite`（payload 1,374,902 = wiki 198,738 / fallback 1,176,164，fallback 占 85.5%）；经 dist `searchCatalog(mode='auto', limit=10)` 驱动（探针脚本 `temp/sdd-t8/probe_acceptance.mjs`）。全量回归基线：**138 files / 1255 passed / 1 skipped / 0 failed**（`npx vitest run` exit 0）。
+
+| 输入 | 期望 | 实际 top hit + score（逐字） | 判定 |
+|---|---|---|---|
+| `水手服` | top hit semantic → serafuku | `1女孩蓝色 眼睛蓝色 头发绯红katagiri himeko长袖momotsuki gakuen 校服…水手领`（fallback 拼接长串，usage 0）0.8786；#2 `水着` 0.8740；#3–#10 全部 water 词形噪声（`hand in water` 0.8735 / `water clothes` 0.8729 / `water in hands` 0.8709…）；canonical `serafuku`（wiki）不在 top-10 | **未达标** |
+| `selafuku` | top hit semantic → serafuku | `@selpuku`（画师 tag，usage 6）0.8644；serafuku 家族部分召回：#2 `serafuku,`（usage 0 退化 tag）0.8627、#3 `seerafuku` 0.8622、#5 `seafuku` 0.8616、#10 `serafuk` 0.8589；canonical `serafuku`（wiki）不在 top-10 | **未达标**（拼写容错召回存在但被画师/退化 tag 压顶） |
+| `twintail` | top hit prompt_form 含 twintails | `twintails`（**alias 级**命中，usage 1,310,823，2ms；semantic 未触发——前级已接住） | **达标**（单复数词形变体由既有 alias 级覆盖，验收目标达成） |
+| `兔耳朵` | ≥3 个耳型相关 tag | `hair米语 (blue archive)裤袜兔 ears`（fallback 拼接串，usage 0）0.8635；#2 `huan` 0.8627、#3 `huan455210` 0.8627、#4 `huannnnn` 0.8563、#5 `yorn` 0.8555…——**0 个规范耳型 tag**（animal_ears / rabbit_ears / animal_ear_fluff 均未出现） | **未达标** |
+
+附加精度探针：gibberish `zzzzzzzzq` 在全量库上仍返回 10 hits ≥0.55（top `shitp zzz` 0.8824，全部 fallback）——阈值 0.55 对短文本 fallback 语料无区分力，与 Task 7 小样观察一致。
+
+**阈值校准实测（brief Step 3）**：`PM_SEMANTIC_THRESHOLD=0.50` 与 `0.60` 重跑三个未达标探针——**排名逐位不变**（三探针全部命中 score 挤在 0.8517–0.8786 窄带，0.60 上界内无一被过滤）。取值依据：失败是**排序问题**（退化/噪声 passage 与正确 tag 的 cosine 差 <0.02）而非阈值问题，0.50–0.60 区间校准无效，**维持缺省 0.55 不动**（不引入既不改善精度也不改善排序的伪调参）。
+
+**失败原因分析**（如实记录）：
+
+1. **e5-small 短文本 cosine 压缩（主因，模型天花板）**：查询与近邻 passage 的相似度全部挤在 0.85–0.88 窄带（Task 7 诊断实测 0.888–0.897），排名由 passage 构成的微小差异决定；gibberish 与正确语义几乎不可分。
+2. **fallback 语料质量（85.5% 行无 wiki）**：退化 fallback passage（usage 0 的拼接串、带逗号 tag 名如 `serafuku,`）与规范 tag 挤在同一分数带，且 KNN 无 usage 信号——usage 0 tag 压顶。探针目标均为高用量 head tag，正确 tag 本身在库内（`serafuku` wiki rowid 203、`rabbit_ears` 等都在），是**排序与语料问题，非建库缺行**。
+3. **中文跨语言未达预期**：`水手服` 被嵌入到 water 词形簇（水着/water clothes/hand in water），未映射到 serafuku 语义簇——multilingual-e5-small 的跨语言能力对"具体服装名词→罗马音 tag"这类映射不足（spec §2 决策"多语言嵌入模型直接编码 wiki 释义已可覆盖中文跨语言"**实测不成立**，见 §8）。
+4. **探针暴露的 spec 合规缺口（代码修复不在 t6 范围，转交处置）**：§3.2 规定 semantic 层"保留 `@` 画师剔除"，实现中 F3 `@` 剔除只在 fuzzy 级（anima-catalog.ts L221），semantic 层无此过滤——实测 `@selpuku`/`@sleppu`/`@selaf` 等画师 tag 出现在 semantic 命中中（selafuku 探针 10 席占 5）。
+5. **可取的正向结论**：拼写容错召回本身存在（selafuku 探针召回 4 个 serafuku 家族 tag）；词形变体（twintail→twintails）由既有 alias 级稳定覆盖且 semantic 自动让位（级联纪律正确）；semantic 层降级/触发/JOIN/阈值机制全程无故障（4 探针均正确走完"前四级全空→semantic 追加"路径，性能 1.1–2.2s/查询，含模型首次加载）。
+
 ## 7. 非目标（Non-goals）
 
 - 不做 LLM 翻译 / 语义扩写（后续可加，架构不变）。
@@ -107,3 +130,12 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 | 向量库 ~0.5GB 落盘 | 独立文件不进 git；int8 量化控制体积 |
 
 **运行时探测结论（§3.3 定案）**：2026-09-15 探测（Node v24.14.0 / sqlite-vec 0.1.9 / @huggingface/transformers 4.2.0，`scripts/probe-sqlite-vec.mjs`）——`node:sqlite` `DatabaseSync(':memory:', { allowExtension: true })` + `loadExtension(getLoadablePath())` 成功加载 vec0 虚拟表，输出 `PROBE_OK`。**选定路径：sqlite-vec（唯一路径，无兼容层）**；hnswlib-node 退路弃用，未选中分支代码不留存。
+
+**验收探针已知限制（Task 8 收口定案，§6 实测依据）**：
+
+| 已知限制 | 依据与缓解方向 |
+|---|---|
+| 中文跨语言映射不足（e5-small 天花板）：`水手服`→water 词形簇而非 serafuku，`兔耳朵`→0 规范耳型 tag | 模型是可替换文件（架构不动）；缓解候选：换更强多语模型（bge-m3）、semantic 命中后 usage_count 重排（Node 侧）、passage 构成 v2（name 复现/尾部放置）——均超出 v1 范围，v1 按 brief"不阻塞收口"记为已知限制 |
+| 阈值校准无效：0.50–0.60 全区间排名逐位不变（命中分挤 0.85–0.88 窄带） | 缺省 0.55 维持；gibberish `zzzzzzzzq` 10 hits ≥0.55 属实——阈值只能截尾不能排序，精度提升须靠重排/换模型 |
+| semantic 层缺 `@` 画师剔除（§3.2 契约缺口，探针暴露） | 修复归属后续任务（semantic 命中过滤 `display.startsWith('@')` 即可，改动面小）；t6 只记录，不改代码 |
+| 退化 fallback passage（usage 0 拼接串/带逗号 tag）与规范 tag 同分带竞争 | 85.5% 行无 wiki 是语料现实；候选缓解同上（usage 重排 / wiki 覆盖提升 / passage v2） |

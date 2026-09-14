@@ -32,6 +32,12 @@ OUT = PRESET / "assets" / "knowledge" / "anima-prompt-v1" / "tag-vector.sqlite"
 CACHE = PRESET / "temp" / "anima-prompt-v1" / "wiki-cache" / "wiki-pages.jsonl"
 DIM = int(os.environ.get("PM_EMBED_DIM", "1024"))
 MODEL = os.environ.get("PM_EMBED_MODEL", "BAAI/bge-m3")
+USE_API = os.environ.get("PM_EMBED_PROVIDER", "").lower() == "api"
+API_BASE = os.environ.get("PM_EMBED_API_BASE", "").rstrip("/")
+API_KEY = os.environ.get("PM_EMBED_API_KEY", "")
+API_MODEL = os.environ.get("PM_EMBED_API_MODEL", "")
+API_BATCH = int(os.environ.get("PM_EMBED_API_BATCH", "64"))
+CKPT = PRESET / "temp" / "anima-prompt-v1" / "api-embed-checkpoint.json"
 WIKI_URL = "https://danbooru.donmai.us/wiki_pages.json"
 TOKEN_RE = re.compile(r"[\r\n]+|\{\{[^}]*\}\}|\[[^\]]*\]|<[^>]*>")  # dokuwiki 标记粗剥
 
@@ -176,6 +182,36 @@ def quantize_int8(v):
     return bytes((max(-127, min(127, int(round(float(x) / m * 127))))) & 0xFF for x in v)
 
 
+def embed_api_batch(texts):
+    """OpenAI 兼容 /embeddings 批量编码（PM_EMBED_API_BASE/KEY/MODEL），带限速退避。
+
+    429/403/5xx 指数退避重试（同 wiki fetch 纪律）；返回按 input 顺序排列的向量列表。
+    维度由 API 模型决定，须与 PM_EMBED_DIM 一致（vec0 表建表时校验）。
+    """
+    import requests
+    last = None
+    for attempt in range(6):
+        try:
+            r = requests.post(
+                f"{API_BASE}/embeddings",
+                headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+                json={"model": API_MODEL, "input": texts},
+                timeout=120,
+            )
+            if r.status_code in (429, 403, 500, 502, 503):
+                last = f"HTTP {r.status_code}"
+                time.sleep(min(60, 2 ** attempt * 2))
+                continue
+            r.raise_for_status()
+            data = r.json()["data"]
+            data.sort(key=lambda d: d["index"])
+            return [d["embedding"] for d in data]
+        except requests.RequestException as e:
+            last = str(e)
+            time.sleep(min(60, 2 ** attempt * 2))
+    sys.exit(f"embeddings API failed after retries: {last}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="只编码前 N 个 tag（调试用）")
@@ -198,17 +234,34 @@ def main():
     else:
         wiki_by_title_lower = {t.lower(): p for t, p in fetch_all_wiki_pages().items()}
 
-    from sentence_transformers import SentenceTransformer
     import sqlite_vec
 
-    print(f"loading model {MODEL} ...", flush=True)
-    model = SentenceTransformer(MODEL, device="cuda" if os.environ.get("FORCE_CUDA") else "cpu")
+    model = None
+    if not USE_API:
+        from sentence_transformers import SentenceTransformer
+        print(f"loading model {MODEL} ...", flush=True)
+        model = SentenceTransformer(MODEL, device="cuda" if os.environ.get("FORCE_CUDA") else "cpu")
+    else:
+        if not (API_BASE and API_KEY and API_MODEL):
+            sys.exit("api provider requires PM_EMBED_API_BASE / PM_EMBED_API_KEY / PM_EMBED_API_MODEL")
+        print(f"api embedder: {API_MODEL} @ {API_BASE} (dim {DIM}, batch {API_BATCH})", flush=True)
 
     texts, meta = [], []
     for record_id, canonical_name, prompt_form, category, _usage, aliases in tags:
         t, src = build_text(canonical_name, prompt_form, category, aliases, wiki_by_title_lower)
         texts.append(t)
         meta.append((record_id, src))
+
+    # API 编码断点：批次结束位置由 rowid 决定（rowid = i+j+1 确定性），同 model/dim/count 才可续跑
+    start_row = 0
+    if USE_API and CKPT.exists():
+        try:
+            ck = json.loads(CKPT.read_text(encoding="utf-8"))
+            if ck.get("model") == API_MODEL and ck.get("dim") == DIM and ck.get("count") == len(texts):
+                start_row = int(ck.get("last_row", 0))
+                print(f"api checkpoint resume: skipping first {start_row} rows", flush=True)
+        except Exception:
+            pass
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUT.with_suffix(".sqlite.tmp")
@@ -222,16 +275,24 @@ def main():
     db.execute("CREATE TABLE payload(rowid INTEGER PRIMARY KEY, record_id TEXT UNIQUE, text_source TEXT NOT NULL)")
     B = int(os.environ.get("PM_BUILD_BATCH", "512"))
     t0 = time.time()
+    done = 0
     for i in range(0, len(texts), B):
-        # e5 系列需要 query/passage 前缀；bge-m3 官方用法不加前缀（池化为模型自带 CLS 配置）
-        inputs = texts[i:i + B]
-        if "e5" in MODEL.lower():
-            inputs = ["passage: " + t for t in inputs]
-        emb = model.encode(
-            inputs,
-            batch_size=B,
-            normalize_embeddings=True,
-        )
+        if USE_API:
+            if i + B <= start_row:
+                done += B
+                continue
+            emb = embed_api_batch(texts[i:i + B])
+            CKPT.write_text(json.dumps({"model": API_MODEL, "dim": DIM, "count": len(texts), "last_row": i + B}), encoding="utf-8")
+        else:
+            # e5 系列需要 query/passage 前缀；bge-m3 官方用法不加前缀（池化为模型自带 CLS 配置）
+            inputs = texts[i:i + B]
+            if "e5" in MODEL.lower():
+                inputs = ["passage: " + t for t in inputs]
+            emb = model.encode(
+                inputs,
+                batch_size=B,
+                normalize_embeddings=True,
+            )
         for j, v in enumerate(emb):
             rowid = i + j + 1
             db.execute(

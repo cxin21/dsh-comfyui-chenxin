@@ -79,6 +79,30 @@ export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
   }
 }
 
+/** API 嵌入器（OpenAI 兼容 /embeddings，PM_EMBED_PROVIDER=api 时启用）。
+ *  env：PM_EMBED_API_BASE / PM_EMBED_API_KEY / PM_EMBED_API_MODEL；输出维度由 API 模型决定，
+ *  必须与索引建表时的 PM_EMBED_DIM 一致。查询期需网络——失败由 createVectorSearch 捕获降级为空。 */
+export function createApiEmbedder(opts?: { baseUrl?: string; apiKey?: string; model?: string }): EmbedFn {
+  const baseUrl = (opts?.baseUrl ?? process.env.PM_EMBED_API_BASE ?? '').replace(/\/+$/, '')
+  const apiKey = opts?.apiKey ?? process.env.PM_EMBED_API_KEY ?? ''
+  const model = opts?.model ?? process.env.PM_EMBED_API_MODEL ?? ''
+  if (!baseUrl || !apiKey || !model) {
+    throw new Error('api embedder requires PM_EMBED_API_BASE / PM_EMBED_API_KEY / PM_EMBED_API_MODEL')
+  }
+  return async (texts) => {
+    const res = await fetch(`${baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, input: texts }),
+    })
+    if (!res.ok) throw new Error(`embeddings API ${res.status}`)
+    const json = (await res.json()) as { data: Array<{ index: number; embedding: number[] }> }
+    const rows: Float32Array[] = new Array(texts.length)
+    for (const d of json.data) rows[d.index] = new Float32Array(d.embedding)
+    return rows
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 量化与 fixture 工具（spec §3.1 int8 口径）：per-vector max-abs 缩放到**有符号**
 // int8，127 为满幅（二进制补码，无偏移，clamp [-127,127]）—— 建库（Python
@@ -158,7 +182,20 @@ export function createVectorSearch(opts?: {
     }
     return resolvedPath
   }
-  const embed = opts?.embed ?? createOnnxEmbedder()
+  // 嵌入器选择：PM_EMBED_PROVIDER=api 走 OpenAI 兼容 /embeddings（在线，查询期需网络），
+  // 否则本地 ONNX（零网络）。env 不全时 api 创建即 throw → 语义层降级为空 + 一次性 warn。
+  let embedFn: EmbedFn | null = null
+  if (opts?.embed) {
+    embedFn = opts.embed
+  } else if (process.env.PM_EMBED_PROVIDER === 'api') {
+    try {
+      embedFn = createApiEmbedder()
+    } catch (e) {
+      console.warn(`[prompt-master] semantic layer degraded: ${String(e)}`)
+    }
+  } else {
+    embedFn = createOnnxEmbedder()
+  }
   let db: DB | null = null
   let mtime = 0
   let warned = false
@@ -196,7 +233,11 @@ export function createVectorSearch(opts?: {
         warn(`vector db missing at ${resolvePath()} (run build_tag_vector.py)`)
         return []
       }
-      const q = await embed([query], 'query')
+      if (!embedFn) {
+        warn('api embedder unavailable (check PM_EMBED_API_BASE/KEY/MODEL)')
+        return []
+      }
+      const q = await embedFn([query], 'query')
       const qv = quantizeInt8(q[0])
       const rows = d.prepare(
         `SELECT payload.record_id, payload.text_source, vec_items.distance

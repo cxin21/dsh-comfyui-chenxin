@@ -183,14 +183,16 @@ def quantize_int8(v):
 
 
 def embed_api_batch(texts):
-    """OpenAI 兼容 /embeddings 编码：内部按 API_BATCH 分片（各平台单请求上限不同，Ark 实测
-    拒收 512/批），429/403/5xx 指数退避重试（stderr 留痕），跨重试与分片保持 input 顺序。
+    """OpenAI 兼容 /embeddings 编码：内部按 API_BATCH 分片（Ark doubao-embedding-vision 实测
+    单请求 input 上限 = 10），线程池并发（PM_EMBED_CONCURRENCY，默认 8）ex.map 保序提交，
+    429/403/5xx 指数退避重试（stderr 留痕），4xx 参数错误打印响应体直接上抛。
     维度由 API 模型决定，须与 PM_EMBED_DIM 一致（vec0 表建表时校验）。
     """
     import requests
-    out = []
-    for s in range(0, len(texts), API_BATCH):
-        chunk = texts[s:s + API_BATCH]
+    from concurrent.futures import ThreadPoolExecutor
+    conc = int(os.environ.get("PM_EMBED_CONCURRENCY", "8"))
+
+    def one(chunk):
         last = None
         for attempt in range(6):
             try:
@@ -205,18 +207,25 @@ def embed_api_batch(texts):
                     print(f"[api] HTTP {r.status_code}, backoff {min(60, 2 ** attempt * 2)}s", flush=True)
                     time.sleep(min(60, 2 ** attempt * 2))
                     continue
-                r.raise_for_status()
+                if r.status_code >= 400:
+                    body = (r.text or "")[:500]
+                    print(f"[api] HTTP {r.status_code}: {body}", flush=True)
+                    raise RuntimeError(f"HTTP {r.status_code}: {body}")
                 data = r.json()["data"]
                 data.sort(key=lambda d: d["index"])
-                out.extend(d["embedding"] for d in data)
-                last = None
-                break
+                return [d["embedding"] for d in data]
             except requests.RequestException as e:
                 last = str(e)
                 print(f"[api] {e}, backoff {min(60, 2 ** attempt * 2)}s", flush=True)
                 time.sleep(min(60, 2 ** attempt * 2))
-        if last is not None:
-            sys.exit(f"embeddings API failed after retries: {last}")
+        raise RuntimeError(f"embeddings API failed after retries: {last}")
+
+    chunks = [texts[s:s + API_BATCH] for s in range(0, len(texts), API_BATCH)]
+    with ThreadPoolExecutor(max_workers=conc) as ex:
+        results = list(ex.map(one, chunks))
+    out = []
+    for r in results:
+        out.extend(r)
     return out
 
 

@@ -30,8 +30,8 @@ PRESET = Path(__file__).resolve().parents[3]  # comfyui-chenxin preset root
 CATALOG = PRESET / "assets" / "knowledge" / "anima-prompt-v1" / "tag-catalog.sqlite"
 OUT = PRESET / "assets" / "knowledge" / "anima-prompt-v1" / "tag-vector.sqlite"
 CACHE = PRESET / "temp" / "anima-prompt-v1" / "wiki-cache" / "wiki-pages.jsonl"
-DIM = 384
-MODEL = "intfloat/multilingual-e5-small"
+DIM = int(os.environ.get("PM_EMBED_DIM", "1024"))
+MODEL = os.environ.get("PM_EMBED_MODEL", "BAAI/bge-m3")
 WIKI_URL = "https://danbooru.donmai.us/wiki_pages.json"
 TOKEN_RE = re.compile(r"[\r\n]+|\{\{[^}]*\}\}|\[[^\]]*\]|<[^>]*>")  # dokuwiki 标记粗剥
 
@@ -220,11 +220,15 @@ def main():
     db.enable_load_extension(False)
     db.execute(f"CREATE VIRTUAL TABLE vec_items USING vec0(embedding int8[{DIM}] distance_metric=cosine)")
     db.execute("CREATE TABLE payload(rowid INTEGER PRIMARY KEY, record_id TEXT UNIQUE, text_source TEXT NOT NULL)")
-    B = 512
+    B = int(os.environ.get("PM_BUILD_BATCH", "512"))
     t0 = time.time()
     for i in range(0, len(texts), B):
+        # e5 系列需要 query/passage 前缀；bge-m3 官方用法不加前缀（池化为模型自带 CLS 配置）
+        inputs = texts[i:i + B]
+        if "e5" in MODEL.lower():
+            inputs = ["passage: " + t for t in inputs]
         emb = model.encode(
-            ["passage: " + t for t in texts[i:i + B]],
+            inputs,
             batch_size=B,
             normalize_embeddings=True,
         )

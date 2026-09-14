@@ -183,33 +183,41 @@ def quantize_int8(v):
 
 
 def embed_api_batch(texts):
-    """OpenAI 兼容 /embeddings 批量编码（PM_EMBED_API_BASE/KEY/MODEL），带限速退避。
-
-    429/403/5xx 指数退避重试（同 wiki fetch 纪律）；返回按 input 顺序排列的向量列表。
+    """OpenAI 兼容 /embeddings 编码：内部按 API_BATCH 分片（各平台单请求上限不同，Ark 实测
+    拒收 512/批），429/403/5xx 指数退避重试（stderr 留痕），跨重试与分片保持 input 顺序。
     维度由 API 模型决定，须与 PM_EMBED_DIM 一致（vec0 表建表时校验）。
     """
     import requests
-    last = None
-    for attempt in range(6):
-        try:
-            r = requests.post(
-                f"{API_BASE}/embeddings",
-                headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-                json={"model": API_MODEL, "input": texts},
-                timeout=120,
-            )
-            if r.status_code in (429, 403, 500, 502, 503):
-                last = f"HTTP {r.status_code}"
+    out = []
+    for s in range(0, len(texts), API_BATCH):
+        chunk = texts[s:s + API_BATCH]
+        last = None
+        for attempt in range(6):
+            try:
+                r = requests.post(
+                    f"{API_BASE}/embeddings",
+                    headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+                    json={"model": API_MODEL, "input": chunk},
+                    timeout=120,
+                )
+                if r.status_code in (429, 403, 500, 502, 503):
+                    last = f"HTTP {r.status_code}"
+                    print(f"[api] HTTP {r.status_code}, backoff {min(60, 2 ** attempt * 2)}s", flush=True)
+                    time.sleep(min(60, 2 ** attempt * 2))
+                    continue
+                r.raise_for_status()
+                data = r.json()["data"]
+                data.sort(key=lambda d: d["index"])
+                out.extend(d["embedding"] for d in data)
+                last = None
+                break
+            except requests.RequestException as e:
+                last = str(e)
+                print(f"[api] {e}, backoff {min(60, 2 ** attempt * 2)}s", flush=True)
                 time.sleep(min(60, 2 ** attempt * 2))
-                continue
-            r.raise_for_status()
-            data = r.json()["data"]
-            data.sort(key=lambda d: d["index"])
-            return [d["embedding"] for d in data]
-        except requests.RequestException as e:
-            last = str(e)
-            time.sleep(min(60, 2 ** attempt * 2))
-    sys.exit(f"embeddings API failed after retries: {last}")
+        if last is not None:
+            sys.exit(f"embeddings API failed after retries: {last}")
+    return out
 
 
 def main():

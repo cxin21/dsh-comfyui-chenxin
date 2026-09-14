@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { registerCatalogSearchTool } from '../../src/tools/catalog-search.js'
 import { stubCtx, runTool } from './helpers.js'
-import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { closeCatalog, setVectorSearch } from '../../src/pe-framework/dialect/anima-catalog.js'
 import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
 
 const cfg = { temperature: 0.7 }
@@ -43,10 +43,16 @@ describe('catalog_search', () => {
   })
 
   it('miss tag returns empty hits with overlay status', async () => {
-    const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'zzzzzzzzq' })))
-    expect(raw.hits).toEqual([])
-    expect(raw.overlay.status).toBe('unavailable')
-    expect(raw.overlay.advisory).toContain('overlay_unavailable')
+    // 级联 miss 专测：semantic 增强层钉死禁用（真实向量库在 miss tag 上的命中属 semantic 行为，另测）
+    setVectorSearch(null)
+    try {
+      const raw = JSON.parse(String(await runTool(stubCtx(), def(), { tag: 'zzzzzzzzq' })))
+      expect(raw.hits).toEqual([])
+      expect(raw.overlay.status).toBe('unavailable')
+      expect(raw.overlay.advisory).toContain('overlay_unavailable')
+    } finally {
+      setVectorSearch(null)
+    }
   })
 
   it('limit respected and clamped to 1..20', async () => {

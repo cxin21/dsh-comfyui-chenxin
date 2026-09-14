@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compileAnima, auditAnima, applyRelationOverlay, overlayAdvisory, isExplicitRequest, variantPolicy } from '../../src/pe-framework/dialect/anima.js'
-import { searchCatalog, closeCatalog, overlayStatus } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalogSync, closeCatalog, overlayStatus } from '../../src/pe-framework/dialect/anima-catalog.js'
 import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
 
 let tmp: string
@@ -20,7 +20,8 @@ afterEach(() => {
 })
 import { SLOT_ORDER } from '../../src/pe-framework/anima.js'
 
-const realSearch = (t: string) => searchCatalog(t, { limit: 5 })
+// 同步 seam（spec §3.2 双入口拆分）：searchCatalogSync ≡ 迁移前 searchCatalog auto 级联语义
+const realSearch = (t: string) => searchCatalogSync(t, { limit: 5 })
 
 describe('anima compile (anima.ts P2 core)', () => {
   it('variant policy injection: base adds score_7 + safety seed', () => {

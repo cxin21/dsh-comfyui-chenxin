@@ -16,7 +16,7 @@
  * - 纯确定性、零 LLM；searchCatalog 故障由调用方兜底（本模块只做 try/catch 后返回空）。
  */
 
-import { searchCatalog } from './anima-catalog.js'
+import { searchCatalogSync } from './anima-catalog.js'
 
 /** 功能词停用表：只滤虚词与代词，不滤内容词（wearing/serving 等实义动词保留交由 catalog 判定） */
 const STOPWORDS = new Set([
@@ -110,7 +110,8 @@ export interface CatalogRecallOptions {
 export function catalogCandidatesForText(text: string, opts?: CatalogRecallOptions): string[] {
   const maxCandidates = opts?.maxCandidates ?? 24
   const maxLookups = opts?.maxLookups ?? 40
-  const search = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 1, mode: 'exact' }))
+  // Ruling 2 双入口拆分：同步 exact-only seam（no await）——semantic 层永不进入生成 persona 召回
+  const search = opts?.search ?? ((t: string) => searchCatalogSync(t, { limit: 1, mode: 'exact' }))
   if (!text || typeof text !== 'string') return []
 
   const tokens = (text.toLowerCase().match(LATIN_TOKEN_RE) ?? []).filter((t) => !STOPWORDS.has(t) && !/^\d+$/.test(t))

@@ -31,8 +31,10 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
   // （fail-fast：bridge.list 自然不含 catalog，不再恒用 anima searchCatalog 混入 h3 评审证据面）。
   if (target === 'anima') {
     try {
-      deps.catalog = (query: string) => {
-        const hits = searchCatalog(query)
+      deps.catalog = async (query: string) => {
+        // searchCatalog 现为 async 公共入口（spec §3.2）：auto 级联末位含 semantic 层；
+        // EvidenceDeps.catalog 本就允许 Promise（evidence.ts 桥层 await），适配器直接透传
+        const hits = await searchCatalog(query)
         if (!Array.isArray(hits)) return []
         return hits.map((h) => ({
           tag: h.prompt_form ?? h.raw ?? query,

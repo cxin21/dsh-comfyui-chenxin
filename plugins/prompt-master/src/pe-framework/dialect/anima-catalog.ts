@@ -1,7 +1,11 @@
 /**
  * Anima tag-catalog 查询层（P2 定案）。
  * 来源：comfyui-chenxin preset knowledge/tag-catalog.sqlite（FTS5 1.39M 行）+ catalog/search.py 匹配语义。
- * node:sqlite DatabaseSync 只读直读；canonical→alias→fuzzy 级联（mode auto）；'exact' = 不含 fuzzy 的精确级联。
+ * node:sqlite DatabaseSync 只读直读；级联匹配：
+ * - searchCatalogSync（同步双入口，spec §3.2）：canonical→alias→artistRegistry→fuzzy（mode auto）；
+ *   'exact' = 不含 fuzzy 的精确级联——永不触发 semantic 层（grounding/F2/存在性判定专用）。
+ * - searchCatalog（异步公共入口，spec §3.2）：同步级联结果之上，仅 mode='auto' 且前级全空时
+ *   末位追加 semantic 向量层（enhancement：任何故障降级为空，不阻塞前四级）。
  */
 import { DatabaseSync } from 'node:sqlite'
 import { statSync, existsSync } from 'node:fs'
@@ -9,9 +13,10 @@ import { dirname } from 'node:path'
 import { resolveKnowledgePath } from '../resources/resolve.js'
 import { assertAnimaCatalog } from '../resources/manifest.js'
 import { openOverlayDb, overlayPath as overlayLibraryPath } from '../anima-knowledge/relations.js'
+import { createVectorSearch, type SemanticHit } from './anima-vector.js'
 
 export interface CatalogHit {
-  match_type: 'canonical' | 'alias' | 'fuzzy' | 'miss'
+  match_type: 'canonical' | 'alias' | 'fuzzy' | 'semantic' | 'miss'
   prompt_form?: string
   record_id?: string
   usage_count?: number
@@ -19,6 +24,9 @@ export interface CatalogHit {
   /** M4 T1：来源标记——仅 overlay artist registry 命中携带 'overlay_artist_registry'；
    *  catalog 原生命中不带此字段（undefined = 真实 catalog 记录）。 */
   source?: string
+  /** semantic 层专有（spec §3.2）：score = 1 - 向量距离（余弦相似度）；text_source = 建库文本来源 */
+  score?: number
+  text_source?: 'wiki' | 'fallback'
 }
 
 export interface CatalogQueryOptions {
@@ -79,6 +87,27 @@ export function setCatalogPath(path: string): void {
   if (_db) { _db.close(); _db = null }
   // 空串 = 清除显式覆盖，回落到 env 优先级（level 0），再回落 defaultCatalogPath()
   _dbPathOverride = path || (process.env.ANIMA_CATALOG_PATH ?? null)
+}
+
+/* ── semantic 层 seam（spec §3.2/§6）：惰性装配，测试可注入/禁用（null=禁用语义层）──
+ * 增强层纪律：装配失败 → null（语义层静默缺席），前四级级联永不受阻；查询期零网络
+ * （向量库缺失时 createVectorSearch 的查询闭包自降级为空，模型永不加载）。 */
+let vectorSearch: ((q: string, k: number) => Promise<SemanticHit[]>) | null | undefined
+
+/** 测试/调用方注入 seam：传 null 显式禁用语义层（此后 getVectorSearch 恒为 null，不再惰性装配） */
+export function setVectorSearch(s: ((q: string, k: number) => Promise<SemanticHit[]>) | null): void {
+  vectorSearch = s
+}
+
+function getVectorSearch(): ((q: string, k: number) => Promise<SemanticHit[]>) | null {
+  if (vectorSearch === undefined) {
+    try {
+      vectorSearch = createVectorSearch()
+    } catch {
+      vectorSearch = null
+    }
+  }
+  return vectorSearch
 }
 
 function db(): DatabaseSync {
@@ -267,11 +296,12 @@ function artistRegistryHits(normalized: string, limit: number): CatalogHit[] {
   }
 }
 
-/** 匹配语义对齐 catalog/search.py：auto=canonical→alias→fuzzy 级联；exact=canonical→alias（无 fuzzy）；
- *  G7：canonical/alias/fuzzy 单级直查；auto/exact 级联落空后追加 overlay accepted 别名命中。
- *  M4 T1：canonical/alias 零命中时插位 artist registry 填隙命中（alias 级 + source 标记，
- *  auto/exact 均消费；单级直查不注入；真命中永不遮蔽）。 */
-export function searchCatalog(tag: string, opts?: CatalogQueryOptions): CatalogHit[] {
+/** 同步级联双入口（Ruling 1/3 双入口拆分，spec §3.2）：canonical→alias→artistRegistry→fuzzy
+ *  （mode auto）+ G7 overlay accepted 别名追加；'exact' = 无 fuzzy；单级直查。
+ *  服务一切同步消费方（catalog-recall 召回、groundSlotTags/F2 的 search seam、测试注入）——
+ *  本函数【永不触发 semantic 层】：grounding/F2 只认 canonical/alias，关系提案端点存在性
+ *  校验要求权威判定，语义近似命中不得进入这些路径（设计定案，见 classifyTag 注释）。 */
+export function searchCatalogSync(tag: string, opts?: CatalogQueryOptions): CatalogHit[] {
   const normalized = normalizeTag(tag)
   const limit = opts?.limit === undefined ? 20 : opts.limit
   if (!normalized || limit < 1) return []
@@ -297,7 +327,59 @@ export function searchCatalog(tag: string, opts?: CatalogQueryOptions): CatalogH
   return overlay.length ? [...cascadeHits, ...overlay] : cascadeHits
 }
 
-/** 单标签类别判定（canonical/alias/fuzzy/miss）——测试与前端分流用 */
+/** semantic 命中 → catalog records JOIN（spec §3.2）：按 record_id 取 prompt_form/usage_count，
+ *  JOIN 不到的丢弃（不凑数——向量库与 catalog 重建时间差可能产生悬空 record_id）。 */
+function joinWithCatalog(sem: SemanticHit[]): CatalogHit[] {
+  const out: CatalogHit[] = []
+  for (const s of sem) {
+    if (!s.record_id) continue
+    const rows = db()
+      .prepare('SELECT prompt_form, usage_count FROM records WHERE record_id=?')
+      .all(s.record_id) as Array<{ prompt_form: string; usage_count: number }>
+    const row = rows[0]
+    if (!row) continue
+    out.push({
+      match_type: 'semantic',
+      record_id: s.record_id,
+      prompt_form: row.prompt_form,
+      usage_count: row.usage_count,
+      score: s.score,
+      text_source: s.text_source,
+    })
+  }
+  return out
+}
+
+/** 异步公共入口（spec §3.2）：searchCatalogSync 结果之上，仅 mode='auto' 且前级全空
+ *  （canonical→alias→artistRegistry→fuzzy→overlay 均零命中）时末位追加 semantic 层；
+ *  'exact' 与单级直查永不触发。增强层纪律：向量层任何故障（缺失/嵌入异常/JOIN 空）
+ *  降级为空返回，不阻塞、不抛出。调用方注意：本函数为 async——judge-assembly 证据适配器、
+ *  catalog_search 工具等异步消费方 await；同步消费方（grounding/F2/召回）必须用 searchCatalogSync。 */
+export async function searchCatalog(tag: string, opts?: CatalogQueryOptions): Promise<CatalogHit[]> {
+  const hits = searchCatalogSync(tag, opts)
+  const modeRaw = opts?.mode ?? 'auto'
+  if (modeRaw !== 'auto' || hits.length > 0) return hits
+  const normalized = normalizeTag(tag)
+  const limit = opts?.limit === undefined ? 20 : opts.limit
+  if (!normalized || limit < 1) return hits
+  const vs = getVectorSearch()
+  if (!vs) return hits
+  try {
+    const sem = await vs(normalized, limit)
+    if (!sem.length) return hits
+    const joined = joinWithCatalog(sem)
+    return joined.length ? joined : hits
+  } catch {
+    // 增强层纪律：语义层故障只降级为空，永不阻塞前四级级联结果
+    return hits
+  }
+}
+
+/** 单标签类别判定（canonical/alias/fuzzy/miss）——测试与前端分流用。
+ *  [设计定案 2026-09-15，spec §3.2 双入口拆分] classifyTag 不接入 semantic 层：MatchKind
+ *  不新增 'semantic' 值、本函数不做任何向量查询。原因：关系提案端点（catalog_relations）
+ *  的存在性校验要求权威 catalog 判定，语义近似命中不得放行；semantic 是 auto 级联末位的
+ *  增强层，只存在于异步公共入口 searchCatalog，不改变存在性分类语义。 */
 export function classifyTag(tag: string): MatchKind {
   const normalized = normalizeTag(tag)
   if (!normalized) return 'miss'

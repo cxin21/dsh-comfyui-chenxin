@@ -302,7 +302,7 @@ describe('copyNormalized 分支（legacy tag-catalog 形状源）', () => {
 })
 
 describe('G4 交互：rebuild 后 catalog_search 自动读新文件（mtime 刷新，不动缓存句柄）', () => {
-  it('build → searchCatalog 返回新行；build 自身不触碰缓存句柄', () => {
+  it('build → searchCatalog 返回新行；build 自身不触碰缓存句柄', async () => {
     const root = join(baseTmp, 'g4')
     const sourcePath = join(root, 'skills', 'anima-prompt-v1', 'knowledge', 'tags.sqlite')
     const outputPath = join(root, 'skills', 'anima-prompt-v1', 'knowledge', 'tag-catalog.sqlite')
@@ -312,7 +312,7 @@ describe('G4 交互：rebuild 后 catalog_search 自动读新文件（mtime 刷�
     // build v1 → 打开缓存句柄
     buildCatalog({ sourcePath, outputPath })
     setCatalogPath(outputPath)
-    expect(searchCatalog('waving').map((h) => h.record_id)).toContain('5')
+    expect((await searchCatalog('waving')).map((h) => h.record_id)).toContain('5')
     expect(_testOnlyState().dbGeneration).toBe(1)
 
     // 追加新 tag 后 rebuild（同一 output 路径）
@@ -327,7 +327,7 @@ describe('G4 交互：rebuild 后 catalog_search 自动读新文件（mtime 刷�
     utimesSync(outputPath, future, future)
 
     // 下一次查询：G4 mtime 刷新 → 关闭陈旧句柄重开 → 自动读新文件
-    const hits = searchCatalog('nekomimi', { mode: 'exact' })
+    const hits = await searchCatalog('nekomimi', { mode: 'exact' })
     expect(hits.map((h) => h.record_id)).toContain('7')
     expect(_testOnlyState().dbGeneration).toBe(2)
   })
@@ -360,7 +360,7 @@ describe.skipIf(process.env.PM_RUN_REAL !== '1')('real tags.sqlite full rebuild 
       expect(countOf(outputPath, 'catalog_fts')).toBe(stats.names)
       // rebuild 产物可检索
       setCatalogPath(outputPath)
-      expect(searchCatalog('1girl', { mode: 'exact' }).length).toBeGreaterThan(0)
+      expect((await searchCatalog('1girl', { mode: 'exact' })).length).toBeGreaterThan(0)
     },
   )
 

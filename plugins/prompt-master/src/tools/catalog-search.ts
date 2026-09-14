@@ -24,7 +24,7 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
       const mode = (args.mode === 'exact' ? 'exact' : 'auto') as CatalogQueryOptions['mode']
       let limit = args.limit ?? 5
       if (!(limit >= 1 && limit <= 20)) limit = 5
-      const hits: CatalogHit[] = searchCatalog(tag, { mode, limit })
+      const hits: CatalogHit[] = await searchCatalog(tag, { mode, limit })
       const status = overlayStatus()
       // G5：fuzzy 命中仅作候选参考；usage_count 低于采纳阈值时给出 advisory
       const flagged = hits.map((h) => ({ ...h, candidate: h.match_type === 'fuzzy' }))

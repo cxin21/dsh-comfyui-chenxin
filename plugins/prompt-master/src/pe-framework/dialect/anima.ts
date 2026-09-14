@@ -5,7 +5,7 @@
  */
 import { SLOT_ORDER } from '../anima.js'
 import { tokensCoveredBy, tokensOf } from '../tokens.js'
-import { normalizeTag, searchCatalog, overlayStatus, queryCatalogInternal, type CatalogHit } from './anima-catalog.js'
+import { normalizeTag, searchCatalogSync, overlayStatus, queryCatalogInternal, type CatalogHit } from './anima-catalog.js'
 import { registerDialect } from './registry.js'
 import type { DialectContract } from './contract.js'
 import { ANIMA_PERSONA, ANIMA_SCHEMA } from '../intent/subagent-provider.js'
@@ -306,7 +306,10 @@ export function compileAnima(slots: AnimaSlots, opts?: CompileAnimaOptions): Com
   const variant = opts?.variant ?? 'base'
   // F2（三期 Task 1）：缺省 limit 1→5 —— groundSlotTags 只取 top hit（语义不变），
   // 同时让 canonical 采纳后处理拿到完整 fuzzy 候选列（≤3）
-  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
+  // 双入口拆分（spec §3.2）：compile 链路（groundSlotTags/F2/内部 audit 重跑）保持同步
+  // exact-only seam——用 searchCatalogSync（永不触发 semantic 层），semantic 命中不参与
+  // grounding 与 F2 采纳；异步公共入口 searchCatalog 仅供异步消费方（judge-assembly/工具）。
+  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalogSync(t, { limit: 5 }))
   const policy = POLICIES[variant] ?? POLICIES.base
   const qualityPrefix = slots.qualityPrefix ?? true
   const citations = groundSlotTags(slots, search)
@@ -687,7 +690,10 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
 /** auditAnima：audit gates（含 catalog_miss —— 需要 slots+search 时生成） */
 export function auditAnima(positive: string, negative: string, opts?: CompileAnimaOptions & { slots?: AnimaSlots; rating?: Rating }): AuditGate[] {
   const gates: AuditGate[] = []
-  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
+  // 双入口拆分（spec §3.2）：audit 链路保持同步（DialectContract.audit 为同步契约），
+  // 缺省 seam 用 searchCatalogSync；注入 seam 返回 semantic 命中时 miss 闸门发
+  // semantic_fallback advisory（见下方 catalog_miss 块）。
+  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalogSync(t, { limit: 5 }))
   const variant = opts?.variant ?? 'base'
   // catalog_miss（A14：保留原文 + advisory；候选作建议）
   if (opts?.slots) {
@@ -764,7 +770,7 @@ export function applyCanonicalSubstitutions(
   negative: string,
   opts?: CompileAnimaOptions & { slots?: AnimaSlots; rating?: Rating },
 ): CanonicalSubstitutionResult {
-  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalog(t, { limit: 5 }))
+  const search: (t: string) => CatalogHit[] = opts?.search ?? ((t: string) => searchCatalogSync(t, { limit: 5 }))
   const variant = opts?.variant ?? 'base'
   const replacements: string[] = []
   const dropped: string[] = []

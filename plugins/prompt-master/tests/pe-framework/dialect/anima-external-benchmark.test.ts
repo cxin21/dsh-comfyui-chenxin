@@ -6,9 +6,10 @@
  */
 import { describe, expect, it, afterAll } from 'vitest'
 import { auditAnima, compileAnima, validateAnimaSlots } from '../../../src/pe-framework/dialect/anima.js'
-import { searchCatalog, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalogSync, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
 
-const realSearch = (t: string) => searchCatalog(t, { limit: 5 })
+// 同步 seam（spec §3.2 双入口拆分）：searchCatalogSync ≡ 迁移前 searchCatalog auto 级联语义
+const realSearch = (t: string) => searchCatalogSync(t, { limit: 5 })
 
 describe('A4：互斥清单扩容', () => {
   it('新增互斥对逐对触发 mutual_exclusion', () => {

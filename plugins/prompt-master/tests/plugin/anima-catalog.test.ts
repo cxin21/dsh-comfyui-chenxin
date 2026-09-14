@@ -1,9 +1,13 @@
-import { describe, expect, it, afterAll, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, afterAll, beforeAll, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { searchCatalog, classifyTag, overlayView, overlayStatus, OVERLAY_ADVISORY, catalogMeta, closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalog, classifyTag, overlayView, overlayStatus, OVERLAY_ADVISORY, catalogMeta, closeCatalog, setVectorSearch } from '../../src/pe-framework/dialect/anima-catalog.js'
 import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
+
+// 级联行为专测文件：semantic 增强层钉死禁用（miss 断言不被真实向量库污染；见 anima-catalog-semantic.test.ts）
+beforeAll(() => setVectorSearch(null))
+afterAll(() => { setVectorSearch(null); closeCatalog() })
 
 describe('anima catalog (anima-catalog.ts)', () => {
   let tmp: string
@@ -19,28 +23,28 @@ describe('anima catalog (anima-catalog.ts)', () => {
     rmSync(tmp, { recursive: true, force: true })
   })
 
-  it('canonical: silvery hair exact-match returns canonical hit with prompt_form', () => {
-    const hits = searchCatalog('silvery hair')
+  it('canonical: silvery hair exact-match returns canonical hit with prompt_form', async () => {
+    const hits = await searchCatalog('silvery hair')
     expect(hits.length).toBeGreaterThan(0)
     expect(hits[0].match_type).toBe('canonical')
     expect(hits[0].prompt_form).toBe('silvery hair')
   })
 
-  it('alias: wave resolves to canonical waving via alias name type', () => {
-    const hits = searchCatalog('wave')
+  it('alias: wave resolves to canonical waving via alias name type', async () => {
+    const hits = await searchCatalog('wave')
     expect(hits.length).toBeGreaterThan(0)
     expect(hits[0].match_type).toBe('alias')
     expect(hits[0].prompt_form).toBe('waving')
   })
 
-  it('fuzzy: silver hair cascades to fuzzy word-root matches', () => {
-    const hits = searchCatalog('silver hair')
+  it('fuzzy: silver hair cascades to fuzzy word-root matches', async () => {
+    const hits = await searchCatalog('silver hair')
     expect(hits.length).toBeGreaterThan(0)
     expect(hits[0].match_type).toBe('fuzzy')
   })
 
-  it('miss: gibberish yields empty results and miss classification', () => {
-    expect(searchCatalog('zzzzzzzzq')).toEqual([])
+  it('miss: gibberish yields empty results and miss classification', async () => {
+    expect(await searchCatalog('zzzzzzzzq')).toEqual([])
     expect(classifyTag('zzzzzzzzq')).toBe('miss')
   })
 
@@ -50,19 +54,19 @@ describe('anima catalog (anima-catalog.ts)', () => {
     expect(classifyTag('expression')).toBe('fuzzy')
   })
 
-  it('limit respected', () => {
-    expect(searchCatalog('silver hair', { limit: 1 }).length).toBe(1)
-    expect(searchCatalog('silver hair', { limit: 0 })).toEqual([])
+  it('limit respected', async () => {
+    expect((await searchCatalog('silver hair', { limit: 1 })).length).toBe(1)
+    expect(await searchCatalog('silver hair', { limit: 0 })).toEqual([])
   })
 
-  it('unknown mode tolerates as auto', () => {
-    const hits = searchCatalog('silvery hair', { mode: 'bogus' as never })
+  it('unknown mode tolerates as auto', async () => {
+    const hits = await searchCatalog('silvery hair', { mode: 'bogus' as never })
     expect(hits[0].match_type).toBe('canonical')
   })
 
-  it('exact mode skips fuzzy cascade', () => {
-    expect(searchCatalog('silver hair', { mode: 'exact' })).toEqual([]) // 无 canonical/alias → 不落 fuzzy
-    expect(searchCatalog('silvery hair', { mode: 'exact' })[0].match_type).toBe('canonical')
+  it('exact mode skips fuzzy cascade', async () => {
+    expect(await searchCatalog('silver hair', { mode: 'exact' })).toEqual([]) // 无 canonical/alias → 不落 fuzzy
+    expect((await searchCatalog('silvery hair', { mode: 'exact' }))[0].match_type).toBe('canonical')
   })
 
   it('overlay degrade: absent overlay → empty view + advisory', () => {
@@ -78,6 +82,4 @@ describe('anima catalog (anima-catalog.ts)', () => {
     expect(meta.tables).toContain('catalog_fts')
     expect(meta.fts).toBe(true)
   })
-
-  afterAll(() => closeCatalog())
 })

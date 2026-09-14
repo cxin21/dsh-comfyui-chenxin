@@ -82,7 +82,7 @@ describe('catalog_artist_add tool face (M4 T1)', () => {
 describe('catalog_search consumption of the artist registry (M4 T1)', () => {
   it('registered artist surfaces as alias hit with explicit source marker (gap-filling on miss)', async () => {
     await runTool({} as never, def(), { name: 'xu beihong', evidence: ['batch B miss record'] })
-    const hits = searchCatalog('xu beihong', { mode: 'auto' })
+    const hits = await searchCatalog('xu beihong', { mode: 'auto' })
     const reg = hits.find((h) => h.source === 'overlay_artist_registry')
     expect(reg, 'registry hit missing').toBeDefined()
     expect(reg!.match_type).toBe('alias')
@@ -95,20 +95,20 @@ describe('catalog_search consumption of the artist registry (M4 T1)', () => {
   })
   it('exact mode includes registry hits; single-level direct modes do not', async () => {
     await runTool({} as never, def(), { name: 'xu beihong', evidence: ['doc'] })
-    expect(searchCatalog('xu beihong', { mode: 'exact' }).some((h) => h.source === 'overlay_artist_registry')).toBe(true)
-    expect(searchCatalog('xu beihong', { mode: 'canonical' }).some((h) => h.source === 'overlay_artist_registry')).toBe(false)
-    expect(searchCatalog('xu beihong', { mode: 'alias' }).some((h) => h.source === 'overlay_artist_registry')).toBe(false)
-    expect(searchCatalog('xu beihong', { mode: 'fuzzy' }).some((h) => h.source === 'overlay_artist_registry')).toBe(false)
+    expect((await searchCatalog('xu beihong', { mode: 'exact' })).some((h) => h.source === 'overlay_artist_registry')).toBe(true)
+    expect((await searchCatalog('xu beihong', { mode: 'canonical' })).some((h) => h.source === 'overlay_artist_registry')).toBe(false)
+    expect((await searchCatalog('xu beihong', { mode: 'alias' })).some((h) => h.source === 'overlay_artist_registry')).toBe(false)
+    expect((await searchCatalog('xu beihong', { mode: 'fuzzy' })).some((h) => h.source === 'overlay_artist_registry')).toBe(false)
   })
   it('canonical protection: real canonical hit is never shadowed or duplicated by the registry', async () => {
     await runTool({} as never, def(), { name: 'wlop', evidence: ['already canonical test'] })
-    const hits = searchCatalog('wlop', { mode: 'auto' })
+    const hits = await searchCatalog('wlop', { mode: 'auto' })
     expect(hits[0].match_type).toBe('canonical')
     expect(hits[0].source).toBeUndefined()
     expect(hits.filter((h) => h.source === 'overlay_artist_registry')).toHaveLength(0)
   })
-  it('unregistered miss stays a clean miss (no registry contamination)', () => {
-    const hits = searchCatalog('definitely nonexistent artist 83174', { mode: 'auto' })
+  it('unregistered miss stays a clean miss (no registry contamination)', async () => {
+    const hits = await searchCatalog('definitely nonexistent artist 83174', { mode: 'auto' })
     expect(hits.some((h) => h.source === 'overlay_artist_registry')).toBe(false)
   })
 })

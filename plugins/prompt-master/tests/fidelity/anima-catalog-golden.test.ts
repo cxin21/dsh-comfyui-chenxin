@@ -1,7 +1,12 @@
-import { describe, expect, it, afterAll } from 'vitest'
+import { describe, expect, it, afterAll, beforeAll } from 'vitest'
 import { createHash } from 'node:crypto'
 import { readGolden } from './harness.js'
-import { searchCatalog, closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalog, closeCatalog, setVectorSearch } from '../../src/pe-framework/dialect/anima-catalog.js'
+
+// golden 是四级确定性级联的保真记录（record_set 相等 + sha256 自洽）——semantic 增强层
+// 必须钉死禁用，否则真实向量库在 miss tag 上追加 semantic 命中将破坏 golden 基线
+beforeAll(() => setVectorSearch(null))
+afterAll(() => { setVectorSearch(null); closeCatalog() })
 
 const FIXTURE_TAGS: Array<{ tag: string; safe: string; kind: string }> = [
   { tag: 'silvery hair', safe: 'silvery_hair', kind: 'canonical' },
@@ -20,10 +25,10 @@ const FIXTURE_TAGS: Array<{ tag: string; safe: string; kind: string }> = [
 
 describe('anima catalog golden double-run (contracts.md ④ 记录集相等)', () => {
   for (const { tag, safe, kind } of FIXTURE_TAGS) {
-    it(`${kind}: ${tag} — TS hits match golden record set (record_id/prompt_form/usage_count/match identity)`, () => {
+    it(`${kind}: ${tag} — TS hits match golden record set (record_id/prompt_form/usage_count/match identity)`, async () => {
       const entry = readGolden(`anima-${safe}`)
       const goldenHits = (entry.pythonOutput as any).hits ?? []
-      const tsHits = searchCatalog(tag, { limit: 5 })
+      const tsHits = await searchCatalog(tag, { limit: 5 })
       const actual = tsHits.map((h) => ({
         record_id: h.record_id,
         prompt_form: h.prompt_form,
@@ -49,6 +54,4 @@ describe('anima catalog golden double-run (contracts.md ④ 记录集相等)', (
       expect(sha, `anima-${safe}`).toBe(entry.sha256)
     }
   })
-
-  afterAll(() => closeCatalog())
 })

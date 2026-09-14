@@ -1,9 +1,10 @@
 import { describe, expect, it, afterAll } from 'vitest'
 import { compileAnima, auditAnima } from '../../../src/pe-framework/dialect/anima.js'
-import { searchCatalog, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalogSync, closeCatalog } from '../../../src/pe-framework/dialect/anima-catalog.js'
 import { EXPLICIT_MARKERS, SENSITIVE_MARKERS, resolveRating } from '../../../src/pe-framework/safety/rating.js'
 
-const realSearch = (t: string) => searchCatalog(t, { limit: 5 })
+// 同步 seam（spec §3.2 双入口拆分）：searchCatalogSync ≡ 迁移前 searchCatalog auto 级联语义
+const realSearch = (t: string) => searchCatalogSync(t, { limit: 5 })
 
 const slots = (extra: Record<string, unknown>) => ({
   count_gender: ['1girl'], detail_mood: ['white dress'], ...extra,
@@ -87,7 +88,7 @@ describe('rating integration (spec §5.3)', () => {
     // 强制复核档位链路；有意的词表变更走评审并同步本期望。
     const escapers: string[] = []
     for (const w of [...EXPLICIT_MARKERS, ...SENSITIVE_MARKERS]) {
-      const top = searchCatalog(w, { limit: 5 })[0]
+      const top = searchCatalogSync(w, { limit: 5 })[0]
       if (top && (top.match_type === 'canonical' || top.match_type === 'alias') && top.prompt_form && top.prompt_form !== w) {
         const f = top.prompt_form.toLowerCase()
         if (!EXPLICIT_MARKERS.some((m) => f.includes(m)) && !SENSITIVE_MARKERS.some((m) => f.includes(m))) {

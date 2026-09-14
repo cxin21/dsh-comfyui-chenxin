@@ -2,9 +2,11 @@ import { describe, expect, it, afterAll } from 'vitest'
 import { createHash } from 'node:crypto'
 import { readGolden } from './harness.js'
 import { compileAnima, auditAnima } from '../../src/pe-framework/dialect/anima.js'
-import { searchCatalog, closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalogSync, closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
 
-const realSearch = (t: string) => searchCatalog(t, { limit: 5 })
+// 同步 seam（spec §3.2 双入口拆分）：compile/audit 的 search 注入保持同步——
+// searchCatalogSync 与迁移前 searchCatalog auto 级联语义逐位相同（semantic 层仅在异步公共入口）
+const realSearch = (t: string) => searchCatalogSync(t, { limit: 5 })
 
 const BRIEFS = ['ex1-minimal', 'ex2-veteran', 'ex3-miku', 'ex4-advisories', 'ex5-explicit', 'ex6-lora']
 

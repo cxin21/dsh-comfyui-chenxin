@@ -167,7 +167,7 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
   const exclusions = (bp.core.negative ?? [])
     .filter((n) => n.severity === 'soft')
     .map((n) => n.target)
-    .filter((t) => t.trim().length > 0)
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
 
   const slots: AnimaSlots = {
     ...(countGender.length > 0 ? { count_gender: countGender } : {}),
@@ -198,6 +198,21 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
  */
 export function preflightRepair(bp: BlueprintV1): { bp: BlueprintV1; repairs: string[] } {
   const repairs: string[] = []
+  // M5-DIAG2（真实会话 c07 确定性崩溃根因）：enrich patch 产物可携带缺 target / 非法 severity 的
+  // 负向条目（validateBlueprint 此前不校验 negative 形状）——直达投影器前由 L1 确定性丢弃并留痕
+  // （LLM 产物不可信；validateBlueprint 已同步收口，此层兜住 enrich patch 不重校验的路径）。
+  const negatives = Array.isArray(bp.core.negative) ? bp.core.negative : []
+  const validNegatives = negatives.filter((n) => {
+    if (n == null || typeof n !== 'object') return false
+    const t = (n as { target?: unknown }).target
+    const s = (n as { severity?: unknown }).severity
+    return typeof t === 'string' && t.trim().length > 0 && (s === 'soft' || s === 'hard')
+  })
+  if (validNegatives.length !== negatives.length) {
+    const dropped = negatives.length - validNegatives.length
+    repairs.push(`negative_invalid_dropped:${dropped}`)
+    return { bp: { ...bp, core: { ...bp.core, negative: validNegatives } }, repairs }
+  }
   if (bp.media !== 'video' || !bp.media_layer.video) return { bp, repairs }
   const out: BlueprintV1 = structuredClone(bp)
   const video = out.media_layer.video!

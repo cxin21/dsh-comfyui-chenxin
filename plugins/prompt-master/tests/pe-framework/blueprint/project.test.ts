@@ -246,6 +246,34 @@ describe('preflightRepair', () => {
     })
     expect(repairs.some((x) => x.startsWith('shots_3>max_2:merge_shots_or_extend_duration'))).toBe(true)
   })
+  it('drops malformed negative entries on any media (M5-DIAG2 c07 根因——enrich patch 缺 target 直达投影器)', () => {
+    const bp: BlueprintV1 = {
+      schema_version: 1, media: 'image',
+      core: {
+        concept: 'x',
+        negative: [
+          { target: '现代元素', severity: 'soft' },
+          { severity: 'soft' } as unknown as { target: string; severity: 'soft' }, // 缺 target（崩溃形状）
+          { target: '', severity: 'soft' }, // 空 target
+          { target: '文字', severity: 'medium' as unknown as 'soft' }, // 非法 severity
+        ],
+      },
+      media_layer: { image: {} },
+    }
+    const { bp: r, repairs } = preflightRepair(bp)
+    expect(repairs).toContain('negative_invalid_dropped:3')
+    expect(r.core.negative).toEqual([{ target: '现代元素', severity: 'soft' }])
+  })
+  it('well-formed negatives pass through unchanged (zero repair noise)', () => {
+    const bp: BlueprintV1 = {
+      schema_version: 1, media: 'image',
+      core: { concept: 'x', negative: [{ target: '现代元素', severity: 'soft' }] },
+      media_layer: { image: {} },
+    }
+    const { bp: r, repairs } = preflightRepair(bp)
+    expect(repairs).toEqual([])
+    expect(r).toBe(bp) // 未修复时原样返回（零克隆，既有语义）
+  })
 })
 
 describe('projectToH3 global audio (spec §8.1 O9)', () => {

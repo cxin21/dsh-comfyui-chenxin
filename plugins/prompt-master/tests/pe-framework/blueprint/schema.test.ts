@@ -48,4 +48,31 @@ describe('validateBlueprint', () => {
     expect(errors.length).toBeGreaterThan(0)
     expect(errors.join()).toContain('shots')
   })
+  it('rejects negative entry missing target (M5-DIAG2 真实会话 c07 崩溃根因——LLM 产物形状收口)', () => {
+    const r = validateBlueprint({
+      schema_version: 1, media: 'image',
+      core: { concept: 'x', negative: [{ severity: 'soft' }, { target: '文字', severity: 'soft' }] },
+      media_layer: { image: {} },
+    })
+    expect(r.ok).toBe(false)
+    const errors = (r as { errors: string[] }).errors
+    expect(errors.join()).toContain('core.negative[0].target')
+  })
+  it('rejects negative entry with invalid severity', () => {
+    const r = validateBlueprint({
+      schema_version: 1, media: 'image',
+      core: { concept: 'x', negative: [{ target: '文字', severity: 'medium' }] },
+      media_layer: { image: {} },
+    })
+    expect(r.ok).toBe(false)
+    expect((r as { errors: string[] }).errors.join()).toContain("core.negative[0].severity must be 'soft'|'hard'")
+  })
+  it('accepts well-formed soft/hard negative entries', () => {
+    const r = validateBlueprint({
+      schema_version: 1, media: 'image',
+      core: { concept: 'x', negative: [{ target: '文字', severity: 'soft' }, { target: '现代元素', severity: 'hard' }] },
+      media_layer: { image: {} },
+    })
+    expect(r.ok).toBe(true)
+  })
 })

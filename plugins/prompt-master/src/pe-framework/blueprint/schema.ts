@@ -145,6 +145,29 @@ export function validateBlueprint(bp: unknown): ValidateResult {
     if (core['aspect_ratio'] != null && !(ASPECT_RATIOS as readonly string[]).includes(core['aspect_ratio'] as string)) {
       errors.push('core.aspect_ratio must be one of 16:9|9:16|1:1|4:3|3:4')
     }
+    // core.negative：可选数组；条目必须 { target: 非空 string, severity: 'soft'|'hard' }
+    // （M5-DIAG2 根因修复：真实会话 c07 实证 enrich patch 可产出缺 target 的 soft 条目——
+    // 校验器此前零 negative 检查 → 直达投影器 exclusions 链 undefined.trim 崩溃。fail-closed
+    // 收口：analyzer/incremental 入口经此闸门，修复反馈指导 LLM 自修）
+    if (core['negative'] != null) {
+      if (!Array.isArray(core['negative'])) {
+        errors.push('core.negative must be an array')
+      } else {
+        core['negative'].forEach((n: unknown, i: number) => {
+          if (!isRecord(n)) {
+            errors.push(`core.negative[${i}] must be an object`)
+            return
+          }
+          const t = n['target']
+          if (typeof t !== 'string' || t.trim().length === 0) {
+            errors.push(`core.negative[${i}].target must be a non-empty string`)
+          }
+          if (n['severity'] !== 'soft' && n['severity'] !== 'hard') {
+            errors.push(`core.negative[${i}].severity must be 'soft'|'hard'`)
+          }
+        })
+      }
+    }
   }
 
   // media_layer：可选；video 分支校验

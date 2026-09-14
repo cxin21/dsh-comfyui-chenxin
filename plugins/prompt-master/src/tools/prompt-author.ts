@@ -43,6 +43,19 @@ import { applyArtDirectionCards, type ArtDirectionRecommendation } from '../pe-f
 import { getStylePreset } from '../pe-framework/styles/registry.js'
 import type { Rating } from '../pe-framework/types.js'
 import { tokensOf } from '../pe-framework/tokens.js'
+import { appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+// M5-DIAG2（c07 真实会话确定性 trim 崩溃）：文件级阶段 trace——%TEMP%/pm-author-trace.log，
+// 插件日志面（logger.info）不可离线检索，文件 trace 供 captain 直接读取；appendFileSync 逐行落盘。
+// 诊断辅助设施：任何写失败静默吞掉（永不阻塞主流程）。移除时机 = 缺陷定位并修复后。
+const TRACE_PATH = join(tmpdir(), 'pm-author-trace.log')
+function trace(stage: string, detail?: unknown): void {
+  try {
+    appendFileSync(TRACE_PATH, `${new Date().toISOString()} ${stage}${detail !== undefined ? ` ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}\n`)
+  } catch { /* 诊断辅助，永不阻塞 */ }
+}
 import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
 import { defaultFeedbackDbPath } from './prompt-feedback.js'
 import { createHash } from 'node:crypto'
@@ -851,7 +864,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
     },
     async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; rating?: 'safe' | 'sensitive' | 'explicit'; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja'; art_direction?: Record<string, unknown> }, exec: ToolRunContext) {
       const a = args as unknown as AuthorArgs
+      try { // M5-DIAG2：诊断包裹——CRASH stack 落盘后原样 rethrow（行为零变化，仅证据采集）
       const target = String(a.target || 'anima') as Target
+      trace('call_start', { target, rating: a.rating ?? null, judge: a.judge_mode ?? null, style: a.style_id ?? null, input: String(a.input ?? '').slice(0, 60) })
       if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
       if (!isDialectReady(target)) {
         return serializeReport({
@@ -878,6 +893,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // captain ③（t4 交接）：a.rating 原样透传（缺省 undefined）——物化 'safe' 会以显式输入身份令
       // resolveRating 记 source='input'、永不记 escalatedFrom，rating_escalated advisory 被压死。
       const resolved = resolveRating(a.rating, input)
+      trace('rating_resolved', resolved)
       const preflightAdvisories: string[] = []
       if (resolved.escalatedFrom) preflightAdvisories.push(`rating_escalated:${resolved.rating}`)
       // M3-T1b（spec §5.5 L185）：h3 rating 硬约束——MiniMax 官方内容政策只支持 safe。
@@ -1072,6 +1088,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // h3 不适用（shots 无 rating 槽；h3 仅 safe，预检 gate 已挡非 safe）。
       if (!draft.blueprint && target === 'anima' && draft.slots) draft.slots.rating = resolved.rating
       traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
+      trace('intent_done', { form: draft.blueprint ? 'blueprint' : (draft.shots ? 'shots' : 'slots'), retried: blueprintRepairRetried, missing: draft.missing?.length ?? null })
 
       // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
       // → Level 2 LLM 结构化修复（≤2 次，计入 MAX_CORRECTIONS）→ Level 3 manual + loop_exhausted
@@ -1104,16 +1121,20 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         ]
 
         const tBlueprintEnrich0 = performance.now()
+        trace('enrich_start', { coreRating: bpForEnrich.core?.rating ?? null, media: bpForEnrich.media })
         const e0 = await enrichBlueprint(ctx, route, bpForEnrich, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}) })
+        trace('enrich_done', { expansions: e0.expansions.length, advisories: e0.advisories?.length ?? 0, firstExpansion: e0.expansions[0] ?? null })
         traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tBlueprintEnrich0 }) // M5-T2（D4）envelope 增量②
         expansions.push(...e0.expansions)
         // M2-T2（spec §4.3 备注）：applyStyle 不感知展示通道——h3 negative_hints 忽略 advisory 由 engine 层产出、此处并入 envelope
         const styleAdvisories = new Set<string>()
         for (const sa of e0.advisories ?? []) styleAdvisories.add(sa)
         const l1 = preflightRepair(e0.blueprint)
+        trace('l1_done', { repairs: l1.repairs.length })
         if (l1.repairs.length > 0) { repaired = true; repairs.push(...l1.repairs) }
         let bp = l1.bp
         let stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts)
+        trace('stage_done', { ok: stage.ok, gates: stage.gates.length, critical: stage.gates.filter((g) => g.severity === 'critical').length })
         // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果（envelope 可见性，不影响闭环）
         let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined
         if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
@@ -1297,6 +1318,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         aesthetics: { recommendedCards },
         style: styleSummaryOf(a.style_id, draft.blueprint),
       })
+      } catch (err) {
+        trace('CRASH', err instanceof Error ? (err.stack ?? err.message) : String(err))
+        throw err
+      }
     },
   })
 }

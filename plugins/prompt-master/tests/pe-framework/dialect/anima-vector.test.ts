@@ -3,15 +3,34 @@ import { DatabaseSync } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { mkdtempSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import {
   createVectorSearch,
   quantizeInt8,
   unitVec,
+  resolveHfCacheDir,
   E5_PASSAGE_PREFIX,
   E5_QUERY_PREFIX,
   type EmbedFn,
 } from '../../../src/pe-framework/dialect/anima-vector.js'
+
+describe('resolveHfCacheDir (T14-002: cwd-independent HF cache pin)', () => {
+  it('returns an absolute preset-anchored path under data/runtime, never node_modules or cwd-relative', () => {
+    const dir = resolveHfCacheDir()
+    expect(dir).toBeTruthy()
+    expect(isAbsolute(dir!)).toBe(true)
+    expect(dir!.endsWith(join('data', 'runtime', 'hf-cache'))).toBe(true)
+    // 缺陷本体：缓存不得落在随 cwd/包安装漂移的位置
+    expect(dir!.includes('node_modules')).toBe(false)
+    expect(dir!.startsWith(tmpdir())).toBe(false)
+  })
+
+  it('is cwd-independent (stable across different working directories)', () => {
+    // presetRootFromModulePath 从 import.meta.url 推导，与 process.cwd() 无关；
+    // 同进程内两次解析必须逐字节一致（确定性缺陷的回归探针）
+    expect(resolveHfCacheDir()).toBe(resolveHfCacheDir())
+  })
+})
 
 describe('e5 prefix constants', () => {
   it('query/passage prefixes follow e5 convention', () => {

@@ -6,7 +6,8 @@
 import { DatabaseSync, type DatabaseSync as DB } from 'node:sqlite'
 import { getLoadablePath } from 'sqlite-vec'
 import { statSync } from 'node:fs'
-import { resolveKnowledgePath } from '../resources/resolve.js'
+import { join, sep } from 'node:path'
+import { getPresetRoot, resolveKnowledgePath } from '../resources/resolve.js'
 
 export const E5_QUERY_PREFIX = 'query: '
 export const E5_PASSAGE_PREFIX = 'passage: '
@@ -14,6 +15,38 @@ export const E5_PASSAGE_PREFIX = 'passage: '
 export type EmbedFn = (texts: string[], kind: 'query' | 'passage') => Promise<Float32Array[]>
 
 type Extractor = import('@huggingface/transformers').FeatureExtractionPipeline
+
+/**
+ * HF 模型缓存稳定路径（T14-002，spec §3.3）：`<preset>/data/runtime/hf-cache`。
+ * 显式 env.cacheDir 钉住缓存位置——transformers.js 缺省缓存目录锚定在包目录
+ * （node_modules/@huggingface/transformers/.cache，实测 v4）且随 cwd 漂移：
+ * 换 cwd 或重装依赖即丢缓存触发 ~118MB 重下载（本机直连 huggingface.co 被阻断）。
+ * 落 data/runtime（持久运行时数据区，与 feedback.sqlite 同区）而非 temp/——
+ * temp 是周期清理区，模型缓存被静默清掉后重下载在阻断环境下不可恢复。
+ * 解析顺序复用 PRESET 路径解析（setPresetRoot → DSH_COMFYUI_PRESET_ROOT → dist 模块位置推导），
+ * 全部与 cwd 无关；解析不出 preset 根时返回 null（保持库缺省，不臆造路径）。
+ */
+export function resolveHfCacheDir(): string | null {
+  const root = getPresetRoot() ?? process.env.DSH_COMFYUI_PRESET_ROOT ?? presetRootFromModulePath()
+  if (!root) return null
+  return join(root, 'data', 'runtime', 'hf-cache')
+}
+
+/** dist 位于 <preset>/plugins/prompt-master/dist/src/... → 定位 plugins 段前为 preset 根（cwd 无关） */
+function presetRootFromModulePath(): string | undefined {
+  try {
+    const here = decodeURIComponent(import.meta.url.replace(/^file:\/\/\/?/, ''))
+    const parts = here.split(/[\\/]/)
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (parts[i] === 'plugins' && parts[i + 1] === 'prompt-master') {
+        return parts.slice(0, i).join(sep)
+      }
+    }
+    return undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
   const model = opts?.model ?? process.env.PM_E5_MODEL ?? 'Xenova/multilingual-e5-small'
@@ -24,6 +57,8 @@ export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
     if (!extractor) {
       try {
         const tf = await import('@huggingface/transformers')
+        const cacheDir = resolveHfCacheDir()
+        if (cacheDir) tf.env.cacheDir = cacheDir
         extractor = (await tf.pipeline('feature-extraction', model, { dtype: 'q8' })) as Extractor
       } catch (e) {
         failed = true

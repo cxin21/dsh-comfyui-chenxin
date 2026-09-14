@@ -328,6 +328,15 @@ describe('M5-HOTFIX2: expansion output discipline', () => {
     expect(system.indexOf('输出契约（硬性）')).toBeLessThan(system.indexOf('最小 diff'))
   })
 
+  it('persona 带语言纪律（M5-DIAG2：真实会话 c04 CJK 回流 → loop_exhausted）+ few-shot 样板零 CJK', async () => {
+    const system = await personaOf('image')
+    expect(system).toContain('语言纪律')
+    expect(system).toContain('英文 Anima tag 词汇')
+    const m = system.match(/紧凑样板[^\n{]*(\{.*\})/)
+    expect(m).not.toBeNull()
+    expect(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(m![1])).toBe(false)
+  })
+
   it('persona 带紧凑 few-shot 样板：可解析 JSON、含 set/expansions、体积证明其小（<300 字符）', async () => {
     const system = await personaOf('image')
     const m = system.match(/紧凑样板[^\n{]*(\{.*\})/)

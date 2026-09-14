@@ -184,7 +184,8 @@ function buildExpansionPersona(media: BlueprintMedia): string {
     '8. 禁散文：只输出裸 JSON 对象，任何解释、前后缀文字、markdown 代码块都算失败。',
     '9. 字段白名单：顶层只允许 set/additions/expansions 三键；字段只允许蓝图结构内既有路径（core.* / media_layer.*），不自造顶层键。',
     '10. 总长上限目标：输出 JSON 全文 ≤ 1200 字符（含空白）；expansions ≤ 8 条、每条 ≤ 24 字符。',
-    '紧凑样板（形状示范——注意它有多小；内容按 v0 实际增量替换）：{"set":{"core":{"style":{"base":"赛博朋克霓虹夜景，冷青主调","theme":"霓虹都市"},"scene":{"lighting":"霓虹灯牌逆光，湿地面反光"}}},"expansions":["scene.lighting 重写"]}',
+    '11. 语言纪律（硬性）：所有字段值一律英文 Anima tag 词汇——无论用户输入是什么语言，禁止中文/日文字符出现在任何值中（含 concept/scene/lighting/detail_mood 等自由文本字段）；中文创意概念必须翻译成英文画面词再写入；expansions 描述亦用英文。违反语言纪律 = 无效输出。',
+    '紧凑样板（形状示范——注意它有多小；内容按 v0 实际增量替换）：{"set":{"core":{"style":{"base":"cyberpunk neon nightscape, cold cyan dominant","theme":"neon metropolis"},"scene":{"lighting":"neon sign rim light, wet asphalt reflections"}}},"expansions":["scene.lighting rewritten"]}',
   ].join('\n')
 }
 

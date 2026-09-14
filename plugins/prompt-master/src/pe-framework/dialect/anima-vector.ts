@@ -41,8 +41,9 @@ export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
 
 // ---------------------------------------------------------------------------
 // 量化与 fixture 工具（spec §3.1 int8 口径）：per-vector max-abs 缩放到**有符号**
-// int8，127 为满幅（二进制补码，无偏移）—— 建库（Python build_tag_vector.py）与查询
-// （Node 查询期）共用同一口径，量化不对称即向量错配。导出供测试 fixture 复用。
+// int8，127 为满幅（二进制补码，无偏移，clamp [-127,127]）—— 建库（Python
+// build_tag_vector.py quantize_int8）与查询（Node 查询期）共用同一口径，量化不对称即
+// 向量错配。导出供测试 fixture 复用。
 // ---------------------------------------------------------------------------
 
 /** LCG 确定性伪随机（fixture 专用） */
@@ -69,17 +70,24 @@ export function unitVec(seed: number, dim = 384): Float32Array {
 }
 
 /**
- * float32 → 有符号 int8 量化（存为 uint8 字节）。
- * 口径（controller ruling，impl-build t5 实测定案）：per-vector max-abs 缩放，127 满幅，
- * **有符号 int8（二进制补码）**——负值写入 Uint8Array 时自动按补码回绕，无 +128 偏移。
- * 偏移编码会破坏 int8 cosine 几何（实测距离误差达 1.6，补码 ≤0.005）。
- * 建库侧（Python build_tag_vector.py）使用逐字节一致的同一公式；SQL 绑定一律 vec_int8(?)。
+ * float32 → 有符号 int8 量化（存为 uint8 字节，负值经二进制补码回绕）。
+ * 口径（controller ruling + impl-build t5 实测定案，依据 temp/sdd-t7/probe_quant5.py）：
+ * per-vector max-abs 缩放，127 满幅，**有符号 int8（二进制补码）**，clamp [-127,127]，
+ * 无 +128 偏移——sqlite-vec 的 int8 列按有符号解释，偏移编码破坏 cosine 几何
+ * （probe 实测距离误差 1.6 vs 补码 ≤0.005）。
+ * 建库侧（Python build_tag_vector.py quantize_int8）使用逐字节一致（byte-exact）的同一
+ * 公式（显式 clamp [-127,127] + & 0xFF 落盘）；SQL 绑定一律 vec_int8(?)。
+ * 注：Math.round 为 half-up，Python round 为 banker's——仅在缩放值恰为 x.5 时可 diverge，
+ * 真实嵌入向量与 LCG fixture 向量上经 byte-exact 交叉验证一致（见 Task3-report.md）。
  */
 export function quantizeInt8(v: Float32Array): Uint8Array {
   let max = 0
   for (const x of v) max = Math.max(max, Math.abs(x))
   const out = new Uint8Array(v.length)
-  for (let i = 0; i < v.length; i++) out[i] = Math.round((v[i] / (max || 1)) * 127)
+  for (let i = 0; i < v.length; i++) {
+    const q = Math.round((v[i] / (max || 1)) * 127)
+    out[i] = Math.min(127, Math.max(-127, q))
+  }
   return out
 }
 

@@ -63,19 +63,29 @@ def load_catalog_tags():
             for rid, cname, pform, cat, usage in rows]
 
 
-def fetch_all_wiki_pages():
-    """分页全量拉 wiki 页清单（对 spec §4 的细化：不逐 tag 查询）。限速 2 req/s + 退避。
-
-    修正计划脚本的一处 bug：新拉到的页必须同步进 have 并返回，
-    否则首跑建库时全部 fallback（缓存只供续跑补缺）。
-    """
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
+def load_wiki_cache():
+    """读 wiki JSONL 缓存为 {title: {title, body}}（fetch 续跑与纯缓存构建共用）。"""
     have = {}
     if CACHE.exists():
         for line in CACHE.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 p = json.loads(line)
                 have[p["title"]] = p
+    return have
+
+
+def fetch_all_wiki_pages():
+    """分页全量拉 wiki 页清单（对 spec §4 的细化：不逐 tag 查询）。限速 2 req/s + 退避。
+
+    修正计划脚本的一处 bug：新拉到的页必须同步进 have 并返回，
+    否则首跑建库时全部 fallback（缓存只供续跑补缺）。
+
+    网络通道定案（t5 fix round 2）：CF 的 TLS 指纹识别拦 python-requests（换 UA 无效），
+    实际拉取由 captain 的 curl 管线完成并落盘同一格式缓存；构建侧设
+    WIKI_CACHE_READY=1 即短路 fetch、原样消费已完成的缓存（见 main）。
+    """
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    have = load_wiki_cache()
     import requests
     s = requests.Session()
     # CF 反爬实测定案（t5 fix round 1）：requests 默认 UA（python-requests/2.x）是 Cloudflare
@@ -179,6 +189,12 @@ def main():
 
     if args.skip_wiki:
         wiki_by_title_lower = {}
+    elif os.environ.get("WIKI_CACHE_READY") == "1":
+        # captain 的 curl 管线拥有网络拉取（CF TLS 指纹拦 python-requests，UA 无关）；
+        # 缓存已完整落盘时短路 fetch，原样消费缓存（294,298 页，page 296 空自然耗尽）。
+        wiki_cache = load_wiki_cache()
+        print(f"wiki cache ready-skip: loaded {len(wiki_cache)} pages from {CACHE}", flush=True)
+        wiki_by_title_lower = {t.lower(): p for t, p in wiki_cache.items()}
     else:
         wiki_by_title_lower = {t.lower(): p for t, p in fetch_all_wiki_pages().items()}
 

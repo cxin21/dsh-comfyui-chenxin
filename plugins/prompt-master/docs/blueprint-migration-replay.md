@@ -58,6 +58,47 @@
 
 **执行方式**：新 DSH 会话（挂载已同步 dist）→ 按 sheet 逐案例调用 → 记录实测到本节 → 与 §8 五项指标合并出回滚判据结论。
 
+### 4.3 终版真实会话重放（2026-09-14，captain 执行；dist = `987f804`）
+
+**前置：重放期间四轮真实会话缺陷修复**（全链见 `docs/enrich-channel-diagnosis.md` DIAG2 节）：
+
+| # | 缺陷 | 根因（事实链） | 修复 |
+|---|---|---|---|
+| 1 | enrich 100% fallback（12/12，三轮 dists） | 直连路由跟随会话模型（reasoning 类），思考 token 计入 maxTokens 且不产出 text 块——1024/4096/1400 三档预算恒打满、文本头恒空 | `aecb720` 用户裁定：直连通道全面省略 maxTokens（宿主 defaultMaxTokens 语义）|
+| 2 | 裸 `undefined.trim` 崩溃（text 流首次到达暴露）| 适配器流首块 text 块 text 字段 undefined | `a43616e` complete() 空串合并防御 |
+| 3 | enrich 中文回流 → `cjk_in_positive` critical → loop_exhausted（c04 探针实录）| intent/enrich persona 零语言纪律 + few-shot 样板自身教中文值；修复轮被 enrich 每轮再污染 | `b703304` 双 persona 硬性英文纪律 + 样板去 CJK（掐断污染源，保留 CJK gate 修复闭环设计）|
+| 4 | prompt 全量重写后 c07 确定性崩溃 | enrich 产出缺 target 的 soft 负向 → `validateBlueprint` 零 negative 校验 → 投影器 exclusions 链 `undefined.trim`；随后 c12 又实证 LLM 越权声明 `severity:'hard'` 触发 §8.1 档 3 拒绝 | `33e2bce` negative 形状 fail-closed 校验 + preflightRepair 确定性丢弃 + 投影防御；`987f804` LLM 负向 hard→soft 确定性降格（hard 为安全通道专属域，与 core.rating strip 同哲学）|
+
+**12 案例终版结果：12/12 `ok:true`，0 超时，0 loop_exhausted**（generation_id 实录）：
+
+| 案例 | generation_id | 关键断言证据（真实 envelope） |
+|---|---|---|
+| c01 | gen_1789349260656_3x04k7zt | form=blueprint/media=image；7 段 canonical 锚定 |
+| c02 | gen_1789349370271_g8ay8pba | 2girls 双角色双姿态双表情分离 |
+| c03 | gen_1789349485537_g5mvg0wf | 无 count_gender；people→negative（软负向推断）|
+| c04 | gen_1789349073099_cs9w2sv7 | @wlop artist 槽（citation 1299120）；exclusions 语言纪律生效（全英文）|
+| c05 | （style 面同 c04 会话） | figure_model 四片段全量注入 + negativeAdded 2d lineart/flat paper illustration |
+| c06 | gen_1789349731855_ibov4aik | conformity:1 零片段注入、theme 语义并入、negativeAdded 保留 |
+| c07 | gen_1789351405812_71lgxxyn | `rating_explicit` 种子 + 六词未成年排除组逐字 + resolved=explicit/source=input + `rating_active:explicit` |
+| c08 | gen_1789350474237_391oi0rx | ⚠️ **P1 缺陷确认**：bikini 未升档（resolved=safe）——升档语料面缺陷（见 §4.4 台账）|
+| c09 | gen_1789351594505_uch80mbt | `Subject 1 from <Picture 1>` character 槽 priority 250 |
+| c10 | gen_1789351733001_yy6aiueb | ⚠️ P2：`duplicate_segment: bamboo forest`（替换发生在去重后，见 §4.4）|
+| c11 | gen_1789352080010_qm7ctnga | `art_direction_applied:lighting:golden_hour` + `art_direction_applied:motion:flowing_hair` 双 advisory |
+| c12 | gen_1789353134105_v00nwee1 | 排除项 modern buildings/power lines/vehicles → exclusions 通道（origin:exclusion priority 900）|
+
+**h3 真实探针（同会话补充，用户指令：双方言全量）**：`gen_1789351912496_o58n8bdo`（雨夜双剑客）——ok、audit 0 gates、官方分词 990/1200、4 镜 [Shot N] + 切点结构、h3 brief enrich 42s（source 可追溯 + nameAnchors 锚定）、legacy envelope 形状正确（无 blueprint 字段）。
+
+**LLM 耗时观测区间**（reasoning 会话模型）：intent 33.8–114.4s、blueprint_enrich 30.3–75.4s、catalog 2.3–4.6s——全部在 300s 子代理超时内。
+
+### 4.4 重放期间登记缺陷台账（不随 M5 收口，转里程碑账本）
+
+| 级别 | 缺陷 | 实录 | 修复方向 |
+|---|---|---|---|
+| P1 | 关键词升档语料面失效（c08 预期 sensitive 实测 safe）| D4 移除 brief 层后升档扫描语料变化，ASCII 词表对中文输入/蓝图面未命中 | 升档语料扩至蓝图字段（enrich 产物回扫）|
+| P2 | 复合 target 原子性（D3 族）| c12 前轮「6 项负向粘连单条目」、c10 `duplicate_segment`（canonical 替换发生在槽内去重之后）| 投影层按逗号拆分原子化 + 去重后置 |
+| P2 | post-enrich 保真复检缺失 | c09「银发」在 enrich patch 中从 appearance_anchors 丢失（checkFidelity 仅 intent 期运行）| patch 应用后复跑保真检查入 expansions |
+| 债 | 共享基座双文件逐字复制 | subagent-provider/analyzer 不互 import 防 ESM 环（设计承袭），前缀断言钉死 | 抽零依赖叶子模块双方 import |
+
 ## 5. 清单⑤ blueprint_id 链路（mock 层，migration-golden.test.ts「replay item 5」）
 
 已验证：默认路径落库（settings→`blueprint_id`，键=generation_id，Q2）→ `blueprint_id` 增量入口（增量分析走 stream/analyzeBlueprintIncremental，provider seam 未消费——与既有 e2e 断言一致）→ judge fast NEEDS → **修复轮 provider 收 `blueprintMode:true` + `anchorBlueprint`（与落库蓝图同源：media/concept/rating/rooftop 逐项相等）** → 闭环 PASS 推进 → 二次落库新 `blueprint_id`。V5/V6 修复轮复活在增量入口同样成立。
@@ -71,15 +112,15 @@ h3 legacy（shots 直译）路径：intent persona === H3_PERSONA 原样、无 `
 
 `prompt_compile`（anima slots 通道）与 `prompt_audit` 的引擎面由 `anima-compile`（15 用例）与 audit 系列套件在全量内回归绿；`registry.test` 工具名单（含两工具注册形状）零改动通过。工具面无迁移越界。
 
-## 8. 回滚判据五项指标（mock 层实测；真实采集随 §4 补录）
+## 8. 回滚判据五项指标（mock 层实测 + 2026-09-14 真实终版补录，§4.3）
 
-| # | 指标 | 实测 | 结论 |
-|---|---|---|---|
-| ① | explicit 档产物种子 vs `rating.resolved` 一致率 | c07 双路径一致 1/1（种子 rating_explicit ↔ resolved explicit；mock L2 断言） | 无不一致样本 |
-| ② | golden 失败 | **0/12**（L1 全绿；L2/L3/L4/清单5/清单6 全绿） | 通过 |
-| ③ | 超时率 | mock 层 0（无子代理/无真实 LLM）；真实参考：迁移前 probe intent 51.0s + enrich 44.7s（enrich 因 brief_too_large skipped） | 待清单④补录迁移后耗时 |
-| ④ | catalog_miss 均值 | 12 基线 compile **0.0 miss/run**（fixtures 全部 catalog-real tag）；真实 probe 1 minor（`catalog_miss:looking away`） | 低 |
-| ⑤ | loop_exhausted 率 | golden 全程 **0**（judge off 主线；清单⑤ fast 闭环 1 轮收敛） | 低 |
+| # | 指标 | mock 实测 | 真实终版（13 run：12 案例 + h3 探针）| 结论 |
+|---|---|---|---|---|
+| ① | explicit 档产物种子 vs `rating.resolved` 一致率 | c07 双路径一致 1/1 | 声明档 1/1（c07 resolved=explicit/source=input + 种子 + 六词负向全对齐）；关键词档 1/2（c08 升档失效 = P1 已登记，其余 safe 预期全符）| 声明链一致；关键词升档缺陷已台账化 |
+| ② | golden 失败 | **0/12**（L1–L4 + 清单5/6 全绿）| **0/12 + h3 探针 0 失败** | 通过 |
+| ③ | 超时率 | mock 层 0 | **0/13**（intent 33.8–114.4s、enrich 30.3–75.4s，全部 < 300s 子代理上限）| 通过 |
+| ④ | catalog_miss 均值 | 12 基线 compile 0.0 miss/run | 全部 minor 级（0/13 critical/important CJK 或预算门；composite/别名 miss 属召回质量面非阻断）| 低 |
+| ⑤ | loop_exhausted 率 | golden 全程 0 | **0/13**（语言纪律修复后修复轮 0 次触发：repairs_count 全 0）| 低 |
 
 ## 9. R1 token 画像（实测，bytes= UTF-8）
 

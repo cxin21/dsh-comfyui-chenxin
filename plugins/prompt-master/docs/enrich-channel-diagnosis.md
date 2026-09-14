@@ -80,3 +80,29 @@ prompt-author 蓝图出口 → enrichBlueprint(ctx, route, v0, opts)   [enrichme
 - engine.test.ts +6（M5-DIAG describe，TDD RED→GREEN）：maxTokens=4096 透传 / error finish reason（code+message）/ max-tokens 截断 parse reason（finish kind + 文本 head）/ 非对象 reason / apply throw reason / signal 透传。legacy token 首位断言贯穿全部失败路径。
 - analyzer.test.ts 前缀断言（基座逐字）与 schema 断言与增量编辑兼容；golden 40 / e2e 8 / orchestration 33 全绿。
 - 全量 + tsc + build 见任务载荷 commandsRun。
+
+---
+
+## 7. DIAG2 收口（2026-09-14，captain 第一性原理分析 + 亲自修复，用户裁定不派代理）
+
+**最终根因链（三层，全部有实测证据）**：
+
+1. **reasoning 预算吞噬**：直连路由跟随会话模型（fangzhou/ark-code-latest，reasoning 类）；思考 token 计入
+   maxTokens 预算且不产出 text 块——1024@10.5s / 4096@38.7s / 1400@13.6s 三档恒打满（≈106 tok/s）且文本头
+   恒空（`parse:max-tokens:""`）。T16 的「量化回调」方向性错误：上限本身是错误参数，思考期要多少都吃。
+   **修复**（aecb720，用户裁定「不设 maxTokens 上限」）：直连通道全面省略 maxTokens → 宿主 defaultMaxTokens
+   语义（主对话同路径本来就正常出内容）；纪律 persona 保留、v0 fallback + reason 透传兜底不变。
+2. **text 块 text=undefined**：maxTokens 解除后 text 流首次真实到达，暴露适配器流首块 text 块 text 字段
+   undefined → complete() `b.text.trim()` 裸崩。**修复**（a43616e）：`(b.text ?? '').trim()` 防御合并。
+3. **CJK 回流 → loop_exhausted**（c04 探针 ok=false 实录）：intent/enrich persona 零语言纪律 + enrich few-shot
+   样板自身含中文值（教学效应）；修复轮把 intent 改好后 enrich 每轮把中文写回 tag 字段，cjk_in_positive
+   critical 永不收敛。**修复**（b703304）：双 persona 硬性英文纪律（intent 规则 12 / enrich 规则 11）+ 样板
+   去 CJK——掐断污染源而非绕过 CJK gate（compile 层注释明确该 gate 是修复闭环的驱动器，不得删除）。
+
+**重放期衍生修复**（c07/c12 实录，同属本通道信任边界）：negative 条目形状 fail-closed 校验 + L1 确定性丢弃 +
+投影防御（33e2bce）；LLM 负向 hard→soft 确定性降格（987f804，hard 为安全通道专属域，与 core.rating strip
+D6/R7 同哲学）。
+
+**终局**：12/12 golden + h3 真实探针全绿、0 超时、0 loop_exhausted、enrich 三轮真实产出（expansions 7–14 条/轮）。
+诊断设施留痕：阶段级文件 trace（%TEMP%/pm-author-trace.log，工具边界 CRASH stack 捕获后原样 rethrow），
+缺陷定位后可移除。指标与缺陷台账见 replay doc §4.3/§4.4/§8。

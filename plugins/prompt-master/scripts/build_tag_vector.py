@@ -6,8 +6,10 @@
 
 产物:
   assets/knowledge/anima-prompt-v1/tag-vector.sqlite
-    - vec0 虚拟表 vec_items: int8[384] distance_metric=cosine（与 Node 侧 Task 3 fixture 同 schema）
+    - vec0 虚拟表 vec_items: int8[PM_EMBED_DIM] distance_metric=cosine（与 Node 侧 Task 3 fixture 同 schema）
     - payload 表: rowid INTEGER PRIMARY KEY, record_id TEXT UNIQUE, text_source TEXT NOT NULL
+    - meta 表: key/value provenance（model/provider/dim/count/quant/distance/built_at/text_sources）
+      —— Node 查询侧（anima-vector.ts readMeta）打开时对账，维度错配 fail-fast（2026-09-15 定案）
   temp/anima-prompt-v1/wiki-cache/wiki-pages.jsonl（wiki 释义缓存，断点续跑）
 
 对计划的两处布局修正（不改意图）:
@@ -290,9 +292,11 @@ def main():
     db.enable_load_extension(False)
     db.execute(f"CREATE VIRTUAL TABLE vec_items USING vec0(embedding int8[{DIM}] distance_metric=cosine)")
     db.execute("CREATE TABLE payload(rowid INTEGER PRIMARY KEY, record_id TEXT UNIQUE, text_source TEXT NOT NULL)")
+    db.execute("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     B = int(os.environ.get("PM_BUILD_BATCH", "512"))
     t0 = time.time()
     done = 0
+    actual_dim = None  # 首批实测维度（防 env DIM 与模型输出漂移——768/1024 双默认事故的建库侧守卫）
     for i in range(0, len(texts), B):
         if USE_API:
             if i + B <= start_row:
@@ -311,6 +315,13 @@ def main():
                 normalize_embeddings=True,
             )
         for j, v in enumerate(emb):
+            if actual_dim is None:
+                actual_dim = len(v)
+                if actual_dim != DIM:
+                    sys.exit(
+                        f"embedder output dim {actual_dim} != DIM {DIM} (PM_EMBED_DIM) — "
+                        f"vec table was created int8[{DIM}]; set PM_EMBED_DIM to the model's true dim and rebuild"
+                    )
             rowid = i + j + 1
             db.execute(
                 "INSERT INTO vec_items(rowid, embedding) VALUES (?, vec_int8(?))",
@@ -326,6 +337,21 @@ def main():
     n_src = db.execute(
         "SELECT text_source, COUNT(*) FROM payload GROUP BY text_source"
     ).fetchall()
+    # provenance meta（Node 查询侧 readMeta 对账依据；fail-fast 见 anima-vector.ts）
+    db.executemany(
+        "INSERT INTO meta(key, value) VALUES (?, ?)",
+        [
+            ("model", API_MODEL if USE_API else MODEL),
+            ("provider", "api" if USE_API else "local"),
+            ("dim", str(actual_dim if actual_dim is not None else DIM)),
+            ("count", str(len(texts))),
+            ("quant", "int8-signed-maxabs-127"),
+            ("distance", "cosine"),
+            ("text_sources", json.dumps({k: n for k, n in n_src})),
+            ("built_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+        ],
+    )
+    db.commit()
     db.close()
     tmp.replace(OUT)  # 原子落盘
     print(f"payload sources: {n_src}")

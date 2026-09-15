@@ -9,6 +9,7 @@ import {
   quantizeInt8,
   unitVec,
   resolveHfCacheDir,
+  VectorDimensionMismatchError,
   E5_PASSAGE_PREFIX,
   E5_QUERY_PREFIX,
   type EmbedFn,
@@ -46,13 +47,21 @@ const tmpDirs: string[] = []
 /** 在指定路径现建 fixture 向量库（schema 与 Task 7 建库脚本完全一致；不加载真模型）。
  *  已存在的同名表先 DROP——支持同路径重建（mtime 重开测试；Windows 不允许删除被缓存句柄
  *  打开的文件，就地重建是唯一可行方式）。 */
-function makeFixtureDbAt(path: string, seeds: Array<[string, string, number]>): void {
+function makeFixtureDbAt(path: string, seeds: Array<[string, string, number]>, meta?: { model: string; dim: number }): void {
   const db = new DatabaseSync(path, { allowExtension: true })
   db.loadExtension(getLoadablePath())
   db.exec('DROP TABLE IF EXISTS vec_items')
   db.exec('DROP TABLE IF EXISTS payload')
+  db.exec('DROP TABLE IF EXISTS meta')
   db.exec(`CREATE VIRTUAL TABLE vec_items USING vec0(embedding int8[${DIM}] distance_metric=cosine)`)
   db.exec(`CREATE TABLE payload(record_id TEXT PRIMARY KEY, text_source TEXT NOT NULL)`)
+  if (meta) {
+    // 与生产建库脚本同形：key/value provenance 表（Node 查询侧 readMeta 对账依据）
+    db.exec(`CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
+    const insM = db.prepare('INSERT INTO meta(key, value) VALUES (?, ?)')
+    insM.run('model', meta.model)
+    insM.run('dim', String(meta.dim))
+  }
   const ins = db.prepare('INSERT INTO vec_items(rowid, embedding) VALUES (?, vec_int8(?))')
   const insP = db.prepare('INSERT INTO payload(rowid, record_id, text_source) VALUES (?, ?, ?)')
   seeds.forEach(([rid, src, seed], i) => {
@@ -65,7 +74,7 @@ function makeFixtureDbAt(path: string, seeds: Array<[string, string, number]>): 
   db.close()
 }
 
-function makeFixtureDb(seeds?: Array<[string, string, number]>): string {
+function makeFixtureDb(seeds?: Array<[string, string, number]>, meta?: { model: string; dim: number }): string {
   const dir = mkdtempSync(join(tmpdir(), 'vec-fixture-'))
   tmpDirs.push(dir)
   const p = join(dir, 'tag-vector.sqlite')
@@ -73,7 +82,7 @@ function makeFixtureDb(seeds?: Array<[string, string, number]>): string {
   makeFixtureDbAt(p, seeds ?? [
     ['serafuku', 'wiki', 101], ['twintails', 'fallback', 202], ['cat_ears', 'wiki', 303],
     ['school_uniform', 'fallback', 404], ['neon_signs', 'wiki', 505],
-  ])
+  ], meta)
   return p
 }
 
@@ -147,5 +156,27 @@ describe('createVectorSearch', () => {
     const search = createVectorSearch({ dbPath: p, embed: async () => [unitVec(101)] })
     expect(await search('', 3)).toEqual([])
     expect(await search('sailor uniform', 0)).toEqual([])
+  })
+
+  it('legacy db without meta table still works (backward compat, warn-once)', async () => {
+    const p = makeFixtureDb() // 无 meta —— 旧版建库产物
+    const search = createVectorSearch({ dbPath: p, embed: async () => [unitVec(101)] })
+    const hits = await search('sailor uniform', 3)
+    expect(hits[0]).toMatchObject({ record_id: 'serafuku' })
+  })
+
+  it('meta-matching dim works normally', async () => {
+    const p = makeFixtureDb(undefined, { model: 'Xenova/bge-base-en-v1.5', dim: DIM })
+    const search = createVectorSearch({ dbPath: p, embed: async () => [unitVec(101)] })
+    expect((await search('sailor uniform', 3))[0]?.record_id).toBe('serafuku')
+  })
+
+  it('dim mismatch vs meta fails fast with typed error (not silent degrade)', async () => {
+    // 建库侧 1024（bge-m3 型事故）、查询侧 stub 输出 384 → 必须抛 VectorDimensionMismatchError，
+    // 且错误不得被本模块 catch-all 吞成空数组（配置错误 ≠ 环境故障）
+    const p = makeFixtureDb(undefined, { model: 'BAAI/bge-m3', dim: 1024 })
+    const search = createVectorSearch({ dbPath: p, embed: async () => [unitVec(101)] })
+    await expect(search('sailor uniform', 3)).rejects.toBeInstanceOf(VectorDimensionMismatchError)
+    await expect(search('sailor uniform', 3)).rejects.toThrow(/index dim=1024.*query dim=384/)
   })
 })

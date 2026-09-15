@@ -14,6 +14,19 @@ export const E5_PASSAGE_PREFIX = 'passage: '
 
 export type EmbedFn = (texts: string[], kind: 'query' | 'passage') => Promise<Float32Array[]>
 
+/**
+ * 查询向量与索引 provenance 不匹配（spec §3.3 meta 对账 fail-fast，2026-09-15 用户定案）。
+ * 与一般降级故障（库缺失/嵌入器故障 → 静默降级为空）性质不同：这是**配置错误**——
+ * 查询侧模型与建库侧模型错配时每一次查询都注定无意义，必须显式报错、可被调用方按型甄别，
+ * 不得落入 catch-all 静默吞掉。抛出前先 console.error 留痕（调用方若降级，信号仍可见）。
+ */
+export class VectorDimensionMismatchError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'VectorDimensionMismatchError'
+  }
+}
+
 type Extractor = import('@huggingface/transformers').FeatureExtractionPipeline
 
 /**
@@ -201,10 +214,25 @@ export function createVectorSearch(opts?: {
   let db: DB | null = null
   let mtime = 0
   let warned = false
+  let metaWarned = false
   const warn = (msg: string) => {
     if (!warned) {
       warned = true
       console.warn(`[prompt-master] semantic layer degraded: ${msg}`)
+    }
+  }
+  /** 读索引 provenance meta（建库侧 build_tag_vector.py 落盘）：{model,dim}；无 meta 表 =
+   *  旧版建库产物 → 返回 'legacy'（跳过对账，一次性提示重建后可启用）。meta 表读取故障
+   *  同样按 legacy 处理——对账本身不得比被保护的查询更脆弱。 */
+  const readMeta = (d: DB): { model: string; dim: number } | 'legacy' => {
+    try {
+      const rows = d.prepare("SELECT key, value FROM meta WHERE key IN ('model','dim')").all() as Array<{ key: string; value: string }>
+      if (rows.length === 0) return 'legacy'
+      const m: Record<string, string> = {}
+      for (const r of rows) m[r.key] = r.value
+      return { model: m.model ?? 'unknown', dim: Number(m.dim) }
+    } catch {
+      return 'legacy'
     }
   }
   /** 打开（缓存）句柄；文件缺失 → null。G4：mtime 变化 → 关闭陈旧句柄重开（向量库为可重建派生产物）。 */
@@ -243,6 +271,22 @@ export function createVectorSearch(opts?: {
         return []
       }
       const q = await embedFn([query], 'query')
+      // provenance 对账（spec §3.3 fail-fast）：查询向量维度必须与 meta 落盘的索引维度一致。
+      // 错配 = 配置错误（建库/查询两侧模型漂移），不是环境故障——显式抛类型化错误，
+      // 不走下方 catch-all 静默降级（2026-09-15 实测教训：768/1024 双默认曾一度并存）。
+      const meta = readMeta(d)
+      if (meta === 'legacy') {
+        if (!metaWarned) {
+          metaWarned = true
+          warn('vector db has no meta provenance (pre-meta build) — dim verification skipped; rebuild to enable fail-fast')
+        }
+      } else if (Number.isFinite(meta.dim) && q[0].length !== meta.dim) {
+        const msg =
+          `vector dim mismatch: index dim=${meta.dim} (model=${meta.model}) vs query dim=${q[0].length} — ` +
+          'align query-side PM_EMBED_MODEL/PM_EMBED_PROVIDER with the index, or rebuild tag-vector.sqlite'
+        console.error(`[prompt-master] semantic layer FAIL-FAST: ${msg}`)
+        throw new VectorDimensionMismatchError(msg)
+      }
       const qv = quantizeInt8(q[0])
       const rows = d.prepare(
         `SELECT payload.record_id, payload.text_source, vec_items.distance
@@ -254,6 +298,9 @@ export function createVectorSearch(opts?: {
         .filter((h) => h.score >= threshold)
         .slice(0, k)
     } catch (e) {
+      // fail-fast 例外：provenance 错配是配置错误，穿透本 catch 让调用方按型甄别
+      //（searchCatalog 等降级方仍可捕获降级，但错误类型与 console.error 留痕不可静默）
+      if (e instanceof VectorDimensionMismatchError) throw e
       warn(String(e))
       return []
     }

@@ -948,13 +948,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       }
       if (formEnv !== undefined) preflightAdvisories.push(`intent_form_override:${formEnv}`)
       // 2026-09-15 管线重设计（spec §9 D8）：PM_PIPELINE_FORM 双态开关（compositing|legacy）。
-      // 非法值 fail-fast；显式设置出 advisory；缺省 legacy（T13 翻转为 compositing）。
+      // 非法值 fail-fast；显式设置出 advisory；T13 起缺省 compositing（回滚 = env 拨回 legacy）。
       // 仅对 target='anima' 生效（h3 未迁移恒 legacy）。
       const pipelineFormRaw = process.env.PM_PIPELINE_FORM
       if (pipelineFormRaw !== undefined && pipelineFormRaw !== 'compositing' && pipelineFormRaw !== 'legacy') {
         throw new Error(`PM_PIPELINE_FORM 非法值: ${pipelineFormRaw}（可选 compositing|legacy）`)
       }
-      const pipelineForm = target === 'anima' ? (pipelineFormRaw ?? 'legacy') : 'legacy'
+      const pipelineForm = target === 'anima' ? (pipelineFormRaw ?? 'compositing') : 'legacy'
       if (pipelineFormRaw !== undefined && target === 'anima') preflightAdvisories.push(`pipeline_form_override:${pipelineFormRaw}`)
       const blueprintForm = target === 'anima' && pipelineForm === 'legacy' && (formEnv ?? intentCfg?.form ?? 'slots') === 'blueprint'
 

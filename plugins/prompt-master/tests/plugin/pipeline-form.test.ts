@@ -38,7 +38,8 @@ describe('PM_PIPELINE_FORM switch (spec §9 D8)', () => {
     const def = registerAuthorTool(ctx as never, { temperature: 0.7 })
     await expect(runTool(ctx, def, { target: 'anima', input: 'x', judge_mode: 'off' })).rejects.toThrow(/PM_PIPELINE_FORM 非法值: bogus/)
   })
-  it('legacy form (default, no env): blueprint path still wired', async () => {
+  it('legacy form (env 显式 legacy): blueprint path still wired', async () => {
+    process.env.PM_PIPELINE_FORM = 'legacy'
     setAuthorIntentProvider(async () => ({
       blueprint: {
         schema_version: 1, media: 'video',
@@ -51,5 +52,14 @@ describe('PM_PIPELINE_FORM switch (spec §9 D8)', () => {
     const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '三镜头打斗CG', judge_mode: 'off' })))
     expect(v.ok).toBe(true)
     expect(v.observability.compositing).toBeUndefined()
+  })
+  it('default (no env) → compositing（T13 缺省翻转）', async () => {
+    setAuthorIntentProvider(async () => ({ semantic: JSON.parse(SEMANTIC_JSON) as never, missing: [] }) as never)
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, { temperature: 0.7 })
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })))
+    expect(v.ok).toBe(true)
+    expect(v.observability.compositing).toMatchObject({ form: 'semantic' })
+    expect(v.advisories.some((a: string) => a.startsWith('pipeline_form_override'))).toBe(false) // 未显式设置 → 无 override advisory
   })
 })

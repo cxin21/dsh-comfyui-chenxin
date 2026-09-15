@@ -495,7 +495,12 @@ describe('P0-fix t1: declared rating reaches anima assembly on the standard slot
  * 天然生效 → enrichBlueprint 扩展层（runEnrich swap，D4）→ projectToAnima（D3 扩展）→ runStage。
  * 修复轮三合一（D5）：anchorBlueprint 增量锚定 + core.rating 重注入（缺口#2）+ validate 单次反馈重试。 */
 describe('M5-T2: blueprint-form default path (D1/D3/D4/D9)', () => {
-  afterEach(() => { delete process.env.PM_AUTHOR_INTENT_FORM })
+  // 2026-09-15 管线重设计 T13：缺省翻转为 compositing——本组钉的是 M5 蓝图形态行为（legacy 态）
+  beforeEach(() => { process.env.PM_PIPELINE_FORM = 'legacy' })
+  afterEach(() => {
+    delete process.env.PM_AUTHOR_INTENT_FORM
+    delete process.env.PM_PIPELINE_FORM
+  })
 
   function imageBpProvider(seen: AuthorIntentRequest[]) {
     return async (req: AuthorIntentRequest) => {
@@ -677,6 +682,9 @@ describe('M5-T2: blueprint-form default path (D1/D3/D4/D9)', () => {
  * 修复：intentBase 携带 blueprintMode（D1）→ provider 蓝图形态返回；D5a anchor 增量锚定；
  * D5b 修复轮 core.rating 重注入（缺口#2）。mock provider 记录 blueprintMode + anchorBlueprint。 */
 describe('M5-T2 V5/R6: repair-round closure revival (D5a anchor + D5b rating re-injection)', () => {
+  // T13 缺省翻转后钉 legacy 态（本组测的是 M5 蓝图修复闭环）
+  beforeEach(() => { process.env.PM_PIPELINE_FORM = 'legacy' })
+  afterEach(() => { delete process.env.PM_PIPELINE_FORM })
   const dimScores = (v: number) => ({
     'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
     composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,

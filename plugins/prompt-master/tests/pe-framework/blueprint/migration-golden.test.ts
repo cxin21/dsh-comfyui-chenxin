@@ -157,11 +157,14 @@ function projectedSlotsOf(c: GoldenCase): Record<string, unknown> {
 
 let tmp: string
 beforeEach(() => {
+  // T13 缺省翻转后：golden 钉 legacy 态（本文件验证 M5 迁移行为基线）
+  process.env.PM_PIPELINE_FORM = 'legacy'
   tmp = mkdtempSync(join(tmpdir(), 'pm-golden-'))
   setAuthorFeedbackDbPath(join(tmp, 'feedback.sqlite'))
 })
 afterEach(() => {
   delete process.env.PM_AUTHOR_INTENT_FORM
+  delete process.env.PM_PIPELINE_FORM
   setAuthorFeedbackDbPath(null)
   setAuthorIntentProvider(null)
   setAuthorEnrichProvider(null)

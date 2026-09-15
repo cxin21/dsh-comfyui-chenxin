@@ -305,7 +305,8 @@ describe('分支6 strict + 复审仍 needs_revision / 规则审计 critical 短�
       judge: 'strict', criticProvider: provider, evidenceDeps,
       revisionProvider: async () => ({ compiled: { positive: 'p2', negative: 'n2' }, changes: ['c'], revisionNote: 'note', rebuttals: [] }),
     }))
-    expect(r.judge).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+    expect(r.judge).toMatchObject({ skipped: true, reason: 'invalid_revision_schema' })
+    expect((r.judge as { detail?: string }).detail).toContain('raw_tail: ')
     expect(r.advisories).toContain('judge_skipped')
     expect(r.debate).toHaveLength(1)
     expect(r.result).toEqual({ positive: 'p2', negative: 'n2' })

@@ -32,7 +32,7 @@ export type CriticOutcome =
   | { verdict: 'pass' | 'needs_revision'; score: number; findings: CriticFinding[]; praise: string[]; /** 回查未能执行/执行失败：findings 未经验证（runStage 转 evidence_unverified advisory；spec §10.1-A1 规格5） */ evidenceUnverified?: boolean }
   /** A2（spec §10.1-A2）revision 轮独立契约产出：无 dimensionScores，score 透传首轮；rebuttalVerdicts 供 runStage 映射 debate round2.reviser.rebuttals */
   | { verdict: 'pass' | 'needs_revision'; score: number; findings: CriticFinding[]; praise: string[]; rebuttalVerdicts: RevisionRebuttal[] }
-  | { skipped: true; reason: string }
+  | { skipped: true; reason: string; /** parse/schema 失败时的诊断尾迹（raw 输出尾部截断），供离线定位 */ detail?: string }
 
 /** A2 复审反驳裁决条目 */
 export type RevisionRebuttal = { finding_id: string; accepted: boolean; reason: string }
@@ -71,8 +71,26 @@ function stripFences(text: string): string {
   return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
 }
 
-function skipped(reason: string): CriticOutcome {
-  return { skipped: true, reason }
+function skipped(reason: string, detail?: string): CriticOutcome {
+  return detail !== undefined ? { skipped: true, reason, detail } : { skipped: true, reason }
+}
+
+/** 2026-09-15（真实会话 gen_1789459886481：judge 78.6s → invalid_schema_or_parse，raw 无留痕无法定位）：
+ *  评审子代理是完整 agent 循环，输出为全部 text 块拼接——JSON 前后有散文/多段文本时 JSON.parse 必失败，
+ *  而 stripFences 只剥一层 fence。宽松提取：剥 fence 后截取首个 '{' 到最后一个 '}' 再 parse。 */
+function parseJsonLoose(raw: string): any | null {
+  try {
+    return JSON.parse(raw)
+  } catch { /* 落到子串提取 */ }
+  const stripped = stripFences(raw)
+  const start = stripped.indexOf('{')
+  const end = stripped.lastIndexOf('}')
+  if (start < 0 || end <= start) return null
+  try {
+    return JSON.parse(stripped.slice(start, end + 1))
+  } catch {
+    return null
+  }
 }
 
 /** bridge 工具列表安全读取：bridge 未传或 list 抛错 → null（= bridge 整体不可用，spec §10.1-A1 规格5） */
@@ -128,12 +146,7 @@ function toValidFinding(f: unknown, rubric: DialectRubric, available: ReadonlySe
 
 /** schema 级校验：形状不合 → null（调用方转 skipped）。 */
 function parseOutcome(raw: string): { verdict: 'pass' | 'needs_revision'; dimensionScores: unknown; findings: unknown[]; praise: string[] } | null {
-  let obj: any
-  try {
-    obj = JSON.parse(stripFences(raw))
-  } catch {
-    return null
-  }
+  const obj = parseJsonLoose(raw)
   if (typeof obj !== 'object' || obj === null) return null
   if (obj.verdict !== 'pass' && obj.verdict !== 'needs_revision') return null
   if (!Array.isArray(obj.findings)) return null
@@ -270,12 +283,7 @@ function buildRevisionUser(input: JudgeReviewInput): string {
 
 /** revision 契约级校验：形状不合 / 引用不存在的 finding id / closed∩unresolved 同 id 冲突 / rebuttal reason 空 → null（调用方转 skipped invalid_revision_schema） */
 function parseRevisionOutcome(raw: string, firstFindings: CriticFinding[]): { closed: string[]; unresolved: string[]; rebuttals: RevisionRebuttal[] } | null {
-  let obj: any
-  try {
-    obj = JSON.parse(stripFences(raw))
-  } catch {
-    return null
-  }
+  const obj = parseJsonLoose(raw)
   if (typeof obj !== 'object' || obj === null) return null
   if (obj.verdict !== 'pass' && obj.verdict !== 'needs_revision') return null
   const isIdArr = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string' && x.length > 0)
@@ -320,7 +328,7 @@ async function judgeRevision(input: JudgeReviewInput): Promise<CriticOutcome> {
     user: buildRevisionUser(input),
   })
   const parsed = parseRevisionOutcome(raw, firstFindings)
-  if (!parsed) return skipped('invalid_revision_schema')
+  if (!parsed) return skipped('invalid_revision_schema', `raw_tail: ${raw.slice(-240)}`)
   const accepted = new Set(parsed.rebuttals.filter((r) => r.accepted).map((r) => r.finding_id))
   const closed = new Set(parsed.closed)
   const survivors = firstFindings.filter((f) => !closed.has(f.id) && !accepted.has(f.id))
@@ -359,7 +367,7 @@ export async function judgeReview(input: JudgeReviewInput): Promise<CriticOutcom
 
     // 规格 5：schema 不合 / parse 失败 → skipped；A6 维度分缺失/多出/非法 → skipped invalid_dimensions
     const parsed = parseOutcome(raw)
-    if (!parsed) return skipped('invalid_schema_or_parse')
+    if (!parsed) return skipped('invalid_schema_or_parse', `raw_tail: ${raw.slice(-240)}`)
     const dimScores = dimensionScoresOf(parsed.dimensionScores, input.rubric)
     if (!dimScores) return skipped('invalid_dimensions')
 

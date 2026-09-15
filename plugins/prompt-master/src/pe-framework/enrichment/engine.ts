@@ -29,6 +29,7 @@ import { applyStyle } from './style.js'
 import { getStylePreset } from '../styles/registry.js'
 import { checkConcreteness, checkFidelity, checkShotDensity } from '../aesthetics/check.js'
 import { CINEMA_LEXICON } from '../aesthetics/lexicon.js'
+import { LIGHTING_BAN } from '../dialect/anima.js'
 
 export interface EnrichRoute {
   provider: string
@@ -218,6 +219,12 @@ export async function enrichBlueprint(
     JSON.stringify(v0),
     ...(opts.styleId ? [`用户风格: ${opts.styleId}（conformity=${opts.conformity ?? 0.6}）`] : []),
     ...(opts.missing && opts.missing.length > 0 ? [`缺失维度: ${opts.missing.join(', ')}`] : []),
+    // 2026-09-15（真实会话 gen_1789459886481 实证）：扩写产出 'magenta rim light...' 触发
+    // lighting_term_banned——而该 gate 升格 critical 进修正环后，修复轮的扩写若再产出禁词
+    // 会导致闭环无法收敛。源头预防：注入部署禁令（与 dialect/anima.ts LIGHTING_BAN 同源单源）。
+    ...(LIGHTING_BAN.length > 0
+      ? ['', `【部署禁令】以下光照词为 lora 内部词，禁止出现在任何扩展文本中：${LIGHTING_BAN.join('、')}。`]
+      : []),
     // M5-T3（D7 推荐先验通道）：推荐器输出注入——与 enrich/engine.ts buildUser（spec §7 P2/§6.2）
     // 同源逐字（空行 + 头行 + 条目行），文案改动必须两处同步；LLM 仍做最终设计决策。
     ...(recs.length > 0

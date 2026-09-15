@@ -608,7 +608,11 @@ export function inspectAnima(positive: string, negative: string, opts?: { varian
   const lightText = ' ' + normalizeText(positive) + ' '
   const found = LIGHTING_BAN.filter((term) => lightText.includes(term)).sort()
   if (found.length) {
-    gates.push({ rule: 'lighting_term_banned', target: 'anima', severity: 'important', detail: `lora-internal lighting term(s) present: ${found.join(', ')}`, source: 'dialect/anima' })
+    // 2026-09-15（真实会话 gen_1789459886481 实证）：important 永不进修正闭环（闭环只认 critical
+    // /judgeFeedback），而本 gate 的唯一修复途径就是修正环（扩写侧重产出）——important 意味着
+    // 永久遗留。与 CJK 泄漏守门（下方注释）同理由升格 critical：只有 critical 才能驱动修正环。
+    // 源头预防配套：enrichment/engine.ts 已注入 LIGHTING_BAN 部署禁令（扩写侧不再产出禁词）。
+    gates.push({ rule: 'lighting_term_banned', target: 'anima', severity: 'critical', detail: `lora-internal lighting term(s) present: ${found.join(', ')}`, source: 'dialect/anima' })
   }
   // mutual exclusion
   for (const [first, second] of MUTUAL_EXCLUSIONS) {

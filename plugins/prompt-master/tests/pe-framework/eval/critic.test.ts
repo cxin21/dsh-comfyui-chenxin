@@ -161,10 +161,18 @@ describe('judgeReview', () => {
     expect(r).toEqual({ skipped: true, reason: expect.any(String) })
   })
 
-  it('规格5b：provider 返回非 JSON → skipped', async () => {
+  it('规格5b：provider 返回非 JSON → skipped（附 raw_tail 诊断尾迹）', async () => {
     const provider: CriticProvider = async () => '这不是 JSON'
     const r = await judgeReview({ ...baseInput(), provider })
-    expect(r).toEqual({ skipped: true, reason: expect.any(String) })
+    expect(r).toMatchObject({ skipped: true, reason: 'invalid_schema_or_parse' })
+    expect((r as { detail?: string }).detail).toContain('raw_tail: 这不是 JSON')
+  })
+
+  it('规格5b+：provider 返回散文包裹的 JSON → 宽松提取后正常评审（2026-09-15 真实会话 judge 78.6s 输出解析失败缺陷的修复）', async () => {
+    const good = JSON.stringify({ verdict: 'pass', dimensionScores: { 'tag-order': 80, 'cross-shot-consistency': 80 }, findings: [], praise: [] })
+    const provider: CriticProvider = async () => `评审结论如下：\n\`\`\`json\n${good}\n\`\`\`\n以上为评审结论。`
+    const r = await judgeReview({ ...baseInput(), provider })
+    expect(r).toMatchObject({ verdict: 'pass' })
   })
 
   it('规格5c：schema 不合（verdict 非法 / 缺 score）→ skipped', async () => {
@@ -325,7 +333,8 @@ describe('judgeReview', () => {
       ]
       for (const bad of bads) {
         const r = await judgeReview(revInput({ provider: async () => (typeof bad === 'string' ? bad : JSON.stringify(bad)) }))
-        expect(r).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+        expect(r).toMatchObject({ skipped: true, reason: 'invalid_revision_schema' })
+        expect((r as { detail?: string }).detail).toContain('raw_tail: ')
       }
     })
 
@@ -342,7 +351,8 @@ describe('judgeReview', () => {
         const r = await judgeReview(revInput({
           provider: async () => rev({ rebuttalVerdicts: [{ finding_id: 'f1', accepted: true, reason }] }),
         }))
-        expect(r).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+        expect(r).toMatchObject({ skipped: true, reason: 'invalid_revision_schema' })
+        expect((r as { detail?: string }).detail).toContain('raw_tail: ')
       }
     })
 
@@ -350,7 +360,8 @@ describe('judgeReview', () => {
       const r = await judgeReview(revInput({
         provider: async () => rev({ closedFindingIds: ['f1', 'f2'], unresolved: ['f2', 'f3'] }),
       }))
-      expect(r).toEqual({ skipped: true, reason: 'invalid_revision_schema' })
+      expect(r).toMatchObject({ skipped: true, reason: 'invalid_revision_schema' })
+      expect((r as { detail?: string }).detail).toContain('raw_tail: ')
     })
 
     it('规格6：revision 轮不触发证据回查（无新 evidence 产出、bridge.query 零调用、无 evidenceUnverified 标志）', async () => {

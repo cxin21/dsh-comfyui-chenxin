@@ -1221,7 +1221,14 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           corrections,
           loopExhausted,
           joyExtraFiltered,
-          traceStages: [...(stage.trace?.stages ?? []), ...traceExtra],
+          // 2026-09-15（真实会话 gen_1789459886481 实证）：traceStages 原为 runStage 内阶段在前、
+          // intent/扩写追加在后——字面读序会误判「评审先于蓝图」。修正为时间序：
+          // intent/扩写 → runStage 内阶段（schema→…→judge）→ catalog。
+          traceStages: [
+            ...traceExtra.filter((e) => e.name !== 'catalog'),
+            ...(stage.trace?.stages ?? []),
+            ...traceExtra.filter((e) => e.name === 'catalog'),
+          ],
           canonicalSubstitutions: canon.canonicalSubstitutions,
           substitutions: canon.substitutions,
           expansions,
@@ -1305,7 +1312,12 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         corrections,
         loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
         joyExtraFiltered,
-        traceStages: [...(stage.trace?.stages ?? []), ...traceExtra],
+        // 同上：时间序修正（slots 路径：enrich → intent → runStage 内阶段 → catalog）
+        traceStages: [
+          ...traceExtra.filter((e) => e.name !== 'catalog'),
+          ...(stage.trace?.stages ?? []),
+          ...traceExtra.filter((e) => e.name === 'catalog'),
+        ],
         canonicalSubstitutions: canon.canonicalSubstitutions,
         substitutions: canon.substitutions,
         designNotes: designNotesOf(projStage),

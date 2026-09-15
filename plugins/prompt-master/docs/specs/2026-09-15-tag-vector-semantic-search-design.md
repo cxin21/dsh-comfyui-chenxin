@@ -160,3 +160,4 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 | selafuku | ⚠️ semantic 触发，10 hits 全部 semantic，**canonical serafuku 仍不在 top-10** | #1 serfafuku(0.7742)、#6 serafuku,(0.7331)；query 与短 typo passage 相似度挤顶、canonical 的 wiki 长 passage 被稀释——与 T12-001 同根因（短 passage 挤压 + 长度稀释），**换 bge-base 未解决该排序类**。@ 剔除与 CJK 拒绝均正常工作 |
 
 **遗留处置候选（T12-001/T13-002 合并）**：① 字符串相似度 tie-breaker（对 semantic 命中按与 query 的编辑距离/字符重合做确定性后排序——selafuku→serafuku 编辑距离 1，可直接把正确 tag 提到首位；零重建，直接命中拼写容错类）；② usage_count 重排；③ passage v2 / 更强模型。①+② 组合为推荐路径（确定性 + 零重建）。
+**处置落地（2026-09-15，commit 9fec064 + e9ee150）**：子串召回 + tie-breaker 组合已在 768 维生产索引上实测——selafuku → #1 serafuku（usage 375,254，fuzzy/子串召回形态），typo 家族（serfafuku/seiufuku/sreafuku 等）退居 #2-#4，中文查询照常在入口拒绝。拼写容错类缺口关闭；usage 重排与 passage v2 不再需要（本组合已覆盖其目标场景）。

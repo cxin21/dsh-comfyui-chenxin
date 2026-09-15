@@ -4,6 +4,7 @@ import { normalizeRefs } from '../pe-framework/dialect/h3.js'
 import { auditH3Full, contractGatesH3 } from '../pe-framework/audit/rules-h3.js'
 import { buildH3Budget, h3BudgetToReport } from '../pe-framework/audit/budget.js'
 import { serializeReport } from '../pe-framework/audit/report.js'
+import { searchCatalog } from '../pe-framework/dialect/anima-catalog.js'
 import type { AuditGate } from '../pe-framework/types.js'
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js'
 import type { Config } from '../plugin/config.js'
@@ -22,6 +23,47 @@ export interface AuditContent {
   duration?: number
   shotCount?: number
   references?: unknown[]
+}
+
+/** T11-001（spec 附录 A1 遗留处置，合并后 dispatch）：D1 残余面收敛——audit 链路为同步契约
+ *  （DialectContract.audit），auditAnima 的 miss 闸门走 searchCatalogSync，永远看不到 semantic
+ *  层（级联 semantic + 子串召回 + tie-breaker）。本助手在异步工具边界做 post-hoc 转换：
+ *  对 rule='catalog_miss' 的 gate 提取原文（detail 'catalog_miss:<text>（…）'），用 async
+ *  searchCatalog 重查——级联增强层（semantic/子串召回/tie-breaker）可解时，gate 原位替换为
+ *  semantic_fallback（与 auditAnima in-band 同格式）；不可解或故障保持原 gate（spec §5 降级纪律）。
+ *  注意：能走到这里的查询，同步级联必已全 miss，async 级联的 top hit 只可能来自增强层。 */
+export async function reconcileSemanticFallback(gates: AuditGate[]): Promise<AuditGate[]> {
+  const out: AuditGate[] = []
+  for (const g of gates) {
+    if (g.rule !== 'catalog_miss') {
+      out.push(g)
+      continue
+    }
+    const m = /^catalog_miss:(.+?)（/.exec(g.detail)
+    const text = m?.[1]?.trim()
+    if (!text) {
+      out.push(g)
+      continue
+    }
+    try {
+      const hits = await searchCatalog(text, { mode: 'auto', limit: 5 })
+      const top = hits[0]
+      if (!top?.prompt_form) {
+        out.push(g)
+        continue
+      }
+      out.push({
+        rule: 'semantic_fallback',
+        target: 'anima',
+        severity: 'minor',
+        detail: `semantic_fallback:${text}→${top.prompt_form}（保留原文未替换）`,
+        source: 'tools/prompt-audit',
+      })
+    } catch {
+      out.push(g) // 增强层纪律：转换失败保持原 gate（spec §5）
+    }
+  }
+  return out
 }
 
 /** 纯审计闸门（无 LLM）：按 target 直接 audit + budget → Envelope */
@@ -103,7 +145,7 @@ export function registerAuditTool(ctx: Context, _config: Config) {
       const target = String(args.target ?? 'h3') as 'anima' | 'h3'
       if (target !== 'anima' && target !== 'h3') throw new Error(`未知 target: ${target}`)
       logInfo(`[prompt-master] prompt_audit target=${target}${typeof args.stage === 'string' && target === 'h3' ? ` stage=${args.stage}` : ''}`)
-      const out = auditContentEnvelope({
+      let out = auditContentEnvelope({
         target,
         positive: typeof args.positive === 'string' ? args.positive : undefined,
         negative: typeof args.negative === 'string' ? args.negative : undefined,
@@ -115,6 +157,23 @@ export function registerAuditTool(ctx: Context, _config: Config) {
         shotCount: typeof args.shotCount === 'number' ? args.shotCount : undefined,
         references: Array.isArray(args.references) ? args.references : undefined,
       })
+      // T11-001（spec 附录 A1）：anima 审计的 catalog_miss gate 在异步边界做
+      // catalog_miss → semantic_fallback post-hoc 转换（同步审计链路看不到 semantic 层）。
+      if (target === 'anima') {
+        try {
+          const env = JSON.parse(out) as { ok?: boolean; audit?: { passed?: boolean; gates?: AuditGate[] }; advisories?: string[] }
+          const gates = env.audit?.gates ?? []
+          if (gates.some((g) => g.rule === 'catalog_miss')) {
+            const reconciled = await reconcileSemanticFallback(gates)
+            const ok2 = reconciled.every((g) => g.severity !== 'critical')
+            out = serializeReport({
+              ok: ok2,
+              audit: { passed: ok2, gates: reconciled },
+              advisories: [],
+            } as never)
+          }
+        } catch { /* 转换失败保持原结果（spec §5 降级纪律） */ }
+      }
       try {
         const env = JSON.parse(out) as { ok?: boolean; audit?: { gates?: Array<{ severity: string }> } }
         const gates = env.audit?.gates ?? []

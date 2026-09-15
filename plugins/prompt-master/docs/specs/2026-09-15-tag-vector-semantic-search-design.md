@@ -162,3 +162,17 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 **遗留处置候选（T12-001/T13-002 合并）**：① 字符串相似度 tie-breaker（对 semantic 命中按与 query 的编辑距离/字符重合做确定性后排序——selafuku→serafuku 编辑距离 1，可直接把正确 tag 提到首位；零重建，直接命中拼写容错类）；② usage_count 重排；③ passage v2 / 更强模型。①+② 组合为推荐路径（确定性 + 零重建）。
 **处置落地（2026-09-15，commit 9fec064 + e9ee150）**：子串召回 + tie-breaker 组合已在 768 维生产索引上实测——selafuku → #1 serafuku（usage 375,254，fuzzy/子串召回形态），typo 家族（serfafuku/seiufuku/sreafuku 等）退居 #2-#4，中文查询照常在入口拒绝。拼写容错类缺口关闭；usage 重排与 passage v2 不再需要（本组合已覆盖其目标场景）。
 **T11-001 收口（2026-09-15，commit 3374ced）**：prompt_audit 工具边界已实现 catalog_miss → semantic_fallback 的 post-hoc 转换（reconcileSemanticFallback，异步边界调 async 级联重查，原位替换 gate、与 auditAnima in-band 同格式；不可解/故障保持原 gate）。dist 端到端实测：slots 含 selafuku 的审计 → semantic_fallback:selafuku→serafuku。D1 残余面清零；deferred 清单中唯一代码项关闭。
+### 附录 A2：管线 LLM 调用架构终态（2026-09-15，用户定案「全部 LLM 调用一次性子代理」）
+
+会话初始化代理的表单注入问题由用户在其配置侧修复后，管线三角色 LLM 调用统一为**一次性 spawn 子代理**（此前短暂切直连的 2b9b2a4/6ba0f54 被 29edaad 再次反转）：
+
+| 角色 | 工厂 | provider | label 前缀 |
+|---|---|---|---|
+| 蓝图 intent | createDefaultIntentProvider → subagentIntent | spawn（opts.provider 可覆盖） | pm-author-<target>-* |
+| 扩写 enrich | SubagentTextRunner（共享工厂 createSubagentTextRunner） | spawn | pm-enrich-* |
+| 增量蓝图（blueprint_id 路径） | 同上（pm-blueprint） | spawn | pm-blueprint-* |
+| 评审 judge | createProductionCriticProvider → createSubagentCriticProvider | spawn | pm-critic-* |
+
+- 调用方式四方一致：prompt 单 text 块、toolFilter {allow:[]}（架构级禁工具）、parent 线穿（exec.agent）、PM_SUBAGENT_TIMEOUT_MS 超时。唯一记录在案的有意差异：intent 将调用方 exec.signal 透传给 start（取消传播），judge/enrich 用自有超时 controller。
+- 调用顺序由 execute 内严格 await 链构造保证（无并行）：intent → enrich(×(1+修复轮)) → runStage[judge] →（judgeFeedback/critical 驱动修正环，≤2 轮）→ 终态。traceStages 已时间序化（f610009），每次运行的完整调用序列可审计。
+- 实测（gen_1789482270069，corrections:2）：7 次 LLM 调用（intent×1 + enrich×3 + judge×3）全部子代理形态，judge 产出真实 verdict（needs_revision/78 分/3 findings），session-init 污染零复现。

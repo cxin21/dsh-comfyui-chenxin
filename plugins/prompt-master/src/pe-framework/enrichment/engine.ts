@@ -51,6 +51,41 @@ export interface EnrichOptions {
    *  ctx.subagents.start 以子代理形态执行（与 intent/judge 三方可见）；缺省走 ctx.llm.stream
    *  直连（无 Agent 会话的兜底路径，行为不变）。 */
   llm?: (req: { system: string; user: string }) => Promise<string>
+  /** 2026-09-15 管线重设计（spec §4）：compositing 形态——patch 路径白名单（越权路径确定性剥离 +
+   *  enrich_path_violation:N advisory），persona 换美学扩展版（语义蓝图 V0 输入） */
+  compositingMode?: boolean
+}
+
+/** spec §4 patch 路径白名单：set 允许前缀 / additions 允许前缀（越权即剥离 + advisory） */
+export const COMPOSITING_SET_ALLOWED = ['core.scene.lighting_idea', 'composition', 'mood']
+export const COMPOSITING_ADDITIONS_ALLOWED = ['core.style_hints', 'mood']
+
+/**
+ * 递归剥离 allowed 前缀之外的 patch 叶路径（spec §4 D3 哲学：契约靠谓词不靠自觉）。
+ * 返回被剥离的叶子数。in-place 修改（与 stripCoreRatingFromPatch 同风格）。
+ */
+export function prunePatchPaths(patch: Record<string, unknown>, allowed: string[]): number {
+  let dropped = 0
+  const walk = (node: Record<string, unknown>, prefix: string): void => {
+    for (const key of Object.keys(node)) {
+      const path = prefix ? `${prefix}.${key}` : key
+      if (allowed.some((a) => path === a || path.startsWith(`${a}.`))) {
+        const v = node[key]
+        if (isPlainObject(v)) walk(v, path)
+        continue
+      }
+      const v = node[key]
+      if (isPlainObject(v) && allowed.some((a) => a.startsWith(`${path}.`) || a === path)) {
+        // 前缀路径本身被允许（如 allowed=core.scene.lighting_idea 而当前是 core.scene）→ 继续下探
+        walk(v, path)
+        continue
+      }
+      delete node[key]
+      dropped++
+    }
+  }
+  walk(patch, '')
+  return dropped
 }
 
 export interface EnrichResult {
@@ -300,12 +335,20 @@ export async function enrichBlueprint(
     const v1 = structuredClone(v0) as BlueprintV1
     // patch 形状：{set, additions, expansions}；兼容裸部分蓝图（整个对象视为 set）
     const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed
+    // 2026-09-15 管线重设计（spec §4）：compositing 模式 patch 路径白名单——越权叶确定性剥离 + advisory
+    let enrichPathViolations = 0
+    if (opts.compositingMode) {
+      enrichPathViolations += prunePatchPaths(set, COMPOSITING_SET_ALLOWED)
+    }
     // M5-T3（D6/R7）：core.rating 信任边界——patch 应用前 strip（set 含裸形态 + additions 两通道全覆盖）。
     // 两条通道都要实际执行 strip（不可短路），advisory 只出一次。
     let ratingOverwriteBlocked = stripCoreRatingFromPatch(set)
     if (isPlainObject(parsed['additions'])) {
       // additions 通道整键阻断（wholeCore）：只删 rating 键不足以保住 rating（见 stripCoreRatingFromPatch ③）
       ratingOverwriteBlocked = stripCoreRatingFromPatch(parsed['additions'] as Record<string, unknown>, { wholeCore: true }) || ratingOverwriteBlocked
+      if (opts.compositingMode) {
+        enrichPathViolations += prunePatchPaths(parsed['additions'] as Record<string, unknown>, COMPOSITING_ADDITIONS_ALLOWED)
+      }
     }
     deepMerge(v1 as unknown as Record<string, unknown>, set)
     if (isPlainObject(parsed['additions'])) {
@@ -361,6 +404,7 @@ export async function enrichBlueprint(
     // M5-T3（D6/R7）：core.rating 覆写企图 → advisory（与 styleAdvisories 同通道并入 envelope advisories）
     const advisories = [...styleAdvisories]
     if (ratingOverwriteBlocked) advisories.push(RATING_OVERWRITE_ADVISORY)
+    if (enrichPathViolations > 0) advisories.push(`enrich_path_violation:${enrichPathViolations}`)
     if (hardDowngraded > 0) advisories.push(`llm_hard_negative_downgraded:${hardDowngraded}`)
 
     return { blueprint: enriched, expansions, ...(advisories.length > 0 ? { advisories } : {}) }

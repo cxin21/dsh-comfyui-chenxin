@@ -206,7 +206,13 @@ export function createSubagentIntentProvider(
         const o = opts._testOverride(text, req)
         if (o) return applyBlueprintClarify(o, req)
       }
-      return applyBlueprintClarify(parseIntentJson(text, req), req)
+      // 2026-09-15（真实运行两次失败实证：输出被「⚠️ 会话初始化提示」横幅 / ask_user 工具尝试
+      // 文本包裹——DSH 子代理会话首块可能含运行时通知）：入口先做宽松 JSON 提取（首个 '{' 到
+      // 最后一个 '}'），提取失败回退原文交由 parseIntentJson 的错误通道（与 judge parseJsonLoose 同款策略）。
+      const braceStart = text.indexOf('{')
+      const braceEnd = text.lastIndexOf('}')
+      const textForParse = braceStart >= 0 && braceEnd > braceStart ? text.slice(braceStart, braceEnd + 1) : text
+      return applyBlueprintClarify(parseIntentJson(textForParse, req), req)
     } finally {
       try {
         await run.dispose()

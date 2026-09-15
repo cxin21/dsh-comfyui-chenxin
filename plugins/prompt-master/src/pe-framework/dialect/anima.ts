@@ -543,7 +543,8 @@ export const MUTUAL_EXCLUSIONS: Array<[string, string]> = [
  *  （NewBie 规范实证：close-up 时下装/鞋袜/全身 tag 对出图是噪声甚至负向引导）。
  *  close-up|full body 互斥由本表接管（细化到具体内容 tag，文案可执行）；substring 语义
  *  与 MUTUAL_EXCLUSIONS 同款（normalizeText 后 includes）。 */
-const FRAMING_MISMATCH: Array<[string, string[]]> = [
+/** 2026-09-15 管线重设计：导出供 compositing 审计复用（单一事实源） */
+export const FRAMING_MISMATCH: Array<[string, string[]]> = [
   ['close-up', ['full body', 'shoes', 'footwear', 'thighhighs', 'pantyhose', 'kneehighs', 'socks']],
   ['upper body', ['full body', 'shoes', 'footwear', 'thighhighs', 'pantyhose', 'kneehighs']],
   ['cowboy shot', ['shoes', 'footwear']],

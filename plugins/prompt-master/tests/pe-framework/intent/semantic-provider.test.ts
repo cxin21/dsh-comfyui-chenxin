@@ -59,13 +59,13 @@ describe('subagentIntent compositing mode (spec §3/§2.1)', () => {
   it('compositing mode injects NO catalog candidates block (D2 zero-catalog)', async () => {
     const captured: { prompt?: string; label?: string } = {}
     const provider = createSubagentIntentProvider(mockOwnerCtx(SEMANTIC_JSON, captured) as never)
-    const req = { ...REQ, catalogCandidates: ['1girl', 'long hair'] } as never
+    const req = { ...(REQ as Record<string, unknown>), catalogCandidates: ['1girl', 'long hair'] } as never
     await provider(req, undefined)
     expect(captured.prompt).not.toContain('catalog 规范候选')
   })
   it('tag-form output → thrown error surfaces tag_in_blueprint (parse layer)', async () => {
     const captured: { prompt?: string; label?: string } = {}
-    const bad = JSON.parse(SEMANTIC_JSON)
+    const bad = JSON.parse(SEMANTIC_JSON) as { subjects: Array<{ appearance: string }> }
     bad.subjects[0].appearance = 'long_hair'
     const provider = createSubagentIntentProvider(mockOwnerCtx(JSON.stringify(bad), captured) as never)
     await expect(provider(REQ, undefined)).rejects.toThrow(/^tag_in_blueprint:1:/)

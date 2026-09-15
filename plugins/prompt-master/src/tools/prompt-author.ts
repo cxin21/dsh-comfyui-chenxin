@@ -11,6 +11,8 @@ import { buildTextZh } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
 import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
 import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js'
+import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js'
+import { searchCatalog } from '../pe-framework/dialect/anima-catalog.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
@@ -945,7 +947,16 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         throw new Error(`PM_AUTHOR_INTENT_FORM 非法值: ${formEnv}（可选 slots|blueprint）`)
       }
       if (formEnv !== undefined) preflightAdvisories.push(`intent_form_override:${formEnv}`)
-      const blueprintForm = target === 'anima' && (formEnv ?? intentCfg?.form ?? 'slots') === 'blueprint'
+      // 2026-09-15 管线重设计（spec §9 D8）：PM_PIPELINE_FORM 双态开关（compositing|legacy）。
+      // 非法值 fail-fast；显式设置出 advisory；缺省 legacy（T13 翻转为 compositing）。
+      // 仅对 target='anima' 生效（h3 未迁移恒 legacy）。
+      const pipelineFormRaw = process.env.PM_PIPELINE_FORM
+      if (pipelineFormRaw !== undefined && pipelineFormRaw !== 'compositing' && pipelineFormRaw !== 'legacy') {
+        throw new Error(`PM_PIPELINE_FORM 非法值: ${pipelineFormRaw}（可选 compositing|legacy）`)
+      }
+      const pipelineForm = target === 'anima' ? (pipelineFormRaw ?? 'legacy') : 'legacy'
+      if (pipelineFormRaw !== undefined && target === 'anima') preflightAdvisories.push(`pipeline_form_override:${pipelineFormRaw}`)
+      const blueprintForm = target === 'anima' && pipelineForm === 'legacy' && (formEnv ?? intentCfg?.form ?? 'slots') === 'blueprint'
 
       // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
       // blueprint_id 路径跳过 enrich（自带 enrichBlueprint 扩展层）。
@@ -1024,11 +1035,16 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // 先看到已验证存在的规范写法）。召回文本 = enrich brief（英文，slots 形态缺省路径）∪ 原始输入；
       // M5-T2（D4）：蓝图形态 runEnrich 跳过 → intentInput 恒为原始 input（与 blueprint_id 路径现状
       // 一致）。检索故障/空文本静默降级为无候选（增强层，不阻塞出稿）。
-      const catalogCandidates = target === 'anima' ? catalogCandidatesForText(intentInput) : []
+      // 2026-09-15 管线重设计（spec §5 D2）：compositing 形态零 catalog 交互——S1/S2 不做词表召回，
+      // 词表证据唯一由 S2.5 检索包承载。
+      const catalogCandidates = target === 'anima' && pipelineForm !== 'compositing' ? catalogCandidatesForText(intentInput) : []
       if (catalogCandidates.length > 0) enrichAdvisories.push(`catalog_recall_injected:${catalogCandidates.length}`)
 
       const intentBase = {
         target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, clarify: a.clarify, catalogCandidates,
+        // 2026-09-15 管线重设计（spec §3）：compositing 形态路由下行——provider 走语义蓝图
+        // persona/schema 与 parseSemanticBlueprint
+        ...(pipelineForm === 'compositing' && target === 'anima' ? { compositingMode: true as const } : {}),
         // M5-T2（D1）：蓝图形态下行——persona/schema 换 ANIMA 蓝图版（registry blueprintPersona/Schema），
         // blueprintExpectedMedia 供 parse 层守卫（D2）。slots 形态（含 rollback）保持 registry slots persona。
         ...(blueprintForm
@@ -1081,6 +1097,21 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const oldBp = repo.load(a.blueprint_id)
         if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
         draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, { llm: blueprintLlm }) }
+      } else if (pipelineForm === 'compositing' && target === 'anima') {
+        // 2026-09-15 管线重设计（spec §3）：compositing S1——语义蓝图产出；
+        // 校验/tag_in_blueprint 失败单次反馈重试（沿蓝图形态 D5c 语义，计 1 次 correction）
+        try {
+          draft = await provider({ ...intentBase, round: 0 }, exec)
+        } catch (error) {
+          blueprintRepairRetried = true
+          preflightAdvisories.push('blueprint_repair_retry')
+          const message = error instanceof Error ? error.message : String(error)
+          draft = await provider({
+            ...intentBase,
+            round: 1,
+            feedback: `上一轮语义蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence、任何字段不得出现 tag 形式词）。`,
+          }, exec)
+        }
       } else if (blueprintForm) {
         try {
           draft = await provider({ ...intentBase, round: 0 }, exec)
@@ -1111,7 +1142,75 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // h3 不适用（shots 无 rating 槽；h3 仅 safe，预检 gate 已挡非 safe）。
       if (!draft.blueprint && target === 'anima' && draft.slots) draft.slots.rating = resolved.rating
       traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
-      trace('intent_done', { form: draft.blueprint ? 'blueprint' : (draft.shots ? 'shots' : 'slots'), retried: blueprintRepairRetried, missing: draft.missing?.length ?? null })
+      trace('intent_done', { form: draft.blueprint ? 'blueprint' : (draft.shots ? 'shots' : (draft.semantic ? 'semantic' : 'slots')), retried: blueprintRepairRetried, missing: draft.missing?.length ?? null })
+
+      // ── compositing 分支（2026-09-15 管线重设计 spec §2/§8）：S2 扩写 → S2.5 检索包 →
+      // S3 成文 → S4 双轨审核 → S5 窄修复（编排细节在 compositing/orchestrate.ts，此处薄接线）
+      if (pipelineForm === 'compositing' && target === 'anima' && draft.semantic) {
+        const enrichRunner = subagentsReady
+          ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent })
+          : undefined
+        const writerRunner = subagentsReady
+          ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
+          : undefined
+        const critic = judgeOpts?.criticProvider
+        const tOrch0 = performance.now()
+        const outcome = await orchestrateCompositing(draft.semantic, resolved.rating, {
+          ...(enrichRunner ? { enrichRunner } : {}),
+          ...(writerRunner ? { writerRunner } : {}),
+          ...(critic ? { critic } : {}),
+          search: async (q: string) => searchCatalog(q),
+        }, { maxCorrections: MAX_CORRECTIONS })
+        traceExtra.push({ name: 'compositing_orchestrate', ms: performance.now() - tOrch0 })
+
+        const stage: StageResult = {
+          ok: outcome.ok,
+          result: { positive: outcome.positive, negative: outcome.negative },
+          gates: outcome.gates.map((g) => ({ rule: g.rule, target: 'anima', severity: g.severity, detail: g.detail, source: g.source })),
+          advisories: outcome.advisories,
+          assumptions: [],
+          targetSlotHint: 't2i.prompt',
+          ...(outcome.judge !== undefined
+            ? {
+                judge: {
+                  verdict: outcome.judge.verdict,
+                  score: outcome.judge.score,
+                  findings: outcome.judge.findings.map((f, i) => ({ id: `f${i + 1}`, severity: f.severity as 'blocker' | 'major' | 'minor', dimension: f.dimension, problem: f.problem, requiredFix: f.requiredFix })),
+                  praise: [],
+                },
+                debate: outcome.judge.debate as StageResult['debate'],
+              }
+            : {}),
+          judgeFeedback: outcome.judgeFeedback,
+          trace: { stages: outcome.trace },
+        }
+        const generationId = makeGenerationId()
+        const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...outcome.advisories]
+        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: outcome.corrections, advisories: finalAdvisories, enrich: 0, rating: resolved.rating })
+        ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(compositing) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} corrections=${outcome.corrections} fallback=${outcome.fallbackUsed}`)
+        return assembleEnvelope(stage, finalAdvisories, {
+          corrections: outcome.corrections,
+          loopExhausted: outcome.advisories.includes('loop_exhausted:true'),
+          joyExtraFiltered: false,
+          traceStages: [
+            ...traceExtra.filter((e) => e.name !== 'catalog'),
+            ...(stage.trace?.stages ?? []),
+            ...traceExtra.filter((e) => e.name === 'catalog'),
+          ],
+          compositing: { form: 'semantic', unresolved_count: outcome.unresolvedCount, writer_retries: outcome.corrections, fallback_used: outcome.fallbackUsed },
+          designNotes: [
+            ...outcome.v1.subjects.map((s) => `主体（${s.count}）: ${s.identity}`),
+            `场景: ${outcome.v1.core.scene.environment} / ${outcome.v1.core.scene.lighting_idea}`,
+          ],
+        }, {
+          generation_id: generationId,
+          ...judgeTopLevel(stage),
+          rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
+          aesthetics: { recommendedCards },
+        }, {
+          next_action: computeNextAction(stage, { repairHints: [], repaired: outcome.corrections > 0 && !outcome.advisories.includes('loop_exhausted:true') }),
+        })
+      }
 
       // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
       // → Level 2 LLM 结构化修复（≤2 次，计入 MAX_CORRECTIONS）→ Level 3 manual + loop_exhausted

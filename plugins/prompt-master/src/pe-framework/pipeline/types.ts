@@ -41,7 +41,7 @@ export type DebateRound = {
 }
 
 export interface PipelineTrace {
-  stages: Array<{ name: 'schema' | 'dialect' | 'audit' | 'budget' | 'render' | 'judge'; ms: number }>
+  stages: Array<{ name: 'schema' | 'dialect' | 'audit' | 'budget' | 'render' | 'judge' | 'semantic_enrich' | 'retrieval_pack' | 'writer_loop'; ms: number }>
   catalogHits?: number
   tokenCounter?: 'official-tokenizer' | 'estimate'
   references?: number

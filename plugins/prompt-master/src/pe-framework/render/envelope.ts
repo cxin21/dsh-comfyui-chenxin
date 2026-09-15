@@ -90,6 +90,13 @@ export interface EnvelopeObservability {
     repairs_count?: number
     anchor_rounds?: number
   }
+  /** 2026-09-15 管线重设计（spec §9）：compositing 形态痕迹 */
+  compositing?: {
+    form: 'semantic'
+    unresolved_count: number
+    writer_retries: number
+    fallback_used: boolean
+  }
 }
 
 export interface EnvelopeNextAction {

@@ -6,8 +6,8 @@
  */
 import type { WriterOutput } from '../../compositing/writer.js'
 import { assemblePositive } from '../../compositing/compose.js'
-import type { RetrievalPack } from '../dialect/retrieval-pack.js'
-import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
+import type { RetrievalPack } from '../../dialect/retrieval-pack.js'
+import type { SemanticBlueprint } from '../../blueprint/semantic-schema.js'
 
 export interface RubricItem {
   id: string

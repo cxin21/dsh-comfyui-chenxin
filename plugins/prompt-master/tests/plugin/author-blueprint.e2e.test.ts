@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js'
+import { registerAuthorTool, setAuthorIntentProvider, setAuthorJudgeDeps } from '../../src/tools/prompt-author.js'
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
 import { stubCtx, runTool, textStream } from './helpers.js'
 import type { AuthorIntentFn } from '../../src/tools/prompt-author.js'
@@ -113,6 +113,57 @@ describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁)', () => {
     expect(v.advisories).toContain('loop_exhausted:true')
     expect(v.observability.repairs.length).toBeGreaterThan(0) // Level 1 修复记录存在
     setAuthorIntentProvider(null)
+  })
+})
+
+// 2026-09-15 对称性修复回归锁（真实会话 gen_1789485485442 实证）：蓝图分支此前只认 critical gate，
+// judge needs_revision 耗尽修正轮后 next_action=ok 静默出稿——标准路径 2026-09-12 P3 已补打点，
+// 蓝图分支当时漏改。本用例钉住：judgeFeedback 持续非空 + corrections 达 MAX → loop_exhausted:true。
+describe('prompt_author blueprint Level 3 对称性（judge needs_revision 耗尽 → loop_exhausted）', () => {
+  // 最小合法 anima image 蓝图（同 orchestration 套件 MINI_IMAGE_BP 形状；scene 齐备过 checkFieldCompleteness）
+  const imageBpProvider: AuthorIntentFn = async () => ({
+    blueprint: {
+      schema_version: 1, media: 'image',
+      core: { concept: '黄昏天台的少女', scene: { environment: 'rooftop', lighting: 'golden hour' }, negative: [] },
+      media_layer: {
+        image: {
+          count_gender: ['1girl'],
+          pose_action: ['standing'],
+          expression: ['smile'],
+          scene_anchors: ['rooftop', 'sunset'],
+          camera_angle: 'cowboy shot',
+        },
+      },
+    } as any, missing: [],
+  })
+
+  // anima 7 维 rubric 维度分（与 author-judge.e2e 的 dimScores 同源形状）+ 恒 needs_revision critic
+  const dimScores = (v: number) => ({
+    'tag-order': v, contradiction: v, 'tag-evidence': v, 'negative-template': v,
+    composition: v, 'lighting-color': v, 'aesthetic-vocabulary': v,
+  })
+  const NEEDS_JSON = JSON.stringify({
+    verdict: 'needs_revision', dimensionScores: dimScores(50),
+    findings: [{ severity: 'major', dimension: 'tag-evidence', problem: 'ungrounded tags', evidence: { tool: 'catalog', query: '1girl', result: 'canonical,n=120' }, requiredFix: 'replace with canonical tags' }],
+    praise: [],
+  })
+  const mockEvidence = {
+    catalog: (q: string) => [{ tag: q, kind: 'canonical', count: 1 }],
+    aesthetics: (q: string) => ({ concreteness: 'pass', query_len: q.length }),
+  }
+
+  it('judgeFeedback 持续 needs_revision + 修正轮耗尽 → loop_exhausted:true（镜像标准路径 P3 口径）', async () => {
+    setAuthorIntentProvider(imageBpProvider as any)
+    setAuthorJudgeDeps({ criticProvider: async () => NEEDS_JSON, evidenceDeps: mockEvidence } as any)
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'fast', enrich: false })))
+    expect(v.observability.corrections).toBe(2) // 评审闭环跑了整整 2 轮修正
+    expect(v.judge).toMatchObject({ verdict: 'needs_revision' }) // 末轮评审仍 needs_revision
+    expect(v.advisories).toContain('loop_exhausted:true') // 此前静默缺失的打点（本回归锁的存在意义）
+    expect(v.observability.loopExhausted).toBe(true)
+    setAuthorIntentProvider(null)
+    setAuthorJudgeDeps(null)
   })
 })
 

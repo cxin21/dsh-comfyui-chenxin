@@ -1041,9 +1041,11 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       if (judgeMode !== 'off') {
         judgeOpts = {
           judge: judgeMode,
-          // 2026-09-15 终态（用户定案「全部 LLM 调用改 direct」）：评审走直连 complete——
-          // spawn 子会话形态触发 session-init 表单且 delegated 子代理不可交互（污染评审输出）。
-          // 注入 seam（测试/e2e mock）优先级不变。
+          // 2026-09-15 复位终态（29edaad，用户定案恢复「全部 LLM 调用一次性子代理」，附录 A2）：
+          // 评审经 createProductionCriticProvider → createSubagentCriticProvider（one-shot spawn，
+          // 架构级禁工具）。历史：2b9b2a4 曾改直连 complete 以规避 session-init 表单污染
+          // （delegated 子代理不可交互）；污染在会话初始化代理侧修复后恢复子代理形态——
+          // 此处注释曾在该中间态遗留「直连」表述，现正名。注入 seam（测试/e2e mock）优先级不变。
           criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
           evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
           originalIntent: input,
@@ -1185,7 +1187,12 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           if (repairJudgeOpts) lastJudged = stage
           if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
         }
-        if (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) {
+        // 2026-09-15 对称性修复（真实会话 gen_1789485485442 实证）：标准路径 2026-09-12 P3 已把
+        // 「judge needs_revision 耗尽修正轮后静默交付」补打 loop_exhausted:true，蓝图分支当时漏改——
+        // 只认 critical gate，评审闭环耗尽（judgeFeedback 仍非空且 corrections 已达 MAX_CORRECTIONS）
+        // 时 next_action=ok 静默出稿。此处镜像标准路径口径（下方非蓝图分支同款条件）。
+        const reviewStillFailed = (stage.judgeFeedback?.length ?? 0) > 0
+        if ((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (reviewStillFailed && corrections >= MAX_CORRECTIONS)) {
           trailAdvisories.push('loop_exhausted:true') // Level 3：仍失败 → manual + loop_exhausted
         }
         const repair_hints: RepairHint[] = repairs.map((r) => ({

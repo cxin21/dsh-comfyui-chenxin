@@ -43,6 +43,35 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
     expect(hits[0].prompt_form).toBe(seed.prompt_form) // 序保持 = 原 semantic 序
   })
 
+  it('子串 FTS 召回：KNN 全空时按三元组 LIKE 召回含查询子串的 tag（selafuku → serafuku）', async () => {
+    // KNN 层 miss（selafuku 的近拼写 tag 不在其向量近邻内）→ 子串召回补候选：
+    // 'selafuku' 三元组含 'afu'/'fuk'/'uku' → LIKE '%afu%' 等命中 serafuku（含 afu/fuk/uku 子串）
+    setVectorSearch(async () => [])
+    const hits = await searchCatalog('selafuku', { mode: 'auto', limit: 10 })
+    const forms = hits.map((h) => h.prompt_form)
+    expect(forms).toContain('serafuku')
+    expect(hits.find((h) => h.prompt_form === 'serafuku')?.match_type).toBe('fuzzy')
+  })
+
+  it('子串召回 + tie-breaker 组合：KNN 返回高分类似 typo 时，子串召回的 serafuku 被 tie-breaker 提到 #1', async () => {
+    const typo = seedRecordId('serfafuku')
+    setVectorSearch(async () => [{ record_id: typo.record_id, score: 0.7742, text_source: 'fallback' as const }])
+    const hits = await searchCatalog('selafuku', { mode: 'auto', limit: 10 })
+    // 子串召回带进 serafuku（lev_sim 0.875 ≥0.8 提位）+ KNN 的 serfafuku（0.78 <0.8 不提位）
+    expect(hits[0].prompt_form).toBe('serafuku')
+    expect(hits.map((h) => h.prompt_form)).toContain('serfafuku')
+  })
+
+  it('子串召回对 <3 字符查询安全（不触发、不崩溃）且级联行为不变', async () => {
+    setVectorSearch(async () => [])
+    // 'ab' 在 fuzzy 层命中前缀 → 级联提前返回，semantic 层不触发
+    const shortHits = await searchCatalog('ab', { mode: 'auto', limit: 5 })
+    expect(Array.isArray(shortHits)).toBe(true)
+    // 'a%b_c' 归一化为 'a%b c'，三元组含通配符字符 → LIKE 已转义，安全返回
+    const weird = await searchCatalog('a%b_c', { mode: 'auto', limit: 5 })
+    expect(Array.isArray(weird)).toBe(true)
+  })
+
   it("mode 'exact' 永不触发 semantic 层", async () => {
     let semanticQueried = false
     setVectorSearch(async () => {
@@ -74,9 +103,12 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
     expect(semanticQueried).toBe(false)
   })
 
-  it('semantic 命中 JOIN 不到 records → 丢弃（不凑数）', async () => {
+  it('semantic 命中 JOIN 不到 records → 丢弃；子串召回候选照常浮现（附录 A1 处置②行为变化）', async () => {
     setVectorSearch(async () => [{ record_id: 'no-such-record-xyz', score: 0.9, text_source: 'fallback' }])
-    expect(await searchCatalog('zzzzzzzzq', { mode: 'auto', limit: 5 })).toEqual([])
+    const hits = await searchCatalog('zzzzzzzzq', { mode: 'auto', limit: 5 })
+    // 悬空 KNN 命中被 JOIN 丢弃；'zzz' 三元组子串召回的真实 catalog 候选以 fuzzy 形态浮现
+    expect(hits.every((h) => h.match_type === 'fuzzy')).toBe(true)
+    expect(hits.every((h) => h.record_id !== 'no-such-record-xyz')).toBe(true)
   })
 
   it('semantic 层剔除 @ 画师命中（spec §3.2 补齐，与 fuzzy F3 的 @ 剔除同口径）', async () => {

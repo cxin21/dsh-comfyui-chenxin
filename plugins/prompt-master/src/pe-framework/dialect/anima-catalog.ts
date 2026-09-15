@@ -330,8 +330,9 @@ export function searchCatalogSync(tag: string, opts?: CatalogQueryOptions): Cata
 /** semantic 命中 → catalog records JOIN（spec §3.2）：按 record_id 取 prompt_form/usage_count，
  *  JOIN 不到的丢弃（不凑数——向量库与 catalog 重建时间差可能产生悬空 record_id）；
  *  @ 画师命中剔除（spec §3.2：semantic 层与 fuzzy F3 同口径——'@' 用户名/画师型记录不得进入
- *  语义近似结果；t6 探针实证 @-artist 占位 5/10 槽位后补齐）。 */
-function joinWithCatalog(sem: SemanticHit[]): CatalogHit[] {
+ *  语义近似结果；t6 探针实证 @-artist 占位 5/10 槽位后补齐）。
+ *  入参放宽为结构化最小形状：同时服务 KNN 命中（SemanticHit）与子串召回命中（无 score/text_source）。 */
+function joinWithCatalog(sem: Array<{ record_id?: string; score?: number; text_source?: 'wiki' | 'fallback'; match_type?: 'semantic' | 'fuzzy' }>): CatalogHit[] {
   const out: CatalogHit[] = []
   for (const s of sem) {
     if (!s.record_id) continue
@@ -342,13 +343,40 @@ function joinWithCatalog(sem: SemanticHit[]): CatalogHit[] {
     if (!row) continue
     if ((row.prompt_form ?? '').trim().startsWith('@')) continue
     out.push({
-      match_type: 'semantic',
+      match_type: s.match_type ?? 'semantic',
       record_id: s.record_id,
       prompt_form: row.prompt_form,
       usage_count: row.usage_count,
       score: s.score,
       text_source: s.text_source,
     })
+  }
+  return out
+}
+
+/** 子串 FTS 召回（spec 附录 A1 遗留处置②，拼写容错类召回层缺口）：KNN 对"拼错查询 vs 正确 tag
+ *  的长释义 passage"结构性 miss（selafuku 类，实测 canonical 不在 KNN top-50），而级联 fuzzy 层的
+ *  FTS 前缀匹配也够不着中缀子串——本函数把归一化查询分解为三元组，对 names.normalized_value 做
+ *  LIKE '%tri%' 扫描（单次全表扫，仅 total-miss 罕见路径触发），按 usage_count 降序召回候选。
+ *  命中以 match_type='fuzzy' 回归级联（无 score——非向量命中），交 tie-breaker 提位。 */
+function substringRecall(query: string, limit: number): CatalogHit[] {
+  const q = normalizeTag(query)
+  if (q.length < 3) return []
+  const grams = q.length === 3 ? [q] : Array.from({ length: q.length - 2 }, (_, i) => q.slice(i, i + 3))
+  const patterns = [...new Set(grams)].map((g) => `%${g.replace(/[%_\\]/g, '\\$&')}%`)
+  const where = patterns.map(() => "n.normalized_value LIKE ? ESCAPE '\\'").join(' OR ')
+  const rows = db()
+    .prepare(
+      `SELECT r.record_id, r.prompt_form, r.usage_count FROM names n JOIN records r ON r.record_id = n.record_id
+       WHERE n.name_type IN ('canonical','alias') AND (${where}) ORDER BY r.usage_count DESC LIMIT ?`,
+    )
+    .all(...patterns, limit) as Array<{ record_id: string; prompt_form: string; usage_count: number }>
+  const seen = new Set<string>()
+  const out: CatalogHit[] = []
+  for (const r of rows) {
+    if (seen.has(r.record_id)) continue
+    seen.add(r.record_id)
+    out.push({ match_type: 'fuzzy', record_id: r.record_id, prompt_form: r.prompt_form, usage_count: r.usage_count, raw: r.prompt_form })
   }
   return out
 }
@@ -412,8 +440,19 @@ export async function searchCatalog(tag: string, opts?: CatalogQueryOptions): Pr
   if (!vs) return hits
   try {
     const sem = await vs(normalized, limit)
-    if (!sem.length) return hits
-    const joined = applyStringTieBreak(normalized, joinWithCatalog(sem))
+    // 子串召回补候选（附录 A1 处置②）：KNN 对拼错查询结构性 miss，三元组 LIKE 扫描召回
+    // 含查询子串的 catalog tag（如 selafuku → serafuku），与 KNN 候选按 record_id 去重合并
+    // （KNN 在前，带 score），再经 tie-breaker 提位近拼写候选。
+    const sub = substringRecall(normalized, limit)
+    if (!sem.length && !sub.length) return hits
+    const merged: Array<{ record_id?: string; score?: number; text_source?: 'wiki' | 'fallback' }> = []
+    const seenIds = new Set<string>()
+    for (const s of [...sem, ...sub]) {
+      if (!s.record_id || seenIds.has(s.record_id)) continue
+      seenIds.add(s.record_id)
+      merged.push(s)
+    }
+    const joined = applyStringTieBreak(normalized, joinWithCatalog(merged)).slice(0, limit)
     return joined.length ? joined : hits
   } catch {
     // 增强层纪律：语义层故障只降级为空，永不阻塞前四级级联结果

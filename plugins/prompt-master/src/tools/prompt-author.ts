@@ -9,7 +9,7 @@ import '../pe-framework/dialect/h3.js'
 import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
 import { buildTextZh } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
-import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
+import { createProductionEvidenceDeps, createDirectCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
@@ -968,7 +968,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // 回滚面：env PM_AUTHOR_INTENT_FORM=slots → blueprintForm=false → runEnrich 原样恢复（D8）。
       if (a.enrich !== false && !a.blueprint_id && !blueprintForm) {
         const tEnrich0 = performance.now()
-        const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent })
+        const enrichProvider = _enrichProvider ?? createDirectCriticProvider(ctx, resolveRoute(exec as ExecLike))
         const eRes = await runEnrich({
           target: target as EnrichTarget,
           userInput: input,
@@ -1029,7 +1029,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       if (judgeMode !== 'off') {
         judgeOpts = {
           judge: judgeMode,
-          criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
+          // 2026-09-15 终态（用户定案「全部 LLM 调用改 direct」）：评审走直连 complete——
+          // spawn 子会话形态触发 session-init 表单且 delegated 子代理不可交互（污染评审输出）。
+          // 注入 seam（测试/e2e mock）优先级不变。
+          criticProvider: _judgeDeps?.criticProvider ?? createDirectCriticProvider(ctx, resolveRoute(exec as ExecLike)),
           evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
           originalIntent: input,
           declaredRating: resolved.rating, // M2-T2（spec §7 P3）：T13 四接线点从编排流可达

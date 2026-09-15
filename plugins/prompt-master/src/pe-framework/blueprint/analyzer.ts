@@ -264,7 +264,6 @@ export async function analyzeBlueprintIncremental(
   route: { provider: string; model: string },
   oldBp: BlueprintV1,
   userInput: string,
-  opts: { llm?: (req: { system: string; user: string }) => Promise<string> } = {},
 ): Promise<BlueprintV1> {
   const persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp)
   const user = [
@@ -272,18 +271,15 @@ export async function analyzeBlueprintIncremental(
     '基于 <old_blueprint> 中的上一版蓝图，合并本轮修改意图后输出完整新蓝图 JSON（未提及字段逐字节保留）。',
   ].join('\n')
 
-  // 2026-09-15（用户定案「全部 LLM 调用改子代理」）：注入 llm runner 时走子代理形态；缺省直连兜底。
-  const text = opts.llm
-    ? await opts.llm({ system: persona, user })
-    : (await complete(ctx, {
-        provider: route.provider,
-        model: route.model,
-        system: persona,
-        user,
-        // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
-        temperature: 0.3,
-        signal: new AbortController().signal,
-      })).text
+  const { text } = await complete(ctx, {
+    provider: route.provider,
+    model: route.model,
+    system: persona,
+    user,
+    // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
+    temperature: 0.3,
+    signal: new AbortController().signal,
+  })
 
   const { blueprint } = parseBlueprintJson(text)
   return blueprint

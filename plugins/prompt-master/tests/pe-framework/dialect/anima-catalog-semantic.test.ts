@@ -21,6 +21,28 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
     expect(hits[0]).toMatchObject({ match_type: 'semantic', prompt_form: seed.prompt_form, score: 0.82, text_source: 'wiki' })
   })
 
+  it('字符串 tie-breaker：近 identical 拼写（lev_sim ≥0.8）提位到 semantic 序之前（selafuku 类拼写容错）', async () => {
+    // T12-001 根因（模型分布特性）的确定性缓解：'selafuku' 与 'serafuku' 归一化 Levenshtein
+    // 相似度 0.875 ≥ 0.8 → 提为第一梯队；'wafuku' 相似度 ~0.5 → 保持 semantic 序（即使分更高）。
+    const near = seedRecordId('serafuku')
+    const far = seedRecordId('wafuku')
+    setVectorSearch(async () => [
+      { record_id: far.record_id, score: 0.7359, text_source: 'fallback' as const },
+      { record_id: near.record_id, score: 0.72, text_source: 'wiki' as const },
+    ])
+    const hits = await searchCatalog('selafuku', { mode: 'auto', limit: 5 })
+    expect(hits[0].match_type).toBe('semantic')
+    expect(hits[0].prompt_form).toBe('serafuku')
+    expect(hits.map((h) => h.prompt_form)).toContain('wafuku')
+  })
+
+  it('字符串 tie-breaker 不触发于无近拼写命中的查询（zzzzzzzzq 类）', async () => {
+    const seed = seedRecordId('silvery hair')
+    setVectorSearch(async () => [{ record_id: seed.record_id, score: 0.82, text_source: 'wiki' as const }])
+    const hits = await searchCatalog('zzzzzzzzq', { mode: 'auto', limit: 5 })
+    expect(hits[0].prompt_form).toBe(seed.prompt_form) // 序保持 = 原 semantic 序
+  })
+
   it("mode 'exact' 永不触发 semantic 层", async () => {
     let semanticQueried = false
     setVectorSearch(async () => {

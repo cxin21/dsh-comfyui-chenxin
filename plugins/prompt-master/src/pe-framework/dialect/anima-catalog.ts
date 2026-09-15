@@ -353,6 +353,49 @@ function joinWithCatalog(sem: SemanticHit[]): CatalogHit[] {
   return out
 }
 
+/** 归一化 Levenshtein 相似度：1 - dist/max(len)；任一侧空串 → 0。
+ *  拼写容错 tie-breaker（附录 A1 遗留处置①）用——'selafuku'/'serafuku' = 0.875。 */
+export function levenshteinSimilarity(a: string, b: string): number {
+  if (!a.length && !b.length) return 1
+  if (!a.length || !b.length) return 0
+  const n = b.length
+  let prev = new Array<number>(n + 1)
+  let curr = new Array<number>(n + 1)
+  for (let j = 0; j <= n; j++) prev[j] = j
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i
+    for (let j = 1; j <= n; j++) {
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    ;[prev, curr] = [curr, prev]
+  }
+  return 1 - prev[n] / Math.max(a.length, n)
+}
+
+/** tie-breaker 提位阈值：归一化 Levenshtein ≥ 0.8 视为"查询词的近 identical 拼写"
+ *  （'selafuku'/'serafuku'=0.875 ✓；'serfafuku'=0.78 ✗；退化 'serafuku,'=0.78 ✗）。 */
+export const STRING_TIEBREAK_SIMILARITY = 0.8
+
+/** 拼写容错 tie-breaker（spec 附录 A1 遗留处置①，T12-001 根因的确定性缓解）：
+ *  semantic 相似度分对"查询词的近重复短 passage"天然挤顶，而正确 tag 的 wiki 富化长
+ *  passage 被长度稀释——对 semantic 命中按与查询词的归一化 Levenshtein 相似度分桶：
+ *  ≥0.8 提为第一梯队（相似度降序、semantic 分降序），其余保持 semantic 序。
+ *  确定性、零 LLM、零重建；@ 过滤已在 joinWithCatalog 先行。 */
+function applyStringTieBreak(query: string, hits: CatalogHit[]): CatalogHit[] {
+  if (hits.length < 2) return hits
+  const q = normalizeTag(query)
+  if (!q) return hits
+  const scored = hits.map((h) => {
+    const form = normalizeTag(h.prompt_form ?? h.raw ?? '')
+    return { h, sim: form ? levenshteinSimilarity(q, form) : 0 }
+  })
+  const promoted = scored.filter((s) => s.sim >= STRING_TIEBREAK_SIMILARITY)
+  if (!promoted.length) return hits
+  promoted.sort((a, b) => b.sim - a.sim || (b.h.score ?? 0) - (a.h.score ?? 0))
+  const rest = scored.filter((s) => s.sim < STRING_TIEBREAK_SIMILARITY).map((s) => s.h)
+  return [...promoted.map((s) => s.h), ...rest]
+}
+
 /** 异步公共入口（spec §3.2）：searchCatalogSync 结果之上，仅 mode='auto' 且前级全空
  *  （canonical→alias→artistRegistry→fuzzy→overlay 均零命中）时末位追加 semantic 层；
  *  'exact' 与单级直查永不触发。增强层纪律：向量层任何故障（缺失/嵌入异常/JOIN 空）
@@ -370,7 +413,7 @@ export async function searchCatalog(tag: string, opts?: CatalogQueryOptions): Pr
   try {
     const sem = await vs(normalized, limit)
     if (!sem.length) return hits
-    const joined = joinWithCatalog(sem)
+    const joined = applyStringTieBreak(normalized, joinWithCatalog(sem))
     return joined.length ? joined : hits
   } catch {
     // 增强层纪律：语义层故障只降级为空，永不阻塞前四级级联结果

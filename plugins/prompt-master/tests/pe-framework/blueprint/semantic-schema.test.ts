@@ -26,8 +26,10 @@ describe('validateSemanticBlueprint (spec §3)', () => {
   it('media!=image rejected', () => {
     expect(validateSemanticBlueprint({ ...GOOD, media: 'video' }).ok).toBe(false)
   })
-  it('empty subjects rejected', () => {
-    expect(validateSemanticBlueprint({ ...GOOD, subjects: [] }).ok).toBe(false)
+  it('empty subjects tolerated (pure-scene c14) with missing advisory', () => {
+    const r = validateSemanticBlueprint({ ...GOOD, subjects: [] })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.missing).toContain('subjects')
   })
   it('duplicate subject id rejected', () => {
     const bp = { ...GOOD, subjects: [GOOD.subjects[0], { ...GOOD.subjects[0] }] }

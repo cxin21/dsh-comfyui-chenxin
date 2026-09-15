@@ -68,8 +68,9 @@ export function validateSemanticBlueprint(raw: unknown): ValidateResult {
     return { ok: false, error: 'core.style_hints must be string[]' }
   }
 
-  if (!Array.isArray(bp.subjects) || bp.subjects.length === 0) {
-    return { ok: false, error: 'subjects must be non-empty array' }
+  if (!Array.isArray(bp.subjects)) {
+    return { ok: false, error: 'subjects must be array' }
+    // 纯场景输入（c14）允许空 subjects——空数组记 missing advisory，不算错误（spec §3 字段契约 + golden c14）
   }
   const ids = new Set<string>()
   for (const s of bp.subjects as Record<string, unknown>[]) {
@@ -99,5 +100,6 @@ export function validateSemanticBlueprint(raw: unknown): ValidateResult {
   const missing: string[] = []
   if (!isStr(bp.mood) || (bp.mood as string).trim() === '') missing.push('mood')
   if (!Array.isArray(c.style_hints) || (c.style_hints as string[]).length === 0) missing.push('core.style_hints')
+  if (!Array.isArray(bp.subjects) || bp.subjects.length === 0) missing.push('subjects')
   return { ok: true, bp: bp as unknown as SemanticBlueprint, missing }
 }

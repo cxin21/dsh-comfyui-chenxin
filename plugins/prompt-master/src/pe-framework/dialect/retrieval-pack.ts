@@ -55,13 +55,14 @@ export function extractConcepts(bp: SemanticBlueprint): Array<{ concept: string;
   for (const [k, v] of Object.entries(bp.core.scene)) {
     if (v.trim()) out.push({ concept: `core.scene.${k}`, query: v })
   }
-  for (const [i, s] of bp.subjects.entries()) {
+  for (const s of bp.subjects) {
     for (const [k, v] of Object.entries(s) as Array<[string, string]>) {
       if (k === 'id' || k === 'count') continue
+      // 概念路径按主体 id（spec §5："S1.appearance"），与 writer source_concept（T2）对齐
       if (k === 'appearance' || k === 'pose') {
-        for (const phrase of splitPhrases(v)) out.push({ concept: `subjects[${i}].${k}`, query: phrase })
+        for (const phrase of splitPhrases(v)) out.push({ concept: `${s.id}.${k}`, query: phrase })
       } else if (v.trim()) {
-        out.push({ concept: `subjects[${i}].${k}`, query: v })
+        out.push({ concept: `${s.id}.${k}`, query: v })
       }
     }
   }

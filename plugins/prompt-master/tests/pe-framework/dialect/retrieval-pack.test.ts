@@ -21,9 +21,9 @@ const BP: SemanticBlueprint = {
 describe('extractConcepts (spec §5)', () => {
   it('sentence/phrase level split for appearance/pose', () => {
     const cs = extractConcepts(BP)
-    const appearance = cs.filter((c) => c.concept === 'subjects[0].appearance')
+    const appearance = cs.filter((c) => c.concept === 'S1.appearance')
     expect(appearance.map((c) => c.query)).toEqual(['long black hair', 'school uniform'])
-    const pose = cs.filter((c) => c.concept === 'subjects[0].pose')
+    const pose = cs.filter((c) => c.concept === 'S1.pose')
     expect(pose.map((c) => c.query)).toEqual(['standing', 'looking back'])
   })
   it('scene fields / composition / mood / style_hints each one query', () => {
@@ -40,7 +40,7 @@ describe('buildRetrievalPack (spec §5)', () => {
     const search = async (q: string) =>
       q.includes('hair') ? [{ prompt_form: 'long hair', match_type: 'canonical', usage_count: 891234 }] : []
     const pack = await buildRetrievalPack(BP, search)
-    const hair = pack.evidence.find((e) => e.concept === 'subjects[0].appearance')
+    const hair = pack.evidence.find((e) => e.concept === 'S1.appearance')
     expect(hair?.hits[0]).toMatchObject({ prompt_form: 'long hair', match_type: 'canonical' })
     expect(pack.unresolved.some((u) => u.query === 'right third')).toBe(true)
     expect(pack.unresolved.every((u) => typeof u.concept === 'string')).toBe(true)
@@ -56,7 +56,7 @@ describe('buildRetrievalPack (spec §5)', () => {
     const search = async (q: string) =>
       q.includes('hair') ? Array.from({ length: 7 }, (_, i) => ({ prompt_form: `hit${i}`, match_type: 'fuzzy' })) : []
     const pack = await buildRetrievalPack(BP, search)
-    expect(pack.evidence.find((e) => e.concept === 'subjects[0].appearance')?.hits.length).toBe(5)
+    expect(pack.evidence.find((e) => e.concept === 'S1.appearance')?.hits.length).toBe(5)
   })
   it('search failure degrades to unresolved (non-blocking)', async () => {
     const search = async () => {

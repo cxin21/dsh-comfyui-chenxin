@@ -49,9 +49,11 @@ function presetRootFromModulePath(): string | undefined {
 }
 
 export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
-  // bge-m3（默认）：多语言强模型，无 query/passage 前缀、CLS 池化、fp32 权重（官方 onnx 无量化变体）。
-  // e5 系列保持旧行为（前缀 + mean 池化 + q8），经 PM_EMBED_MODEL / PM_E5_MODEL 环境变量可切回。
-  const model = opts?.model ?? process.env.PM_EMBED_MODEL ?? process.env.PM_E5_MODEL ?? 'BAAI/bge-m3'
+  // bge-base-en-v1.5（默认，768 维，英文单语）：无 query/passage 前缀、CLS 池化、fp32。
+  // e5 系列保持旧行为（前缀 + mean 池化 + q8），bge-m3 / 其他模型经 PM_EMBED_MODEL 可切。
+  // ⚠️ 默认值必须与建库脚本（build_tag_vector.py MODEL，BAAI/bge-base-en-v1.5 768 维）同模型同维度，
+  // 否则查询向量与索引维度错配、semantic 层必然降级。
+  const model = opts?.model ?? process.env.PM_EMBED_MODEL ?? process.env.PM_E5_MODEL ?? 'Xenova/bge-base-en-v1.5'
   const isE5 = /e5/i.test(model)
   const dtype = (process.env.PM_EMBED_DTYPE ?? (isE5 ? 'q8' : 'fp32')) as 'fp32' | 'q8'
   let extractor: Extractor | null = null

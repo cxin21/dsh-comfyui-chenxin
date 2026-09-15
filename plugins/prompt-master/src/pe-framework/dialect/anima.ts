@@ -522,7 +522,8 @@ export const LIGHTING_BAN = [
   // 不是光照渲染 LoRA 触发词；保留的是 true light-effect 词（Anima3 §2 语义）
 ]
 
-const MUTUAL_EXCLUSIONS: Array<[string, string]> = [
+/** 2026-09-15 管线重设计：导出供 compositing 检索包/审计复用（单一事实源，不再复制词表） */
+export const MUTUAL_EXCLUSIONS: Array<[string, string]> = [
   ['from front', 'from behind'],
   ['from above', 'from below'],
   ['pov', 'full body'],

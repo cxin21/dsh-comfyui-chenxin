@@ -9,7 +9,8 @@ import '../pe-framework/dialect/h3.js'
 import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
 import { buildTextZh } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
-import { createProductionEvidenceDeps, createDirectCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
+import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
+import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
@@ -963,12 +964,23 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // host 装配子代理读 parent.options 缺 parent 直接 TypeError → 全量静默 skipped
       // （docs/2026-09-12-camera-language-research.md §2）
       const criticParent = (exec as unknown as ExecLike | undefined)?.agent ?? (ctx as { agent?: unknown } | undefined)?.agent
+      // 2026-09-15（用户定案「全部 LLM 调用一次性子代理」终态）：扩写/增量蓝图的嵌套 LLM 调用
+      // 统一走子代理形态（三方可见）；subagents 未注册时保持 complete 直连兜底（无 Agent 会话可用）。
+      const subagentsReady = Boolean((ctx as { subagents?: { start?: unknown } | undefined })?.subagents?.start)
+      const asLlm = (runner: ReturnType<typeof createSubagentTextRunner>) =>
+        (req: { system: string; user: string }) => runner(`${req.system}\n\n${req.user}`)
+      const enrichLlm = subagentsReady
+        ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent }))
+        : undefined
+      const blueprintLlm = subagentsReady
+        ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent }))
+        : undefined
       // M5-T2（D4，design §2.4）：runEnrich 退出 anima 蓝图形态默认路径（enrichBlueprint 扩展层顶上
       // ——spec §4/§8 字面流无 brief 层；LLM 调用数首轮持平）。blueprint_id 路径既有跳过语义不变。
       // 回滚面：env PM_AUTHOR_INTENT_FORM=slots → blueprintForm=false → runEnrich 原样恢复（D8）。
       if (a.enrich !== false && !a.blueprint_id && !blueprintForm) {
         const tEnrich0 = performance.now()
-        const enrichProvider = _enrichProvider ?? createDirectCriticProvider(ctx, resolveRoute(exec as ExecLike))
+        const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent })
         const eRes = await runEnrich({
           target: target as EnrichTarget,
           userInput: input,
@@ -1032,7 +1044,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           // 2026-09-15 终态（用户定案「全部 LLM 调用改 direct」）：评审走直连 complete——
           // spawn 子会话形态触发 session-init 表单且 delegated 子代理不可交互（污染评审输出）。
           // 注入 seam（测试/e2e mock）优先级不变。
-          criticProvider: _judgeDeps?.criticProvider ?? createDirectCriticProvider(ctx, resolveRoute(exec as ExecLike)),
+          criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
           evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
           originalIntent: input,
           declaredRating: resolved.rating, // M2-T2（spec §7 P3）：T13 四接线点从编排流可达
@@ -1060,7 +1072,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const repo = createBlueprintRepo({ settings: repoScope })
         const oldBp = repo.load(a.blueprint_id)
         if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
-        draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input) }
+        draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, { llm: blueprintLlm }) }
       } else if (blueprintForm) {
         try {
           draft = await provider({ ...intentBase, round: 0 }, exec)
@@ -1125,7 +1137,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
 
         const tBlueprintEnrich0 = performance.now()
         trace('enrich_start', { coreRating: bpForEnrich.core?.rating ?? null, media: bpForEnrich.media })
-        const e0 = await enrichBlueprint(ctx, route, bpForEnrich, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}) })
+        const e0 = await enrichBlueprint(ctx, route, bpForEnrich, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}), llm: enrichLlm })
         trace('enrich_done', { expansions: e0.expansions.length, advisories: e0.advisories?.length ?? 0, firstExpansion: e0.expansions[0] ?? null })
         traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tBlueprintEnrich0 }) // M5-T2（D4）envelope 增量②
         expansions.push(...e0.expansions)
@@ -1162,7 +1174,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           if (!d2.blueprint) break // provider 未返回蓝图 → 保留当前 stage，走 Level 3
           injectBlueprintCoreRating(d2, resolved.rating) // M5-T2（D5b）缺口#2：修复轮重注入
           const tE2 = performance.now()
-          const e2 = await enrichBlueprint(ctx, route, d2.blueprint, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}) })
+          const e2 = await enrichBlueprint(ctx, route, d2.blueprint, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}), llm: enrichLlm })
           traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tE2 }) // D4 增量②：修复轮同计
           expansions.push(...e2.expansions)
           for (const sa of e2.advisories ?? []) styleAdvisories.add(sa)

@@ -47,6 +47,10 @@ export interface EnrichOptions {
   /** M5-DIAG：调用方取消信号透传（取消可传播到 ctx.llm.stream；prompt-author exec.signal 接线
    *  留待后续任务，缺省行为不变——孤儿 AbortController 兜底）。 */
   signal?: AbortSignal
+  /** 2026-09-15（用户定案「全部 LLM 调用改子代理」）：子代理文本 runner——注入后扩写经
+   *  ctx.subagents.start 以子代理形态执行（与 intent/judge 三方可见）；缺省走 ctx.llm.stream
+   *  直连（无 Agent 会话的兜底路径，行为不变）。 */
+  llm?: (req: { system: string; user: string }) => Promise<string>
 }
 
 export interface EnrichResult {
@@ -238,24 +242,32 @@ export async function enrichBlueprint(
 
   let raw = ''
   let finishKind = 'unknown'
+  const expansionSystem = buildExpansionPersona(v0.media)
   try {
-    const res = await complete(ctx, {
-      provider: route.provider,
-      model: route.model,
-      system: buildExpansionPersona(v0.media),
-      user,
-      // M5-DIAG2（用户裁定 2026-09-14：不设 maxTokens 上限）：三轮实测（1024@~10.5s / 4096@38.7s /
-      // 1400@13.6s）预算恒打满且文本头恒空（reason=parse:max-tokens:""，gen_1789344503021_z22g7861）
-      // —— 直连路由跟随会话模型（fangzhou/ark-code-latest），reasoning token 计入 maxTokens 预算
-      // 且不产出 text 块，任何上限都会被思考期吃满后截断。故省略 maxTokens → 宿主 defaultMaxTokens
-      // 语义（主对话同路径正常出内容）。persona 输出纪律保留（内容紧凑性仍有效）；越界兜底不变：
-      // max-tokens → v0 fallback + reason 可观测（M5-DIAG 机制）。
-      temperature: 0.4,
-      // M5-DIAG：opts.signal 透传（缺省孤儿 controller，行为不变）
-      signal: opts.signal ?? new AbortController().signal,
-    })
-    raw = res.text
-    finishKind = res.finish.kind
+    // 2026-09-15（用户定案「全部 LLM 调用改子代理」）：注入 llm runner 时走子代理形态
+    // （三方可见）；缺省保留 ctx.llm.stream 直连（无 Agent 会话的兜底路径，行为不变）。
+    if (opts.llm) {
+      raw = await opts.llm({ system: expansionSystem, user })
+      finishKind = 'subagent'
+    } else {
+      const res = await complete(ctx, {
+        provider: route.provider,
+        model: route.model,
+        system: expansionSystem,
+        user,
+        // M5-DIAG2（用户裁定 2026-09-14：不设 maxTokens 上限）：三轮实测（1024@~10.5s / 4096@38.7s /
+        // 1400@13.6s）预算恒打满且文本头恒空（reason=parse:max-tokens:""，gen_1789344503021_z22g7861）
+        // —— 直连路由跟随会话模型（fangzhou/ark-code-latest），reasoning token 计入 maxTokens 预算
+        // 且不产出 text 块，任何上限都会被思考期吃满后截断。故省略 maxTokens → 宿主 defaultMaxTokens
+        // 语义（主对话同路径正常出内容）。persona 输出纪律保留（内容紧凑性仍有效）；越界兜底不变：
+        // max-tokens → v0 fallback + reason 可观测（M5-DIAG 机制）。
+        temperature: 0.4,
+        // M5-DIAG：opts.signal 透传（缺省孤儿 controller，行为不变）
+        signal: opts.signal ?? new AbortController().signal,
+      })
+      raw = res.text
+      finishKind = res.finish.kind
+    }
   } catch (error) {
     // M5-DIAG：失败原因进 expansions（legacy token 首位不变 = 既有断言面零漂移）——
     // 真实会话据此直接分类（AUTH/NO_ADAPTER/TIMEOUT/...），不再需要盲猜

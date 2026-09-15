@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, afterAll } from 'vitest'
 import { apply } from '../../src/plugin/index.js'
+import { setAuthorIntentProvider } from '../../src/tools/prompt-author.js'
+import { setVectorSearch, closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js'
+
+// 2026-09-15：apply 会装入 intent 子代理 provider（模块级 seam）——不复位会泄漏到
+// 同 worker 后续测试文件（anima-f7/external-benchmark/brief-golden 的未注入调用被劫持）。
+afterAll(() => {
+  setAuthorIntentProvider(null)
+  setVectorSearch(null)
+  closeCatalog()
+})
 
 function stubCtx() {
   const registered: Array<{ name: string; parameters: Record<string, unknown>; output: { schema: unknown } }> = []

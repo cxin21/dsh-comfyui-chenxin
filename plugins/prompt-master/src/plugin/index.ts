@@ -5,7 +5,7 @@ import { registerExpandTool } from '../tools/prompt-expand.js'
 import { registerReverseTool } from '../tools/prompt-reverse.js'
 import { registerMinimaxTool } from '../tools/minimax-scenario.js'
 import { registerProfileListTool, type ProfileScope } from '../tools/profile-list.js'
-import { registerAuthorTool } from '../tools/prompt-author.js'
+import { registerAuthorTool, setAuthorIntentProvider } from '../tools/prompt-author.js'
 import { registerCompileTool } from '../tools/prompt-compile.js'
 import { registerCatalogSearchTool } from '../tools/catalog-search.js'
 import { registerCatalogRelationsTool } from '../tools/catalog-relations.js'
@@ -20,7 +20,7 @@ import { setBuiltinFilter } from '../resolver/profiles/index.js'
 import { registerOverridesNamespace, registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js'
 import '../pe-framework/dialect/anima.js'
 import '../pe-framework/dialect/h3.js'
-// 2026-09-15 终态：intent 子代理 provider 不再生产注入（见下方注释）；工厂保留可切回。
+import { createDefaultIntentProvider } from '../pe-framework/intent/index.js'
 import { setPresetRoot } from '../pe-framework/resources/resolve.js'
 import { Config, type Config as ConfigShape } from './config.js'
 
@@ -50,11 +50,11 @@ export function apply(ctx: Context, config: ConfigShape) {
     Object.entries(profileScope.get()).map(([id, profileJson]) => ({ id, profileJson })),
   )
 
-  // 2026-09-15 终态（用户定案「全部 LLM 调用改 direct」）：intent 不再注入子代理 provider——
-  // 生产走 prompt-author 的 defaultIntent（ctx.llm.stream 直连，零会话生命周期）。
-  // spawn 子会话形态会触发 session-init 表单（团队资产注入/Agent 绑定选择），而 delegated
-  // 子代理不可交互（DELEGATED_CALLER），未决问题进 final result 污染蓝图 JSON 解析（实证）。
-  // createSubagentIntentProvider 保留（未来 DSH 提供无会话 one-shot 原语时可切回）。
+  // R2: 装入默认 Intent Provider（intent 走 DSH one-shot subagent；ownerCtx 一次性绑定；返回 AuthorIntentFn 单参）
+  //     必须早于 author 工具注册/调用 → 在 ctx.effect 之前完成
+  // 2026-09-15 复位（用户定案「全部 LLM 调用一次性子代理」+ session-init 污染已由用户在
+  // 会话初始化代理侧修复）：intent 恢复子代理形态（与扩写/评审三方一致）。
+  setAuthorIntentProvider(createDefaultIntentProvider(ctx))
 
   // 内置覆盖层 namespace（Task 7 spec §7.1）→ 注入 profile_list 工具
   const overrides = registerOverridesNamespace(ctx)

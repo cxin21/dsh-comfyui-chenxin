@@ -15,6 +15,7 @@
 import { complete } from '../../llm/complete.js'
 import type { Context } from '@deepseek-ai/cordis'
 import { validateBlueprint, type BlueprintMedia, type BlueprintV1 } from './schema.js'
+import { validateSemanticBlueprint, detectTagForm, type SemanticBlueprint } from './semantic-schema.js'
 import { checkFidelity } from '../aesthetics/check.js'
 
 export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（MiniMax-H3 视频分镜等），再经编译与审计门成为成品。
@@ -194,6 +195,47 @@ export function parseBlueprintJson(text: string, opts: { expectedMedia?: Bluepri
     throw new Error(`blueprint media mismatch: expected ${opts.expectedMedia} got ${checked.value.media}`)
   }
   return { blueprint: checked.value, missing: computeMissing(checked.value) }
+}
+
+/**
+ * 语义蓝图解析（2026-09-15 管线重设计 spec §3）：compositing 形态 S1 产出 →
+ * 宽松 JSON 提取（容忍横幅/包裹，沿 subagent-provider 入口策略）→ validateSemanticBlueprint
+ * → tag 形态扫描（D3：任何字符串字段命中 TAG_FORM_RE 即 fail，错误文案
+ * `tag_in_blueprint:N:<paths>` 可机检、可作修复轮 feedback）。
+ */
+export function parseSemanticBlueprint(text: string): { semantic: SemanticBlueprint; missing: string[] } {
+  const braceStart = text.indexOf('{')
+  const braceEnd = text.lastIndexOf('}')
+  const raw = braceStart >= 0 && braceEnd > braceStart ? text.slice(braceStart, braceEnd + 1) : text
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (e) {
+    throw new Error(`语义蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}（原始片段：${raw.slice(0, 200)}）`)
+  }
+  const checked = validateSemanticBlueprint(parsed)
+  if (!checked.ok) {
+    throw new Error(`语义蓝图校验失败：${checked.error}`)
+  }
+  const paths: string[] = []
+  const scan = (node: unknown, path: string): void => {
+    if (typeof node === 'string') {
+      if (detectTagForm(node)) paths.push(path || '(root)')
+      return
+    }
+    if (Array.isArray(node)) {
+      node.forEach((x, i) => scan(x, `${path}[${i}]`))
+      return
+    }
+    if (node !== null && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) scan(v, path ? `${path}.${k}` : k)
+    }
+  }
+  scan(checked.bp, '')
+  if (paths.length > 0) {
+    throw new Error(`tag_in_blueprint:${paths.length}:${paths.join(',')}`)
+  }
+  return { semantic: checked.bp, missing: checked.missing }
 }
 
 export async function analyzeIntent(

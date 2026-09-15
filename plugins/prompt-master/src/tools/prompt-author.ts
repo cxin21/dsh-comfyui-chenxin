@@ -19,6 +19,7 @@ import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blu
 import { projectToH3, projectToAnima, preflightRepair } from '../pe-framework/blueprint/project.js'
 import { enrichBlueprint } from '../pe-framework/enrichment/engine.js'
 import type { BlueprintV1 } from '../pe-framework/blueprint/schema.js'
+import type { SemanticBlueprint } from '../pe-framework/blueprint/semantic-schema.js'
 // M5-HOTFIX（P0）：蓝图落库真实 settings 接线——register-or-reuse owner scope（与 plugin/index.ts
 // custom-profiles 同款成熟模式），替代对裸 ctx.settings 的危险类型断言（本次 DSH 进程死亡根因）
 import z from '@deepseek-ai/schemastery'
@@ -106,6 +107,8 @@ export interface AuthorDraft {
   blueprint?: BlueprintV1
   /** Task 10 蓝图管线：缺失维度标记（spec §6），传入 enrichBlueprint 作扩展引导 */
   missing?: string[]
+  /** 2026-09-15 管线重设计（spec §3）：compositing 形态 S1 语义蓝图 v0——纯画面语义，零词表 */
+  semantic?: SemanticBlueprint
 }
 
 export interface AuthorIntentRequest {
@@ -130,6 +133,9 @@ export interface AuthorIntentRequest {
   blueprintExpectedMedia?: string
   /** M5-T2（D5a/V6）：修复轮增量锚定——上一版蓝图经 INCREMENTAL_ANCHOR 进 <old_blueprint> 专用块 */
   anchorBlueprint?: BlueprintV1
+  /** 2026-09-15 管线重设计（spec §3）：compositing 形态路由——provider 据此走语义蓝图 persona/schema
+   *  与 parseSemanticBlueprint；与 blueprintMode 互斥（compositing 优先） */
+  compositingMode?: boolean
 }
 
 export type AuthorIntentFn = (req: AuthorIntentRequest, exec?: ExecLike) => Promise<AuthorDraft>

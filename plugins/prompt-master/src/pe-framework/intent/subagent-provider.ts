@@ -5,8 +5,9 @@ import type {
 } from '../../tools/prompt-author.js'
 import type { H3ShotsInput } from '../schema/h3-shots.js'
 import type { AnimaSlots } from '../dialect/anima.js'
-import { BLUEPRINT_SCHEMA, INCREMENTAL_ANCHOR, parseBlueprintJson } from '../blueprint/analyzer.js'
+import { BLUEPRINT_SCHEMA, INCREMENTAL_ANCHOR, parseBlueprintJson, parseSemanticBlueprint } from '../blueprint/analyzer.js'
 import type { BlueprintV1 } from '../blueprint/schema.js'
+import { buildTaskText } from '../llm/task-text.js'
 
 /**
  * Task 12 Step 3b（spec §14）：intent 子代理瘦身——蓝图模式注入最小 system，
@@ -106,12 +107,18 @@ export function createSubagentIntentProvider(
     // M5-T2（D1）：blueprintMode = anima 默认路径蓝图形态（prompt-author 唯一读取点下行）——
     // persona/schema 优先取 req（registry intent.blueprintPersona/Schema 的 ANIMA 蓝图版），缺省回落通用蓝图常量
     const isBlueprint = req.target === 'blueprint' || req.blueprintMode === true
-    const persona = isBlueprint
-      ? ((req as { persona?: string }).persona ?? BLUEPRINT_SUBAGENT_SYSTEM)
-      : ((req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA)
-    const schema = isBlueprint
-      ? ((req as { schema?: string }).schema ?? BLUEPRINT_SCHEMA)
-      : ((req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA)
+    // 2026-09-15 管线重设计（spec §3）：compositing 形态优先——S1 语义蓝图，零词表交互（D2）
+    const isSemantic = (req as { compositingMode?: boolean }).compositingMode === true
+    const persona = isSemantic
+      ? ((req as { persona?: string }).persona ?? ANIMA_SEMANTIC_PERSONA)
+      : isBlueprint
+        ? ((req as { persona?: string }).persona ?? BLUEPRINT_SUBAGENT_SYSTEM)
+        : ((req as { persona?: string }).persona ?? opts.persona ?? DEFAULT_PERSONA)
+    const schema = isSemantic
+      ? ((req as { schema?: string }).schema ?? ANIMA_SEMANTIC_SCHEMA)
+      : isBlueprint
+        ? ((req as { schema?: string }).schema ?? BLUEPRINT_SCHEMA)
+        : ((req as { schema?: string }).schema ?? opts.schema ?? DEFAULT_SCHEMA)
     // parent 必须是当前调用 Agent：工具执行上下文（exec.agent）优先，
     // 回退到 apply 绑定的 ownerCtx.agent（仅在插件确实在 agent scope 下 apply 时可用）。
     const parent = exec?.agent ?? ownerCtx?.agent
@@ -122,7 +129,36 @@ export function createSubagentIntentProvider(
     // B7（外部基准 2026-09）：catalog 候选召回注入——检索证据进生成回路（generate 前给 LLM 看
     // 已验证存在的规范 tag 写法），替代「生成后 catalog_miss 事后 advisory」的单向流
     const candidates = (Array.isArray(req.catalogCandidates) ? req.catalogCandidates : []).filter((c) => typeof c === 'string' && c.trim())
-    const taskText = [
+    // compositing 形态（spec §2.1/§3）：taskText 走分区模板（persona → user_intent → rules → output_contract），
+    // 零 catalog 候选块（D2）；legacy 形态维持原拼接
+    const taskText = isSemantic
+      ? buildTaskText([
+          { tag: 'task_persona', body: persona },
+          { tag: 'user_intent', body: JSON.stringify(dumpIntentRequest(req, []), null, 2) },
+          {
+            tag: 'rules',
+            body: [
+              '输出 JSON Schema:',
+              schema,
+              ...(req.feedback
+                ? [
+                    '',
+                    '【修订纪律（硬性）】',
+                    '- 只修复反馈点名的问题，逐条执行 requiredFix；未被点名的部分保持原样，不得顺手删改',
+                    '- 修订 = 按规则整图重投影（输出完整蓝图 JSON），不是追加修改说明',
+                  ]
+                : []),
+            ].join('\n'),
+          },
+          {
+            tag: 'output_contract',
+            body: [
+              '仅输出一个 JSON 对象：直接输出裸 JSON（不要 markdown fence，不要解释，不要任何前后缀文字）',
+              '本任务为 one-shot 结构产出：不要调用任何工具',
+            ].join('\n'),
+          },
+        ])
+      : [
       persona,
       // M5-T2（D5a/V6）：修复轮增量锚定——旧蓝图全文进 <old_blueprint> 专用块（复用 analyzer
       // INCREMENTAL_ANCHOR 模板），禁整图重解释；首轮无锚（无上一版蓝图）
@@ -243,6 +279,11 @@ function applyBlueprintClarify(draft: AuthorDraft, req: AuthorIntentRequest): Au
 }
 
 function parseIntentJson(text: string, req: AuthorIntentRequest): AuthorDraft {
+  // 2026-09-15 管线重设计（spec §3）：compositing 形态优先——语义蓝图解析（含 tag_in_blueprint 门）
+  if ((req as { compositingMode?: boolean }).compositingMode === true) {
+    const r = parseSemanticBlueprint(text)
+    return { semantic: r.semantic, missing: r.missing }
+  }
   // Task 12 Step 3b：蓝图模式走 analyzer 的蓝图解析（stripFences + validateBlueprint + missing 计算）
   // M5-T2（D1/D2）：blueprintMode = anima 默认路径蓝图形态；expectedMedia 守卫透传（parse 层
   // media 方向校验，错误文案可机检可反馈——D5c 反馈重试的输入）
@@ -406,6 +447,53 @@ export const ANIMA_SCHEMA = `{
 - 直接输出裸 JSON（不要 markdown fence，不要解释）
 - 用户提供 references 时保持 ref 标签稳定
 `
+
+/* ── 2026-09-15 管线重设计（spec §3）：compositing 形态 S1 语义蓝图 persona/schema ── */
+
+export const ANIMA_SEMANTIC_PERSONA = `角色：你是画面意图分析引擎。把用户的创作意图转成一张「画面语义蓝图 v0」——只描述画面本身，不做任何词表判断。你的产出会被美学扩写引擎增强，再由成文引擎对照 tag 词库翻译为最终提示词。
+
+【输出语言】所有字段：英文自然语言（除 count 数字）。
+【绝对禁令】
+1. 输出中不得出现任何 Danbooru tag 形式的词（snake_case、1girl、@artist、score_9 等）。判定标准：一个词若只能作为 tag 而非普通英文短语理解，即违规。
+2. 不得调用任何工具；不得猜测词库里有什么；不要为"适配词库"改写画面语义。
+3. 不编造情节；语义级保留用户要素（不增删指代）。
+【画面纪律】
+4. 单一可见瞬间（动作峰值帧），不写连续过程。
+5. 内容分级：按请求档位完整保留要素与措辞，不得降档、委婉化或删除。
+【字段契约】
+core.concept        ≤2 句，画面一句话总纲
+core.scene          {environment, time_of_day, weather, lighting_idea} 各 ≤1 句
+core.style_hints[]  0-3 条画风倾向描述（如 "retro anime cel shading"）；无则空
+subjects[]          每个主体：{id: "S1", count: 数字, identity ≤1句, appearance ≤3句(发型/发色/瞳色/体型/服装/配饰), pose ≤2句, expression ≤1句}
+composition         {framing ≤1句, camera_angle ≤1句, placement ≤1句}
+mood                ≤2 句
+negative_hints[]    用户明示的排除意图，0-3 条；无则空
+信息密度基准（few-shot——你的产出应达到同等密度）：
+用户意图「雨夜街头，一个穿黑色皮夹克的白发少女在霓虹灯下回眸」→
+{"schema_version":1,"media":"image","core":{"concept":"a white-haired girl glances back under neon lights on a rain-soaked night street","scene":{"environment":"night city street","time_of_day":"night","weather":"rain","lighting_idea":"neon signage glows from both sides, a streetlamp keeps her face clearly exposed"},"style_hints":[]},"subjects":[{"id":"S1","count":1,"identity":"a girl","appearance":"white hair, black leather jacket, crop top and denim shorts","pose":"standing, looking back over her shoulder","expression":"parted lips"}],"composition":{"framing":"seen from the knees up","camera_angle":"slightly low","placement":"right of center"},"mood":"nocturnal, confident","negative_hints":[]}
+
+输出：只输出一个语义蓝图 JSON（裸 JSON，不要 markdown fence，不要解释）；不要调用任何工具。`
+
+export const ANIMA_SEMANTIC_SCHEMA = `{
+  "schema_version": 1,
+  "media": "image",
+  "core": {
+    "concept": "≤2 句英文画面总纲",
+    "scene": { "environment": "英文", "time_of_day": "英文", "weather": "英文", "lighting_idea": "光源物件与人物曝光（英文）" },
+    "style_hints": ["0-3 条画风倾向描述；无则空"]
+  },
+  "subjects": [
+    { "id": "S1", "count": 1, "identity": "英文", "appearance": "英文（发型/发色/瞳色/体型/服装/配饰）", "pose": "英文", "expression": "英文" }
+  ],
+  "composition": { "framing": "英文", "camera_angle": "英文", "placement": "英文" },
+  "mood": "英文",
+  "negative_hints": ["用户明示排除意图；无则空"]
+}
+
+输出规则：
+- 只能输出一个 JSON 对象，不要任何前缀后缀文字
+- 直接输出裸 JSON（不要 markdown fence，不要解释）
+- 任何字段不得出现 Danbooru tag 形式的词（snake_case、1girl、@artist、score_N）`
 
 export const H3_SCHEMA = `{
   "duration_seconds": 10,

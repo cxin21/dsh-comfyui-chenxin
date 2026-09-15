@@ -121,6 +121,14 @@ export function projectToH3(bp: BlueprintV1): H3ShotsInput {
 
 export function projectToAnima(bp: BlueprintV1): AnimaSlots {
   resetAdvisories()
+  // 2026-09-15（真实会话实证，子代理通道修复轮）：LLM 产出的蓝图可能把数组型槽位写成
+  // 字符串（形状漂移）——消费点强制归一为 string[]，非数组单值包一层数组，防 .map 崩溃。
+  const asTagArray = (v: unknown): string[] => {
+    if (v === undefined || v === null) return []
+    if (Array.isArray(v)) return v.map((t) => String(t).trim()).filter((t) => t.length > 0)
+    const s = String(v).trim()
+    return s.length > 0 ? [s] : []
+  }
   const hard = (bp.core.negative ?? []).find((n) => n.severity === 'hard')
   if (hard) throw new BlueprintHardNegativeError(hard.target)
 
@@ -141,17 +149,17 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
     (c.reference_slots ?? []).map((_slot, j) => `Subject ${i + 1} from <Picture ${j + 1}>`),
   )
   // B8（外部基准 2026-09）：风格画师候选 → artist 槽（裸名；grounding 命中后升 @形）
-  const artist = (bp.core.style?.artist_hints ?? []).filter((a) => typeof a === 'string' && a.trim().length > 0)
+  const artist = asTagArray(bp.core.style?.artist_hints)
   // M5-T2（D3）：scene = environment（自然语言）+ scene_anchors（≤3 高影响锚点 tag），保序去重
   const scene = [...new Set([
     ...(bp.core.scene?.environment && bp.core.scene.environment.trim() ? [bp.core.scene.environment] : []),
-    ...((image?.scene_anchors ?? []).map((s) => String(s).trim()).filter((s) => s.length > 0)),
+    ...(asTagArray(image?.scene_anchors)),
   ])]
   // M5-T2（D3）：主干槽位来源——count_gender / pose_action / expression 直映射（此前无来源，
   // 主干槽位塌陷）
-  const countGender = (image?.count_gender ?? []).map((t) => String(t).trim()).filter((t) => t.length > 0)
-  const poseAction = (image?.pose_action ?? []).map((t) => String(t).trim()).filter((t) => t.length > 0)
-  const expression = (image?.expression ?? []).map((t) => String(t).trim()).filter((t) => t.length > 0)
+  const countGender = asTagArray(image?.count_gender)
+  const poseAction = asTagArray(image?.pose_action)
+  const expression = asTagArray(image?.expression)
   const detailMood = [
     ...(bp.core.scene?.lighting ? [bp.core.scene.lighting] : []),
     ...(image?.lighting_detail ? [image.lighting_detail] : []),

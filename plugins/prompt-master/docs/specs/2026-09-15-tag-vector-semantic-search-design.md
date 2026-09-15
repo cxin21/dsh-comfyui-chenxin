@@ -151,3 +151,12 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 3. **英文匹配约束**：查询含 CJK（汉字/假名，正则 /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/）时在向量入口直接拒绝——不编码、不检索。实现于 nima-vector.ts 查询函数入口，单测覆盖（spy 断言 embedder 零调用）。
 4. **在线 API 嵌入通道（env 可插拔，默认不启用）**：PM_EMBED_PROVIDER=api + PM_EMBED_API_BASE/KEY/MODEL 走 OpenAI 兼容 /embeddings；Python 建库侧同通道（批次断点续跑）。用户实测 Ark doubao-embedding-vision（2048 维）单请求上限 10 条、持续限速 ~5.8 行/s（全量 4 天）后弃用在线路线，保留通道作为升级路径。此为对 §5「查询期零网络」底线的**可选扩展**——默认路径仍离线。
 5. **@ 画师剔除缺口**（§8 表第 3 行）已在合并后修复（91dc763，semantic JOIN 点过滤 + TDD + live-index 实测），不再列为已知限制。
+### 附录 A1：bge-base-en-v1.5 探针结果（2026-09-15，768 维索引验证）
+
+| 探针 | 结果 | 说明 |
+|---|---|---|
+| 	wintail / unny ears / sailor uniform | ✅ 前四级命中（alias/canonical） | 精确/别名路径不受模型影响 |
+| 水手服（中文） | ✅ []——英文匹配约束生效 | CJK 拒绝在入口拦截，零 embed 调用（约束的正面验收） |
+| selafuku | ⚠️ semantic 触发，10 hits 全部 semantic，**canonical serafuku 仍不在 top-10** | #1 serfafuku(0.7742)、#6 serafuku,(0.7331)；query 与短 typo passage 相似度挤顶、canonical 的 wiki 长 passage 被稀释——与 T12-001 同根因（短 passage 挤压 + 长度稀释），**换 bge-base 未解决该排序类**。@ 剔除与 CJK 拒绝均正常工作 |
+
+**遗留处置候选（T12-001/T13-002 合并）**：① 字符串相似度 tie-breaker（对 semantic 命中按与 query 的编辑距离/字符重合做确定性后排序——selafuku→serafuku 编辑距离 1，可直接把正确 tag 提到首位；零重建，直接命中拼写容错类）；② usage_count 重排；③ passage v2 / 更强模型。①+② 组合为推荐路径（确定性 + 零重建）。

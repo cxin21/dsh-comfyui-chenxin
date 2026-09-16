@@ -5,6 +5,7 @@
  * 本模块只做 persona/prompt 装配与输出契约解析；机器审计在 audit.ts（T8）。
  */
 import { buildTaskText } from '../llm/task-text.js'
+import { extractFirstJsonObject } from '../llm/json-extract.js'
 import type { RetrievalPack } from '../dialect/retrieval-pack.js'
 import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
 

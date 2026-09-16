@@ -17,6 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { validateBlueprint, type BlueprintMedia, type BlueprintV1 } from './schema.js'
 import { validateSemanticBlueprint, detectTagForm, type SemanticBlueprint } from './semantic-schema.js'
 import { checkFidelity } from '../aesthetics/check.js'
+import { extractFirstJsonObject } from '../llm/json-extract.js'
 
 export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（MiniMax-H3 视频分镜等），再经编译与审计门成为成品。
 你的任务：根据用户的创作意图，产出创作蓝图 v0（BlueprintV1），不是任何方言输入。

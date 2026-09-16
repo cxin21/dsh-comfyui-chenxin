@@ -5,6 +5,7 @@
  * 降级铁律：解析/应用失败 → v0 原样 + enrich_skipped advisory，永不抛出（不阻塞出稿）。
  */
 import { buildTaskText } from '../llm/task-text.js'
+import { extractFirstJsonObject } from '../llm/json-extract.js'
 import { prunePatchPaths, COMPOSITING_SET_ALLOWED, COMPOSITING_ADDITIONS_ALLOWED } from '../enrichment/engine.js'
 import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
 
@@ -71,9 +72,9 @@ export function applySemanticPatch(
   v0: SemanticBlueprint,
   raw: string,
 ): SemanticEnrichResult {
-  const braceStart = raw.indexOf('{')
-  const braceEnd = raw.lastIndexOf('}')
-  const body = braceStart >= 0 && braceEnd > braceStart ? raw.slice(braceStart, braceEnd + 1) : raw
+  // 2026-09-16 活跑实证（gen_1789522875279）：LLM 在 JSON 后追加说明文字 → 首{到尾}切片跨界
+  // parse 失败 → 扩写整轮被跳过。统一改用平衡花括号扫描（截取第一个完整 JSON 对象）。
+  const body = extractFirstJsonObject(raw)
   const parsed = JSON.parse(body) as Record<string, unknown>
   const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed
   const additions = isPlainObject(parsed['additions']) ? (parsed['additions'] as Record<string, unknown>) : undefined

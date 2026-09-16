@@ -73,9 +73,13 @@ describe('auditCompositing (spec §7)', () => {
     const gates = auditCompositing(OUT, PACK, bad, OPTS)
     expect(gates.some((g) => g.rule === 'tag_in_blueprint')).toBe(true)
   })
-  it('tag_budget: below min → critical; over chars → critical', () => {
-    const few = { ...OUT, tags: OUT.tags.slice(0, 5) }
-    expect(auditCompositing(few, PACK, BP, OPTS).some((g) => g.rule === 'tag_budget')).toBe(true)
+  it('tag_budget: below evidence-floor → critical; evidence-limited shortfall → important; over chars → critical', () => {
+    // PACK 可用证据概念 = 5 evidence（含 fillers 块）+ 1 artist = 6 → 下限 6；2 tags 低于下限 → critical
+    const few = { ...OUT, tags: OUT.tags.slice(0, 2) }
+    expect(auditCompositing(few, PACK, BP, OPTS).some((g) => g.rule === 'tag_budget' && g.severity === 'critical')).toBe(true)
+    // 6 tags 达到证据下限但未满目标 20 → important（搭车反馈，不跳审）
+    const six = { ...OUT, tags: OUT.tags.slice(0, 6) }
+    expect(auditCompositing(six, PACK, BP, OPTS).some((g) => g.rule === 'tag_budget' && g.severity === 'important')).toBe(true)
     const long = { ...OUT, nl: 'x'.repeat(1300) }
     expect(auditCompositing(long, PACK, BP, OPTS).some((g) => g.rule === 'tag_budget' && g.detail.includes('chars'))).toBe(true)
   })

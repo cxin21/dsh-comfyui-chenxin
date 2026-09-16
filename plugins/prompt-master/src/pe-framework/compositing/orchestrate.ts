@@ -211,6 +211,16 @@ export async function orchestrateCompositing(
   }
   trace.push({ name: 'writer_loop', ms: performance.now() - t0 })
 
+  // D7 fail-open（spec §7「任何情况下不空手出稿」）：耗尽/失败后仍含 critical →
+  // 确定性回退出稿（真实会话 gen_1789521620450 实证：耗尽后 ok=false 且 result 被丢，违反 D7）
+  const hasCritical = gates.some((g) => g.severity === 'critical')
+  if (!fallbackUsed && hasCritical) {
+    writerOut = deterministicCompose(v1, pack)
+    fallbackUsed = true
+    advisories.push('writer_fallback_used')
+    gates = auditCompositing(writerOut, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
+  }
+
   // ok 语义（legacy P3 对齐）：确定性审计全过 → ok=true（judge needs_revision 耗尽走 loop_exhausted
   // advisory，不丢 result）；回退通道 fail-open 恒 ok=true（产品已出，故事在 advisories/gates 里）
   const finalWriterOut = writerOut as WriterOutput // 循环不变式：break 前必已赋值（解析失败/耗尽走 fallback 分支）

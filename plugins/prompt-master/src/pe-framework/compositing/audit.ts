@@ -118,12 +118,17 @@ export function auditCompositing(
   scan(bp, '')
   if (bpPaths.length > 0) push('tag_in_blueprint', 'critical', `blueprint fields contain tag-form words: ${bpPaths.join(',')}`)
 
-  // tag_budget：数量 + 字符（spec §6 T7）
-  const min = opts.minTags ?? MIN_TAGS
+  // tag_budget：数量 + 字符（spec §6 T7）。
+  // 2026-09-16 活跑实证修订（gen_1789521620450）：min 硬门与 T1（tag 只能来自证据）自相矛盾——
+  // 证据概念数不足 20 时 writer 无法达标。下限取 min(minTags, 可用证据概念数)：
+  // 低于它 = writer 丢弃了可得证据（critical）；高于它但未满 minTags = 数量偏少（important，搭车反馈不跳审）。
+  const min = Math.min(opts.minTags ?? MIN_TAGS, pack.evidence.length + pack.artists.length)
   const max = opts.maxTags ?? MAX_TAGS
   const maxChars = opts.maxChars ?? MAX_CHARS
   if (out.tags.length < min || out.tags.length > max) {
     push('tag_budget', 'critical', `tag count ${out.tags.length} outside [${min},${max}]`)
+  } else if (out.tags.length < (opts.minTags ?? MIN_TAGS)) {
+    push('tag_budget', 'important', `tag count ${out.tags.length} below target ${opts.minTags ?? MIN_TAGS} (evidence-limited: ${pack.evidence.length} concepts resolved)`)
   }
   const positive = assemblePositive(out, opts.rating)
   if (positive.length > maxChars) {

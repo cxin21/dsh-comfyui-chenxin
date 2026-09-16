@@ -91,15 +91,22 @@ export async function buildRetrievalPack(
 ): Promise<RetrievalPack> {
   const evidence: ConceptEvidence[] = []
   const unresolved: Array<{ concept: string; query: string }> = []
-  for (const { concept, query } of extractConcepts(bp)) {
-    let hits: EvidenceHit[] = []
-    try {
-      hits = normalizeHits(await search(query), query)
-    } catch {
-      hits = []
-    }
-    if (hits.length === 0) unresolved.push({ concept, query })
-    else evidence.push({ concept, query, hits })
+  // 2026-09-16 活跑实证（retrieval_pack 56.7s）：概念间独立，并行查询——bge-m3 单次嵌入 ~4s，
+  // 串行 14+ 概念是管线延迟大头。降级语义不变：单查询故障 → 该概念进 unresolved。
+  const results = await Promise.all(
+    extractConcepts(bp).map(async ({ concept, query }) => {
+      let hits: EvidenceHit[] = []
+      try {
+        hits = normalizeHits(await search(query), query)
+      } catch {
+        hits = []
+      }
+      return { concept, query, hits }
+    }),
+  )
+  for (const r of results) {
+    if (r.hits.length === 0) unresolved.push({ concept: r.concept, query: r.query })
+    else evidence.push({ concept: r.concept, query: r.query, hits: r.hits })
   }
 
   // 画师块：style_hints 命中中 prompt_form 以 @ 开头者

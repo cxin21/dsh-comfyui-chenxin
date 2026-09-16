@@ -84,10 +84,10 @@ describe('buildRetrievalPack (spec §5)', () => {
 
 describe('向量命中质量门（spec §5 修订 2026-09-16；冒烟噪声形态回归锁 gen_1789525639240）', () => {
   const NOISE = [
-    // 冒烟实证的真实噪声形态（bge-m3 字面碰瓷命中）
+    // 冒烟实证的真实噪声形态（bge-base 字面碰瓷命中；standing upskirt 0.83/9000 在 0.62 阈值下
+    // 属于门拦不住的"真 tag 语义无关"形态——归 judge tag-selection 查，见 §12.3 标定遗留）
     { prompt_form: 'nishino - the boy at the bottom of the school caste and also at the top of the underground', match_type: 'semantic', score: 0.88, usage_count: 12 },
     { prompt_form: 'general:handlebar deepthroat', match_type: 'semantic', score: 0.86, usage_count: 300 },
-    { prompt_form: 'standing upskirt', match_type: 'semantic', score: 0.83, usage_count: 9000 },
     { prompt_form: 'pathfinder: wrath of the righteous', match_type: 'semantic', score: 0.87, usage_count: 40 },
   ]
   it('Q1 原子性：多词长句拒绝', async () => {
@@ -101,9 +101,9 @@ describe('向量命中质量门（spec §5 修订 2026-09-16；冒烟噪声形�
     ])
     expect(pack.evidence).toHaveLength(0)
   })
-  it('Q3 语义分：score < 0.85 拒绝；≥ 0.85 且频次达标通过', async () => {
+  it('Q3 语义分：score < 0.62 拒绝；≥ 0.62 且频次达标通过（§12.3 阈值修订）', async () => {
     const pack = await gatedPack([
-      { prompt_form: 'standing upskirt', match_type: 'semantic', score: 0.83, usage_count: 9000 },
+      { prompt_form: 'standing upskirt', match_type: 'semantic', score: 0.55, usage_count: 9000 },
       { prompt_form: 'paper lantern', match_type: 'semantic', score: 0.91, usage_count: 5000 },
     ])
     // 同一概念：合格命中留下、低分命中被拒

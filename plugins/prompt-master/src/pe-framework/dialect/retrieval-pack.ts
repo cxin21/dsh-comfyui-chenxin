@@ -47,35 +47,77 @@ export interface CatalogHitLike {
 
 export type CatalogSearchFn = (query: string) => Promise<CatalogHitLike[]>
 
-/** 概念清单抽取（确定性，无裁量）：句/短语级切分，粒度对齐 catalog 检索习惯 */
+/**
+ * 词组级再切分（spec §5「名词短语级」的正确实现——2026-09-16 会话 b3405319 活跑实证：
+ * 整句 query 对 danbooru 词库零命中 → 15 概念仅 2 命中，检索饥饿）。
+ * 长句（> maxWords 词）按停用词边界切成 2-5 词的词组片段，每片段独立成查询。
+ */
+const STOPWORD_BOUNDARY =
+  /\b(?:the|a|an|of|in|on|at|to|with|along|across|behind|beside|from|into|over|under|her|his|their|its|and|or|while|as|like|so|that|this|these|those|by|for|up|down|serving|serve|serves|kept|keep|keeps|readable|fills|fill|filling|rises|rise|rising|glows|glow|glowing|casts|cast|casting|recedes|sink|sinks|leading|lends|lending|stirring|dissolving|converge|converging|carried|carrying)\b/gi
+
+export function splitIntoPhraseQueries(text: string, maxWords = 5): string[] {
+  const cleaned = text.trim()
+  if (cleaned.length === 0) return []
+  if (cleaned.split(/\s+/).length <= maxWords) return [cleaned]
+  const boundaries = [...cleaned.matchAll(STOPWORD_BOUNDARY)]
+  const cuts = [0, ...boundaries.map((m) => m.index! + m[0].length), cleaned.length]
+  const frags: string[] = []
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const frag = cleaned.slice(cuts[i], cuts[i + 1]).trim().replace(/^[,\s]+|[,\s]+$/g, '')
+    if (frag.length >= 3) frags.push(frag)
+  }
+  const out: string[] = []
+  for (const frag of frags) {
+    const words = frag.split(/\s+/)
+    if (words.length <= maxWords) {
+      out.push(frag)
+      continue
+    }
+    for (let i = 0; i < words.length; i += maxWords) {
+      const win = words.slice(i, i + maxWords).join(' ').trim()
+      if (win.length >= 3) out.push(win)
+    }
+  }
+  return [...new Set(out)]
+}
+
+/** 概念清单抽取（确定性，无裁量）：逗号切分 + 词组级再切分（§5 名词短语级） */
 export function extractConcepts(bp: SemanticBlueprint): Array<{ concept: string; query: string }> {
   const out: Array<{ concept: string; query: string }> = []
-  const splitPhrases = (text: string): string[] =>
-    text.split(/[,;，；]/).map((s) => s.trim()).filter((s) => s.length > 0)
+  const pushFragments = (concept: string, value: string): void => {
+    for (const phrase of value.split(/[,;，；]/).map((s) => s.trim()).filter((s) => s.length > 0)) {
+      for (const q of splitIntoPhraseQueries(phrase)) {
+        out.push({ concept, query: q })
+      }
+    }
+  }
 
-  out.push({ concept: 'core.concept', query: bp.core.concept })
+  pushFragments('core.concept', bp.core.concept)
   for (const [k, v] of Object.entries(bp.core.scene)) {
-    if (v.trim()) out.push({ concept: `core.scene.${k}`, query: v })
+    if (v.trim()) pushFragments(`core.scene.${k}`, v)
   }
   for (const s of bp.subjects) {
     for (const [k, v] of Object.entries(s) as Array<[string, string]>) {
       if (k === 'id' || k === 'count') continue
       // 概念路径按主体 id（spec §5："S1.appearance"），与 writer source_concept（T2）对齐
-      if (k === 'appearance' || k === 'pose') {
-        for (const phrase of splitPhrases(v)) out.push({ concept: `${s.id}.${k}`, query: phrase })
-      } else if (v.trim()) {
-        out.push({ concept: `${s.id}.${k}`, query: v })
-      }
+      if (v.trim()) pushFragments(`${s.id}.${k}`, v)
     }
   }
   for (const [k, v] of Object.entries(bp.composition)) {
-    if (v.trim()) out.push({ concept: `composition.${k}`, query: v })
+    if (v.trim()) pushFragments(`composition.${k}`, v)
   }
-  if (bp.mood.trim()) out.push({ concept: 'mood', query: bp.mood })
+  if (bp.mood.trim()) pushFragments('mood', bp.mood)
   for (const [i, h] of bp.core.style_hints.entries()) {
-    if (h.trim()) out.push({ concept: `core.style_hints[${i}]`, query: h })
+    if (h.trim()) pushFragments(`core.style_hints[${i}]`, h)
   }
-  return out
+  // (concept, query) 去重：同路径同查询只保留一个
+  const seen = new Set<string>()
+  return out.filter(({ concept, query }) => {
+    const key = `${concept}\u0000${query}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function normalizeHits(raw: CatalogHitLike[], query: string): EvidenceHit[] {
@@ -96,12 +138,12 @@ function normalizeHits(raw: CatalogHitLike[], query: string): EvidenceHit[] {
  *    真 tag 碰瓷通道就此堵死；其概念走 unresolved 出口由 NL 承载）
  * Q1 原子性：prompt_form 词数 > MAX_FORM_WORDS(6) → 拒（全部 match_type；canonical 也不例外）
  * Q2 标点：含 ':' / '：' / ' - ' 连接结构 → 拒（全部 match_type；danbooru 规范 tag 无冒号）
- * Q3 语义分：semantic 命中 score < MIN_SEMANTIC_SCORE(0.85) → 拒（T1R §12.3 阈值，
- *    env PM_VECTOR_MIN_SCORE 可标定覆盖）
+ * Q3 语义分：semantic 命中 score < MIN_SEMANTIC_SCORE(0.62) → 拒（§12.3 阈值——0.85 为未标定值，
+ *    活跑实证片级查询在 bge-base 上的现实区间 0.6-0.8，0.85 导致证据饥饿；env PM_VECTOR_MIN_SCORE 可标定覆盖）
  * Q4 频次：非 canonical 命中 usage_count < MIN_USAGE_COUNT(100) → 拒
  *    （env PM_VECTOR_MIN_USAGE 可标定覆盖）；canonical/alias 免 Q3/Q4（人工策展形式），Q1/Q2 照查。 */
 
-export const MIN_SEMANTIC_SCORE = 0.85
+export const MIN_SEMANTIC_SCORE = 0.62
 export const MIN_USAGE_COUNT = 100
 export const MAX_FORM_WORDS = 6
 

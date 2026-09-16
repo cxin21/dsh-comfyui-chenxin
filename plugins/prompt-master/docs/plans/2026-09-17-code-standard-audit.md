@@ -6,19 +6,19 @@
 
 ## 发现 → 修复映射
 
-| # | 级别 | 发现 | 证据 | 修复任务 |
-|---|---|---|---|---|
-| F1 | P0 | 真实 API Key 入库 | config.yaml.example:29，commit ee78de5 | Task 1（占位符替换；**密钥轮换由用户执行**） |
-| F2 | P0 | .gitignore 未覆盖 config.yaml | git check-ignore 无命中 | Task 1 |
-| F3 | P0 | formatter/linter 缺失（无工具强制） | 无 eslint/prettier 配置 | Task 2 |
-| F4 | P0 | 46 文件缺末尾换行 + 1 处尾随空格 + 缺 .gitattributes | 全量扫描 | Task 2（随 formatter 一并修复） |
-| F5 | P1 | .env.example 模板失同步：4 死变量（DB_PATH/LOG_LEVEL/DEFAULT_PROVIDER/DEFAULT_MODEL 代码零读取）、缺 15 活跃变量 | 全量 env 扫描 | Task 3 |
-| F6 | P1 | 散落产物未忽略：preset-report.json（vitest-stage2.log 已忽略） | git check-ignore | Task 1 |
-| F7 | P1 | applySemanticPatch quirk：无 `set` 键 patch 把 additions 误计 enrich_path_violation:1 | enrich-type-guard 测试实证 | Task 4（TDD） |
-| F8 | P1 | 插件门面缺失：无 README/CHANGELOG/LICENSE | 文件枚举 | Task 5（LICENSE 协议选择需用户裁决，暂缓） |
-| F9 | P2 | `any` 130 处（resolver 移植层 ~120 + host 接缝 3） | 全量扫描 | Task 6（resolver 类型化改造——大工程，本轮仅收口 host 接缝 + 文档标注，resolver 全面类型化另立计划） |
-| F10 | P2 | pe-framework/index.ts `export *` 桶导出 | 读文件 | 不修（有意便利层，消费者依赖面广；标注为已接受偏差） |
-| F11 | P1 | 大文件待拆分：prompt-author 1360 / anima 938 / rules-h3 650 / catalog 558 / anima-catalog 519 / subagent-provider 504 | 行数扫描 | 不在本轮（结构性拆分另立计划，回归风险大） |
+| #   | 级别 | 发现                                                                                                                  | 证据                                   | 修复任务                                                                                            |
+| --- | ---- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| F1  | P0   | 真实 API Key 入库                                                                                                     | config.yaml.example:29，commit ee78de5 | Task 1（占位符替换；**密钥轮换由用户执行**）                                                        |
+| F2  | P0   | .gitignore 未覆盖 config.yaml                                                                                         | git check-ignore 无命中                | Task 1                                                                                              |
+| F3  | P0   | formatter/linter 缺失（无工具强制）                                                                                   | 无 eslint/prettier 配置                | Task 2                                                                                              |
+| F4  | P0   | 46 文件缺末尾换行 + 1 处尾随空格 + 缺 .gitattributes                                                                  | 全量扫描                               | Task 2（随 formatter 一并修复）                                                                     |
+| F5  | P1   | .env.example 模板失同步：4 死变量（DB_PATH/LOG_LEVEL/DEFAULT_PROVIDER/DEFAULT_MODEL 代码零读取）、缺 15 活跃变量      | 全量 env 扫描                          | Task 3                                                                                              |
+| F6  | P1   | 散落产物未忽略：preset-report.json（vitest-stage2.log 已忽略）                                                        | git check-ignore                       | Task 1                                                                                              |
+| F7  | P1   | applySemanticPatch quirk：无 `set` 键 patch 把 additions 误计 enrich_path_violation:1                                 | enrich-type-guard 测试实证             | Task 4（TDD）                                                                                       |
+| F8  | P1   | 插件门面缺失：无 README/CHANGELOG/LICENSE                                                                             | 文件枚举                               | Task 5（LICENSE 协议选择需用户裁决，暂缓）                                                          |
+| F9  | P2   | `any` 130 处（resolver 移植层 ~120 + host 接缝 3）                                                                    | 全量扫描                               | Task 6（resolver 类型化改造——大工程，本轮仅收口 host 接缝 + 文档标注，resolver 全面类型化另立计划） |
+| F10 | P2   | pe-framework/index.ts `export *` 桶导出                                                                               | 读文件                                 | 不修（有意便利层，消费者依赖面广；标注为已接受偏差）                                                |
+| F11 | P1   | 大文件待拆分：prompt-author 1360 / anima 938 / rules-h3 650 / catalog 558 / anima-catalog 519 / subagent-provider 504 | 行数扫描                               | 不在本轮（结构性拆分另立计划，回归风险大）                                                          |
 
 ## 合规确认（无需修复）
 

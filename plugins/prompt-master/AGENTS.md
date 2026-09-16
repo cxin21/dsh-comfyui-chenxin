@@ -20,6 +20,7 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 提交只含 src；不要期待 git status 里出现 dist。
 
 **修改 src 后的标准流程**（防止再犯）：
+
 1. `git status --short` 是否显示 `src/**` 改动
 2. 若是 → 跑 `npm run build`（本机 dist 立即更新，DSH 下次加载即用新逻辑）
 3. 可选复测：`node` 加载 `dist/src/pe-framework/audit/rules-h3.js` 跑 `auditH3Full`，
@@ -40,15 +41,15 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 
 ## 插件结构速览
 
-- **管线形态（2026-09-16 定稿，spec `docs/specs/2026-09-15-prompt-pipeline-redesign-design.md`）**：
-  anima **唯一路径 = compositing 五段**（用户裁决「不向后兼容、不保留旧逻辑」——M5 蓝图形态/slots
-  直译/`PM_AUTHOR_INTENT_FORM`/`PM_PIPELINE_FORM` 双态开关已删除，回滚 = revert 提交）：
-  S1 意图蓝图（语义，零词表）→ S2 美学扩写（patch 白名单）→ S2.5 概念检索包
-  （**唯一 catalog 消费点**）→ S3 LLM 成文（`pm-writer` 子代理，tag 只能取自检索包证据、
-  查不到进 NL 尾且与 tag 零重叠）→ S4 双轨审核（确定性审计谓词 + 6 维 judge）→ S5 窄修复
-  （≤2 轮，只重入成文+审核，蓝图/扩写冻结）。确定性回退：成文失败/耗尽 → `deterministicCompose`
-  出稿（advisory `writer_fallback_used`）。编排器 `pe-framework/compositing/orchestrate.ts`。
-  h3 未迁移（shots 路径 + runEnrich brief 原样）。anima blueprint_id 增量未接入（T1R 项，显式报错）。
+- **管线形态（2026-09-17 定稿，spec `docs/specs/2026-09-17-agentic-pipeline-redesign.md`）**：
+  anima **唯一路径 = agentic 四段**（检索层已废除——证据饥饿是 09-17 会话验尸的坏稿根因）：
+  S1 意图蓝图（`pm-author`，禁工具）→ S2 美学扩写（`pm-enrich`，禁工具 + patch 值类型守卫）→
+  S3 成文（`pm-writer`，**工具查字典** catalog_search）→ S4 双轨审核（确定性机器门 ∥ `pm-auditor`
+  **每轮必跑**，工具查字典）→ S5 修复（独立 `pm-repairer`，工具查字典；≤2 轮，writer 不重入）。
+  确定性回退：成文失败/耗尽 → `deterministicCompose`（蓝图概念直查 catalog）出稿
+  （advisory `writer_fallback_used`）。envelope 顶层 `quality`（passed/degraded/fallback）+ `auditor`。
+  编排器 `pe-framework/compositing/orchestrate.ts`。h3 未迁移（shots 路径 + runEnrich brief 原样）。
+  anima blueprint_id 增量未接入（T1R 项，显式报错）。
 - `src/pe-framework/blueprint/` — 蓝图 IR：schema / analyzer / project（投影器）/ repo
 - `src/pe-framework/enrichment/` — 美学扩展引擎 + 风格库（style.ts）
 - `src/pe-framework/aesthetics/` — 具体性/保真检查 + 词库（lexicon.ts）

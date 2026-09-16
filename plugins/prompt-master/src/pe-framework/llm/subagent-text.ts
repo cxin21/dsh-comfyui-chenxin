@@ -1,3 +1,4 @@
+import { SubagentHostCtx } from './host-ctx.js'
 /**
  * 共享子代理文本工厂（2026-09-15「全部 LLM 调用改子代理」用户定案）：
  * 管线内嵌套 LLM 调用（扩写 enrichBlueprint / 增量蓝图 analyzeBlueprintIncremental 等）
@@ -11,7 +12,7 @@ import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js';
 export type SubagentTextRunner = (taskText: string) => Promise<string>;
 
 export function createSubagentTextRunner(
-  ownerCtx: any,
+  ownerCtx: SubagentHostCtx,
   opts?: { labelPrefix?: string; timeoutMs?: number; parent?: unknown },
 ): SubagentTextRunner {
   const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '');

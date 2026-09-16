@@ -1,3 +1,4 @@
+import { SubagentHostCtx } from './host-ctx.js'
 /**
  * 子代理工具工厂（spec 2026-09-17 agentic-pipeline-redesign §2，A2）：
  * 成文/审计/修复三个 LLM 经 ctx.subagents.start 执行并**开放 catalog_search 工具**——
@@ -14,7 +15,7 @@ export type SubagentToolRunner = (taskText: string) => Promise<string>;
 export const PIPELINE_TOOL_ALLOW = ['catalog_search'] as const;
 
 export function createSubagentToolRunner(
-  ownerCtx: any,
+  ownerCtx: SubagentHostCtx,
   opts?: { labelPrefix?: string; timeoutMs?: number; parent?: unknown; allow?: readonly string[] },
 ): SubagentToolRunner {
   const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '');

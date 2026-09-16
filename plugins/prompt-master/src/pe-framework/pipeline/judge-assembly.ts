@@ -1,3 +1,4 @@
+import { SubagentHostCtx } from '../llm/host-ctx.js'
 /**
  * Task 5（spec §2.1/§2.3）：EvidenceBridge / CriticProvider 的生产装配。
  * 供插件层（Task 6）把真实证据依赖与 subagent 评委接进 runStage 注入点；
@@ -90,7 +91,7 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
  * host 装配子代理直接 TypeError——详见 docs/2026-09-12-camera-language-research.md §2）。
  */
 export function createProductionCriticProvider(
-  ownerCtx: any,
+  ownerCtx: SubagentHostCtx,
   opts?: { timeoutMs?: number; parent?: unknown },
 ): CriticProvider {
   return createSubagentCriticProvider(ownerCtx, opts);

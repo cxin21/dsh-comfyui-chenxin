@@ -1,3 +1,4 @@
+import { SubagentHostCtx } from '../llm/host-ctx.js'
 import type { AuthorIntentFn, AuthorIntentRequest, AuthorDraft } from '../../tools/prompt-author.js';
 import type { H3ShotsInput } from '../schema/h3-shots.js';
 import type { AnimaSlots } from '../dialect/anima.js';
@@ -41,7 +42,7 @@ const KEY_CLARIFY_DIMS = ['style', 'media', 'negative'];
 
 /** DSH 0.1.2 one-shot subagent run 的鸭子类型（测试 mock 与真实 seam 共用）。 */
 export interface SubagentLikeRun {
-  id: string;
+  id?: string;
   localAgent?: unknown;
   result: Promise<{
     output: Array<{ type: string; text?: string }>;
@@ -91,7 +92,7 @@ function dumpIntentRequest(req: AuthorIntentRequest, candidates: string[]): Reco
  * 创建子代理 Intent Provider：ownerCtx 在此一次性绑定，返回可装入 author.ts seam 的 AuthorIntentFn。
  * ownerCtx 应包含 ctx.subagents 服务（plugin inject ['subagents']）。
  */
-export function createSubagentIntentProvider(ownerCtx: any, opts: SubagentProviderOptions = {}): AuthorIntentFn {
+export function createSubagentIntentProvider(ownerCtx: SubagentHostCtx, opts: SubagentProviderOptions = {}): AuthorIntentFn {
   // R9：默认 60s 实战连续超时（session-97f3819d 三连失败）→ 180s。
   // 2026-09 外部基准升级：persona 900→3075 字符 + B7 候选块后，intent 子代理实测 60s 双连超时
   // （旧 dist 钉 60s 的根因即「R9 改了 src 未及时重建 dist」，运行主机载入过期产物），默认提至 300s。
@@ -106,6 +107,8 @@ export function createSubagentIntentProvider(ownerCtx: any, opts: SubagentProvid
       'SubagentIntentProvider 不可用：ctx.subagents 未注册（DSH host 未加载 subagent 服务或 plugin 未注入 "subagents"）。提示：检查 plugin inject 是否含 "subagents"，或稍后重试。',
     );
   }
+  // guard 后捕获（闭包内属性窄化失效——audit F9 类型收口）
+  const subagents = ownerCtx.subagents;
 
   return async function subagentIntent(req: AuthorIntentRequest, exec?: any): Promise<AuthorDraft> {
     // persona/schema 解析（Task 7 方言化）：req（author 按 dialect.intent 注入）> opts（插件配置）> 全局 DEFAULT 兜底
@@ -210,7 +213,8 @@ export function createSubagentIntentProvider(ownerCtx: any, opts: SubagentProvid
 
     let run: SubagentLikeRun;
     try {
-      run = await ownerCtx.subagents.start(provider, {
+      // host 返回形状是运行时守卫后的结构子集——此处置信断言（guard 已验 start 可调用）
+      run = (await subagents.start(provider, {
         label,
         prompt: [{ type: 'text', text: taskText }],
         parent,
@@ -219,7 +223,7 @@ export function createSubagentIntentProvider(ownerCtx: any, opts: SubagentProvid
         // 替代此前只靠提示词「不要调用任何工具」的软约束（真实样本：修复轮曾调 28 次工具）
         toolFilter: { allow: [] },
         signal: exec?.signal ?? controller.signal,
-      });
+      })) as unknown as SubagentLikeRun;
     } catch (error) {
       if (controller.signal.aborted) throw timeoutError;
       throw error;

@@ -25,7 +25,7 @@ export const COMPOSITING_RUBRIC: RubricItem[] = [
   },
   {
     id: 'tag-selection',
-    criterion: '同一概念多命中时选择 usage_count 更高/语义更精确的 prompt_form；tag 顺序符合 T3 权重序；景别一致性成立',
+    criterion: '①语义正确：每个 tag 在画面语境中的含义与用途一致（反例：skirt lift 是主动用手掀裙，不能表达"风掀裙摆"——语义误用即 major finding）；②顺序通顺：tag 序列符合 T3 权重序且读起来自然；③无重复：无精确/近义重复（精确重复由系统 duplicate_tag 门机检，你查近义重复，如 long hair 与 hair over shoulder 并存）；④多命中取舍合理（usage_count 更高/语义更精确者优先）',
   },
   {
     id: 'negative-template',
@@ -45,6 +45,15 @@ export const COMPOSITING_RUBRIC_IDS = COMPOSITING_RUBRIC.map((r) => r.id)
 
 export const COMPOSITING_JUDGE_PERSONA = `角色：你是 Anima 成文产物评审引擎。被审对象是「成文引擎」对画面语义蓝图的翻译结果（tag 区 + NL 尾）。
 你只判不改：输出裁决 JSON，不改写产物。
+
+【逐 tag 检查清单（对 tags[] 每一项执行，用户裁决 2026-09-16）】
+A. 语义正确性：该 tag 在本画面语境中的含义是否与用途一致？语义误用（如 skirt lift 表达风掀、
+   looking at viewer 与 facing away 并用）即 major finding。
+B. 顺序通顺：tag 序列是否符合 T3 权重序、读起来是否自然？顺序错乱即 minor（系统性错乱 major）。
+C. 重复：是否有精确或近义重复？精确重复由系统 duplicate_tag 门机检（你免查），近义重复
+   （同义 tag 并存，如 long hair + hair over shoulder）即 minor。
+D. NL 重叠：nl 是否复述了 tag 已表达的概念？（系统 nl_tag_overlap 门机检词面+向量，你查语义级
+   复述——措辞不同但信息完全重复的句/短语。）
 
 【评分维度（六维，各 0-100 整数分）】
 ${COMPOSITING_RUBRIC.map((r, i) => `${i + 1}. ${r.id}：${r.criterion}`).join('\n')}

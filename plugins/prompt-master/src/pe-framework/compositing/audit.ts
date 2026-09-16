@@ -58,6 +58,45 @@ export function auditCompositing(
     }
   }
 
+  // duplicate_tag（2026-09-16 用户裁决：审核层四查之一——重复 tag 可机检）：规范化后精确重复
+  const seenTexts = new Set<string>()
+  for (const t of out.tags) {
+    if (seenTexts.has(norm(t.text))) {
+      push('duplicate_tag', 'critical', `duplicate tag '${t.text}' (source_concept ${t.source_concept}); required_fix: keep one, merge the other into NL if it adds relation/exposure info`)
+    }
+    seenTexts.add(norm(t.text))
+  }
+
+  // tag_order（T3 权重序的可机检投影）：已知 rank 的 tag 序列必须非降——违反 = important
+  // （搭车反馈；顺序"通顺"的语义级判断归 judge tag-selection 维度）
+  const ORDER_RANK: Array<[RegExp, number]> = [
+    [/^S\d+\.identity$/, 1],
+    [/^core\.style_hints/, 2], // artist 槽
+    [/^S\d+\.appearance$/, 3],
+    [/^S\d+\.pose$/, 4],
+    [/^S\d+\.expression$/, 5],
+    [/^composition\.(framing|camera_angle)$/, 6],
+    [/^core\.scene\./, 7],
+    [/^mood$/, 8],
+  ]
+  const rankOf = (sourceConcept: string): number | undefined => {
+    for (const [re, r] of ORDER_RANK) if (re.test(sourceConcept)) return r
+    return undefined
+  }
+  let lastRank = -1
+  let orderViolations = 0
+  for (const t of out.tags) {
+    const r = rankOf(t.source_concept)
+    if (r === undefined) continue
+    if (r < lastRank) {
+      push('tag_order', 'important', `tag '${t.text}' (${t.source_concept}, rank ${r}) breaks T3 weight order after rank ${lastRank}`)
+      orderViolations++
+      if (orderViolations >= 5) break
+    } else {
+      lastRank = r
+    }
+  }
+
   // nl_tag_overlap：词面包含 或 bge-m3 余弦 ≥ 阈值（spec §7 D6）
   const sentences = out.nl.split(/(?<=\.)\s+/).filter((s) => s.trim() !== '')
   let vectorUnavailable = false

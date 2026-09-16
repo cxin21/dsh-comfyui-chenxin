@@ -40,13 +40,15 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 
 ## 插件结构速览
 
-- **管线形态（2026-09-15 重设计，spec `docs/specs/2026-09-15-prompt-pipeline-redesign-design.md`）**：
-  `PM_PIPELINE_FORM=compositing|legacy`（缺省 **compositing**，非法值 fail-fast，env 拨回 legacy 即回滚）。
-  compositing 五段：S1 意图蓝图（语义，零词表）→ S2 美学扩写（patch 白名单）→ S2.5 概念检索包
+- **管线形态（2026-09-16 定稿，spec `docs/specs/2026-09-15-prompt-pipeline-redesign-design.md`）**：
+  anima **唯一路径 = compositing 五段**（用户裁决「不向后兼容、不保留旧逻辑」——M5 蓝图形态/slots
+  直译/`PM_AUTHOR_INTENT_FORM`/`PM_PIPELINE_FORM` 双态开关已删除，回滚 = revert 提交）：
+  S1 意图蓝图（语义，零词表）→ S2 美学扩写（patch 白名单）→ S2.5 概念检索包
   （**唯一 catalog 消费点**）→ S3 LLM 成文（`pm-writer` 子代理，tag 只能取自检索包证据、
   查不到进 NL 尾且与 tag 零重叠）→ S4 双轨审核（确定性审计谓词 + 6 维 judge）→ S5 窄修复
   （≤2 轮，只重入成文+审核，蓝图/扩写冻结）。确定性回退：成文失败/耗尽 → `deterministicCompose`
   出稿（advisory `writer_fallback_used`）。编排器 `pe-framework/compositing/orchestrate.ts`。
+  h3 未迁移（shots 路径 + runEnrich brief 原样）。anima blueprint_id 增量未接入（T1R 项，显式报错）。
 - `src/pe-framework/blueprint/` — 蓝图 IR：schema / analyzer / project（投影器）/ repo
 - `src/pe-framework/enrichment/` — 美学扩展引擎 + 风格库（style.ts）
 - `src/pe-framework/aesthetics/` — 具体性/保真检查 + 词库（lexicon.ts）

@@ -251,6 +251,13 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 3. golden L5 的 overlap 阈值 0.85 是否需要按 NL 分句长度分档——T1R 用 c01-c12 重放实测后定。
 4. judge/generator 模型分离是否启用独立评审路由（成本 +1 配置面）——默认否，维持路由跟随会话。
 
+## 12b. 修订记录（2026-09-16，用户裁决「不向后兼容、不保留旧逻辑」）
+
+- **D8 作废**：`PM_PIPELINE_FORM`/`PM_AUTHOR_INTENT_FORM` 双态开关与 legacy 回滚面删除——anima 唯一路径 = compositing 五段，回滚 = revert 提交。
+- **M5 蓝图形态/slots 直译对 anima 移除**：`draft.blueprint` 分支与 slots 装配仅服务 h3（未迁移方言）；anima blueprint_id 增量未接入（T1R 项，显式报错不做静默旧路径）。
+- **legacy brief 扩写（runEnrich）仅服务 h3**；anima 美学扩展 = S2 `runSemanticEnrich`（patch 白名单）。
+- 活跑冒烟驱动的两处接线热修复已并入本设计：①intentBase persona 踩踏（compositing 态不下发 persona/schema）；②runEnrich 守卫。
+
 ## 13. 提示词工程纪律来源（2026-09-15 调研）
 
 | 来源 | 采纳落点 |

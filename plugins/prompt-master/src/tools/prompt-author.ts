@@ -938,25 +938,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
       const intentCfg = getDialect(target)?.intent
 
-      // M5-T2（D1，design §2.1）：路由形态**唯一读取点**——registry intent.form + env kill-switch。
-      // env 覆盖语义：PM_AUTHOR_INTENT_FORM='slots' → anima 回滚 slots 直译（D8 回滚面 R2，不发版回滚）；
-      // ='blueprint' → 显式开启。覆盖仅对 target='anima' 生效（h3 未迁移、无蓝图 schema，kill-switch
-      // 语义 = anima 回滚）。非法值 fail-fast（防拼错静默走默认）；显式设置出 advisory（可观测）。
-      const formEnv = process.env.PM_AUTHOR_INTENT_FORM
-      if (formEnv !== undefined && formEnv !== 'slots' && formEnv !== 'blueprint') {
-        throw new Error(`PM_AUTHOR_INTENT_FORM 非法值: ${formEnv}（可选 slots|blueprint）`)
-      }
-      if (formEnv !== undefined) preflightAdvisories.push(`intent_form_override:${formEnv}`)
-      // 2026-09-15 管线重设计（spec §9 D8）：PM_PIPELINE_FORM 双态开关（compositing|legacy）。
-      // 非法值 fail-fast；显式设置出 advisory；T13 起缺省 compositing（回滚 = env 拨回 legacy）。
-      // 仅对 target='anima' 生效（h3 未迁移恒 legacy）。
-      const pipelineFormRaw = process.env.PM_PIPELINE_FORM
-      if (pipelineFormRaw !== undefined && pipelineFormRaw !== 'compositing' && pipelineFormRaw !== 'legacy') {
-        throw new Error(`PM_PIPELINE_FORM 非法值: ${pipelineFormRaw}（可选 compositing|legacy）`)
-      }
-      const pipelineForm = target === 'anima' ? (pipelineFormRaw ?? 'compositing') : 'legacy'
-      if (pipelineFormRaw !== undefined && target === 'anima') preflightAdvisories.push(`pipeline_form_override:${pipelineFormRaw}`)
-      const blueprintForm = target === 'anima' && pipelineForm === 'legacy' && (formEnv ?? intentCfg?.form ?? 'slots') === 'blueprint'
+      // 2026-09-16 管线重设计定稿（用户裁决「不向后兼容、不保留旧逻辑」）：
+      // anima 一律走 compositing 五段（意图蓝图→扩写→成文→审核→修复），M5 蓝图形态/slots 直译/
+      // PM_AUTHOR_INTENT_FORM/PM_PIPELINE_FORM 双态开关全部移除——anima 无回滚面，回滚 = revert 提交。
+      // h3 未迁移，维持原 shots 路径（runEnrich brief + slots/shots 装配仅服务 h3）。
 
       // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
       // blueprint_id 路径跳过 enrich（自带 enrichBlueprint 扩展层）。
@@ -992,13 +977,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const blueprintLlm = subagentsReady
         ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent }))
         : undefined
-      // M5-T2（D4，design §2.4）：runEnrich 退出 anima 蓝图形态默认路径（enrichBlueprint 扩展层顶上
-      // ——spec §4/§8 字面流无 brief 层；LLM 调用数首轮持平）。blueprint_id 路径既有跳过语义不变。
-      // 回滚面：env PM_AUTHOR_INTENT_FORM=slots → blueprintForm=false → runEnrich 原样恢复（D8）。
-      // 2026-09-15 管线重设计（spec §4 D2）：compositing 形态跳过 legacy brief 扩写（runEnrich）——
-      // 美学扩展由 compositing 编排层的 runSemanticEnrich 承载；真实会话冒烟实证：漏加此守卫时
-      // runEnrich 白烧一个 pm-critic 子代理并把 brief 混进 intentInput。
-      if (a.enrich !== false && !a.blueprint_id && !blueprintForm && pipelineForm !== 'compositing') {
+      // runEnrich（brief 扩写）仅服务 h3（未迁移方言）；anima 的美学扩展在 compositing 编排层
+      // runSemanticEnrich（spec §4）。降级铁律不变：runEnrich 永不抛出。
+      if (a.enrich !== false && !a.blueprint_id && target === 'h3') {
         const tEnrich0 = performance.now()
         const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent })
         const eRes = await runEnrich({
@@ -1007,12 +988,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           outputLang: a.outputLang,
           provider: enrichProvider,
           rating: resolved.rating, // Task 14 ④：预检定档透传（Task 12 persona 【内容分级】块）
-          ...(artDirectionSpecified && target === 'anima' ? { artDirection: a.art_direction } : {}),
           recommendations: recommendedCards, // Task 14 ④：推荐器输出 →【推荐先验】（Task 12 P2，LLM 终决）
         })
         if ('brief' in eRes) {
           const brief = eRes.brief
-          if (target === 'anima' && a.outputLang !== undefined && a.outputLang !== 'en') enrichAdvisories.push('enrich_lang_forced') // T5 carry① + 终审 I-2：anima 恒锁 'en'（zh/ja 都纠正），brief.outputLang 已被引擎强制 'en'
           if (trimNameAnchors(brief)) enrichAdvisories.push('name_anchors_trimmed') // T5 carry③：条目 ≤10、单条 ≤100 字符
           intentInput = briefToIntentText(brief)
           enrichFlag = 1
@@ -1027,43 +1006,24 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           enrichmentTop = { skipped: true, reason: eRes.reason }
         }
         traceExtra.push({ name: 'enrich', ms: performance.now() - tEnrich0 })
-      } else if (a.enrich === true && (a.blueprint_id || blueprintForm)) {
+      } else if (a.enrich === true && a.blueprint_id) {
         // Round7 T6：blueprint 路径忽略 enrich 参数（blueprint 分支自带 enrichBlueprint 扩展层）。
         // 显式 enrich=true 补 advisory 消除静默忽略（与 judge_mode 忽略口径一致：参数被忽略必须可观测）。
         // M5-T2（D4）：默认蓝图形态同样适用（runEnrich 已被 swap 掉）
         enrichAdvisories.push('enrich_ignored_blueprint')
       }
 
-      // B7（外部基准 2026-09）：catalog 候选召回——anima 的检索证据进生成回路（LLM 写 tag 前
-      // 先看到已验证存在的规范写法）。召回文本 = enrich brief（英文，slots 形态缺省路径）∪ 原始输入；
-      // M5-T2（D4）：蓝图形态 runEnrich 跳过 → intentInput 恒为原始 input（与 blueprint_id 路径现状
-      // 一致）。检索故障/空文本静默降级为无候选（增强层，不阻塞出稿）。
-      // 2026-09-15 管线重设计（spec §5 D2）：compositing 形态零 catalog 交互——S1/S2 不做词表召回，
-      // 词表证据唯一由 S2.5 检索包承载。
-      const catalogCandidates = target === 'anima' && pipelineForm !== 'compositing' ? catalogCandidatesForText(intentInput) : []
-      if (catalogCandidates.length > 0) enrichAdvisories.push(`catalog_recall_injected:${catalogCandidates.length}`)
+      // 2026-09-16 定稿：B7 前置召回随 legacy slots 路径移除——anima 词表证据唯一由 S2.5 检索包承载（spec §5 D2）
 
       const intentBase = {
-        target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, clarify: a.clarify, catalogCandidates,
-        // 2026-09-15 管线重设计（spec §3）：compositing 形态路由下行——provider 走语义蓝图
-        // persona/schema 与 parseSemanticBlueprint。注意：persona/schema 键必须在 compositing 态
-        // 下**缺省**（provider 内部落 ANIMA_SEMANTIC_* 常量）——真实会话冒烟实证：此前三元展开
-        // 无条件注入 registry slots persona（ANIMA_PERSONA），踩踏 compositingMode，LLM 收到旧
-        // persona 产出 slots JSON → schema_version 校验失败。
-        ...(pipelineForm === 'compositing' && target === 'anima' ? { compositingMode: true as const } : {}),
-        // M5-T2（D1）：蓝图形态下行——persona/schema 换 ANIMA 蓝图版（registry blueprintPersona/Schema），
-        // blueprintExpectedMedia 供 parse 层守卫（D2）。slots 形态（含 rollback）保持 registry slots persona；
-        // compositing 形态不下发 persona/schema（语义蓝图常量由 provider 兜底）。
-        ...(blueprintForm
-          ? {
-              persona: intentCfg?.blueprintPersona,
-              schema: intentCfg?.blueprintSchema,
-              blueprintMode: true as const,
-              blueprintExpectedMedia: intentCfg?.blueprintExpectedMedia,
-            }
-          : pipelineForm === 'compositing' && target === 'anima'
-            ? {}
-            : { persona: intentCfg?.persona, schema: intentCfg?.schema }),
+        target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, clarify: a.clarify,
+        // 2026-09-15 管线重设计（spec §3）：anima 一律 compositing——provider 走语义蓝图
+        // persona/schema 与 parseSemanticBlueprint。persona/schema 键不下发（provider 内部落
+        // ANIMA_SEMANTIC_* 常量）——真实会话冒烟实证：此前三元展开无条件注入 registry slots
+        // persona（ANIMA_PERSONA），踩踏 compositingMode，LLM 收到旧 persona 产出 slots JSON。
+        ...(target === 'anima' ? { compositingMode: true as const } : {}),
+        // h3（未迁移方言）：registry slots/shots persona 照旧
+        ...(target === 'h3' ? { persona: intentCfg?.persona, schema: intentCfg?.schema } : {}),
       }
 
       // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化
@@ -1095,6 +1055,11 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const tIntent0 = performance.now()
       let draft: AuthorDraft
       let blueprintRepairRetried = false // M5-T2（D5c）：validate 失败单次反馈重试是否发生（计 1 次 correction）
+      if (a.blueprint_id && target === 'anima') {
+        // 2026-09-16 定稿：anima blueprint_id 增量路径未接入 compositing（semantic 增量分析 = T1R 项）——
+        // 旧 BlueprintV1 增量随 legacy 蓝图分支对 anima 移除，宁显式报错不做静默旧路径
+        throw new Error('blueprint_id 增量路径未接入 compositing 管线（anima）——请直接用 input 全新生成，或对 h3 使用 blueprint_id')
+      }
       if (a.blueprint_id) {
         // M5-HOTFIX（P0）：增量入口与落库同源接线——blueprintSettingsScope（register owner scope），
         // 废除裸 ctx.settings 的 RepoSettingsScope 断言（同款 Bug B：服务级 get(ns)/update(ns,patch)
@@ -1106,7 +1071,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
         const oldBp = repo.load(a.blueprint_id)
         if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
         draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, { llm: blueprintLlm }) }
-      } else if (pipelineForm === 'compositing' && target === 'anima') {
+      } else if (target === 'anima') {
         // 2026-09-15 管线重设计（spec §3）：compositing S1——语义蓝图产出；
         // 校验/tag_in_blueprint 失败单次反馈重试（沿蓝图形态 D5c 语义，计 1 次 correction）
         try {
@@ -1119,23 +1084,6 @@ export function registerAuthorTool(ctx: Context, config: Config) {
             ...intentBase,
             round: 1,
             feedback: `上一轮语义蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence、任何字段不得出现 tag 形式词）。`,
-          }, exec)
-        }
-      } else if (blueprintForm) {
-        try {
-          draft = await provider({ ...intentBase, round: 0 }, exec)
-        } catch (error) {
-          // M5-T2（D5c，design §2.4/§2.7 R3）：蓝图形态首轮产出未过解析/校验/expectedMedia 守卫 →
-          // 错误文案作 feedback 单次反馈重试（advisory blueprint_repair_retry；计 1 次 correction）；
-          // 再失败原错误透传（fail-closed，**不做 slots 静默降级**——design §2.5 D8）。仅蓝图形态
-          // 首轮生效；slots 形态解析失败语义保持现状（throw 直达）。
-          blueprintRepairRetried = true
-          preflightAdvisories.push('blueprint_repair_retry')
-          const message = error instanceof Error ? error.message : String(error)
-          draft = await provider({
-            ...intentBase,
-            round: 1,
-            feedback: `上一轮蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence）。`,
           }, exec)
         }
       } else {
@@ -1155,7 +1103,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
 
       // ── compositing 分支（2026-09-15 管线重设计 spec §2/§8）：S2 扩写 → S2.5 检索包 →
       // S3 成文 → S4 双轨审核 → S5 窄修复（编排细节在 compositing/orchestrate.ts，此处薄接线）
-      if (pipelineForm === 'compositing' && target === 'anima' && draft.semantic) {
+      if (target === 'anima' && draft.semantic) {
         const enrichRunner = subagentsReady
           ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent })
           : undefined
@@ -1286,7 +1234,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           })
           // M5-T2（D5a/V6）：修复轮携带增量锚定（当前蓝图 → <old_blueprint>，禁整图重解释）；
           // V5：intentBase 携带 blueprintMode（D1）→ provider 蓝图形态返回——修复轮死路修复
-          const d2 = await provider({ ...intentBase, round: corrections, feedback, ...(blueprintForm ? { anchorBlueprint: bp } : {}) }, exec)
+          const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec)
           if (!d2.blueprint) break // provider 未返回蓝图 → 保留当前 stage，走 Level 3
           injectBlueprintCoreRating(d2, resolved.rating) // M5-T2（D5b）缺口#2：修复轮重注入
           const tE2 = performance.now()

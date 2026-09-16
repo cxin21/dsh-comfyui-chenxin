@@ -15,7 +15,10 @@ export function isCountTag(t: string): boolean {
 
 /** 纯十六进制或「数字+十六进制」泄漏（如 1f1f3b、1f1f3b1f1f3b、2） */
 export function isHexGarbageToken(t: string): boolean {
-  const s = String(t || '').trim().toLowerCase().replace(/\s+/g, '');
+  const s = String(t || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
   if (!s) return true;
   if (/^(artist|copyright|character|meta|score_):/.test(s)) return false;
   if (isCountTag(s)) return false;
@@ -44,11 +47,7 @@ function normalizeToken(raw: string, danbooru: boolean): string {
   if (danbooru) {
     return normalizeBooruValue(t.replace(/_/g, ' '));
   }
-  return t
-    .toLowerCase()
-    .replace(/\//g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return t.toLowerCase().replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function bracketInnerToTag(inner: string, danbooru: boolean): string {
@@ -66,7 +65,10 @@ function splitLooseTokens(chunk: string): string[] {
   const c = String(chunk || '').trim();
   if (!c) return [];
   if (/^(?:\d+|[0-9a-f]{4,})(?:\s+(?:\d+|[0-9a-f]{4,}))+$/i.test(c)) {
-    return c.split(/\s+/).map((w) => w.trim()).filter(Boolean);
+    return c
+      .split(/\s+/)
+      .map((w) => w.trim())
+      .filter(Boolean);
   }
   return [c];
 }
@@ -109,7 +111,7 @@ export function unwrapBracketNotation(text: string, danbooru: boolean): string {
   return dedupeTokens([...remParts, ...bracketParts]).join(', ');
 }
 
-function tokenKey(t: string, danbooru: boolean): string {
+function tokenKey(t: string, _danbooru: boolean): string {
   return String(t || '')
     .trim()
     .toLowerCase()
@@ -119,9 +121,7 @@ function tokenKey(t: string, danbooru: boolean): string {
 }
 
 function qualityPrefixTokenSet(caption: any): Set<string> | null {
-  const prefix = String(
-    caption && caption.quality_prompt_prefix != null ? caption.quality_prompt_prefix : ''
-  ).trim();
+  const prefix = String(caption && caption.quality_prompt_prefix != null ? caption.quality_prompt_prefix : '').trim();
   if (!prefix) return null;
   const danbooru = isDanbooruCaption(caption);
   const set = new Set<string>();

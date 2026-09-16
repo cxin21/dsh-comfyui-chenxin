@@ -18,9 +18,7 @@
         "matched_name": "wave",
         "name_type": "alias",
         "score": 850,
-        "aliases": [
-          "wave"
-        ],
+        "aliases": ["wave"],
         "provenance": [
           "raw_record_id:1287447",
           "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",

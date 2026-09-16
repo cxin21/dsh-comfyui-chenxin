@@ -8,12 +8,12 @@
  *   构图：三分法/对称/负空间/前景引导/画中画（spec §7.3 列举）
  */
 export interface CinemaLexicon {
-  shots: string[]
-  lenses: string[]
-  camera_moves: string[]
-  lighting: string[]
-  grading: string[]
-  composition: string[]
+  shots: string[];
+  lenses: string[];
+  camera_moves: string[];
+  lighting: string[];
+  grading: string[];
+  composition: string[];
 }
 
 export const CINEMA_LEXICON: CinemaLexicon = {
@@ -23,4 +23,4 @@ export const CINEMA_LEXICON: CinemaLexicon = {
   lighting: ['黄金时刻', '蓝色时刻', '伦勃朗光', '体积光', '三点布光', '侧逆光', '背光', '顶光', '边缘光', '色温'],
   grading: ['青橙对比', '低饱和', '漂白', '高光暖调', '阴影冷调', '中间调暖调', '胶片颗粒', '褪色复古'],
   composition: ['三分法', '对称构图', '负空间', '前景引导', '画中画', '框架构图', '对角构图', '中心构图', '黄金分割'],
-}
+};

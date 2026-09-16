@@ -4,49 +4,17 @@
     "variant": "aesthetic",
     "subject": "Hatsune Miku stage performance",
     "slots": {
-      "count_gender": [
-        "1girl",
-        "solo"
-      ],
-      "character": [
-        "hatsune miku",
-        "vocaloid"
-      ],
-      "appearance": [
-        "long hair",
-        "aqua hair",
-        "twin tails",
-        "blue eyes"
-      ],
-      "clothing": [
-        "sleeves past wrists",
-        "necktie",
-        "boots"
-      ],
-      "pose_action": [
-        "standing",
-        "microphone"
-      ],
-      "expression": [
-        "smile",
-        "open mouth"
-      ],
-      "camera": [
-        "from below",
-        "cowboy shot"
-      ],
-      "scene": [
-        "stage",
-        "spotlights",
-        "confetti"
-      ],
-      "detail_mood": [
-        "cinematic"
-      ]
+      "count_gender": ["1girl", "solo"],
+      "character": ["hatsune miku", "vocaloid"],
+      "appearance": ["long hair", "aqua hair", "twin tails", "blue eyes"],
+      "clothing": ["sleeves past wrists", "necktie", "boots"],
+      "pose_action": ["standing", "microphone"],
+      "expression": ["smile", "open mouth"],
+      "camera": ["from below", "cowboy shot"],
+      "scene": ["stage", "spotlights", "confetti"],
+      "detail_mood": ["cinematic"]
     },
-    "exclusions": [
-      "no text"
-    ]
+    "exclusions": ["no text"]
   },
   "pythonOutput": {
     "ok": true,
@@ -78,12 +46,8 @@
           "citation:221726:match=canonical:canonical=confetti:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:209603:match=canonical:canonical=cinematic:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [
-          "catalog_miss:spotlights"
-        ],
-        "advisories": [
-          "[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"
-        ]
+        "assumptions": ["catalog_miss:spotlights"],
+        "advisories": ["[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"]
       },
       "metadata": {
         "variant": "aesthetic",
@@ -651,9 +615,7 @@
       ]
     },
     "errors": [],
-    "advisories": [
-      "[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"
-    ]
+    "advisories": ["[warning] lighting_term_banned: lora-internal lighting term(s) present: spotlight"]
   },
   "sha256": "d112cd064255c28bccb3df168628faf930cd011bdb52325449e94989da6b46ec"
 }

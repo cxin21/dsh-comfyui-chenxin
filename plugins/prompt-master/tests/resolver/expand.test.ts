@@ -31,8 +31,14 @@ describe('resolveExpand', () => {
     const exp = all.filter((p) => p.kind === 'expand' && p.builtinKey && String(p.builtinKey).startsWith('expand_'));
     expect(exp.length).toBe(8);
     expect(exp.map((p) => p.builtinKey).sort()).toEqual([
-      'expand_cinematic', 'expand_compact', 'expand_danbooru', 'expand_descriptive_en',
-      'expand_natural', 'expand_photographer', 'expand_structured_json', 'expand_structured_md',
+      'expand_cinematic',
+      'expand_compact',
+      'expand_danbooru',
+      'expand_descriptive_en',
+      'expand_natural',
+      'expand_photographer',
+      'expand_structured_json',
+      'expand_structured_md',
     ]);
   });
 

@@ -25,7 +25,7 @@ export function userTemplateHasInputPlaceholder(tpl: string | undefined | null):
 export function appendExpandSourceBlock(
   userBody: string | undefined | null,
   shortText: string | undefined | null,
-  outputLang: string
+  outputLang: string,
 ): string {
   const t = String(shortText || '').trim();
   if (!t) {
@@ -60,7 +60,7 @@ export function getOutputLangUserLock(outputLang: string): string {
     return (
       '【Output language】Locked to English (highest priority). Even if input is Chinese, ' +
       'output must be English only; no Chinese sentences as main content.'
-    )
+    );
   }
   return '';
 }

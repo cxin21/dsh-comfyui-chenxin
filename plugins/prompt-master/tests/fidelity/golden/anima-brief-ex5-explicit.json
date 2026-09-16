@@ -4,18 +4,9 @@
     "variant": "base",
     "subject": "intimate portrait",
     "slots": {
-      "count_gender": [
-        "1girl",
-        "solo"
-      ],
-      "appearance": [
-        "long hair",
-        "blush"
-      ],
-      "camera": [
-        "close-up",
-        "looking at viewer"
-      ]
+      "count_gender": ["1girl", "solo"],
+      "appearance": ["long hair", "blush"],
+      "camera": ["close-up", "looking at viewer"]
     },
     "explicit": true
   },
@@ -35,12 +26,8 @@
           "citation:214098:match=canonical:canonical=close-up:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:663666:match=canonical:canonical=looking_at_viewer:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [
-          "rating_active:explicit"
-        ],
-        "advisories": [
-          "[warning] tag_count_out_of_range: 6 content tags (working range 12-50)"
-        ]
+        "assumptions": ["rating_active:explicit"],
+        "advisories": ["[warning] tag_count_out_of_range: 6 content tags (working range 12-50)"]
       },
       "metadata": {
         "variant": "base",
@@ -310,9 +297,7 @@
       ]
     },
     "errors": [],
-    "advisories": [
-      "[warning] tag_count_out_of_range: 6 content tags (working range 12-50)"
-    ]
+    "advisories": ["[warning] tag_count_out_of_range: 6 content tags (working range 12-50)"]
   },
   "sha256": "98e80cdc021923bf46d48e635d0da4897f272a17e2a2186b3602b87c18387cd2"
 }

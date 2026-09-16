@@ -1,85 +1,97 @@
-import { describe, expect, it, afterAll, beforeAll, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { searchCatalog, classifyTag, overlayView, overlayStatus, OVERLAY_ADVISORY, catalogMeta, closeCatalog, setVectorSearch } from '../../src/pe-framework/dialect/anima-catalog.js'
-import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js'
+import { describe, expect, it, afterAll, beforeAll, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  searchCatalog,
+  classifyTag,
+  overlayView,
+  overlayStatus,
+  OVERLAY_ADVISORY,
+  catalogMeta,
+  closeCatalog,
+  setVectorSearch,
+} from '../../src/pe-framework/dialect/anima-catalog.js';
+import { setOverlayPath } from '../../src/pe-framework/anima-knowledge/relations.js';
 
 // 级联行为专测文件：semantic 增强层钉死禁用（miss 断言不被真实向量库污染；见 anima-catalog-semantic.test.ts）
-beforeAll(() => setVectorSearch(null))
-afterAll(() => { setVectorSearch(null); closeCatalog() })
+beforeAll(() => setVectorSearch(null));
+afterAll(() => {
+  setVectorSearch(null);
+  closeCatalog();
+});
 
 describe('anima catalog (anima-catalog.ts)', () => {
-  let tmp: string
+  let tmp: string;
 
   beforeEach(() => {
     // O2 隔离：overlay-degrade 断言不依赖环境残留——注入保证不存在的临时 overlay 路径
-    tmp = mkdtempSync(join(tmpdir(), 'pm-ovl-'))
-    setOverlayPath(join(tmp, 'temp', 'anima-prompt-v1', 'relation-overlay.sqlite'))
-  })
+    tmp = mkdtempSync(join(tmpdir(), 'pm-ovl-'));
+    setOverlayPath(join(tmp, 'temp', 'anima-prompt-v1', 'relation-overlay.sqlite'));
+  });
 
   afterEach(() => {
-    setOverlayPath('')
-    rmSync(tmp, { recursive: true, force: true })
-  })
+    setOverlayPath('');
+    rmSync(tmp, { recursive: true, force: true });
+  });
 
   it('canonical: silvery hair exact-match returns canonical hit with prompt_form', async () => {
-    const hits = await searchCatalog('silvery hair')
-    expect(hits.length).toBeGreaterThan(0)
-    expect(hits[0].match_type).toBe('canonical')
-    expect(hits[0].prompt_form).toBe('silvery hair')
-  })
+    const hits = await searchCatalog('silvery hair');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].match_type).toBe('canonical');
+    expect(hits[0].prompt_form).toBe('silvery hair');
+  });
 
   it('alias: wave resolves to canonical waving via alias name type', async () => {
-    const hits = await searchCatalog('wave')
-    expect(hits.length).toBeGreaterThan(0)
-    expect(hits[0].match_type).toBe('alias')
-    expect(hits[0].prompt_form).toBe('waving')
-  })
+    const hits = await searchCatalog('wave');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].match_type).toBe('alias');
+    expect(hits[0].prompt_form).toBe('waving');
+  });
 
   it('fuzzy: silver hair cascades to fuzzy word-root matches', async () => {
-    const hits = await searchCatalog('silver hair')
-    expect(hits.length).toBeGreaterThan(0)
-    expect(hits[0].match_type).toBe('fuzzy')
-  })
+    const hits = await searchCatalog('silver hair');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].match_type).toBe('fuzzy');
+  });
 
   it('miss: gibberish yields empty results and miss classification', async () => {
-    expect(await searchCatalog('zzzzzzzzq')).toEqual([])
-    expect(classifyTag('zzzzzzzzq')).toBe('miss')
-  })
+    expect(await searchCatalog('zzzzzzzzq')).toEqual([]);
+    expect(classifyTag('zzzzzzzzq')).toBe('miss');
+  });
 
   it('classifyTag distinguishes canonical/alias/fuzzy', () => {
-    expect(classifyTag('long hair')).toBe('canonical')
-    expect(classifyTag('grinning')).toBe('alias')
-    expect(classifyTag('expression')).toBe('fuzzy')
-  })
+    expect(classifyTag('long hair')).toBe('canonical');
+    expect(classifyTag('grinning')).toBe('alias');
+    expect(classifyTag('expression')).toBe('fuzzy');
+  });
 
   it('limit respected', async () => {
-    expect((await searchCatalog('silver hair', { limit: 1 })).length).toBe(1)
-    expect(await searchCatalog('silver hair', { limit: 0 })).toEqual([])
-  })
+    expect((await searchCatalog('silver hair', { limit: 1 })).length).toBe(1);
+    expect(await searchCatalog('silver hair', { limit: 0 })).toEqual([]);
+  });
 
   it('unknown mode tolerates as auto', async () => {
-    const hits = await searchCatalog('silvery hair', { mode: 'bogus' as never })
-    expect(hits[0].match_type).toBe('canonical')
-  })
+    const hits = await searchCatalog('silvery hair', { mode: 'bogus' as never });
+    expect(hits[0].match_type).toBe('canonical');
+  });
 
   it('exact mode skips fuzzy cascade', async () => {
-    expect(await searchCatalog('silver hair', { mode: 'exact' })).toEqual([]) // 无 canonical/alias → 不落 fuzzy
-    expect((await searchCatalog('silvery hair', { mode: 'exact' }))[0].match_type).toBe('canonical')
-  })
+    expect(await searchCatalog('silver hair', { mode: 'exact' })).toEqual([]); // 无 canonical/alias → 不落 fuzzy
+    expect((await searchCatalog('silvery hair', { mode: 'exact' }))[0].match_type).toBe('canonical');
+  });
 
   it('overlay degrade: absent overlay → empty view + advisory', () => {
-    expect(overlayView()).toEqual({ tags: {} })
-    expect(overlayStatus()).toBe('unavailable')
-    expect(OVERLAY_ADVISORY).toBe('overlay_unavailable')
-  })
+    expect(overlayView()).toEqual({ tags: {} });
+    expect(overlayStatus()).toBe('unavailable');
+    expect(OVERLAY_ADVISORY).toBe('overlay_unavailable');
+  });
 
   it('catalogMeta reports real file, tables and fts presence', () => {
-    const meta = catalogMeta()
-    expect(meta.sizeBytes).toBeGreaterThan(700 * 1024 * 1024)
-    expect(meta.tables).toContain('records')
-    expect(meta.tables).toContain('catalog_fts')
-    expect(meta.fts).toBe(true)
-  })
-})
+    const meta = catalogMeta();
+    expect(meta.sizeBytes).toBeGreaterThan(700 * 1024 * 1024);
+    expect(meta.tables).toContain('records');
+    expect(meta.tables).toContain('catalog_fts');
+    expect(meta.fts).toBe(true);
+  });
+});

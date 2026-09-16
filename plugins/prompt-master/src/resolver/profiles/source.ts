@@ -1,13 +1,16 @@
-export interface CustomProfileRecord { id: string; profileJson: string }
+export interface CustomProfileRecord {
+  id: string;
+  profileJson: string;
+}
 
-type CustomProfileSource = () => CustomProfileRecord[]
+type CustomProfileSource = () => CustomProfileRecord[];
 
-let injected: CustomProfileSource = () => []
+let injected: CustomProfileSource = () => [];
 
 export function setCustomProfileSource(fn: CustomProfileSource | null): void {
-  injected = fn ?? (() => [])
+  injected = fn ?? (() => []);
 }
 
 export function getCustomProfileSource(): CustomProfileSource {
-  return injected
+  return injected;
 }

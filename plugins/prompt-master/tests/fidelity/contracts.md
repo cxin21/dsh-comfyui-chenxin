@@ -15,12 +15,12 @@
 
 Python budget 的 20+ 原始字段**不全搬**。投影映射表（保真 ↔ 投影 ↔ 放弃）：
 
-| 字段 | 处置 | 说明 |
-|---|---|---|
-| `text_tokens` / `char_count` / `char_limit` / `quality_cap` / `effective_cap` / `over` / `token_over` / `char_over` | **保真** | 确定性预算判定（token 数/上限/over），TS 必须逐一复刻 |
-| `verified` / `snapshot_id` / `model_id` / `model_hard_limit` / `reference_count` / `video_count` / `audio_count` / `visual_tokens` / `chat_template_tokens` / `available_tokens` | 放弃 | 上下文帧内部量/环境快照，非提示词可执行面 |
-| `mode` / `stage` | 保真 | 路由回显 |
-| P1 envelope 外层 `ok` / `command` / `errors[].code` / `advisories` | 保真 | 收敛闭环契约 |
+| 字段                                                                                                                                                                             | 处置     | 说明                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------- |
+| `text_tokens` / `char_count` / `char_limit` / `quality_cap` / `effective_cap` / `over` / `token_over` / `char_over`                                                              | **保真** | 确定性预算判定（token 数/上限/over），TS 必须逐一复刻 |
+| `verified` / `snapshot_id` / `model_id` / `model_hard_limit` / `reference_count` / `video_count` / `audio_count` / `visual_tokens` / `chat_template_tokens` / `available_tokens` | 放弃     | 上下文帧内部量/环境快照，非提示词可执行面             |
+| `mode` / `stage`                                                                                                                                                                 | 保真     | 路由回显                                              |
+| P1 envelope 外层 `ok` / `command` / `errors[].code` / `advisories`                                                                                                               | 保真     | 收敛闭环契约                                          |
 
 tokenizer 归化（T11）的计数单元 = **官方上下文帧（含 vision pads）**；T11 起对 `text_tokens` 采样逐 token 断言。
 

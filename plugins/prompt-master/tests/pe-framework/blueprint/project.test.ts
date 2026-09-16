@@ -1,18 +1,34 @@
-import { describe, expect, it } from 'vitest'
-import { projectToH3, projectToAnima, projectAdvisories, lastProjectAdvisories, preflightRepair, BlueprintHardNegativeError } from '../../../src/pe-framework/blueprint/project.js'
-import { applyStyle } from '../../../src/pe-framework/enrichment/style.js'
-import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js'
+import { describe, expect, it } from 'vitest';
+import {
+  projectToH3,
+  projectToAnima,
+
+  lastProjectAdvisories,
+  preflightRepair,
+  BlueprintHardNegativeError,
+} from '../../../src/pe-framework/blueprint/project.js';
+import { applyStyle } from '../../../src/pe-framework/enrichment/style.js';
+import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js';
 // 副作用注册 h3 方言包（getDialectPackage 供 preflightRepair 约束）
-import '../../../src/pe-framework/dialect/h3.js'
+import '../../../src/pe-framework/dialect/h3.js';
 
 // 计划 fixture（含 hard 负向 → 供 throw 用例）
 const h3Bp: BlueprintV1 = {
-  schema_version: 1, media: 'video',
+  schema_version: 1,
+  media: 'video',
   core: {
-    concept: '剑客决斗', aspect_ratio: '16:9',
-    characters: [{ id: 'c1', name: '银发剑客', appearance_anchors: ['银白长发', '灰色披风', '反手持刀'], continuity_lock: true }],
-    scene: { environment: '黄昏荒原' }, emotion: '紧张', composition: ['三分法'],
-    negative: [{ target: '字幕', severity: 'soft' }, { target: '血腥', severity: 'hard' }],
+    concept: '剑客决斗',
+    aspect_ratio: '16:9',
+    characters: [
+      { id: 'c1', name: '银发剑客', appearance_anchors: ['银白长发', '灰色披风', '反手持刀'], continuity_lock: true },
+    ],
+    scene: { environment: '黄昏荒原' },
+    emotion: '紧张',
+    composition: ['三分法'],
+    negative: [
+      { target: '字幕', severity: 'soft' },
+      { target: '血腥', severity: 'hard' },
+    ],
   },
   media_layer: {
     video: {
@@ -24,24 +40,28 @@ const h3Bp: BlueprintV1 = {
       ],
     },
   },
-}
+};
 
 // 仅 soft 负向的变体（hard → throw 用例独立于基础投影断言）
 const h3BpSoft: BlueprintV1 = {
   ...h3Bp,
   core: { ...h3Bp.core, negative: [{ target: '字幕', severity: 'soft' }] },
-}
+};
 
 // 快照 fixture（spec §8.3 防漂移；无 hard，含 continuity 锁 + soft 负向）
 const fightBp: BlueprintV1 = {
-  schema_version: 1, media: 'video',
+  schema_version: 1,
+  media: 'video',
   core: {
-    concept: '剑客决斗', aspect_ratio: '16:9',
+    concept: '剑客决斗',
+    aspect_ratio: '16:9',
     characters: [
       { id: 'c1', name: '银发剑客', appearance_anchors: ['银白长发', '灰色披风', '反手持刀'], continuity_lock: true },
       { id: 'c2', name: '黑袍武士', appearance_anchors: ['黑色兜帽', '双刀'], outfit: '黑色劲装' },
     ],
-    scene: { environment: '黄昏荒原', lighting: '侧逆光' }, emotion: '紧张', composition: ['三分法'],
+    scene: { environment: '黄昏荒原', lighting: '侧逆光' },
+    emotion: '紧张',
+    composition: ['三分法'],
     negative: [{ target: '字幕', severity: 'soft' }],
   },
   media_layer: {
@@ -54,11 +74,12 @@ const fightBp: BlueprintV1 = {
       ],
     },
   },
-}
+};
 
 /* ── M5-T2（D3）：projectToAnima 主干槽位来源扩展（media_layer.image 增补四字段直映射）── */
 const animaImageBp: BlueprintV1 = {
-  schema_version: 1, media: 'image',
+  schema_version: 1,
+  media: 'image',
   core: {
     concept: '黄昏天台的少女',
     characters: [{ id: 'c1', name: '少女', appearance_anchors: ['黑色长发'], outfit: '水手服' }],
@@ -76,179 +97,188 @@ const animaImageBp: BlueprintV1 = {
       camera_angle: 'cowboy shot',
     },
   },
-}
+};
 
 describe('M5-T2 D3: projectToAnima trunk-slot sources', () => {
   it('count_gender/pose_action/expression 直映射；scene = environment + scene_anchors 保序去重', () => {
-    const s = projectToAnima(animaImageBp)
-    expect(s.count_gender).toEqual(['1girl'])
-    expect(s.pose_action).toEqual(['standing', 'looking at viewer'])
-    expect(s.expression).toEqual(['smile'])
+    const s = projectToAnima(animaImageBp);
+    expect(s.count_gender).toEqual(['1girl']);
+    expect(s.pose_action).toEqual(['standing', 'looking at viewer']);
+    expect(s.expression).toEqual(['smile']);
     // environment 'rooftop' 与 scene_anchors[0] 重复 → 去重保序（首次出现位）
-    expect(s.scene).toEqual(['rooftop', 'sunset', 'wind'])
-    expect(s.appearance).toEqual(['黑色长发'])
-    expect(s.clothing).toEqual(['水手服'])
-    expect(s.camera).toEqual(['cowboy shot'])
-  })
+    expect(s.scene).toEqual(['rooftop', 'sunset', 'wind']);
+    expect(s.appearance).toEqual(['黑色长发']);
+    expect(s.clothing).toEqual(['水手服']);
+    expect(s.camera).toEqual(['cowboy shot']);
+  });
 
   it('deliberate non-mapping：palette/emotion/aspect_ratio 不产出槽位（design §2.3 P1 留痕）', () => {
-    const s = projectToAnima(animaImageBp)
-    expect(JSON.stringify(s)).not.toContain('teal and orange')
-    expect(JSON.stringify(s)).not.toContain('melancholic')
-    expect('aspect_ratio' in s).toBe(false)
-  })
+    const s = projectToAnima(animaImageBp);
+    expect(JSON.stringify(s)).not.toContain('teal and orange');
+    expect(JSON.stringify(s)).not.toContain('melancholic');
+    expect('aspect_ratio' in s).toBe(false);
+  });
 
   it('空 image 层蓝图 → 主干槽缺省不产出（既有语义零变化）', () => {
     const bare: BlueprintV1 = {
-      schema_version: 1, media: 'image',
+      schema_version: 1,
+      media: 'image',
       core: { concept: 'x', negative: [] },
       media_layer: { image: {} },
-    }
-    const s = projectToAnima(bare)
-    expect('count_gender' in s).toBe(false)
-    expect('pose_action' in s).toBe(false)
-    expect('expression' in s).toBe(false)
-    expect('scene' in s).toBe(false)
-  })
-})
+    };
+    const s = projectToAnima(bare);
+    expect('count_gender' in s).toBe(false);
+    expect('pose_action' in s).toBe(false);
+    expect('expression' in s).toBe(false);
+    expect('scene' in s).toBe(false);
+  });
+});
 
 describe('projectToH3', () => {
   it('maps duration to total and preserves 3 shots', () => {
-    const s = projectToH3(h3BpSoft)
-    expect(s.duration_seconds).toBe(15)
-    expect(s.shots).toHaveLength(3)
-  })
+    const s = projectToH3(h3BpSoft);
+    expect(s.duration_seconds).toBe(15);
+    expect(s.shots).toHaveLength(3);
+  });
   it('injects continuity-locked anchors into every shot what', () => {
-    const s = projectToH3(h3BpSoft)
-    for (const shot of s.shots) expect(shot.what).toContain('银白长发')
-  })
+    const s = projectToH3(h3BpSoft);
+    for (const shot of s.shots) expect(shot.what).toContain('银白长发');
+  });
   it('who resolves to <Subject N> stable labels by character order', () => {
-    const s = projectToH3(fightBp)
-    expect(s.shots[0].who).toBe('<Subject 1>，<Subject 2>')
-  })
+    const s = projectToH3(fightBp);
+    expect(s.shots[0].who).toBe('<Subject 1>，<Subject 2>');
+  });
   it('soft negative → positive rewrite in what tail + advisory recorded', () => {
-    const s = projectToH3(h3BpSoft)
-    for (const shot of s.shots) expect(shot.what).toContain('无字幕纯净画面') // 末句正向改写
-    const advisories = lastProjectAdvisories()
-    expect(advisories.some((a) => a.includes('字幕'))).toBe(true)
-  })
+    const s = projectToH3(h3BpSoft);
+    for (const shot of s.shots) expect(shot.what).toContain('无字幕纯净画面'); // 末句正向改写
+    const advisories = lastProjectAdvisories();
+    expect(advisories.some((a) => a.includes('字幕'))).toBe(true);
+  });
   it('action empty falls back to beat (what stays non-empty)', () => {
     const bp: BlueprintV1 = {
-      schema_version: 1, media: 'video',
+      schema_version: 1,
+      media: 'video',
       core: { concept: 'x', negative: [] },
       media_layer: { video: { total_duration_seconds: 4, shots: [{ beat: '对峙' }] } },
-    }
-    const s = projectToH3(bp)
-    expect(s.shots[0].what.length).toBeGreaterThan(0)
-    expect(s.shots[0].what).toContain('对峙')
-  })
+    };
+    const s = projectToH3(bp);
+    expect(s.shots[0].what.length).toBeGreaterThan(0);
+    expect(s.shots[0].what).toContain('对峙');
+  });
   it('injects scene.lighting + emotion into every shot what (spec §8.1 ROI)', () => {
-    const s = projectToH3(fightBp)
+    const s = projectToH3(fightBp);
     for (const shot of s.shots) {
-      expect(shot.what).toContain('侧逆光')
-      expect(shot.what).toContain('紧张')
+      expect(shot.what).toContain('侧逆光');
+      expect(shot.what).toContain('紧张');
     }
-  })
+  });
   it('merges core.style base/theme into every shot what (spec §8.1 core.style→what, any conformity)', () => {
     const bp: BlueprintV1 = {
       ...fightBp,
       core: { ...fightBp.core, style: { base: '写实电影', theme: '暗黑史诗' } },
-    }
-    const s = projectToH3(bp)
+    };
+    const s = projectToH3(bp);
     for (const shot of s.shots) {
-      expect(shot.what).toContain('写实电影')
-      expect(shot.what).toContain('暗黑史诗')
+      expect(shot.what).toContain('写实电影');
+      expect(shot.what).toContain('暗黑史诗');
     }
-  })
+  });
   it('default conformity 0.6: H3 what carries core.style reference AND ~60% style phrases (no reference-only fake tier)', () => {
     const bp: BlueprintV1 = {
       ...fightBp,
       core: { ...fightBp.core, style: { base: '写实电影', theme: '暗黑史诗' } },
-    }
-    const enriched = applyStyle(bp, 'cinematic_real', 0.6)
+    };
+    const enriched = applyStyle(bp, 'cinematic_real', 0.6);
     // 合并语义：用户 brief 已有 style.base 优先，风格库只补缺
-    expect(enriched.core.style?.base).toContain('写实')
-    const s = projectToH3(enriched)
+    expect(enriched.core.style?.base).toContain('写实');
+    const s = projectToH3(enriched);
     for (const shot of s.shots) {
       // 风格引用进 what（第 1 级）
-      expect(shot.what).toContain('写实电影')
+      expect(shot.what).toContain('写实电影');
       // 约 60% 风格短语进 what（第 2 级，不再仅引用）——cinematic_real video fragment 5 短语 → round(0.6×5)=3 短语注入
       // C9（外部基准 2026-09）：风格片段已词表化（英文短语）
-      expect(shot.what).toContain('IMAX film grain')
-      expect(shot.what).toContain('anamorphic lens flare')
-      expect(shot.what).toContain('teal and orange grading')
+      expect(shot.what).toContain('IMAX film grain');
+      expect(shot.what).toContain('anamorphic lens flare');
+      expect(shot.what).toContain('teal and orange grading');
     }
-  })
+  });
   it('hard negative → throws BlueprintHardNegativeError', () => {
-    expect(() => projectToH3(h3Bp)).toThrow(/hard negative/)
-    expect(() => projectToH3(h3Bp)).toThrow(BlueprintHardNegativeError)
-  })
+    expect(() => projectToH3(h3Bp)).toThrow(/hard negative/);
+    expect(() => projectToH3(h3Bp)).toThrow(BlueprintHardNegativeError);
+  });
   it('projection snapshot (spec §8.3 防漂移)', () => {
-    expect(JSON.stringify(projectToH3(fightBp))).toMatchSnapshot()
-  })
-})
+    expect(JSON.stringify(projectToH3(fightBp))).toMatchSnapshot();
+  });
+});
 
 describe('projectToAnima', () => {
   it('maps anchors to appearance + negative to exclusions', () => {
     // 计划原文 `{ ...h3Bp, media: 'image', negative: [...] }` 把 negative 放在顶层——
     // BlueprintV1 的 negative 在 core 下，顶层覆盖不生效导致 h3Bp 的 hard 血腥残留、投影必 throw。
     // 按计划意图（soft-only 蓝图映射 appearance/exclusions）修正覆盖位置为 core.negative。
-    const s = projectToAnima({ ...h3Bp, media: 'image', core: { ...h3Bp.core, negative: [{ target: '字幕', severity: 'soft' }] } } as any)
-    expect(s.appearance).toContain('银白长发')
-    expect(s.exclusions).toContain('字幕')
-  })
+    const s = projectToAnima({
+      ...h3Bp,
+      media: 'image',
+      core: { ...h3Bp.core, negative: [{ target: '字幕', severity: 'soft' }] },
+    } as any);
+    expect(s.appearance).toContain('银白长发');
+    expect(s.exclusions).toContain('字幕');
+  });
   it('maps scene/composition/style to detail_mood and outfit to clothing', () => {
-    const s = projectToAnima(fightBp as any)
-    expect(s.clothing).toContain('黑色劲装')
-    expect(s.detail_mood).toContain('三分法')
-    expect(s.detail_mood).toContain('侧逆光')
-    expect(s.scene).toContain('黄昏荒原')
-  })
+    const s = projectToAnima(fightBp as any);
+    expect(s.clothing).toContain('黑色劲装');
+    expect(s.detail_mood).toContain('三分法');
+    expect(s.detail_mood).toContain('侧逆光');
+    expect(s.scene).toContain('黄昏荒原');
+  });
   it('maps style.artist_hints to artist slot (B8, bare names); absent hints → no artist slot', () => {
     const withArtists = projectToAnima({
       ...fightBp,
       core: { ...fightBp.core, style: { base: 'cel shading', artist_hints: ['rella', 'wlop'] } },
-    } as any)
-    expect(withArtists.artist).toEqual(['rella', 'wlop'])
-    const withoutArtists = projectToAnima(fightBp as any)
-    expect(withoutArtists.artist).toBeUndefined()
-  })
+    } as any);
+    expect(withArtists.artist).toEqual(['rella', 'wlop']);
+    const withoutArtists = projectToAnima(fightBp as any);
+    expect(withoutArtists.artist).toBeUndefined();
+  });
 
   // P0 修复（t1 验收④，spec §5.1 链路完整性）：core.rating（prompt_author 确定性注入）必须
   // 映射到 slots.rating——此前投影丢弃 rating，蓝图路径组装层回退关键词扫描（同源静默降档）。
   it('maps core.rating to slots.rating (deterministic rating write must reach assembly)', () => {
-    const explicit = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'explicit' } })
-    expect(explicit.rating).toBe('explicit')
-    const sensitive = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'sensitive' } })
-    expect(sensitive.rating).toBe('sensitive')
-    const safe = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'safe' } })
-    expect(safe.rating).toBe('safe')
-  })
+    const explicit = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'explicit' } });
+    expect(explicit.rating).toBe('explicit');
+    const sensitive = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'sensitive' } });
+    expect(sensitive.rating).toBe('sensitive');
+    const safe = projectToAnima({ ...fightBp, core: { ...fightBp.core, rating: 'safe' } });
+    expect(safe.rating).toBe('safe');
+  });
   it('absent core.rating → no rating slot (bare blueprints keep keyword-fallback semantics)', () => {
-    const s = projectToAnima(fightBp as any)
-    expect(s.rating).toBeUndefined()
-  })
-})
+    const s = projectToAnima(fightBp as any);
+    expect(s.rating).toBeUndefined();
+  });
+});
 
 describe('preflightRepair', () => {
   it('clamps out-of-range duration to nearest legal value and records repair', () => {
     const { bp: r, repairs } = preflightRepair({
       ...fightBp,
       media_layer: { video: { ...fightBp.media_layer.video!, total_duration_seconds: 3 } },
-    })
-    expect(r.media_layer.video!.total_duration_seconds).toBe(4)
-    expect(repairs.some((x) => x.startsWith('duration_3→4'))).toBe(true)
-  })
+    });
+    expect(r.media_layer.video!.total_duration_seconds).toBe(4);
+    expect(repairs.some((x) => x.startsWith('duration_3→4'))).toBe(true);
+  });
   it('records shots-overflow suggestion when shots exceed max_shots', () => {
     const { repairs } = preflightRepair({
       ...fightBp,
-      media_layer: { video: { ...fightBp.media_layer.video!, total_duration_seconds: 5, shots: fightBp.media_layer.video!.shots } },
-    })
-    expect(repairs.some((x) => x.startsWith('shots_3>max_2:merge_shots_or_extend_duration'))).toBe(true)
-  })
+      media_layer: {
+        video: { ...fightBp.media_layer.video!, total_duration_seconds: 5, shots: fightBp.media_layer.video!.shots },
+      },
+    });
+    expect(repairs.some((x) => x.startsWith('shots_3>max_2:merge_shots_or_extend_duration'))).toBe(true);
+  });
   it('drops malformed negative entries on any media (M5-DIAG2 c07 根因——enrich patch 缺 target 直达投影器)', () => {
     const bp: BlueprintV1 = {
-      schema_version: 1, media: 'image',
+      schema_version: 1,
+      media: 'image',
       core: {
         concept: 'x',
         negative: [
@@ -259,43 +289,48 @@ describe('preflightRepair', () => {
         ],
       },
       media_layer: { image: {} },
-    }
-    const { bp: r, repairs } = preflightRepair(bp)
-    expect(repairs).toContain('negative_invalid_dropped:3')
-    expect(r.core.negative).toEqual([{ target: '现代元素', severity: 'soft' }])
-  })
+    };
+    const { bp: r, repairs } = preflightRepair(bp);
+    expect(repairs).toContain('negative_invalid_dropped:3');
+    expect(r.core.negative).toEqual([{ target: '现代元素', severity: 'soft' }]);
+  });
   it('well-formed negatives pass through unchanged (zero repair noise)', () => {
     const bp: BlueprintV1 = {
-      schema_version: 1, media: 'image',
+      schema_version: 1,
+      media: 'image',
       core: { concept: 'x', negative: [{ target: '现代元素', severity: 'soft' }] },
       media_layer: { image: {} },
-    }
-    const { bp: r, repairs } = preflightRepair(bp)
-    expect(repairs).toEqual([])
-    expect(r).toBe(bp) // 未修复时原样返回（零克隆，既有语义）
-  })
-})
+    };
+    const { bp: r, repairs } = preflightRepair(bp);
+    expect(repairs).toEqual([]);
+    expect(r).toBe(bp); // 未修复时原样返回（零克隆，既有语义）
+  });
+});
 
 describe('projectToH3 global audio (spec §8.1 O9)', () => {
   it('merges media_layer.video.audio into first-shot ambient', () => {
     const bp: BlueprintV1 = {
-      schema_version: 1, media: 'video',
+      schema_version: 1,
+      media: 'video',
       core: { concept: 'x', negative: [] },
-      media_layer: { video: { total_duration_seconds: 4, audio: '雨声与远处雷声', shots: [{ beat: '对峙', audio_focus: '风声' }] } },
-    }
-    const s = projectToH3(bp)
-    expect(s.shots[0].ambient).toContain('雨声与远处雷声')
-    expect(s.shots[0].ambient).toContain('风声') // 与 audio_focus 用「；」并入
-  })
+      media_layer: {
+        video: { total_duration_seconds: 4, audio: '雨声与远处雷声', shots: [{ beat: '对峙', audio_focus: '风声' }] },
+      },
+    };
+    const s = projectToH3(bp);
+    expect(s.shots[0].ambient).toContain('雨声与远处雷声');
+    expect(s.shots[0].ambient).toContain('风声'); // 与 audio_focus 用「；」并入
+  });
   it('drops global audio with advisory when no shots', () => {
     const bp: BlueprintV1 = {
-      schema_version: 1, media: 'video',
+      schema_version: 1,
+      media: 'video',
       core: { concept: 'x', negative: [] },
       media_layer: { video: { total_duration_seconds: 4, audio: '环境白噪', shots: [] } },
-    }
-    const s = projectToH3(bp)
-    expect(s.shots).toHaveLength(0)
-    const advisories = lastProjectAdvisories()
-    expect(advisories.some((a) => a.includes('audio_dropped:no_shots'))).toBe(true)
-  })
-})
+    };
+    const s = projectToH3(bp);
+    expect(s.shots).toHaveLength(0);
+    const advisories = lastProjectAdvisories();
+    expect(advisories.some((a) => a.includes('audio_dropped:no_shots'))).toBe(true);
+  });
+});

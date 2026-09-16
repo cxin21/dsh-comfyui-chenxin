@@ -1,6 +1,10 @@
 // tagLineSanitize 单元测试 — 1:1 移植自 PM tagLineSanitize.js
 import { describe, it, expect } from 'vitest';
-import { cleanTagLineBody, isHexGarbageToken, unwrapBracketNotation } from '../../src/resolver/profiles/reverse/tagLineSanitize.js';
+import {
+  cleanTagLineBody,
+  isHexGarbageToken,
+  unwrapBracketNotation,
+} from '../../src/resolver/profiles/reverse/tagLineSanitize.js';
 
 describe('tagLineSanitize.isHexGarbageToken', () => {
   it('纯数字/长 hex 视为垃圾', () => {

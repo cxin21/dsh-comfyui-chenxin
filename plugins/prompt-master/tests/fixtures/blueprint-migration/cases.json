@@ -19,31 +19,14 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "long hair"
-        ],
-        "clothing": [
-          "sailor uniform"
-        ],
-        "pose_action": [
-          "standing"
-        ],
-        "expression": [
-          "smile"
-        ],
-        "scene": [
-          "rooftop",
-          "sunset"
-        ],
-        "detail_mood": [
-          "golden hour"
-        ],
-        "camera": [
-          "cowboy shot"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["long hair"],
+        "clothing": ["sailor uniform"],
+        "pose_action": ["standing"],
+        "expression": ["smile"],
+        "scene": ["rooftop", "sunset"],
+        "detail_mood": ["golden hour"],
+        "camera": ["cowboy shot"],
         "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
       },
       "blueprint": {
@@ -55,9 +38,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "long hair"
-              ],
+              "appearance_anchors": ["long hair"],
               "outfit": "sailor uniform"
             }
           ],
@@ -70,18 +51,10 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "standing"
-            ],
-            "expression": [
-              "smile"
-            ],
-            "scene_anchors": [
-              "sunset"
-            ],
+            "count_gender": ["1girl"],
+            "pose_action": ["standing"],
+            "expression": ["smile"],
+            "scene_anchors": ["sunset"],
             "camera_angle": "cowboy shot"
           }
         }
@@ -99,27 +72,12 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "2girls"
-        ],
-        "appearance": [
-          "black hair",
-          "silver hair"
-        ],
-        "pose_action": [
-          "standing",
-          "sitting"
-        ],
-        "expression": [
-          "smile",
-          "angry"
-        ],
-        "scene": [
-          "school rooftop"
-        ],
-        "detail_mood": [
-          "afternoon light"
-        ],
+        "count_gender": ["2girls"],
+        "appearance": ["black hair", "silver hair"],
+        "pose_action": ["standing", "sitting"],
+        "expression": ["smile", "angry"],
+        "scene": ["school rooftop"],
+        "detail_mood": ["afternoon light"],
         "narrative": "Two students share a quiet rooftop; one stands smiling, one sits sulking; side light splits the frame."
       },
       "blueprint": {
@@ -131,16 +89,12 @@
             {
               "id": "c1",
               "name": "黑发少女",
-              "appearance_anchors": [
-                "black hair"
-              ]
+              "appearance_anchors": ["black hair"]
             },
             {
               "id": "c2",
               "name": "银发少女",
-              "appearance_anchors": [
-                "silver hair"
-              ]
+              "appearance_anchors": ["silver hair"]
             }
           ],
           "scene": {
@@ -151,20 +105,10 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "2girls"
-            ],
-            "pose_action": [
-              "standing",
-              "sitting"
-            ],
-            "expression": [
-              "smile",
-              "angry"
-            ],
-            "scene_anchors": [
-              "school rooftop"
-            ]
+            "count_gender": ["2girls"],
+            "pose_action": ["standing", "sitting"],
+            "expression": ["smile", "angry"],
+            "scene_anchors": ["school rooftop"]
           }
         }
       },
@@ -181,14 +125,8 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "scene": [
-          "cityscape",
-          "night",
-          "neon"
-        ],
-        "detail_mood": [
-          "rain"
-        ],
+        "scene": ["cityscape", "night", "neon"],
+        "detail_mood": ["rain"],
         "narrative": "A rain-soaked neon cityscape at night; no people; wet asphalt mirrors the signage."
       },
       "blueprint": {
@@ -199,18 +137,13 @@
           "scene": {
             "environment": "cityscape"
           },
-          "composition": [
-            "rain"
-          ],
+          "composition": ["rain"],
           "negative": [],
           "narrative": "A rain-soaked neon cityscape at night; no people; wet asphalt mirrors the signage."
         },
         "media_layer": {
           "image": {
-            "scene_anchors": [
-              "night",
-              "neon"
-            ]
+            "scene_anchors": ["night", "neon"]
           }
         }
       },
@@ -227,18 +160,10 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "white dress"
-        ],
-        "artist": [
-          "wlop"
-        ],
-        "scene": [
-          "garden"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["white dress"],
+        "artist": ["wlop"],
+        "scene": ["garden"],
         "narrative": "A girl in a white dress in a garden; painterly soft light; elegant flowing composition."
       },
       "blueprint": {
@@ -250,27 +175,21 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "white dress"
-              ]
+              "appearance_anchors": ["white dress"]
             }
           ],
           "scene": {
             "environment": "garden"
           },
           "style": {
-            "artist_hints": [
-              "wlop"
-            ]
+            "artist_hints": ["wlop"]
           },
           "negative": [],
           "narrative": "A girl in a white dress in a garden; painterly soft light; elegant flowing composition."
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
+            "count_gender": ["1girl"],
             "scene_anchors": []
           }
         }
@@ -290,25 +209,12 @@
         "conformity": 0
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "long hair"
-        ],
-        "pose_action": [
-          "standing"
-        ],
-        "expression": [
-          "smile"
-        ],
-        "scene": [
-          "rooftop",
-          "sunset"
-        ],
-        "detail_mood": [
-          "golden hour"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["long hair"],
+        "pose_action": ["standing"],
+        "expression": ["smile"],
+        "scene": ["rooftop", "sunset"],
+        "detail_mood": ["golden hour"],
         "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
       },
       "blueprint": {
@@ -320,9 +226,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "long hair"
-              ]
+              "appearance_anchors": ["long hair"]
             }
           ],
           "scene": {
@@ -334,18 +238,10 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "standing"
-            ],
-            "expression": [
-              "smile"
-            ],
-            "scene_anchors": [
-              "sunset"
-            ]
+            "count_gender": ["1girl"],
+            "pose_action": ["standing"],
+            "expression": ["smile"],
+            "scene_anchors": ["sunset"]
           }
         }
       },
@@ -354,10 +250,7 @@
           "collectible pvc figure aesthetic",
           "pvc figure, glossy coat, display base, studio product photography"
         ],
-        "exclusions": [
-          "2d lineart",
-          "flat paper illustration"
-        ]
+        "exclusions": ["2d lineart", "flat paper illustration"]
       },
       "whitelistNote": "figure_model 预设经 enrichBlueprint→applyStyle 注入：fragments.image→lighting_detail、theme→core.style.theme（均投影进 detail_mood）；negative_hints→soft negative→exclusions。旧 slots 路径不消费 style 片段（applyStyle 仅蓝图面）——注入差异即设计稿 §2.6 预告的 c05 白名单面。artist_hints=[] 保身份槽严格相等。",
       "expectedCompile": {
@@ -375,25 +268,12 @@
         "conformity": 1
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "long hair"
-        ],
-        "pose_action": [
-          "standing"
-        ],
-        "expression": [
-          "smile"
-        ],
-        "scene": [
-          "rooftop",
-          "sunset"
-        ],
-        "detail_mood": [
-          "golden hour"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["long hair"],
+        "pose_action": ["standing"],
+        "expression": ["smile"],
+        "scene": ["rooftop", "sunset"],
+        "detail_mood": ["golden hour"],
         "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
       },
       "blueprint": {
@@ -405,9 +285,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "long hair"
-              ]
+              "appearance_anchors": ["long hair"]
             }
           ],
           "scene": {
@@ -419,29 +297,16 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "standing"
-            ],
-            "expression": [
-              "smile"
-            ],
-            "scene_anchors": [
-              "sunset"
-            ]
+            "count_gender": ["1girl"],
+            "pose_action": ["standing"],
+            "expression": ["smile"],
+            "scene_anchors": ["sunset"]
           }
         }
       },
       "allowed_extra": {
-        "detail_mood": [
-          "collectible pvc figure aesthetic"
-        ],
-        "exclusions": [
-          "2d lineart",
-          "flat paper illustration"
-        ]
+        "detail_mood": ["collectible pvc figure aesthetic"],
+        "exclusions": ["2d lineart", "flat paper illustration"]
       },
       "whitelistNote": "conformity=1 → fragments 不注入（lighting_detail 无片段）；但 applyStyle 的 core.style 补缺合并（theme）与 negative_hints 并入仍发生（与 slots 旧路径的结构差）——白名单照实声明，fragments 差异不再出现是本例的判据点。",
       "expectedCompile": {
@@ -458,25 +323,12 @@
         "rating": "explicit"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "long hair"
-        ],
-        "pose_action": [
-          "standing"
-        ],
-        "expression": [
-          "smile"
-        ],
-        "scene": [
-          "rooftop",
-          "sunset"
-        ],
-        "detail_mood": [
-          "golden hour"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["long hair"],
+        "pose_action": ["standing"],
+        "expression": ["smile"],
+        "scene": ["rooftop", "sunset"],
+        "detail_mood": ["golden hour"],
         "narrative": "A girl on a rooftop at sunset; warm backlight dominates the frame; the city fades into soft depth."
       },
       "blueprint": {
@@ -488,9 +340,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "long hair"
-              ]
+              "appearance_anchors": ["long hair"]
             }
           ],
           "scene": {
@@ -502,18 +352,10 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "standing"
-            ],
-            "expression": [
-              "smile"
-            ],
-            "scene_anchors": [
-              "sunset"
-            ]
+            "count_gender": ["1girl"],
+            "pose_action": ["standing"],
+            "expression": ["smile"],
+            "scene_anchors": ["sunset"]
           }
         }
       },
@@ -531,21 +373,11 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "bikini"
-        ],
-        "pose_action": [
-          "sitting"
-        ],
-        "expression": [
-          "smile"
-        ],
-        "scene": [
-          "poolside"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["bikini"],
+        "pose_action": ["sitting"],
+        "expression": ["smile"],
+        "scene": ["poolside"],
         "narrative": "A girl in a bikini by the pool; bright summer light; casual summer mood."
       },
       "blueprint": {
@@ -557,9 +389,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "bikini"
-              ]
+              "appearance_anchors": ["bikini"]
             }
           ],
           "scene": {
@@ -570,15 +400,9 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "sitting"
-            ],
-            "expression": [
-              "smile"
-            ]
+            "count_gender": ["1girl"],
+            "pose_action": ["sitting"],
+            "expression": ["smile"]
           }
         }
       },
@@ -595,25 +419,12 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "character": [
-          "Subject 1 from <Picture 1>"
-        ],
-        "appearance": [
-          "silver hair",
-          "red eyes"
-        ],
-        "clothing": [
-          "school uniform"
-        ],
-        "pose_action": [
-          "standing"
-        ],
-        "scene": [
-          "classroom"
-        ],
+        "count_gender": ["1girl"],
+        "character": ["Subject 1 from <Picture 1>"],
+        "appearance": ["silver hair", "red eyes"],
+        "clothing": ["school uniform"],
+        "pose_action": ["standing"],
+        "scene": ["classroom"],
         "narrative": "The silver-haired transfer student from the reference stands in an empty classroom; window light rakes across the desks."
       },
       "blueprint": {
@@ -625,13 +436,8 @@
             {
               "id": "c1",
               "name": "银发转学生",
-              "reference_slots": [
-                "<Picture 1>"
-              ],
-              "appearance_anchors": [
-                "silver hair",
-                "red eyes"
-              ],
+              "reference_slots": ["<Picture 1>"],
+              "appearance_anchors": ["silver hair", "red eyes"],
               "outfit": "school uniform"
             }
           ],
@@ -643,12 +449,8 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "standing"
-            ]
+            "count_gender": ["1girl"],
+            "pose_action": ["standing"]
           }
         }
       },
@@ -665,15 +467,9 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "black hair"
-        ],
-        "scene": [
-          "bamboo forest"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["black hair"],
+        "scene": ["bamboo forest"],
         "narrative": "竹林深处，一名黑发少女驻足回望；晨雾未散，光斑落在叶隙之间；画面前景留白，背景竹影层层退远，色彩以青绿为主、米白为辅。"
       },
       "blueprint": {
@@ -685,9 +481,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "black hair"
-              ]
+              "appearance_anchors": ["black hair"]
             }
           ],
           "scene": {
@@ -698,9 +492,7 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
+            "count_gender": ["1girl"],
             "scene_anchors": []
           }
         }
@@ -722,26 +514,12 @@
         }
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "long hair"
-        ],
-        "pose_action": [
-          "standing",
-          "hair in wind"
-        ],
-        "expression": [
-          "smile"
-        ],
-        "scene": [
-          "rooftop",
-          "sunset"
-        ],
-        "detail_mood": [
-          "golden hour"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["long hair"],
+        "pose_action": ["standing", "hair in wind"],
+        "expression": ["smile"],
+        "scene": ["rooftop", "sunset"],
+        "detail_mood": ["golden hour"],
         "narrative": "A girl on a windy rooftop at sunset; her hair streams in the wind; warm backlight and long shadows carve the scene."
       },
       "blueprint": {
@@ -753,9 +531,7 @@
             {
               "id": "c1",
               "name": "少女",
-              "appearance_anchors": [
-                "long hair"
-              ]
+              "appearance_anchors": ["long hair"]
             }
           ],
           "scene": {
@@ -766,38 +542,20 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ],
-            "pose_action": [
-              "standing"
-            ],
-            "expression": [
-              "smile"
-            ],
-            "scene_anchors": [
-              "sunset"
-            ]
+            "count_gender": ["1girl"],
+            "pose_action": ["standing"],
+            "expression": ["smile"],
+            "scene_anchors": ["sunset"]
           }
         }
       },
       "allowed_missing": {
-        "pose_action": [
-          "hair in wind"
-        ],
-        "detail_mood": [
-          "golden hour"
-        ]
+        "pose_action": ["hair in wind"],
+        "detail_mood": ["golden hour"]
       },
       "allowed_extra": {
-        "pose_action": [
-          "hair flowing in wind",
-          "dynamic hair",
-          "hair strands floating"
-        ],
-        "detail_mood": [
-          "golden hour, long shadows, warm amber tones"
-        ]
+        "pose_action": ["hair flowing in wind", "dynamic hair", "hair strands floating"],
+        "detail_mood": ["golden hour, long shadows, warm amber tones"]
       },
       "whitelistNote": "新路径显式卡确定性注入（F1）：golden_hour tags 连接进 scene.lighting（空基线→整串单 tag）、flowing_hair tags 追加进 pose_action；旧路径语义 = 卡进 enrich brief 软约束（recorded 基线取其 grounded 形态 'hair in wind'）。卡面差异由白名单机制承载——这正是 c11 的判据点。",
       "expectedCompile": {
@@ -813,18 +571,10 @@
         "judge_mode": "off"
       },
       "slotsBaseline": {
-        "count_gender": [
-          "1girl"
-        ],
-        "appearance": [
-          "kimono"
-        ],
-        "scene": [
-          "shrine"
-        ],
-        "exclusions": [
-          "modern elements"
-        ],
+        "count_gender": ["1girl"],
+        "appearance": ["kimono"],
+        "scene": ["shrine"],
+        "exclusions": ["modern elements"],
         "narrative": "A shrine maiden scene at dusk; paper charms flutter; nothing modern anywhere in frame."
       },
       "blueprint": {
@@ -836,9 +586,7 @@
             {
               "id": "c1",
               "name": "巫女",
-              "appearance_anchors": [
-                "kimono"
-              ]
+              "appearance_anchors": ["kimono"]
             }
           ],
           "scene": {
@@ -854,9 +602,7 @@
         },
         "media_layer": {
           "image": {
-            "count_gender": [
-              "1girl"
-            ]
+            "count_gender": ["1girl"]
           }
         }
       },

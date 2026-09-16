@@ -10,36 +10,60 @@
  */
 
 export interface ArtDirectionCard {
-  id: string
+  id: string;
   /** 中文设计意图名 */
-  name: string
+  name: string;
   /** 配套 tag 组合拳（3-5 个） */
-  tags: readonly string[]
+  tags: readonly string[];
 }
 
 /** 镜头视角（8）：突出气势 / 自然人像 / 叙事感 / 紧张动感 / 场景宏大 / 情绪特写 / 俯瞰叙事 / 戏剧轮廓 */
 export const PERSPECTIVE_CARDS: readonly ArtDirectionCard[] = [
   { id: 'low_angle', name: '低角度仰拍', tags: ['from below', 'dramatic low angle', 'looking up'] },
-  { id: 'three_quarter_view', name: '三分之二视角', tags: ['three-quarter view', 'dynamic angle', 'showing both face and body'] },
-  { id: 'over_shoulder_glance', name: '过肩回眸', tags: ['over the shoulder shot', 'looking back at viewer', 'soft focus on background'] },
+  {
+    id: 'three_quarter_view',
+    name: '三分之二视角',
+    tags: ['three-quarter view', 'dynamic angle', 'showing both face and body'],
+  },
+  {
+    id: 'over_shoulder_glance',
+    name: '过肩回眸',
+    tags: ['over the shoulder shot', 'looking back at viewer', 'soft focus on background'],
+  },
   { id: 'dutch_angle', name: '荷兰角', tags: ['dutch angle', 'tilted frame', 'sense of tension'] },
   { id: 'wide_panorama', name: '广角全景', tags: ['wide angle shot', 'expansive view', 'cinematic wide shot'] },
   { id: 'close_up', name: '特写', tags: ['close-up', 'shallow depth of field', 'detailed face'] },
   { id: 'top_down', name: '俯视', tags: ['from above', 'top-down view', 'looking down'] },
   { id: 'side_silhouette', name: '侧面剪影', tags: ['from side', 'silhouette', 'dark outline'] },
-]
+];
 
 /** 构图设计（8）：均衡 / 动势 / 呼吸感 / 聚焦 / 仪式感 / 纵深 / 协调 / 戏剧性 */
 export const COMPOSITION_CARDS: readonly ArtDirectionCard[] = [
   { id: 'rule_of_thirds', name: '三分法则', tags: ['rule of thirds', 'off-center placement', 'balanced asymmetry'] },
-  { id: 'diagonal_dynamics', name: '对角线动势', tags: ['diagonal composition', 'dynamic diagonal lines', 'sense of movement'] },
-  { id: 'negative_space', name: '负空间', tags: ['negative space composition', 'minimalist', 'empty space for breathing room'] },
-  { id: 'framed_subject', name: '框架构图', tags: ['framed composition', 'natural frame around subject', 'foreground framing'] },
+  {
+    id: 'diagonal_dynamics',
+    name: '对角线动势',
+    tags: ['diagonal composition', 'dynamic diagonal lines', 'sense of movement'],
+  },
+  {
+    id: 'negative_space',
+    name: '负空间',
+    tags: ['negative space composition', 'minimalist', 'empty space for breathing room'],
+  },
+  {
+    id: 'framed_subject',
+    name: '框架构图',
+    tags: ['framed composition', 'natural frame around subject', 'foreground framing'],
+  },
   { id: 'perfect_symmetry', name: '对称', tags: ['perfect symmetry', 'mirrored composition', 'formal and elegant'] },
   { id: 'leading_lines', name: '引导线', tags: ['leading lines', 'converging lines', 'depth through perspective'] },
-  { id: 'golden_ratio', name: '黄金分割', tags: ['golden ratio composition', 'naturally pleasing placement', 'organic balance'] },
+  {
+    id: 'golden_ratio',
+    name: '黄金分割',
+    tags: ['golden ratio composition', 'naturally pleasing placement', 'organic balance'],
+  },
   { id: 'strong_silhouette', name: '剪影', tags: ['strong silhouette', 'dramatic outline', 'minimal detail'] },
-]
+];
 
 /** 光影设计（8）：电影感 / 发丝边缘光 / 穿透感 / 夜景 / 黄金时刻 / 暖光私密 / 明暗戏剧 / 梦幻柔焦
  *  A7（外部基准 2026-09）：全部 tag 必须通过 dialect/anima.ts LIGHTING_BAN 审计——光效词
@@ -55,17 +79,37 @@ export const LIGHTING_CARDS: readonly ArtDirectionCard[] = [
   { id: 'lantern_glow', name: '烛光灯火', tags: ['warm lantern light', 'paper lanterns', 'cozy amber palette'] },
   { id: 'high_contrast', name: '高对比', tags: ['high contrast lighting', 'chiaroscuro', 'dramatic light and shadow'] },
   { id: 'soft_dreamlight', name: '柔光梦幻', tags: ['ethereal glow', 'diffused light', 'soft diffused glow'] },
-]
+];
 
 /** 色彩设计（6）：张力 / 统一 / 电影调色 / 点睛 / 淡雅 / 幻想高饱和 */
 export const COLOR_CARDS: readonly ArtDirectionCard[] = [
-  { id: 'warm_cool_contrast', name: '冷暖对比', tags: ['contrasting color palette', 'teal against orange accents', 'color tension'] },
-  { id: 'limited_palette', name: '有限色板', tags: ['limited palette', 'two-tone color scheme', 'unified color harmony'] },
-  { id: 'cinematic_grading', name: '浓郁电影调色', tags: ['cinematic color grading', 'rich saturated colors', 'vivid yet natural tones'] },
-  { id: 'accent_on_mono', name: '单色点缀', tags: ['monochrome with accent color', 'splash of red', 'selective color pop'] },
+  {
+    id: 'warm_cool_contrast',
+    name: '冷暖对比',
+    tags: ['contrasting color palette', 'teal against orange accents', 'color tension'],
+  },
+  {
+    id: 'limited_palette',
+    name: '有限色板',
+    tags: ['limited palette', 'two-tone color scheme', 'unified color harmony'],
+  },
+  {
+    id: 'cinematic_grading',
+    name: '浓郁电影调色',
+    tags: ['cinematic color grading', 'rich saturated colors', 'vivid yet natural tones'],
+  },
+  {
+    id: 'accent_on_mono',
+    name: '单色点缀',
+    tags: ['monochrome with accent color', 'splash of red', 'selective color pop'],
+  },
   { id: 'soft_pastel', name: '柔和淡彩', tags: ['soft pastel colors', 'muted tones', 'gentle color transition'] },
-  { id: 'vivid_fantasy', name: '高饱和幻想', tags: ['vibrant fantasy colors', 'iridescent highlights', 'luminous colors'] },
-]
+  {
+    id: 'vivid_fantasy',
+    name: '高饱和幻想',
+    tags: ['vibrant fantasy colors', 'iridescent highlights', 'luminous colors'],
+  },
+];
 
 /** 动势设计（6）：直接服务舞剑类动作需求 */
 export const MOTION_CARDS: readonly ArtDirectionCard[] = [
@@ -75,9 +119,9 @@ export const MOTION_CARDS: readonly ArtDirectionCard[] = [
   { id: 'weapon_trail', name: '武器轨迹', tags: ['sword trail', 'gleaming blade', 'weapon arc'] },
   { id: 'falling_petals', name: '花瓣飞舞', tags: ['falling petals', 'petals in the wind', 'swirling petals'] },
   { id: 'frozen_peak', name: '定格瞬间', tags: ['caught mid-action', 'frozen motion', 'peak of the movement'] },
-]
+];
 
-export type ArtDirectionField = 'perspective' | 'composition' | 'lighting' | 'color' | 'motion'
+export type ArtDirectionField = 'perspective' | 'composition' | 'lighting' | 'color' | 'motion';
 
 /** 五类卡组总表（brief.artDirection 校验与卡片菜单的唯一数据源） */
 export const ALL_ART_DIRECTION: Record<ArtDirectionField, readonly ArtDirectionCard[]> = {
@@ -86,7 +130,7 @@ export const ALL_ART_DIRECTION: Record<ArtDirectionField, readonly ArtDirectionC
   lighting: LIGHTING_CARDS,
   color: COLOR_CARDS,
   motion: MOTION_CARDS,
-}
+};
 
 const FIELD_LABELS: Record<ArtDirectionField, string> = {
   perspective: '镜头视角',
@@ -94,16 +138,16 @@ const FIELD_LABELS: Record<ArtDirectionField, string> = {
   lighting: '光影设计',
   color: '色彩设计',
   motion: '动势设计',
-}
+};
 
 /** 按类目校验：id 必须属于该字段对应卡组（跨类目 id 一律拒绝，保证字段语义无歧义）。 */
 export function isKnownCardId(field: ArtDirectionField, id: string): boolean {
-  return ALL_ART_DIRECTION[field].some((card) => card.id === id)
+  return ALL_ART_DIRECTION[field].some((card) => card.id === id);
 }
 
 /** 按 字段+id 取卡片（engine buildUser 注入「调用方指定卡」块用）。 */
 export function artDirectionCardOf(field: ArtDirectionField, id: string): ArtDirectionCard | undefined {
-  return ALL_ART_DIRECTION[field].find((card) => card.id === id)
+  return ALL_ART_DIRECTION[field].find((card) => card.id === id);
 }
 
 /**
@@ -114,24 +158,24 @@ export function artDirectionCardOf(field: ArtDirectionField, id: string): ArtDir
 export function validateArtDirectionSpec(spec: Record<string, string>): string | null {
   for (const [field, id] of Object.entries(spec)) {
     if (!(field in ALL_ART_DIRECTION)) {
-      return `art_direction 字段无效: ${String(field)}（合法字段: perspective/composition/lighting/color/motion）`
+      return `art_direction 字段无效: ${String(field)}（合法字段: perspective/composition/lighting/color/motion）`;
     }
-    const f = field as ArtDirectionField
+    const f = field as ArtDirectionField;
     if (typeof id !== 'string' || !isKnownCardId(f, id)) {
-      return `art_direction.${field} 无效卡片 id: ${String(id)}（该字段合法 id: ${ALL_ART_DIRECTION[f].map((c) => c.id).join(', ')}）`
+      return `art_direction.${field} 无效卡片 id: ${String(id)}（该字段合法 id: ${ALL_ART_DIRECTION[f].map((c) => c.id).join(', ')}）`;
     }
   }
-  return null
+  return null;
 }
 
 /** 卡片清单菜单（engine buildUser 注入 user 段）：id+name+tags，供 LLM 先选卡、再按组合拳扩写。 */
 export function buildArtDirectionMenu(): string {
   const lines: string[] = [
     '艺术指导卡片菜单（先选卡再扩写：每类至多选 1 张，把卡片 id 填入 schema 的 artDirection 对应字段，并把该卡片的配套 tag 融入对应维度短语）：',
-  ]
+  ];
   for (const field of ['perspective', 'composition', 'lighting', 'color', 'motion'] as const) {
-    lines.push(`【${field} ${FIELD_LABELS[field]}】`)
-    for (const card of ALL_ART_DIRECTION[field]) lines.push(`- ${card.id} ${card.name}: ${card.tags.join(', ')}`)
+    lines.push(`【${field} ${FIELD_LABELS[field]}】`);
+    for (const card of ALL_ART_DIRECTION[field]) lines.push(`- ${card.id} ${card.name}: ${card.tags.join(', ')}`);
   }
-  return lines.join('\n')
+  return lines.join('\n');
 }

@@ -4,10 +4,7 @@
     "variant": "base",
     "subject": "battle-damaged veteran warrior in torn bodysuit, kneeling in ruined city",
     "slots": {
-      "count_gender": [
-        "1girl",
-        "solo"
-      ],
+      "count_gender": ["1girl", "solo"],
       "appearance": [
         "mature",
         "long hair",
@@ -30,43 +27,14 @@
         "gauntlets",
         "high heel boots"
       ],
-      "pose_action": [
-        "kneeling",
-        "hand on own hip",
-        "holding sword"
-      ],
-      "expression": [
-        "expressionless",
-        "smirk",
-        "narrow eyes"
-      ],
-      "camera": [
-        "cowboy shot",
-        "from below",
-        "looking at viewer"
-      ],
-      "scene": [
-        "ruins",
-        "debris",
-        "cityscape",
-        "night",
-        "rain",
-        "smoke",
-        "fire"
-      ],
-      "detail_mood": [
-        "cinematic",
-        "atmospheric"
-      ]
+      "pose_action": ["kneeling", "hand on own hip", "holding sword"],
+      "expression": ["expressionless", "smirk", "narrow eyes"],
+      "camera": ["cowboy shot", "from below", "looking at viewer"],
+      "scene": ["ruins", "debris", "cityscape", "night", "rain", "smoke", "fire"],
+      "detail_mood": ["cinematic", "atmospheric"]
     },
     "narrative": "a cold veteran warrior kneeling in the rain amid the wreckage of a battle just won, her skin-tight bodysuit torn and battle-damaged at the shoulder pauldron, one sleeve, the side torso just under the arm, the hip seam, the outer thigh, and one knee guard — skin showing through every jagged rip but the chest plate and lower front still intact, gauntlets scratched and dusted, sword point down resting against the debris, smoke and distant fire drifting past crumbling pillars of a destroyed city, looking up at the viewer through the rain with the unhurried composure of a regal survivor who has already counted the bodies",
-    "exclusions": [
-      "no text",
-      "no watermark",
-      "no censored",
-      "no bar censor",
-      "no mosaic"
-    ]
+    "exclusions": ["no text", "no watermark", "no censored", "no bar censor", "no mosaic"]
   },
   "pythonOutput": {
     "ok": true,
@@ -116,9 +84,7 @@
           "citation:209603:match=canonical:canonical=cinematic:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",
           "citation:106948:match=canonical:canonical=atmospheric:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
-        "assumptions": [
-          "narrative_excluded:sentence_count:1"
-        ],
+        "assumptions": ["narrative_excluded:sentence_count:1"],
         "advisories": []
       },
       "metadata": {

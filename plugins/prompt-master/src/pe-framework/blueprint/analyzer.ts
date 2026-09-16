@@ -12,12 +12,12 @@
  * 注：运行期接入 createSubagentIntentProvider 的 one-shot 子代理 seam 由 Task 10/12 的 author 管线
  * 负责（subagent-provider.ts 蓝图 persona 接线在 Task 12 Step 3b）；本模块独立可测（LLM stream 路径）。
  */
-import { complete } from '../../llm/complete.js'
-import type { Context } from '@deepseek-ai/cordis'
-import { validateBlueprint, type BlueprintMedia, type BlueprintV1 } from './schema.js'
-import { validateSemanticBlueprint, detectTagForm, type SemanticBlueprint } from './semantic-schema.js'
-import { checkFidelity } from '../aesthetics/check.js'
-import { extractFirstJsonObject } from '../llm/json-extract.js'
+import { complete } from '../../llm/complete.js';
+import type { Context } from '@deepseek-ai/cordis';
+import { validateBlueprint, type BlueprintMedia, type BlueprintV1 } from './schema.js';
+import { validateSemanticBlueprint, detectTagForm, type SemanticBlueprint } from './semantic-schema.js';
+import { checkFidelity } from '../aesthetics/check.js';
+
 
 export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（MiniMax-H3 视频分镜等），再经编译与审计门成为成品。
 你的任务：根据用户的创作意图，产出创作蓝图 v0（BlueprintV1），不是任何方言输入。
@@ -33,7 +33,7 @@ export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎。产出�
 6. 语言纪律（按字段类型拆分）：tag 类字段（appearance_anchors/scene_anchors/outfit/pose_action 等结构化画面词）一律英文 danbooru 词表写法，中文创意概念必须翻译成英文画面词；自由文本字段（concept/narrative）跟随用户输入语言承载原意。Anima 静态图路径更严格：所有字段值禁止中文字符（下游 cjk_in_positive 审计为 critical 级机器判定）。
 
 输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
-`
+`;
 
 export const BLUEPRINT_SCHEMA = `{
   "schema_version": 1,
@@ -63,7 +63,7 @@ export const BLUEPRINT_SCHEMA = `{
 - 只能输出一个 JSON 对象，不要任何前缀后缀文字
 - 直接输出裸 JSON（不要 markdown fence，不要解释）
 - 用户提供 references 时：提取参考物美学特征进蓝图核心字段（scene.lighting/core.style.palette/scene.atmosphere 等），保持 ref 标签稳定（<Picture N> 等）
-`
+`;
 
 /**
  * M5-T2（D2，design §2.2）：ANIMA 蓝图 persona——image 形态模板的配套规则块（Q3 裁定落 analyzer.ts，
@@ -94,7 +94,7 @@ export const ANIMA_BLUEPRINT_PERSONA = `你是一个创作蓝图分析引擎。�
 12. 语言纪律（M5-DIAG2 补：真实会话 c04 实录扩写层 CJK 回流——cjk_in_positive critical 触发 loop_exhausted）：所有字段值一律英文 Anima tag 词汇——无论用户 brief 是什么语言，禁止中文/日文字符出现在任何字段值中（含 concept/scene/lighting/narrative 等自由文本字段）；中文创意概念必须翻译成英文画面词再写入。违反语言纪律 = 无效蓝图
 
 输出：只输出一个蓝图 v0 JSON（裸 JSON，不要 markdown fence、不要解释）。
-`
+`;
 
 /**
  * M5-T2（D2，design §2.2）：ANIMA 蓝图 schema——image 形态模板（BLUEPRINT_SCHEMA 是 video 硬编码，
@@ -140,37 +140,37 @@ export const ANIMA_BLUEPRINT_SCHEMA = `{
 - 直接输出裸 JSON（不要 markdown fence，不要解释）
 - 用户提供 references 时：提取参考物美学特征进蓝图核心字段（core.scene.lighting/core.style.palette/core.scene.atmosphere 等），保持 ref 标签稳定（<Picture N> 等）
 - media 固定 "image"，不要输出 media_layer.video；camera_angle 只允许 full body / cowboy shot / upper body / close-up + 至多 1 个视角词
-`
+`;
 
 export interface AnalyzeOptions {
-  refs?: unknown[]
-  clarify?: 'ask' | 'auto'
+  refs?: unknown[];
+  clarify?: 'ask' | 'auto';
 }
 
 export interface AnalyzeResult {
-  blueprint: BlueprintV1
-  missing: string[]
-  clarify_questions?: string[]
+  blueprint: BlueprintV1;
+  missing: string[];
+  clarify_questions?: string[];
 }
 
 /** 关键缺失维度（spec §6：风格/媒介/负向边界，影响产出方向，触发澄清） */
-const KEY_MISSING_DIMS = ['style', 'media', 'negative']
+const KEY_MISSING_DIMS = ['style', 'media', 'negative'];
 
 function stripFences(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  return ((fenced && fenced[1] !== undefined) ? fenced[1] : text).trim()
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (fenced && fenced[1] !== undefined ? fenced[1] : text).trim();
 }
 
 /** 计算缺失维度（spec §6：关键=style/media/negative 边界；次要=光影/构图） */
 function computeMissing(bp: BlueprintV1): string[] {
-  const missing: string[] = []
-  const core = bp.core
-  if (!core.style) missing.push('style')
-  if (!bp.media) missing.push('media')
-  if (!Array.isArray(core.negative) || core.negative.length === 0) missing.push('negative')
-  if (!core.scene?.lighting) missing.push('lighting')
-  if (!core.composition || core.composition.length === 0) missing.push('composition')
-  return missing
+  const missing: string[] = [];
+  const core = bp.core;
+  if (!core.style) missing.push('style');
+  if (!bp.media) missing.push('media');
+  if (!Array.isArray(core.negative) || core.negative.length === 0) missing.push('negative');
+  if (!core.scene?.lighting) missing.push('lighting');
+  if (!core.composition || core.composition.length === 0) missing.push('composition');
+  return missing;
 }
 
 /**
@@ -181,21 +181,24 @@ function computeMissing(bp: BlueprintV1): string[] {
  * （media 枚举本就含 image/video/mixed）；方向守卫放 parse 层，防 anima 收到 video 形蓝图后
  * 投影空槽 + applyStyle 注入错分支（design §2.7 R8）。expectedMedia 缺省不启用（analyzeBlueprintIncremental 等既有调用方零变化）。
  */
-export function parseBlueprintJson(text: string, opts: { expectedMedia?: BlueprintMedia } = {}): { blueprint: BlueprintV1; missing: string[] } {
-  let parsed: unknown
+export function parseBlueprintJson(
+  text: string,
+  opts: { expectedMedia?: BlueprintMedia } = {},
+): { blueprint: BlueprintV1; missing: string[] } {
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(stripFences(text))
+    parsed = JSON.parse(stripFences(text));
   } catch (e) {
-    throw new Error(`蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}`)
+    throw new Error(`蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}`);
   }
-  const checked = validateBlueprint(parsed)
+  const checked = validateBlueprint(parsed);
   if (!checked.ok) {
-    throw new Error(`蓝图校验失败：${checked.errors.join('; ')}`)
+    throw new Error(`蓝图校验失败：${checked.errors.join('; ')}`);
   }
   if (opts.expectedMedia !== undefined && checked.value.media !== opts.expectedMedia) {
-    throw new Error(`blueprint media mismatch: expected ${opts.expectedMedia} got ${checked.value.media}`)
+    throw new Error(`blueprint media mismatch: expected ${opts.expectedMedia} got ${checked.value.media}`);
   }
-  return { blueprint: checked.value, missing: computeMissing(checked.value) }
+  return { blueprint: checked.value, missing: computeMissing(checked.value) };
 }
 
 /**
@@ -205,38 +208,40 @@ export function parseBlueprintJson(text: string, opts: { expectedMedia?: Bluepri
  * `tag_in_blueprint:N:<paths>` 可机检、可作修复轮 feedback）。
  */
 export function parseSemanticBlueprint(text: string): { semantic: SemanticBlueprint; missing: string[] } {
-  const braceStart = text.indexOf('{')
-  const braceEnd = text.lastIndexOf('}')
-  const raw = braceStart >= 0 && braceEnd > braceStart ? text.slice(braceStart, braceEnd + 1) : text
-  let parsed: unknown
+  const braceStart = text.indexOf('{');
+  const braceEnd = text.lastIndexOf('}');
+  const raw = braceStart >= 0 && braceEnd > braceStart ? text.slice(braceStart, braceEnd + 1) : text;
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw)
+    parsed = JSON.parse(raw);
   } catch (e) {
-    throw new Error(`语义蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}（原始片段：${raw.slice(0, 200)}）`)
+    throw new Error(
+      `语义蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}（原始片段：${raw.slice(0, 200)}）`,
+    );
   }
-  const checked = validateSemanticBlueprint(parsed)
+  const checked = validateSemanticBlueprint(parsed);
   if (!checked.ok) {
-    throw new Error(`语义蓝图校验失败：${checked.error}`)
+    throw new Error(`语义蓝图校验失败：${checked.error}`);
   }
-  const paths: string[] = []
+  const paths: string[] = [];
   const scan = (node: unknown, path: string): void => {
     if (typeof node === 'string') {
-      if (detectTagForm(node)) paths.push(path || '(root)')
-      return
+      if (detectTagForm(node)) paths.push(path || '(root)');
+      return;
     }
     if (Array.isArray(node)) {
-      node.forEach((x, i) => scan(x, `${path}[${i}]`))
-      return
+      node.forEach((x, i) => scan(x, `${path}[${i}]`));
+      return;
     }
     if (node !== null && typeof node === 'object') {
-      for (const [k, v] of Object.entries(node as Record<string, unknown>)) scan(v, path ? `${path}.${k}` : k)
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) scan(v, path ? `${path}.${k}` : k);
     }
-  }
-  scan(checked.bp, '')
+  };
+  scan(checked.bp, '');
   if (paths.length > 0) {
-    throw new Error(`tag_in_blueprint:${paths.length}:${paths.join(',')}`)
+    throw new Error(`tag_in_blueprint:${paths.length}:${paths.join(',')}`);
   }
-  return { semantic: checked.bp, missing: checked.missing }
+  return { semantic: checked.bp, missing: checked.missing };
 }
 
 export async function analyzeIntent(
@@ -247,11 +252,13 @@ export async function analyzeIntent(
 ): Promise<AnalyzeResult> {
   const user = [
     ...(opts.refs && opts.refs.length > 0
-      ? [`references 传入：${JSON.stringify(opts.refs)}（提取参考物美学特征进蓝图核心字段：scene.lighting/core.style.palette/scene.atmosphere 等，保持 ref 标签稳定）`]
+      ? [
+          `references 传入：${JSON.stringify(opts.refs)}（提取参考物美学特征进蓝图核心字段：scene.lighting/core.style.palette/scene.atmosphere 等，保持 ref 标签稳定）`,
+        ]
       : []),
     `创作意图: ${input}`,
     '按 BLUEPRINT_SCHEMA 产出蓝图 v0 JSON。',
-  ].join('\n')
+  ].join('\n');
 
   const { text } = await complete(ctx, {
     provider: route.provider,
@@ -261,24 +268,24 @@ export async function analyzeIntent(
     // M5-DIAG2（用户裁定：不设 maxTokens 上限）——reasoning 模型思考预算不可预支，交由宿主 defaultMaxTokens
     temperature: 0.3,
     signal: new AbortController().signal,
-  })
+  });
 
-  const { blueprint, missing: baseMissing } = parseBlueprintJson(text)
-  const missing = [...baseMissing]
+  const { blueprint, missing: baseMissing } = parseBlueprintJson(text);
+  const missing = [...baseMissing];
   // 保真守卫（spec §6）：用户原文核心实体必须出现在蓝图任意字段；丢失实体并入 missing
-  const fid = checkFidelity(input, blueprint)
+  const fid = checkFidelity(input, blueprint);
   for (const e of fid.missingEntities) {
-    if (!missing.includes(e)) missing.push(e)
+    if (!missing.includes(e)) missing.push(e);
   }
 
-  const result: AnalyzeResult = { blueprint, missing }
+  const result: AnalyzeResult = { blueprint, missing };
   if (opts.clarify === 'ask') {
-    const keyMissing = missing.filter((m) => KEY_MISSING_DIMS.includes(m))
+    const keyMissing = missing.filter((m) => KEY_MISSING_DIMS.includes(m));
     if (keyMissing.length > 0) {
-      result.clarify_questions = keyMissing.map((dim) => `缺少 <${dim}>：请选择/补充`)
+      result.clarify_questions = keyMissing.map((dim) => `缺少 <${dim}>：请选择/补充`);
     }
   }
-  return result
+  return result;
 }
 
 /**
@@ -293,7 +300,7 @@ export function INCREMENTAL_ANCHOR(oldBp: BlueprintV1): string {
 <old_blueprint>
 ${JSON.stringify(oldBp)}
 </old_blueprint>
-`
+`;
 }
 
 /**
@@ -309,25 +316,27 @@ export async function analyzeBlueprintIncremental(
   userInput: string,
   opts: { llm?: (req: { system: string; user: string }) => Promise<string> } = {},
 ): Promise<BlueprintV1> {
-  const persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp)
+  const persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp);
   const user = [
     `修改意图: ${userInput}`,
     '基于 <old_blueprint> 中的上一版蓝图，合并本轮修改意图后输出完整新蓝图 JSON（未提及字段逐字节保留）。',
-  ].join('\n')
+  ].join('\n');
 
   // 2026-09-15（用户定案「全部 LLM 调用改子代理」）：注入 llm runner 时走子代理形态；缺省直连兜底。
   const text = opts.llm
     ? await opts.llm({ system: persona, user })
-    : (await complete(ctx, {
-        provider: route.provider,
-        model: route.model,
-        system: persona,
-        user,
-        // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
-        temperature: 0.3,
-        signal: new AbortController().signal,
-      })).text
+    : (
+        await complete(ctx, {
+          provider: route.provider,
+          model: route.model,
+          system: persona,
+          user,
+          // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
+          temperature: 0.3,
+          signal: new AbortController().signal,
+        })
+      ).text;
 
-  const { blueprint } = parseBlueprintJson(text)
-  return blueprint
+  const { blueprint } = parseBlueprintJson(text);
+  return blueprint;
 }

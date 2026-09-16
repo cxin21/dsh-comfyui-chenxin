@@ -1,19 +1,19 @@
-import type { AuditReport } from '../types.js'
-import { serializeReport } from '../audit/report.js'
-import type { StageResult } from '../pipeline/types.js'
+import type { AuditReport } from '../types.js';
+import { serializeReport } from '../audit/report.js';
+import type { StageResult } from '../pipeline/types.js';
 
 /** target → 默认 slot 提示；方言自带 targetSlotHint 时优先使用方言值 */
 export function targetSlotHint(target: string): string {
-  if (target === 'h3') return 't2v.prompt'
-  if (target === 'anima') return 't2i.prompt'
-  return 'generic.prompt'
+  if (target === 'h3') return 't2v.prompt';
+  if (target === 'anima') return 't2i.prompt';
+  return 'generic.prompt';
 }
 
-export type NextAction = 'retry_input' | 'auto_repair' | 'manual' | 'advisory_only' | 'ok'
+export type NextAction = 'retry_input' | 'auto_repair' | 'manual' | 'advisory_only' | 'ok';
 
 export interface RepairHint {
-  field: string
-  fix: string
+  field: string;
+  fix: string;
 }
 
 /** critical 契约闸门（spec §11：retry_input 可自动归因的确定性规则集） */
@@ -25,7 +25,7 @@ const CONTRACT_GATE_RULES = new Set([
   'field_order',
   'cut_timestamps',
   'char_budget',
-])
+]);
 
 /**
  * 失败语义判定（计划 Task 3 修正版，消除死分支）：
@@ -41,14 +41,14 @@ export function computeNextAction(
   opts?: { repairHints?: RepairHint[]; repaired?: boolean },
 ): NextAction {
   if (stage.ok) {
-    return stage.advisories.length > 0 ? 'advisory_only' : 'ok'
+    return stage.advisories.length > 0 ? 'advisory_only' : 'ok';
   }
-  if (opts?.repaired === true) return 'auto_repair'
-  if (stage.advisories.some((a) => a.includes('loop_exhausted'))) return 'manual'
+  if (opts?.repaired === true) return 'auto_repair';
+  if (stage.advisories.some((a) => a.includes('loop_exhausted'))) return 'manual';
   if (stage.gates.some((g) => g.severity === 'critical' && CONTRACT_GATE_RULES.has(g.rule))) {
-    return 'retry_input'
+    return 'retry_input';
   }
-  return 'manual'
+  return 'manual';
 }
 
 /**
@@ -58,24 +58,24 @@ export function computeNextAction(
  * Task 3（spec §11）：顶层加 next_action 与可选 repair_hints（由调用方传 computeNextAction 的结果，repaired 由 Level 1/2 实际修复后置 true）。
  */
 export interface EnvelopeObservability {
-  corrections?: number
-  loopExhausted?: boolean
-  joyExtraFiltered?: boolean
-  sanitizeChanged?: boolean
-  continueRounds?: number
-  continueWarnings?: string[]
+  corrections?: number;
+  loopExhausted?: boolean;
+  joyExtraFiltered?: boolean;
+  sanitizeChanged?: boolean;
+  continueRounds?: number;
+  continueWarnings?: string[];
   /** 各管线阶段耗时（ms）；内核 trace 摘要，供 GUI/模型可见性 */
-  traceStages?: Array<{ name: string; ms: number }>
+  traceStages?: Array<{ name: string; ms: number }>;
   /** Task 10 蓝图管线：美学扩展记录（§7.1 改写/自检 advisory） */
-  expansions?: string[]
+  expansions?: string[];
   /** Task 10 蓝图管线：Level 1/2 修复记录（如 duration_3→4） */
-  repairs?: string[]
+  repairs?: string[];
   /** F5（三期 Task 4）：canonical 替换计数——独立新字段，不与 corrections（修正闭环轮次）混淆 */
-  canonicalSubstitutions?: number
+  canonicalSubstitutions?: number;
   /** F5：canonical 替换对（`原片段→新tag`，来自 compile result T1 字段）；无替换为空数组 */
-  substitutions?: string[]
+  substitutions?: string[];
   /** A6（外部基准 2026-09）：design_notes 设计说明投影（anima segments 槽位汇总，零 LLM） */
-  designNotes?: string[]
+  designNotes?: string[];
   /**
    * M5-T2（D4/D9，design §2.4 envelope 增量①）：默认路径蓝图形态痕迹（T1R 验收草案「envelope
    * 出现 blueprint 痕迹」载体）。仅蓝图载体出现（runEnrich 跳过/修复轮锚定/落库计数一屏可见）；
@@ -83,26 +83,26 @@ export interface EnvelopeObservability {
    * 不在本接口。
    */
   blueprint?: {
-    form: 'blueprint' | 'slots'
-    media?: string
-    missing_count?: number
-    expansions_count?: number
-    repairs_count?: number
-    anchor_rounds?: number
-  }
+    form: 'blueprint' | 'slots';
+    media?: string;
+    missing_count?: number;
+    expansions_count?: number;
+    repairs_count?: number;
+    anchor_rounds?: number;
+  };
   /** 2026-09-17 agentic 管线（spec）：compositing 形态痕迹（A1 检索层已废除） */
   compositing?: {
-    form: 'semantic'
-    writer_retries: number
-    fallback_used: boolean
+    form: 'semantic';
+    writer_retries: number;
+    fallback_used: boolean;
     /** 审计 LLM 本轮裁决（pass/needs_revision/skipped） */
-    auditor: string
-  }
+    auditor: string;
+  };
 }
 
 export interface EnvelopeNextAction {
-  next_action: NextAction
-  repair_hints?: RepairHint[]
+  next_action: NextAction;
+  repair_hints?: RepairHint[];
 }
 
 export function assembleEnvelope(
@@ -116,7 +116,7 @@ export function assembleEnvelope(
     passed: stage.ok,
     gates: stage.gates,
     ...(stage.budget !== undefined ? { budget: stage.budget } : {}),
-  }
+  };
   const envelope: Record<string, unknown> = {
     ok: stage.ok,
     ...(stage.ok ? { result: stage.result } : {}),
@@ -129,6 +129,6 @@ export function assembleEnvelope(
     ...(observability !== undefined ? { observability } : {}),
     // G2：方言顶层投影（如 anima phase_status）最后合并——方言键不被基础键覆盖，h3 不传则无变化
     ...(dialectTopLevel ?? {}),
-  }
-  return serializeReport(envelope as unknown as AuditReport)
+  };
+  return serializeReport(envelope as unknown as AuditReport);
 }

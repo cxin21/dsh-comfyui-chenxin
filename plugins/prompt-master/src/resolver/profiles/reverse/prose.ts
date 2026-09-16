@@ -34,14 +34,10 @@ const ROLE_ZH: Record<string, string> = {
 const STYLE_ZH: Record<string, string> = {
   Straightforward:
     '以主体与媒介起笔；用肯定语气写清关键人物/物体/场景及颜色、形状、质感、空间关系与互动；不写情绪臆测；画面文字照录；有水印/签名/压缩痕迹则注明；勿以「这是一张…」开头。',
-  Descriptive_Casual:
-    '语气轻松口语化，像向朋友介绍画面；仍只写可见事实，不编造。',
-  Art_Critic:
-    '从构图、风格、象征、色彩与光影、可能的艺术流派等角度评论；可含审美判断，但须基于画面可见信息。',
-  Product_Listing:
-    '像电商商品详情描述：突出主体卖点、材质、颜色、规格感与使用场景（仅写图中可见者）。',
-  Social_Media_Post:
-    '像社交平台发帖配文：自然、有吸引力，仍忠实于画面内容。',
+  Descriptive_Casual: '语气轻松口语化，像向朋友介绍画面；仍只写可见事实，不编造。',
+  Art_Critic: '从构图、风格、象征、色彩与光影、可能的艺术流派等角度评论；可含审美判断，但须基于画面可见信息。',
+  Product_Listing: '像电商商品详情描述：突出主体卖点、材质、颜色、规格感与使用场景（仅写图中可见者）。',
+  Social_Media_Post: '像社交平台发帖配文：自然、有吸引力，仍忠实于画面内容。',
 };
 
 const BODY_ZH: Record<string, string> = {
@@ -49,12 +45,9 @@ const BODY_ZH: Record<string, string> = {
     '根据当前图像输出简洁直述式中文描述：{style} 篇幅约 {wc} 字；最终仅一段连贯正文。禁止英文逗号分隔标签行、禁止 ComfyUI 关键词列表、禁止 Markdown 与思维链。',
   Descriptive_Casual:
     '根据当前图像用轻松口语写一段中文描述：{style} 篇幅约 {wc} 字；单段正文，禁止英文标签行与 Markdown。',
-  Art_Critic:
-    '根据当前图像写一段中文艺术评论：{style} 篇幅约 {wc} 字；单段正文，禁止提纲分点与 Markdown。',
-  Product_Listing:
-    '根据当前图像写一段中文商品文案：{style} 篇幅约 {wc} 字；单段或短条目式正文，禁止英文标签行。',
-  Social_Media_Post:
-    '根据当前图像写一段中文社交配文：{style} 篇幅约 {wc} 字；单段正文，禁止英文标签行。',
+  Art_Critic: '根据当前图像写一段中文艺术评论：{style} 篇幅约 {wc} 字；单段正文，禁止提纲分点与 Markdown。',
+  Product_Listing: '根据当前图像写一段中文商品文案：{style} 篇幅约 {wc} 字；单段或短条目式正文，禁止英文标签行。',
+  Social_Media_Post: '根据当前图像写一段中文社交配文：{style} 篇幅约 {wc} 字；单段正文，禁止英文标签行。',
 };
 
 export function buildSystemPrompt(caption: any, media_target: string): string {

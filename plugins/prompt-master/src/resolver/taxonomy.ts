@@ -9,25 +9,25 @@ interface FormatDef {
 }
 
 export const OUTPUT_FORMATS: FormatDef[] = [
-  { id: 'prose' as OutputFormat,          label: '自然语言',        kinds: ['expand', 'reverse', 'train'] },
-  { id: 'sd_tags' as OutputFormat,        label: 'SD 标签列表',    kinds: ['expand', 'reverse', 'train'] },
-  { id: 'danbooru_tags' as OutputFormat,  label: 'Danbooru 标签',  kinds: ['expand', 'reverse', 'train'] },
-  { id: 'structured_md' as OutputFormat,  label: '结构化 Markdown', kinds: ['expand', 'reverse'] },
-  { id: 'structured_json' as OutputFormat,label: '结构化 JSON',    kinds: ['expand', 'reverse'] },
-  { id: 'minimax' as OutputFormat,        label: 'MiniMax H3',      kinds: ['expand'] },
+  { id: 'prose' as OutputFormat, label: '自然语言', kinds: ['expand', 'reverse', 'train'] },
+  { id: 'sd_tags' as OutputFormat, label: 'SD 标签列表', kinds: ['expand', 'reverse', 'train'] },
+  { id: 'danbooru_tags' as OutputFormat, label: 'Danbooru 标签', kinds: ['expand', 'reverse', 'train'] },
+  { id: 'structured_md' as OutputFormat, label: '结构化 Markdown', kinds: ['expand', 'reverse'] },
+  { id: 'structured_json' as OutputFormat, label: '结构化 JSON', kinds: ['expand', 'reverse'] },
+  { id: 'minimax' as OutputFormat, label: 'MiniMax H3', kinds: ['expand'] },
 ];
 
 export const SUBJECT_DOMAINS = [
-  { id: 'general',      label: '通用' },
-  { id: 'portrait',     label: '人物' },
-  { id: 'landscape',    label: '风景' },
+  { id: 'general', label: '通用' },
+  { id: 'portrait', label: '人物' },
+  { id: 'landscape', label: '风景' },
   { id: 'architecture', label: '建筑' },
-  { id: 'animal',       label: '动物' },
-  { id: 'product',      label: '产品' },
-  { id: 'still_life',   label: '静物' },
+  { id: 'animal', label: '动物' },
+  { id: 'product', label: '产品' },
+  { id: 'still_life', label: '静物' },
 ];
 
-export const ALL_SUBJECT_DOMAIN_IDS = SUBJECT_DOMAINS.map(d => d.id);
+export const ALL_SUBJECT_DOMAIN_IDS = SUBJECT_DOMAINS.map((d) => d.id);
 
 const EXPAND_FORMAT_MAP: Record<string, OutputFormat> = {
   expand_natural: 'prose',
@@ -96,7 +96,7 @@ export const REVERSE_TAGS: Record<string, string[]> = {
 
 export function inferOutputFormat(profile: PEProfile): OutputFormat {
   const explicit = String(profile.outputFormat || '').trim() as OutputFormat;
-  if (OUTPUT_FORMATS.some(f => f.id === explicit)) return explicit;
+  if (OUTPUT_FORMATS.some((f) => f.id === explicit)) return explicit;
 
   const id = String(profile.id || '');
   const isTorii = profile.toriiFormat || id.startsWith('pe_torii_') || id.startsWith('pe_train_torii_');
@@ -113,7 +113,7 @@ export function inferOutputFormat(profile: PEProfile): OutputFormat {
 
 export function inferTags(profile: PEProfile): string[] {
   if (Array.isArray(profile.tags) && profile.tags.length) {
-    return profile.tags.map(t => String(t).trim()).filter(Boolean);
+    return profile.tags.map((t) => String(t).trim()).filter(Boolean);
   }
 
   const id = String(profile.id || '');
@@ -137,7 +137,7 @@ export function inferTags(profile: PEProfile): string[] {
 export function inferSubjectDomains(profile: PEProfile): string[] {
   if (Array.isArray(profile.subjectDomains) && profile.subjectDomains.length) {
     const set = new Set(ALL_SUBJECT_DOMAIN_IDS);
-    const out = profile.subjectDomains.filter(id => set.has(id));
+    const out = profile.subjectDomains.filter((id) => set.has(id));
     if (out.length) return out;
   }
   return ['general'];
@@ -177,7 +177,7 @@ export function isTrainStructuredMdProfile(profile: PEProfile): boolean {
   const id = String(profile.id || '');
   if (id.startsWith('pe_train_torii_')) return true;
   if (profile.structuredFormat || profile.toriiFormat) {
-    const key = (profile as any).builtinKey || id.replace(/^pe_train_torii_/, '');
+    const _key = (profile as any).builtinKey || id.replace(/^pe_train_torii_/, '');
     const fmt = (profile as any).outputFormat || inferOutputFormat(profile);
     return fmt === 'structured_md';
   }

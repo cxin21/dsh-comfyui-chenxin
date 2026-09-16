@@ -8,13 +8,13 @@
  * 以 match_type 'alias' + source 'overlay_artist_registry' 返回（填隙，永不遮蔽真命中）
  * ③evidence 必填非空（防 LLM 灌水，无缺省）④幂等 = UPSERT 更新 evidence/confidence。
  */
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { Context } from '@deepseek-ai/cordis'
-import { registerArtist, listArtists } from '../pe-framework/anima-knowledge/relations.js'
-import type { Config } from '../plugin/config.js'
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import type { Context } from '@deepseek-ai/cordis';
+import { registerArtist, listArtists } from '../pe-framework/anima-knowledge/relations.js';
+import type { Config } from '../plugin/config.js';
 
-type LogCtx = { logger?: { info?: (msg: string) => void } }
-const logInfo = (ctx: Context | null, msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg)
+type LogCtx = { logger?: { info?: (msg: string) => void } };
+const logInfo = (ctx: Context | null, msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg);
 
 /** 纯写面（无 LLM）：catalog_artist_add → JSON 摘要 */
 export function registerCatalogArtistAddTool(ctx: Context, _config: Config) {
@@ -32,7 +32,10 @@ export function registerCatalogArtistAddTool(ctx: Context, _config: Config) {
       model: { type: 'string', description: '登记来源模型标记（缺省 null）' },
     },
     output: {
-      schema: { type: 'string', description: 'JSON {ok,created,name,name_normalized,confidence,evidence_count,registry_size}' },
+      schema: {
+        type: 'string',
+        description: 'JSON {ok,created,name,name_normalized,confidence,evidence_count,registry_size}',
+      },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: { name?: string; evidence?: string[]; confidence?: number; model?: string }) {
@@ -41,8 +44,11 @@ export function registerCatalogArtistAddTool(ctx: Context, _config: Config) {
         evidence: Array.isArray(args?.evidence) ? args.evidence.map((e) => String(e)) : [],
         confidence: args?.confidence,
         model: args?.model === undefined ? undefined : String(args.model),
-      })
-      logInfo(ctx, `[prompt-master] catalog_artist_add → ${r.name_normalized} created=${r.created} evidence=${r.evidence.length}`)
+      });
+      logInfo(
+        ctx,
+        `[prompt-master] catalog_artist_add → ${r.name_normalized} created=${r.created} evidence=${r.evidence.length}`,
+      );
       return JSON.stringify({
         ok: true,
         created: r.created,
@@ -51,7 +57,7 @@ export function registerCatalogArtistAddTool(ctx: Context, _config: Config) {
         confidence: r.confidence,
         evidence_count: r.evidence.length,
         registry_size: listArtists(1_000_000).length,
-      })
+      });
     },
-  })
+  });
 }

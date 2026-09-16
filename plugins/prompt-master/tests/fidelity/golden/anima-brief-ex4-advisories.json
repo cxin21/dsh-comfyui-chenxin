@@ -4,23 +4,11 @@
     "variant": "base",
     "subject": "advisory trigger demo",
     "slots": {
-      "count_gender": [
-        "1girl"
-      ],
-      "appearance": [
-        "curvy"
-      ],
-      "clothing": [
-        "leotard"
-      ],
-      "camera": [
-        "from front",
-        "from behind"
-      ],
-      "scene": [
-        "moonlight",
-        "backlighting"
-      ]
+      "count_gender": ["1girl"],
+      "appearance": ["curvy"],
+      "clothing": ["leotard"],
+      "camera": ["from front", "from behind"],
+      "scene": ["moonlight", "backlighting"]
     }
   },
   "pythonOutput": {

@@ -9,17 +9,17 @@ import type {
   DialectConstraints,
   DialectAesthetics,
   DialectLicense,
-} from './contract.js'
-import { getDialect } from './registry.js'
-import type { Target } from '../types.js'
+} from './contract.js';
+import { getDialect } from './registry.js';
+import type { Target } from '../types.js';
 
-export type { DialectCapabilities, DialectConstraints, DialectAesthetics, DialectLicense }
+export type { DialectCapabilities, DialectConstraints, DialectAesthetics, DialectLicense };
 
 export interface DialectPackage extends DialectContract {
-  capabilities: DialectCapabilities
-  constraints: DialectConstraints
-  aesthetics: DialectAesthetics
-  license?: DialectLicense
+  capabilities: DialectCapabilities;
+  constraints: DialectConstraints;
+  aesthetics: DialectAesthetics;
+  license?: DialectLicense;
 }
 
 /**
@@ -27,8 +27,8 @@ export interface DialectPackage extends DialectContract {
  * target 参数放宽为 string：未知方言名返回 undefined（计划测试用例 getDialectPackage('flux')）。
  */
 export function getDialectPackage(target: string): DialectPackage | undefined {
-  const d = getDialect(target as Target)
-  if (!d) return undefined
-  if (d.capabilities === undefined || d.constraints === undefined || d.aesthetics === undefined) return undefined
-  return d as unknown as DialectPackage
+  const d = getDialect(target as Target);
+  if (!d) return undefined;
+  if (d.capabilities === undefined || d.constraints === undefined || d.aesthetics === undefined) return undefined;
+  return d as unknown as DialectPackage;
 }

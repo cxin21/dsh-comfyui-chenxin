@@ -7,29 +7,33 @@
  * - 降级铁律（spec §2.1/§6）：provider 抛错 / parse 失败 / schema 不合 / 大小超限 → { skipped: true, reason }，
  *   永不抛出、永不静默截断。
  */
-import type { CriticProvider } from '../eval/critic.js'
-import type { Rating } from '../types.js'
-import { detectLanguage } from '../dialect/h3.js'
-import { validateBrief } from './brief.js'
-import type { EnrichedBrief } from './brief.js'
-import { buildEnrichPersona } from './personas.js'
-import { buildArtDirectionMenu, artDirectionCardOf, type ArtDirectionField } from './art-direction.js'
+import type { CriticProvider } from '../eval/critic.js';
+import type { Rating } from '../types.js';
+import { detectLanguage } from '../dialect/h3.js';
+import { validateBrief } from './brief.js';
+import type { EnrichedBrief } from './brief.js';
+import { buildEnrichPersona } from './personas.js';
+import { buildArtDirectionMenu, artDirectionCardOf, type ArtDirectionField } from './art-direction.js';
 
-export type EnrichTarget = 'anima' | 'h3'
+export type EnrichTarget = 'anima' | 'h3';
 
-export type EnrichResult = { brief: EnrichedBrief } | { skipped: true; reason: string }
+export type EnrichResult = { brief: EnrichedBrief } | { skipped: true; reason: string };
 
 function stripFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  return text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .trim();
 }
 
 function buildSchema(target: EnrichTarget): string {
-  const item = `{ "text": "维度内容（≤200 字符）", "source": "user" | "enriched" }`
+  const item = `{ "text": "维度内容（≤200 字符）", "source": "user" | "enriched" }`;
   // Round8 T3Q：anima 增加 artDirection（所选卡片 id，全部可选）；h3 不做美学升级，schema 不出现该字段
-  const artDirection = target === 'anima'
-    ? `
+  const artDirection =
+    target === 'anima'
+      ? `
   "artDirection": { "perspective": "镜头视角卡片 id（可省略）", "composition": "构图卡片 id（可省略）", "lighting": "光影卡片 id（可省略）", "color": "色彩卡片 id（可省略）", "motion": "动势卡片 id（可省略）" },`
-    : ''
+      : '';
   return `{
   "outputLang": "en" | "zh" | "ja",
   "subject": [${item}],
@@ -40,10 +44,15 @@ function buildSchema(target: EnrichTarget): string {
   "style": [${item}],
   "mood": [${item}],${artDirection}
   "nameAnchors": [{ "original": "用户原角色名", "anchored": "英文锚定名" }]
-}`
+}`;
 }
 
-function buildUser(input: { target: EnrichTarget; userInput: string; artDirection?: Record<string, string>; recommendations?: Array<{ field: string; cardId: string; reason: string }> }): string {
+function buildUser(input: {
+  target: EnrichTarget;
+  userInput: string;
+  artDirection?: Record<string, string>;
+  recommendations?: Array<{ field: string; cardId: string; reason: string }>;
+}): string {
   const lines = [
     `target=${input.target}`,
     '',
@@ -55,42 +64,49 @@ function buildUser(input: { target: EnrichTarget; userInput: string; artDirectio
     '每维度 ≤6 条、单条 ≤200 字符。outputLang 按目标方言给出（anima 恒为 en）。',
     // 2026-09-12 真实样本：enrich 子代理曾试图调用 prompt_author（套娃）——one-shot 禁工具
     '本任务为 one-shot 结构产出：不要调用任何工具，输出仅限要求的 JSON。',
-  ]
+  ];
   // Round8 T3Q：anima user 段附艺术指导卡片清单（id+name+tags），供 LLM 先选卡、再按组合拳扩写
-  if (input.target === 'anima') lines.push('', buildArtDirectionMenu())
+  if (input.target === 'anima') lines.push('', buildArtDirectionMenu());
   // 2026-09-12 P1：调用方显式指定卡（prompt_author.art_direction）——必须回写 brief.artDirection 并按组合拳扩写
-  const specified = Object.entries(input.artDirection ?? {})
+  const specified = Object.entries(input.artDirection ?? {});
   if (input.target === 'anima' && specified.length > 0) {
     lines.push(
       '',
       '调用方已指定的艺术指导卡片（硬要求：把每个卡片 id 原样写入 brief.artDirection 对应字段，并把该卡片的配套 tag 融入对应维度的扩写；不得替换为其他卡片）：',
-    )
+    );
     for (const [field, id] of specified) {
-      const card = artDirectionCardOf(field as ArtDirectionField, id)
-      if (card) lines.push(`- ${field}=${card.id}（${card.name}）: ${card.tags.join(', ')}`)
+      const card = artDirectionCardOf(field as ArtDirectionField, id);
+      if (card) lines.push(`- ${field}=${card.id}（${card.name}）: ${card.tags.join(', ')}`);
     }
   }
   // spec §7 P2/§6.2：T10 推荐器输出作为【推荐先验】注入——LLM 仍做最终设计决策，每类至多 1 张
-  const recs = input.recommendations ?? []
+  const recs = input.recommendations ?? [];
   if (recs.length > 0) {
-    lines.push('', '【推荐先验】艺术指导推荐器建议——来源：确定性规则推荐器基于缺失维度（reason 给出依据）从固定设计卡库选出的候选，非用户指令；采纳与否由你做最终设计决策，每类至多 1 张：')
-    for (const r of recs) lines.push(`- ${r.field}: ${r.cardId}（${r.reason}）`)
+    lines.push(
+      '',
+      '【推荐先验】艺术指导推荐器建议——来源：确定性规则推荐器基于缺失维度（reason 给出依据）从固定设计卡库选出的候选，非用户指令；采纳与否由你做最终设计决策，每类至多 1 张：',
+    );
+    for (const r of recs) lines.push(`- ${r.field}: ${r.cardId}（${r.reason}）`);
   }
-  return lines.join('\n')
+  return lines.join('\n');
 }
 
 /** detectLanguage（'中文'|'日本語'|'English'）→ brief outputLang（'zh'|'ja'|'en'，其他归 en）。 */
 function mapDetectedLang(detected: string): EnrichedBrief['outputLang'] {
-  if (detected === '中文') return 'zh'
-  if (detected === '日本語') return 'ja'
-  return 'en'
+  if (detected === '中文') return 'zh';
+  if (detected === '日本語') return 'ja';
+  return 'en';
 }
 
 /** spec §2.2/§4：目标方言的最终 outputLang（在 validate 之后由代码强制，不信任 LLM 输出）。 */
-function resolveOutputLang(target: EnrichTarget, explicit: EnrichedBrief['outputLang'] | undefined, userInput: string): EnrichedBrief['outputLang'] {
-  if (target === 'anima') return 'en'
-  if (explicit !== undefined) return explicit
-  return mapDetectedLang(detectLanguage(userInput))
+function resolveOutputLang(
+  target: EnrichTarget,
+  explicit: EnrichedBrief['outputLang'] | undefined,
+  userInput: string,
+): EnrichedBrief['outputLang'] {
+  if (target === 'anima') return 'en';
+  if (explicit !== undefined) return explicit;
+  return mapDetectedLang(detectLanguage(userInput));
 }
 
 /**
@@ -101,45 +117,51 @@ function resolveOutputLang(target: EnrichTarget, explicit: EnrichedBrief['output
  * - Round8 T3Q：未知/跨类目艺术指导卡片 id（validateBrief invalid_art_direction）→ invalid_art_direction（整体降级）
  */
 export async function runEnrich(input: {
-  target: EnrichTarget
-  userInput: string
+  target: EnrichTarget;
+  userInput: string;
   /** 显式指定优先（仅 h3 有效；anima 恒锁 en） */
-  outputLang?: EnrichedBrief['outputLang']
-  provider: CriticProvider
+  outputLang?: EnrichedBrief['outputLang'];
+  provider: CriticProvider;
   /** 2026-09-12 P1：调用方显式指定的艺术指导卡（prompt_author.art_direction；仅 anima 消费，h3 忽略） */
-  artDirection?: Record<string, string>
+  artDirection?: Record<string, string>;
   /** spec §7 P2：内容分级 → buildEnrichPersona【内容分级】块（缺省 safe；h3 不加块） */
-  rating?: Rating
+  rating?: Rating;
   /** spec §6.2：T10 推荐器输出 → user 段【推荐先验】块（有推荐时渲染，LLM 仍做最终设计决策） */
-  recommendations?: Array<{ field: string; cardId: string; reason: string }>
+  recommendations?: Array<{ field: string; cardId: string; reason: string }>;
 }): Promise<EnrichResult> {
   try {
     const raw = await input.provider({
       persona: buildEnrichPersona(input.target, { rating: input.rating }),
       schema: buildSchema(input.target),
-      user: buildUser({ target: input.target, userInput: input.userInput, artDirection: input.artDirection, recommendations: input.recommendations }),
-    })
-    let parsed: unknown
+      user: buildUser({
+        target: input.target,
+        userInput: input.userInput,
+        artDirection: input.artDirection,
+        recommendations: input.recommendations,
+      }),
+    });
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(stripFences(raw))
+      parsed = JSON.parse(stripFences(raw));
     } catch {
-      return { skipped: true, reason: 'enrich_invalid_schema' }
+      return { skipped: true, reason: 'enrich_invalid_schema' };
     }
-    const validated = validateBrief(parsed)
+    const validated = validateBrief(parsed);
     if (!validated.ok) {
       // 形状/schema 不合归一为 enrich_invalid_schema；专属降级 reason 保留（不修补，整体降级）：
       // 大小超限 brief_too_large；Round8 T3Q 未知/跨类目卡片 id invalid_art_direction
-      const reason = validated.reason === 'brief_too_large' || validated.reason === 'invalid_art_direction'
-        ? validated.reason
-        : 'enrich_invalid_schema'
-      return { skipped: true, reason }
+      const reason =
+        validated.reason === 'brief_too_large' || validated.reason === 'invalid_art_direction'
+          ? validated.reason
+          : 'enrich_invalid_schema';
+      return { skipped: true, reason };
     }
     const brief: EnrichedBrief = {
       ...validated.brief,
       outputLang: resolveOutputLang(input.target, input.outputLang, input.userInput),
-    }
-    return { brief }
+    };
+    return { brief };
   } catch {
-    return { skipped: true, reason: 'enrich_llm_error' }
+    return { skipped: true, reason: 'enrich_llm_error' };
   }
 }

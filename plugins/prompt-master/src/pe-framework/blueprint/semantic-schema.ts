@@ -5,34 +5,32 @@
  */
 
 export interface SemanticSubject {
-  id: string
-  count: number
-  identity: string
-  appearance: string
-  pose: string
-  expression: string
+  id: string;
+  count: number;
+  identity: string;
+  appearance: string;
+  pose: string;
+  expression: string;
 }
 
 export interface SemanticBlueprint {
-  schema_version: 1
-  media: 'image'
+  schema_version: 1;
+  media: 'image';
   core: {
-    concept: string
-    scene: { environment: string; time_of_day: string; weather: string; lighting_idea: string }
-    style_hints: string[]
-  }
-  subjects: SemanticSubject[]
-  composition: { framing: string; camera_angle: string; placement: string }
-  mood: string
-  negative_hints: string[]
+    concept: string;
+    scene: { environment: string; time_of_day: string; weather: string; lighting_idea: string };
+    style_hints: string[];
+  };
+  subjects: SemanticSubject[];
+  composition: { framing: string; camera_angle: string; placement: string };
+  mood: string;
+  negative_hints: string[];
 }
 
-export type ValidateResult =
-  | { ok: true; bp: SemanticBlueprint; missing: string[] }
-  | { ok: false; error: string }
+export type ValidateResult = { ok: true; bp: SemanticBlueprint; missing: string[] } | { ok: false; error: string };
 
 function isStr(x: unknown): x is string {
-  return typeof x === 'string'
+  return typeof x === 'string';
 }
 
 /**
@@ -40,80 +38,83 @@ function isStr(x: unknown): x is string {
  * 用于 S1/S2 输出的零词表契约机检（tag_in_blueprint）。
  */
 export const TAG_FORM_RE =
-  /(^|[\s,;])(\d+\+?(?:girls|boys|girl|boy|other|others)(?=$|[\s,;])|[a-z]+_[a-z]+|@[a-z0-9_]+|score_\d+)/i
+  /(^|[\s,;])(\d+\+?(?:girls|boys|girl|boy|other|others)(?=$|[\s,;])|[a-z]+_[a-z]+|@[a-z0-9_]+|score_\d+)/i;
 
 export function detectTagForm(text: string): boolean {
-  return TAG_FORM_RE.test(text)
+  return TAG_FORM_RE.test(text);
 }
 
 function isPlainObjectShallow(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 export function validateSemanticBlueprint(raw: unknown): ValidateResult {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ok: false, error: 'blueprint must be a JSON object' }
+    return { ok: false, error: 'blueprint must be a JSON object' };
   }
-  const bp = raw as Record<string, unknown>
+  const bp = raw as Record<string, unknown>;
   // ── envelope 形状漂移归一化（2026-09-16 活跑两轮实证：LLM 产出 schema_version/media 缺失、
   // subjects 为对象或缺省——envelope 形状漂移用确定性 coercion 容忍并记录，语义垃圾仍 fail-closed）──
-  if (bp.schema_version === undefined) bp.schema_version = 1
-  else if (bp.schema_version === '1' || bp.schema_version === 1.0) bp.schema_version = 1
-  if (bp.media === undefined || bp.media === '') bp.media = 'image'
-  if (bp.subjects === undefined || bp.subjects === null) bp.subjects = []
-  else if (isPlainObjectShallow(bp.subjects)) bp.subjects = Object.values(bp.subjects)
-  if (bp.mood === undefined) bp.mood = ''
-  if (bp.negative_hints === undefined) bp.negative_hints = []
-  if (bp.core === undefined || bp.core === null) return { ok: false, error: 'core missing' }
+  if (bp.schema_version === undefined) bp.schema_version = 1;
+  else if (bp.schema_version === '1' || bp.schema_version === 1.0) bp.schema_version = 1;
+  if (bp.media === undefined || bp.media === '') bp.media = 'image';
+  if (bp.subjects === undefined || bp.subjects === null) bp.subjects = [];
+  else if (isPlainObjectShallow(bp.subjects)) bp.subjects = Object.values(bp.subjects);
+  if (bp.mood === undefined) bp.mood = '';
+  if (bp.negative_hints === undefined) bp.negative_hints = [];
+  if (bp.core === undefined || bp.core === null) return { ok: false, error: 'core missing' };
 
-  if (bp.schema_version !== 1) return { ok: false, error: 'schema_version must be 1' }
-  if (bp.media !== 'image') return { ok: false, error: `media must be "image", got ${JSON.stringify(bp.media)}` }
+  if (bp.schema_version !== 1) return { ok: false, error: 'schema_version must be 1' };
+  if (bp.media !== 'image') return { ok: false, error: `media must be "image", got ${JSON.stringify(bp.media)}` };
 
-  const core = bp.core
-  if (core === null || typeof core !== 'object') return { ok: false, error: 'core missing' }
-  const c = core as Record<string, unknown>
-  if (!isStr(c.concept) || c.concept.trim() === '') return { ok: false, error: 'core.concept missing/empty' }
-  const scene = c.scene
-  if (scene === null || typeof scene !== 'object') return { ok: false, error: 'core.scene missing' }
-  const sc = scene as Record<string, unknown>
+  const core = bp.core;
+  if (core === null || typeof core !== 'object') return { ok: false, error: 'core missing' };
+  const c = core as Record<string, unknown>;
+  if (!isStr(c.concept) || c.concept.trim() === '') return { ok: false, error: 'core.concept missing/empty' };
+  const scene = c.scene;
+  if (scene === null || typeof scene !== 'object') return { ok: false, error: 'core.scene missing' };
+  const sc = scene as Record<string, unknown>;
   for (const k of ['environment', 'time_of_day', 'weather', 'lighting_idea'] as const) {
-    if (!isStr(sc[k])) sc[k] = '' // scene 子字段缺省为空串（记录供下游）
+    if (!isStr(sc[k])) sc[k] = ''; // scene 子字段缺省为空串（记录供下游）
   }
   if (c.style_hints !== undefined && (!Array.isArray(c.style_hints) || c.style_hints.some((x) => !isStr(x)))) {
-    return { ok: false, error: 'core.style_hints must be string[]' }
+    return { ok: false, error: 'core.style_hints must be string[]' };
   }
 
   if (!Array.isArray(bp.subjects)) {
-    return { ok: false, error: 'subjects must be array' }
+    return { ok: false, error: 'subjects must be array' };
     // 纯场景输入（c14）允许空 subjects——空数组记 missing advisory，不算错误（spec §3 字段契约 + golden c14）
   }
-  const ids = new Set<string>()
+  const ids = new Set<string>();
   for (const [si, s] of (bp.subjects as Record<string, unknown>[]).entries()) {
-    if (s === null || typeof s !== 'object') return { ok: false, error: 'subject must be object' }
-    if (!isStr(s.id) || (s.id as string).trim() === '') s.id = `S${si + 1}` // 漂移归一化：缺 id 自动编号
+    if (s === null || typeof s !== 'object') return { ok: false, error: 'subject must be object' };
+    if (!isStr(s.id) || (s.id as string).trim() === '') s.id = `S${si + 1}`; // 漂移归一化：缺 id 自动编号
     for (const k of ['identity', 'appearance', 'pose', 'expression'] as const) {
-      if (!isStr(s[k])) s[k] = '' // 漂移归一化：缺字段补空串（missing advisory 面覆盖语义缺失）
+      if (!isStr(s[k])) s[k] = ''; // 漂移归一化：缺字段补空串（missing advisory 面覆盖语义缺失）
     }
-    if (typeof s.count !== 'number' || !Number.isInteger(s.count) || (s.count as number) < 1) s.count = 1
-    if (ids.has(s.id as string)) return { ok: false, error: `duplicate subject id: ${s.id}` }
-    ids.add(s.id as string)
+    if (typeof s.count !== 'number' || !Number.isInteger(s.count) || (s.count as number) < 1) s.count = 1;
+    if (ids.has(s.id as string)) return { ok: false, error: `duplicate subject id: ${s.id}` };
+    ids.add(s.id as string);
   }
 
-  const comp = bp.composition
-  if (comp === null || typeof comp !== 'object') return { ok: false, error: 'composition missing' }
-  const cm = comp as Record<string, unknown>
+  const comp = bp.composition;
+  if (comp === null || typeof comp !== 'object') return { ok: false, error: 'composition missing' };
+  const cm = comp as Record<string, unknown>;
   for (const k of ['framing', 'camera_angle', 'placement'] as const) {
-    if (!isStr(cm[k])) cm[k] = '' // 漂移归一化：缺字段补空串
+    if (!isStr(cm[k])) cm[k] = ''; // 漂移归一化：缺字段补空串
   }
-  if (!isStr(bp.mood) && bp.mood !== undefined) return { ok: false, error: 'mood must be string' }
-  if (bp.negative_hints !== undefined && (!Array.isArray(bp.negative_hints) || (bp.negative_hints as unknown[]).some((x) => !isStr(x)))) {
-    return { ok: false, error: 'negative_hints must be string[]' }
+  if (!isStr(bp.mood) && bp.mood !== undefined) return { ok: false, error: 'mood must be string' };
+  if (
+    bp.negative_hints !== undefined &&
+    (!Array.isArray(bp.negative_hints) || (bp.negative_hints as unknown[]).some((x) => !isStr(x)))
+  ) {
+    return { ok: false, error: 'negative_hints must be string[]' };
   }
 
   // 缺省 advisory 面（非错误）：mood/style_hints 可为空串/空数组——记录供下游推荐先验
-  const missing: string[] = []
-  if (!isStr(bp.mood) || (bp.mood as string).trim() === '') missing.push('mood')
-  if (!Array.isArray(c.style_hints) || (c.style_hints as string[]).length === 0) missing.push('core.style_hints')
-  if (!Array.isArray(bp.subjects) || bp.subjects.length === 0) missing.push('subjects')
-  return { ok: true, bp: bp as unknown as SemanticBlueprint, missing }
+  const missing: string[] = [];
+  if (!isStr(bp.mood) || (bp.mood as string).trim() === '') missing.push('mood');
+  if (!Array.isArray(c.style_hints) || (c.style_hints as string[]).length === 0) missing.push('core.style_hints');
+  if (!Array.isArray(bp.subjects) || bp.subjects.length === 0) missing.push('subjects');
+  return { ok: true, bp: bp as unknown as SemanticBlueprint, missing };
 }

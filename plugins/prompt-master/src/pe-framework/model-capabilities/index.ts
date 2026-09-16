@@ -1,2 +1,2 @@
-export * from './families.js'
-export * from './capabilities.js'
+export * from './families.js';
+export * from './capabilities.js';

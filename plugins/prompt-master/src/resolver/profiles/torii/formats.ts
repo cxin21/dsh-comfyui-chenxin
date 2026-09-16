@@ -25,8 +25,13 @@ export const TORII_OUTPUT_FORMAT_BY_CTYPE: Record<string, string> = {
 };
 
 export const ALL_SUBJECT_DOMAIN_IDS = [
-  'general', 'portrait', 'landscape', 'architecture',
-  'animal', 'product', 'still_life',
+  'general',
+  'portrait',
+  'landscape',
+  'architecture',
+  'animal',
+  'product',
+  'still_life',
 ];
 
 export const TORII_GATE_FORMATS: ToriiGateFormat[] = [
@@ -42,7 +47,8 @@ export const TORII_GATE_FORMATS: ToriiGateFormat[] = [
   {
     cType: 'long_thoughts',
     name: '结构化 MD · 六段完整式',
-    description: '6 段 Markdown：① 思考 ② General description ③ 分角色 ④ Individual Parts ⑤ Texts on image ⑥ Background and effects。',
+    description:
+      '6 段 Markdown：① 思考 ② General description ③ 分角色 ④ Individual Parts ⑤ Texts on image ⑥ Background and effects。',
     category: '详细结构化',
     useNamesDefault: true,
     extractMode: 'full',
@@ -153,10 +159,5 @@ export function isStructuredReverseProfileId(profileId: string): boolean {
 }
 
 export function isStructuredTemplateProfile(profile: any): boolean {
-  return !!(
-    profile &&
-    (profile.structuredFormat ||
-      profile.toriiFormat ||
-      isStructuredReverseProfileId(profile.id))
-  );
+  return !!(profile && (profile.structuredFormat || profile.toriiFormat || isStructuredReverseProfileId(profile.id)));
 }

@@ -9,7 +9,7 @@
  * target 与定档来源）。文案零变化——逐字节钉死在 tests/tools/h3-gate-error.test.ts，
  * 改文案必先改该断言（消费面子串断言不动）。
  */
-export const H3_RATING_UNSUPPORTED_HEAD = 'h3_rating_unsupported: MiniMax H3 内容政策只支持 safe（spec §5.5）'
+export const H3_RATING_UNSUPPORTED_HEAD = 'h3_rating_unsupported: MiniMax H3 内容政策只支持 safe（spec §5.5）';
 
 /** 构造 h3 rating gate 拒收错误（文案与 t62/t71 原文逐字节一致）。
  *  @param detail surface 语境段（以「——」接政策头后，止于「被拒绝」前）
@@ -17,5 +17,5 @@ export const H3_RATING_UNSUPPORTED_HEAD = 'h3_rating_unsupported: MiniMax H3 内
 export function h3RatingUnsupportedError(detail: string, pointer: string): Error {
   return new Error(
     `${H3_RATING_UNSUPPORTED_HEAD}——${detail}被拒绝，不做降级猜测。需要 sensitive/explicit 内容分级请改走 prompt_author${pointer}。`,
-  )
+  );
 }

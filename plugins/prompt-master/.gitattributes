@@ -1,0 +1,8 @@
+# 规范 A-编码与换行：统一 LF、UTF-8（Windows 上禁 autocrlf 改写）
+* text=auto eol=lf
+*.ts text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.pyc binary

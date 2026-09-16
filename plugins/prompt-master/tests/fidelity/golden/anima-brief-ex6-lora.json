@@ -5,13 +5,8 @@
     "subject": "lora-driven portrait",
     "quality_prefix": false,
     "slots": {
-      "count_gender": [
-        "1girl",
-        "solo"
-      ],
-      "appearance": [
-        "long hair"
-      ]
+      "count_gender": ["1girl", "solo"],
+      "appearance": ["long hair"]
     }
   },
   "pythonOutput": {
@@ -28,9 +23,7 @@
           "citation:662719:match=canonical:canonical=long_hair:source=gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63"
         ],
         "assumptions": [],
-        "advisories": [
-          "[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"
-        ]
+        "advisories": ["[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"]
       },
       "metadata": {
         "variant": "base",
@@ -129,9 +122,7 @@
       ]
     },
     "errors": [],
-    "advisories": [
-      "[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"
-    ]
+    "advisories": ["[warning] tag_count_out_of_range: 3 content tags (working range 12-50)"]
   },
   "sha256": "0f47e6f376551415e12551ce239c0b94e65ce6da38053b56269fda3ae9b30885"
 }

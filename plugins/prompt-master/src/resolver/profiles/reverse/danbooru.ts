@@ -54,11 +54,7 @@ export function looksLikeTagProse(text: string): boolean {
   if (/^(artist|copyright|character|meta):/i.test(t)) return false;
   const commas = (t.match(/,/g) || []).length;
   if (commas >= 3 && /\b(1girl|1boy|solo|long hair|short hair)\b/i.test(t)) return false;
-  if (
-    /\b(she|he|they|the image|features a|stands|standing|wearing|dressed in|portrait of|a young)\b/i.test(
-      t
-    )
-  ) {
+  if (/\b(she|he|they|the image|features a|stands|standing|wearing|dressed in|portrait of|a young)\b/i.test(t)) {
     return true;
   }
   if (/\. [a-z]/.test(t)) return true;
@@ -80,9 +76,7 @@ export function buildUserTaskLead(caption: any, media_target: string): string {
       ? 'List Danbooru-style tags for this video key frame as ONE line.'
       : 'List Danbooru-style tags for this image as ONE line.';
   }
-  return video
-    ? '请为当前视频画面输出一行 Danbooru 英文标签。'
-    : '请为当前图像输出一行 Danbooru 英文标签。';
+  return video ? '请为当前视频画面输出一行 Danbooru 英文标签。' : '请为当前图像输出一行 Danbooru 英文标签。';
 }
 
 export function buildUserTaskBody(caption: any): string {
@@ -115,14 +109,11 @@ export function sanitizeTagOutput(text: string): string {
     !/self[- ]?check|fidelity\s*analysis/i.test(l) &&
     !looksLikeTagProse(l) &&
     (/^(artist|copyright|character|meta):/i.test(l) ||
-      ((l.match(/,/g) || []).length >= 2 &&
-        /\b(1girl|1boy|solo|long hair|short hair)\b/i.test(l)));
+      ((l.match(/,/g) || []).length >= 2 && /\b(1girl|1boy|solo|long hair|short hair)\b/i.test(l)));
 
   const line =
     lines.find(isTagLine) ||
-    lines.find(
-      (l) => !!l && /^(artist|copyright|character|meta):/i.test(l) && !looksLikeTagProse(l)
-    );
+    lines.find((l) => !!l && /^(artist|copyright|character|meta):/i.test(l) && !looksLikeTagProse(l));
 
   s = line || '';
   if (!s && lines[0] && !looksLikeTagProse(lines[0])) {

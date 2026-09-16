@@ -5,39 +5,39 @@
 
 /** One expected output field: matched by any of its label patterns. */
 export interface OutputFieldContract {
-  key: string
-  patterns: RegExp[]
+  key: string;
+  patterns: RegExp[];
 }
 
 /** Declares the expected structure of a long-form model output. */
 export interface OutputContract {
-  id: string
-  fields: OutputFieldContract[]
+  id: string;
+  fields: OutputFieldContract[];
   /** Optional separator between repeated groups (e.g. per-scene blocks). */
-  groupSeparator?: RegExp
+  groupSeparator?: RegExp;
   /** Optional expected group count, derived from the request form fields. */
-  expectedGroups?: (formFields: Record<string, unknown>) => number
+  expectedGroups?: (formFields: Record<string, unknown>) => number;
 }
 
 /** Result of inspecting a text against an OutputContract. */
 export interface StructureInspection {
   /** Missing items, reported as `field:<key>` entries. */
-  missing: string[]
+  missing: string[];
   /** True when nothing is missing. */
-  complete: boolean
+  complete: boolean;
 }
 
 /** Seed context used to build continuation prompts. */
 export interface ContinueSeed {
-  system?: string
-  userText: string
-  outputLang: 'zh' | 'en'
+  system?: string;
+  userText: string;
+  outputLang: 'zh' | 'en';
 }
 
 /** Final outcome of continueUntilComplete. */
 export interface ContinueOutcome {
-  text: string
-  rounds: number
-  complete: boolean
-  warnings: string[]
+  text: string;
+  rounds: number;
+  complete: boolean;
+  warnings: string[];
 }

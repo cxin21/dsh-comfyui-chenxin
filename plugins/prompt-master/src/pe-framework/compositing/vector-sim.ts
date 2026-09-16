@@ -13,70 +13,70 @@
  * 与 anima-vector 的增强层降级纪律一致。嵌入模型默认 Xenova/bge-base-en-v1.5（768 维，
  * PM_EMBED_MODEL 可切），与 tag-vector.sqlite 索引同源。
  */
-import { createOnnxEmbedder, type EmbedFn } from '../dialect/anima-vector.js'
-import { splitNlSentences } from './audit.js'
+import { createOnnxEmbedder, type EmbedFn } from '../dialect/anima-vector.js';
+import { splitNlSentences } from './audit.js';
 
-const CJK_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/
+const CJK_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/;
 
 export interface BgeVectorSimOpts {
   /** 注入 stub 供测试；缺省用 createOnnxEmbedder()（PM_EMBED_MODEL / PM_EMBED_PROVIDER 生效） */
-  embed?: EmbedFn
+  embed?: EmbedFn;
 }
 
 export interface BgeOverlapSim {
   /** 审计前预热：把 nl 的句子与 tags 全部嵌入缓存。只嵌入缺失文本；单条故障静默跳过。 */
-  prewarm(nl: string, tags: string[]): Promise<void>
+  prewarm(nl: string, tags: string[]): Promise<void>;
   /** 同步余弦查询；未预热/空串/CJK/维度错配 → undefined */
-  sim(a: string, b: string): number | undefined
+  sim(a: string, b: string): number | undefined;
 }
 
 function normalizeDot(a: Float32Array, b: Float32Array): number {
   // 不信任 embedder 的 normalize 声明：对非归一化向量也给出真余弦
-  let na = 0
-  let nb = 0
+  let na = 0;
+  let nb = 0;
   for (let i = 0; i < a.length; i++) {
-    na += a[i] * a[i]
-    nb += b[i] * b[i]
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
   }
-  const denom = Math.sqrt(na) * Math.sqrt(nb)
-  if (denom === 0) return 0
-  let s = 0
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i]
-  return s / denom
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  if (denom === 0) return 0;
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+  return s / denom;
 }
 
-const embeddable = (t: string): boolean => t.trim() !== '' && !CJK_RE.test(t)
+const embeddable = (t: string): boolean => t.trim() !== '' && !CJK_RE.test(t);
 
 export function createBgeOverlapSim(opts?: BgeVectorSimOpts): BgeOverlapSim {
-  const embed = opts?.embed ?? createOnnxEmbedder()
-  const cache = new Map<string, Float32Array>()
+  const embed = opts?.embed ?? createOnnxEmbedder();
+  const cache = new Map<string, Float32Array>();
   const embedOne = async (text: string): Promise<void> => {
-    if (cache.has(text)) return
+    if (cache.has(text)) return;
     try {
-      const rows = await embed([text], 'passage')
-      const v = rows[0]
-      if (v && v.length > 0) cache.set(text, v)
+      const rows = await embed([text], 'passage');
+      const v = rows[0];
+      if (v && v.length > 0) cache.set(text, v);
     } catch {
       /* 单条嵌入故障 → 该文本相关对 sim=undefined，audit 保持词面路径 */
     }
-  }
+  };
   return {
     async prewarm(nl: string, tags: string[]): Promise<void> {
-      const texts = [...splitNlSentences(nl), ...tags].filter(embeddable)
-      await Promise.all(texts.map(embedOne))
+      const texts = [...splitNlSentences(nl), ...tags].filter(embeddable);
+      await Promise.all(texts.map(embedOne));
     },
     sim(a: string, b: string): number | undefined {
-      if (a.trim() === '' || b.trim() === '') return undefined
-      if (CJK_RE.test(a) || CJK_RE.test(b)) return undefined
-      const va = cache.get(a)
-      const vb = cache.get(b)
-      if (!va || !vb || va.length !== vb.length) return undefined
-      return normalizeDot(va, vb)
+      if (a.trim() === '' || b.trim() === '') return undefined;
+      if (CJK_RE.test(a) || CJK_RE.test(b)) return undefined;
+      const va = cache.get(a);
+      const vb = cache.get(b);
+      if (!va || !vb || va.length !== vb.length) return undefined;
+      return normalizeDot(va, vb);
     },
-  }
+  };
 }
 
-let shared: BgeOverlapSim | undefined
+let shared: BgeOverlapSim | undefined;
 
 /**
  * prompt-author 装配用进程级单例（惰性）。env `PM_VECTOR_OVERLAP=off` 显式关闭 →
@@ -90,10 +90,10 @@ export function getSharedBgeOverlapSim(): BgeOverlapSim {
       shared = {
         prewarm: async () => {},
         sim: () => undefined,
-      }
+      };
     } else {
-      shared = createBgeOverlapSim()
+      shared = createBgeOverlapSim();
     }
   }
-  return shared
+  return shared;
 }

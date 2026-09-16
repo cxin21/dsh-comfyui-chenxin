@@ -5,9 +5,9 @@
  * 检索包证据层已废除（A1）；未验证形式由机审 fabricated_tag（catalog 直查）兜底拦截。
  * 本模块只做 persona/prompt 装配与输出契约解析；机器审计在 audit.ts。
  */
-import { buildTaskText } from '../llm/task-text.js'
-import { extractFirstJsonObject } from '../llm/json-extract.js'
-import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
+import { buildTaskText } from '../llm/task-text.js';
+import { extractFirstJsonObject } from '../llm/json-extract.js';
+import type { SemanticBlueprint } from '../blueprint/semantic-schema.js';
 
 /** task_persona 块：角色定位 + few-shot（同构即模板）；硬性规则在 WRITER_RULES（§2.1 拆分） */
 export const WRITER_PERSONA = `角色：你是 Anima 提示词成文引擎。输入 = 画面语义蓝图 v1。你把蓝图翻译为最终提示词的 tag 区与 NL 尾。
@@ -26,7 +26,7 @@ export const WRITER_PERSONA = `角色：你是 Anima 提示词成文引擎。输
 {"schema_version":1,"media":"image","core":{"concept":"a white-haired girl glances back under neon lights on a rain-soaked night street","scene":{"environment":"night city street","time_of_day":"night","weather":"rain","lighting_idea":"neon signage glows from both sides"},"style_hints":[]},"subjects":[{"id":"S1","count":1,"identity":"a girl","appearance":"white hair, black leather jacket","pose":"standing, looking back","expression":"parted lips"}],"composition":{"framing":"seen from the knees up","camera_angle":"slightly low","placement":"right of center"},"mood":"nocturnal, confident","negative_hints":["no modern vehicles"]}
 </blueprint_v1>
 输出（假设工具验证了 white hair / black leather jacket / looking back / cowboy shot；"neon signage glows from both sides" 无 canonical）：
-{"tags":[{"text":"1girl","source_concept":"S1.count"},{"text":"solo","source_concept":"S1.count"},{"text":"white hair","source_concept":"S1.appearance"},{"text":"black leather jacket","source_concept":"S1.appearance"},{"text":"standing","source_concept":"S1.pose"},{"text":"looking back","source_concept":"S1.pose"},{"text":"parted lips","source_concept":"S1.expression"},{"text":"cowboy shot","source_concept":"composition.framing"},{"text":"from below","source_concept":"composition.camera_angle"},{"text":"night","source_concept":"core.scene.time_of_day"},{"text":"rain","source_concept":"core.scene.weather"},{"text":"neon lights","source_concept":"core.scene.environment"}],"nl":"She stands on the right of center while neon signage glows from both sides behind her. Wet street reflections stay secondary on the ground. Signboard glow keeps her face clearly exposed with no silhouette.","negative":["no modern vehicles"]}`
+{"tags":[{"text":"1girl","source_concept":"S1.count"},{"text":"solo","source_concept":"S1.count"},{"text":"white hair","source_concept":"S1.appearance"},{"text":"black leather jacket","source_concept":"S1.appearance"},{"text":"standing","source_concept":"S1.pose"},{"text":"looking back","source_concept":"S1.pose"},{"text":"parted lips","source_concept":"S1.expression"},{"text":"cowboy shot","source_concept":"composition.framing"},{"text":"from below","source_concept":"composition.camera_angle"},{"text":"night","source_concept":"core.scene.time_of_day"},{"text":"rain","source_concept":"core.scene.weather"},{"text":"neon lights","source_concept":"core.scene.environment"}],"nl":"She stands on the right of center while neon signage glows from both sides behind her. Wet street reflections stay secondary on the ground. Signboard glow keeps her face clearly exposed with no silhouette.","negative":["no modern vehicles"]}`;
 
 /** task_rules 块：硬性规则谓词（T=tag 区 / N=NL 尾 / negative 契约） */
 export const WRITER_RULES = `【tag 区规则（硬性）】
@@ -44,69 +44,75 @@ N3. NL 尾不得复述 tag 区任何已表达概念——判定标准：若删�
 N4. NL 长度 2-4 句英文。
 N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源一律写场景物件（neon signs / streetlamp / paper lanterns）。
 
-【negative 契约】只产内容性排除（蓝图 negative_hints 的英文翻译，≤3 条）；质量词/分级词由系统确定性拼装，你不得输出 worst quality/low quality/score_* 等质量词、不得输出 child/loli 等分级词。`
+【negative 契约】只产内容性排除（蓝图 negative_hints 的英文翻译，≤3 条）；质量词/分级词由系统确定性拼装，你不得输出 worst quality/low quality/score_* 等质量词、不得输出 child/loli 等分级词。`;
 
 const WRITER_OUTPUT_CONTRACT = `仅输出一个 JSON 对象（裸 JSON：无 markdown fence、无解释、无任何前后缀文字）：
-{"tags":[{"text":"…","source_concept":"…"}…],"nl":"…2-4 句英文…","negative":["…"]}`
+{"tags":[{"text":"…","source_concept":"…"}…],"nl":"…2-4 句英文…","negative":["…"]}`;
 
 export interface WriterTag {
-  text: string
-  source_concept: string
+  text: string;
+  source_concept: string;
 }
 
 export interface WriterOutput {
-  tags: WriterTag[]
-  nl: string
-  negative: string[]
-  dropped_concepts?: string[]
+  tags: WriterTag[];
+  nl: string;
+  negative: string[];
+  dropped_concepts?: string[];
 }
 
 /** 禁止 LLM 输出的 negative 词（质量词/分级词——系统确定性拼装，spec §6 negative 契约） */
-const FORBIDDEN_NEGATIVE_RE = /(^|[\s,])(worst quality|low quality|best quality|score_\d|masterpiece|child|loli|shota|toddler|kid|preteen)(?=$|[\s,])/i
+const FORBIDDEN_NEGATIVE_RE =
+  /(^|[\s,])(worst quality|low quality|best quality|score_\d|masterpiece|child|loli|shota|toddler|kid|preteen)(?=$|[\s,])/i;
 
-export function buildWriterPrompt(
-  bp: SemanticBlueprint,
-  opts: { feedback?: string } = {},
-): string {
-  const rules: string[] = [WRITER_RULES]
+export function buildWriterPrompt(bp: SemanticBlueprint, opts: { feedback?: string } = {}): string {
+  const rules: string[] = [WRITER_RULES];
   if (opts.feedback) {
-    rules.push(`【修复反馈（硬性）】\n${opts.feedback}\n逐条执行 requiredFix；未被点名的部分保持原样。`)
+    rules.push(`【修复反馈（硬性）】\n${opts.feedback}\n逐条执行 requiredFix；未被点名的部分保持原样。`);
   }
   return buildTaskText([
     { tag: 'task_persona', body: WRITER_PERSONA },
     { tag: 'blueprint_v1', body: JSON.stringify(bp, null, 2) },
     { tag: 'rules', body: rules.join('\n\n') },
     { tag: 'output_contract', body: WRITER_OUTPUT_CONTRACT },
-  ])
+  ]);
 }
 
 /** 输出契约解析（宽松 JSON 提取沿管线惯例）；契约违规即抛错（错误文案进修复 feedback） */
 export function parseWriterOutput(raw: string): WriterOutput {
-  const body = extractFirstJsonObject(raw)
-  let parsed: unknown
+  const body = extractFirstJsonObject(raw);
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(body)
+    parsed = JSON.parse(body);
   } catch (e) {
-    throw new Error(`writer 输出非 JSON：${(e as Error)?.message ?? 'parse failed'}（原始片段：${body.slice(0, 200)}）`)
+    throw new Error(
+      `writer 输出非 JSON：${(e as Error)?.message ?? 'parse failed'}（原始片段：${body.slice(0, 200)}）`,
+    );
   }
-  const o = parsed as Record<string, unknown>
-  if (!Array.isArray(o.tags)) throw new Error('writer 契约违规：tags 必须为数组')
-  const tags: WriterTag[] = []
+  const o = parsed as Record<string, unknown>;
+  if (!Array.isArray(o.tags)) throw new Error('writer 契约违规：tags 必须为数组');
+  const tags: WriterTag[] = [];
   for (const t of o.tags as unknown[]) {
-    if (t === null || typeof t !== 'object') throw new Error('writer 契约违规：tag 项必须为对象')
-    const tag = t as Record<string, unknown>
-    if (typeof tag.text !== 'string' || tag.text.trim() === '') throw new Error('writer 契约违规：tag.text 缺失/为空')
+    if (t === null || typeof t !== 'object') throw new Error('writer 契约违规：tag 项必须为对象');
+    const tag = t as Record<string, unknown>;
+    if (typeof tag.text !== 'string' || tag.text.trim() === '') throw new Error('writer 契约违规：tag.text 缺失/为空');
     if (typeof tag.source_concept !== 'string' || tag.source_concept.trim() === '') {
-      throw new Error(`writer 契约违规：tag "${tag.text}" 缺 source_concept（T2）`)
+      throw new Error(`writer 契约违规：tag "${tag.text}" 缺 source_concept（T2）`);
     }
-    tags.push({ text: tag.text, source_concept: tag.source_concept })
+    tags.push({ text: tag.text, source_concept: tag.source_concept });
   }
-  if (typeof o.nl !== 'string') throw new Error('writer 契约违规：nl 必须为字符串')
-  const negative = Array.isArray(o.negative) ? (o.negative as unknown[]).filter((x): x is string => typeof x === 'string') : []
-  const badNegative = negative.find((n) => FORBIDDEN_NEGATIVE_RE.test(n))
+  if (typeof o.nl !== 'string') throw new Error('writer 契约违规：nl 必须为字符串');
+  const negative = Array.isArray(o.negative)
+    ? (o.negative as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+  const badNegative = negative.find((n) => FORBIDDEN_NEGATIVE_RE.test(n));
   if (badNegative !== undefined) {
-    throw new Error(`writer 契约违规：negative 含质量词/分级词 "${badNegative}"（negative 契约：质量词/分级词由系统拼装）`)
+    throw new Error(
+      `writer 契约违规：negative 含质量词/分级词 "${badNegative}"（negative 契约：质量词/分级词由系统拼装）`,
+    );
   }
-  const dropped = Array.isArray(o.dropped_concepts) ? (o.dropped_concepts as unknown[]).filter((x): x is string => typeof x === 'string') : []
-  return { tags, nl: o.nl, negative, ...(dropped.length > 0 ? { dropped_concepts: dropped } : {}) }
+  const dropped = Array.isArray(o.dropped_concepts)
+    ? (o.dropped_concepts as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+  return { tags, nl: o.nl, negative, ...(dropped.length > 0 ? { dropped_concepts: dropped } : {}) };
 }

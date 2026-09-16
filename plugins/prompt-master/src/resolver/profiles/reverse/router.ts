@@ -8,11 +8,7 @@ import * as Anima3PE from './anima3.js';
 import { cleanTagLineBody } from './tagLineSanitize.js';
 import { buildCaptionLengthBlock, resolveDanbooruLenHint, resolveCaptionMaxNewTokens } from './length.js';
 
-export const SUPPORTED_TYPES = new Set([
-  'Descriptive',
-  'Stable_Diffusion_Prompt',
-  'Danbooru_tag_list',
-]);
+export const SUPPORTED_TYPES = new Set(['Descriptive', 'Stable_Diffusion_Prompt', 'Danbooru_tag_list']);
 
 /** SD / Danbooru 且用户勾选「强化 ANIMA」时为 true */
 export function useAnima3Enhance(caption: any): boolean {
@@ -41,9 +37,15 @@ export function applyQualityPrefixToCaption(text: string, caption: any): string 
   if (!prefix) return body;
   if (!body) return prefix;
   const normPrefix = prefix.replace(/[,，]\s*$/, '').trim();
-  let normBody = body.replace(/^[,，]\s*/, '').trim();
-  const prefixHead = normPrefix.split(/[,，]\s*/)[0]?.trim().toLowerCase();
-  const bodyHead = normBody.split(/[,，]\s*/)[0]?.trim().toLowerCase();
+  const normBody = body.replace(/^[,，]\s*/, '').trim();
+  const prefixHead = normPrefix
+    .split(/[,，]\s*/)[0]
+    ?.trim()
+    .toLowerCase();
+  const bodyHead = normBody
+    .split(/[,，]\s*/)[0]
+    ?.trim()
+    .toLowerCase();
   if (prefixHead && bodyHead === prefixHead) return normBody;
   const sep = normBody.includes('，') && !/,/.test(normBody) ? '，' : ', ';
   return `${normPrefix}${sep}${normBody}`;
@@ -97,7 +99,10 @@ export function buildSystemPrompt(caption: any, media_target: string): string {
   }
   if (isComfyuiSd(caption)) {
     if (useAnima3Enhance(caption)) return Anima3PE.buildPrimarySystemPrompt(caption, media_target);
-    return ComfyuiPE.buildExpertSystemPrefix(caption, media_target) + ComfyuiPE.buildFaithfulReproductionBlock(caption, media_target);
+    return (
+      ComfyuiPE.buildExpertSystemPrefix(caption, media_target) +
+      ComfyuiPE.buildFaithfulReproductionBlock(caption, media_target)
+    );
   }
   return ComfyuiPE.buildExpertSystemPrefix(caption, media_target);
 }
@@ -108,7 +113,8 @@ export function buildSystemAddons(caption: any, media_target: string): string {
   if (useAnima3Enhance(caption) && (isComfyuiSd(caption) || isDanbooru(caption))) {
     out = Anima3PE.buildSystemAddons(caption, media_target) + lengthBlock;
   } else if (isComfyuiSd(caption)) {
-    out = ComfyuiPE.buildTypeOutputAddon(caption) + ComfyuiPE.buildSystemWorkflowBlock(caption, media_target) + lengthBlock;
+    out =
+      ComfyuiPE.buildTypeOutputAddon(caption) + ComfyuiPE.buildSystemWorkflowBlock(caption, media_target) + lengthBlock;
   } else if (isDanbooru(caption)) {
     const tagLenHint = resolveDanbooruLenHint(caption);
     const lenBlock = tagLenHint

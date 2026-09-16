@@ -2,11 +2,11 @@
  * Task 7: feedback store（spec §3.2）——generations + feedback 两表，node:sqlite。
  * 行为规格 8 条逐条覆盖（brief：每条至少一个测试）。
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   recordGeneration,
@@ -22,15 +22,15 @@ import {
   GENERATION_RETENTION_DAYS,
   type GenerationRow,
   type FeedbackRow,
-} from '../../../src/pe-framework/feedback/store.js'
+} from '../../../src/pe-framework/feedback/store.js';
 
-const dir = mkdtempSync(join(tmpdir(), 'feedback-store-'))
+const dir = mkdtempSync(join(tmpdir(), 'feedback-store-'));
 // A17：afterEach 统一清理临时目录
-afterEach(() => rmSync(dir, { recursive: true, force: true }))
-beforeEach(() => mkdirSync(dir, { recursive: true }))
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
+beforeEach(() => mkdirSync(dir, { recursive: true }));
 
 function dbPath(name: string): string {
-  return join(dir, name + '.sqlite')
+  return join(dir, name + '.sqlite');
 }
 
 function gen(overrides: Partial<GenerationRow> = {}): GenerationRow {
@@ -43,27 +43,27 @@ function gen(overrides: Partial<GenerationRow> = {}): GenerationRow {
     final_output: 'masterpiece, 1girl',
     enrich: 0,
     ...overrides,
-  }
+  };
 }
 
 // ---------- 1. 建表懒初始化 ----------
 describe('lazy init', () => {
   it('creates db file and tables on first call', () => {
-    const p = dbPath('init')
-    expect(() => recordGeneration(p, gen())).not.toThrow()
+    const p = dbPath('init');
+    expect(() => recordGeneration(p, gen())).not.toThrow();
     // 二次调用（表已存在）走第二条写路径：真实执行 recordFeedback 并断言结果
-    const g2 = gen()
-    recordGeneration(p, g2)
-    expect(recordFeedback(p, { generation_id: g2.id, rating: 3 })).toEqual({ ok: true })
+    const g2 = gen();
+    recordGeneration(p, g2);
+    expect(recordFeedback(p, { generation_id: g2.id, rating: 3 })).toEqual({ ok: true });
     // 直接再查不炸
-    expect(listFeedback(p)).toEqual(listFeedback(p))
-  })
-})
+    expect(listFeedback(p)).toEqual(listFeedback(p));
+  });
+});
 
 // ---------- 2. recordGeneration/get 往返 ----------
 describe('recordGeneration / getGeneration roundtrip', () => {
   it('persists and reads back all fields', () => {
-    const p = dbPath('roundtrip')
+    const p = dbPath('roundtrip');
     const g = gen({
       variant: 'cinematic',
       judge_score: 82,
@@ -71,58 +71,58 @@ describe('recordGeneration / getGeneration roundtrip', () => {
       debate_json: JSON.stringify({ findings: [{ severity: 'minor', note: 'x' }] }),
       repair_rounds: 1,
       enrich: 1,
-    })
-    recordGeneration(p, g)
-    const got = getGeneration(p, g.id)
-    expect(got).toEqual(g)
-  })
+    });
+    recordGeneration(p, g);
+    const got = getGeneration(p, g.id);
+    expect(got).toEqual(g);
+  });
 
   it('omits optional fields → undefined on read-back', () => {
-    const p = dbPath('roundtrip2')
-    const g = gen({ repair_rounds: 0 })
-    delete (g as unknown as Record<string, unknown>).judge_score
-    recordGeneration(p, g)
-    const got = getGeneration(p, g.id)
-    expect(got?.judge_score).toBeUndefined()
-    expect(got?.judge_verdict).toBeUndefined()
-    expect(got?.debate_json).toBeUndefined()
-    expect(got?.variant).toBeUndefined()
-  })
+    const p = dbPath('roundtrip2');
+    const g = gen({ repair_rounds: 0 });
+    delete (g as unknown as Record<string, unknown>).judge_score;
+    recordGeneration(p, g);
+    const got = getGeneration(p, g.id);
+    expect(got?.judge_score).toBeUndefined();
+    expect(got?.judge_verdict).toBeUndefined();
+    expect(got?.debate_json).toBeUndefined();
+    expect(got?.variant).toBeUndefined();
+  });
 
   it('unknown id → undefined', () => {
-    expect(getGeneration(dbPath('roundtrip'), 'gen_nope')).toBeUndefined()
-  })
-})
+    expect(getGeneration(dbPath('roundtrip'), 'gen_nope')).toBeUndefined();
+  });
+});
 
 // ---------- 3. recordFeedback 外键校验 ----------
 describe('recordFeedback FK validation', () => {
   it('unknown generation_id → generation_not_found', () => {
-    const p = dbPath('fk')
+    const p = dbPath('fk');
     expect(recordFeedback(p, { generation_id: 'gen_missing', rating: 4 })).toEqual({
       ok: false,
       code: 'generation_not_found',
-    })
-  })
+    });
+  });
 
   it('known generation_id → ok:true, created_at auto-filled', () => {
-    const p = dbPath('fk2')
-    const g = gen()
-    recordGeneration(p, g)
-    const r = recordFeedback(p, { generation_id: g.id, rating: 5, tags: ['构图'] })
-    expect(r).toEqual({ ok: true })
-    const f = getFeedback(p, g.id)
-    expect(f).toBeDefined()
-    expect(f!.rating).toBe(5)
-    expect(f!.tags).toEqual(['构图'])
-    expect(f!.created_at).toBeGreaterThan(0)
-  })
-})
+    const p = dbPath('fk2');
+    const g = gen();
+    recordGeneration(p, g);
+    const r = recordFeedback(p, { generation_id: g.id, rating: 5, tags: ['构图'] });
+    expect(r).toEqual({ ok: true });
+    const f = getFeedback(p, g.id);
+    expect(f).toBeDefined();
+    expect(f!.rating).toBe(5);
+    expect(f!.tags).toEqual(['构图']);
+    expect(f!.created_at).toBeGreaterThan(0);
+  });
+});
 
 // ---------- 4. 64KB / 32KB 裁剪 ----------
 describe('size caps', () => {
   it('trims debate_json to ≤64KB, keeps blocker/major, drops minor, marks truncated', () => {
-    const p = dbPath('debate')
-    const filler = 'x'.repeat(20 * 1024)
+    const p = dbPath('debate');
+    const filler = 'x'.repeat(20 * 1024);
     const debate = {
       findings: [
         { severity: 'blocker', note: 'BLOCKER-' + filler },
@@ -131,241 +131,243 @@ describe('size caps', () => {
         { severity: 'minor', note: 'MINOR2-' + filler },
       ],
       verdict: 'needs_revision',
-    }
-    const debateJson = JSON.stringify(debate)
-    expect(Buffer.byteLength(debateJson)).toBeGreaterThan(DEBATE_JSON_MAX)
-    const g = gen({ debate_json: debateJson })
-    recordGeneration(p, g)
-    const stored = getGeneration(p, g.id)!.debate_json!
-    expect(Buffer.byteLength(stored)).toBeLessThanOrEqual(DEBATE_JSON_MAX)
-    expect(stored).toContain('"truncated":true')
-    expect(stored).toContain('BLOCKER-')
-    expect(stored).toContain('MAJOR-')
-    expect(stored).not.toContain('MINOR-')
-  })
+    };
+    const debateJson = JSON.stringify(debate);
+    expect(Buffer.byteLength(debateJson)).toBeGreaterThan(DEBATE_JSON_MAX);
+    const g = gen({ debate_json: debateJson });
+    recordGeneration(p, g);
+    const stored = getGeneration(p, g.id)!.debate_json!;
+    expect(Buffer.byteLength(stored)).toBeLessThanOrEqual(DEBATE_JSON_MAX);
+    expect(stored).toContain('"truncated":true');
+    expect(stored).toContain('BLOCKER-');
+    expect(stored).toContain('MAJOR-');
+    expect(stored).not.toContain('MINOR-');
+  });
 
   it('small debate_json passes through untouched', () => {
-    const p = dbPath('debate2')
-    const raw = JSON.stringify({ findings: [], verdict: 'pass' })
-    const g = gen({ debate_json: raw })
-    recordGeneration(p, g)
-    expect(getGeneration(p, g.id)!.debate_json).toBe(raw)
-  })
+    const p = dbPath('debate2');
+    const raw = JSON.stringify({ findings: [], verdict: 'pass' });
+    const g = gen({ debate_json: raw });
+    recordGeneration(p, g);
+    expect(getGeneration(p, g.id)!.debate_json).toBe(raw);
+  });
 
   it('final_output >32KB truncated to 32KB', () => {
-    const p = dbPath('final')
-    const g = gen({ final_output: 'y'.repeat(FINAL_OUTPUT_MAX + 1000) })
-    recordGeneration(p, g)
-    const stored = getGeneration(p, g.id)!.final_output
-    expect(Buffer.byteLength(stored)).toBeLessThanOrEqual(FINAL_OUTPUT_MAX)
-    expect(stored.length).toBeLessThan(FINAL_OUTPUT_MAX + 1000)
-  })
-})
+    const p = dbPath('final');
+    const g = gen({ final_output: 'y'.repeat(FINAL_OUTPUT_MAX + 1000) });
+    recordGeneration(p, g);
+    const stored = getGeneration(p, g.id)!.final_output;
+    expect(Buffer.byteLength(stored)).toBeLessThanOrEqual(FINAL_OUTPUT_MAX);
+    expect(stored.length).toBeLessThan(FINAL_OUTPUT_MAX + 1000);
+  });
+});
 
 // ---------- 5. list 过滤 ----------
 describe('listFeedback filters', () => {
-  const p = dbPath('list')
+  const p = dbPath('list');
 
   function seed(id: string, target: string, rating: number): void {
-    recordGeneration(p, gen({ id, target }))
-    recordFeedback(p, { generation_id: id, rating })
+    recordGeneration(p, gen({ id, target }));
+    recordFeedback(p, { generation_id: id, rating });
   }
 
   it('filters by target / min_rating / max_rating / limit, created_at desc', () => {
-    seed('gen_l1', 'anima', 1)
-    seed('gen_l2', 'anima', 3)
-    seed('gen_l3', 'anima', 5)
-    seed('gen_l4', 'h3', 2)
-    seed('gen_l5', 'h3', 4)
+    seed('gen_l1', 'anima', 1);
+    seed('gen_l2', 'anima', 3);
+    seed('gen_l3', 'anima', 5);
+    seed('gen_l4', 'h3', 2);
+    seed('gen_l5', 'h3', 4);
 
     // target 过滤
-    expect(listFeedback(p, { target: 'anima' }).map((f) => f.generation_id)).toEqual(['gen_l3', 'gen_l2', 'gen_l1'])
+    expect(listFeedback(p, { target: 'anima' }).map((f) => f.generation_id)).toEqual(['gen_l3', 'gen_l2', 'gen_l1']);
     // min_rating（含边界：rating≥3 → l5/l3/l2，同 ms 写入按 rowid 倒序）
-    expect(listFeedback(p, { min_rating: 3 }).map((f) => f.generation_id)).toEqual(['gen_l5', 'gen_l3', 'gen_l2'])
+    expect(listFeedback(p, { min_rating: 3 }).map((f) => f.generation_id)).toEqual(['gen_l5', 'gen_l3', 'gen_l2']);
     // max_rating
-    expect(listFeedback(p, { max_rating: 2 }).map((f) => f.generation_id)).toEqual(['gen_l4', 'gen_l1'])
+    expect(listFeedback(p, { max_rating: 2 }).map((f) => f.generation_id)).toEqual(['gen_l4', 'gen_l1']);
     // limit（created_at 倒序取前 N）
-    expect(listFeedback(p, { limit: 2 }).map((f) => f.generation_id)).toEqual(['gen_l5', 'gen_l4'])
+    expect(listFeedback(p, { limit: 2 }).map((f) => f.generation_id)).toEqual(['gen_l5', 'gen_l4']);
     // 组合
-    expect(listFeedback(p, { target: 'anima', min_rating: 2, max_rating: 4 }).map((f) => f.generation_id)).toEqual(['gen_l2'])
+    expect(listFeedback(p, { target: 'anima', min_rating: 2, max_rating: 4 }).map((f) => f.generation_id)).toEqual([
+      'gen_l2',
+    ]);
     // 返回行带 target 且倒序
-    const all = listFeedback(p)
-    expect(all.every((f) => typeof f.target === 'string')).toBe(true)
-    for (let i = 1; i < all.length; i++) expect(all[i - 1].created_at >= all[i].created_at).toBe(true)
-  })
-})
+    const all = listFeedback(p);
+    expect(all.every((f) => typeof f.target === 'string')).toBe(true);
+    for (let i = 1; i < all.length; i++) expect(all[i - 1].created_at >= all[i].created_at).toBe(true);
+  });
+});
 
 // ---------- 6. stats 聚合 ----------
 describe('statsFeedback', () => {
-  const p = dbPath('stats')
+  const p = dbPath('stats');
 
   it('count / avgRating / histogram / topTags', () => {
     const feed = (id: string, rating: number, tags?: string[]): void => {
-      recordGeneration(p, gen({ id, target: 'h3' }))
-      recordFeedback(p, { generation_id: id, rating, tags })
-    }
-    feed('gen_s1', 1, ['节奏', '角色不一致'])
-    feed('gen_s2', 3, ['节奏'])
-    feed('gen_s3', 3)
-    feed('gen_s4', 5, ['节奏', '镜头冗余', '角色不一致'])
-    feed('gen_s5', 5, ['角色不一致'])
+      recordGeneration(p, gen({ id, target: 'h3' }));
+      recordFeedback(p, { generation_id: id, rating, tags });
+    };
+    feed('gen_s1', 1, ['节奏', '角色不一致']);
+    feed('gen_s2', 3, ['节奏']);
+    feed('gen_s3', 3);
+    feed('gen_s4', 5, ['节奏', '镜头冗余', '角色不一致']);
+    feed('gen_s5', 5, ['角色不一致']);
     // 干扰项：不同 target
-    recordGeneration(p, gen({ id: 'gen_s6', target: 'anima' }))
-    recordFeedback(p, { generation_id: 'gen_s6', rating: 1, tags: ['构图'] })
+    recordGeneration(p, gen({ id: 'gen_s6', target: 'anima' }));
+    recordFeedback(p, { generation_id: 'gen_s6', rating: 1, tags: ['构图'] });
 
-    const s = statsFeedback(p, 'h3')
-    expect(s.count).toBe(5)
-    expect(s.avgRating).toBeCloseTo(3.4, 5)
+    const s = statsFeedback(p, 'h3');
+    expect(s.count).toBe(5);
+    expect(s.avgRating).toBeCloseTo(3.4, 5);
     // histogram：5 桶，index 0 = rating 1 → [1,0,2,0,2]
-    expect(s.histogram).toEqual([1, 0, 2, 0, 2])
+    expect(s.histogram).toEqual([1, 0, 2, 0, 2]);
     // topTags 降序取前 5
     expect(s.topTags).toEqual([
       { tag: '角色不一致', n: 3 },
       { tag: '节奏', n: 3 },
       { tag: '镜头冗余', n: 1 },
-    ])
+    ]);
     // 无 target 过滤 → 全量
-    expect(statsFeedback(p).count).toBe(6)
+    expect(statsFeedback(p).count).toBe(6);
     // avgRating 一位小数
-    const sAll = statsFeedback(p)
-    expect(Number(sAll.avgRating.toFixed(1))).toBe(sAll.avgRating)
-  })
-})
+    const sAll = statsFeedback(p);
+    expect(Number(sAll.avgRating.toFixed(1))).toBe(sAll.avgRating);
+  });
+});
 
 // ---------- 6b. A10 评委校准视图 ----------
 describe('statsFeedback alignment (A10)', () => {
-  const p = dbPath('align')
+  const p = dbPath('align');
 
   it('6 对数据 → pearson 数值正确；<5 对 → null；无 pairs → 全零/null', () => {
-    const judges = [80, 60, 70, 90, 50, 85]
-    const ratings = [4, 2, 3, 5, 1, 4]
+    const judges = [80, 60, 70, 90, 50, 85];
+    const ratings = [4, 2, 3, 5, 1, 4];
     judges.forEach((j, i) => {
-      const id = 'gen_a' + i
-      recordGeneration(p, gen({ id, target: 'anima', judge_score: j }))
-      recordFeedback(p, { generation_id: id, rating: ratings[i] })
-    })
+      const id = 'gen_a' + i;
+      recordGeneration(p, gen({ id, target: 'anima', judge_score: j }));
+      recordFeedback(p, { generation_id: id, rating: ratings[i] });
+    });
     // 干扰项：有 judge 无 feedback、有 feedback 无 judge → 不计入 pairs
-    recordGeneration(p, gen({ id: 'gen_noFb', target: 'anima', judge_score: 99 }))
-    recordGeneration(p, gen({ id: 'gen_noJudge', target: 'anima' }))
-    recordFeedback(p, { generation_id: 'gen_noJudge', rating: 5 })
+    recordGeneration(p, gen({ id: 'gen_noFb', target: 'anima', judge_score: 99 }));
+    recordGeneration(p, gen({ id: 'gen_noJudge', target: 'anima' }));
+    recordFeedback(p, { generation_id: 'gen_noJudge', rating: 5 });
 
-    const s = statsFeedback(p, 'anima')
-    expect(s.alignment).toBeDefined()
-    expect(s.alignment!.pairs).toBe(6)
-    expect(s.alignment!.avgJudge).toBeCloseTo(72.5, 5)
-    expect(s.alignment!.avgHuman).toBeCloseTo(19 / 6, 5)
-    expect(s.alignment!.pearson).toBeCloseTo(0.99, 2)
+    const s = statsFeedback(p, 'anima');
+    expect(s.alignment).toBeDefined();
+    expect(s.alignment!.pairs).toBe(6);
+    expect(s.alignment!.avgJudge).toBeCloseTo(72.5, 5);
+    expect(s.alignment!.avgHuman).toBeCloseTo(19 / 6, 5);
+    expect(s.alignment!.pearson).toBeCloseTo(0.99, 2);
 
     // <5 对 → pearson null
-    const p2 = dbPath('align2')
+    const p2 = dbPath('align2');
     for (let i = 0; i < 4; i++) {
-      recordGeneration(p2, gen({ id: 'gen_b' + i, target: 'h3', judge_score: 50 + i }))
-      recordFeedback(p2, { generation_id: 'gen_b' + i, rating: 2 + i })
+      recordGeneration(p2, gen({ id: 'gen_b' + i, target: 'h3', judge_score: 50 + i }));
+      recordFeedback(p2, { generation_id: 'gen_b' + i, rating: 2 + i });
     }
-    const s2 = statsFeedback(p2)
-    expect(s2.alignment!.pairs).toBe(4)
-    expect(s2.alignment!.pearson).toBeNull()
+    const s2 = statsFeedback(p2);
+    expect(s2.alignment!.pairs).toBe(4);
+    expect(s2.alignment!.pearson).toBeNull();
 
     // 无 pairs → 全零/null
-    const p3 = dbPath('align3')
-    recordGeneration(p3, gen({ id: 'gen_c0' }))
-    recordFeedback(p3, { generation_id: 'gen_c0', rating: 3 })
-    const s3 = statsFeedback(p3)
-    expect(s3.alignment).toEqual({ pairs: 0, avgJudge: 0, avgHuman: 0, pearson: null })
-  })
-})
+    const p3 = dbPath('align3');
+    recordGeneration(p3, gen({ id: 'gen_c0' }));
+    recordFeedback(p3, { generation_id: 'gen_c0', rating: 3 });
+    const s3 = statsFeedback(p3);
+    expect(s3.alignment).toEqual({ pairs: 0, avgJudge: 0, avgHuman: 0, pearson: null });
+  });
+});
 
 // ---------- 6c. A15 limit 参数化 ----------
 describe('listGenerations limit (A15)', () => {
   it('limit=1 只回最新 1 条', () => {
-    const p = dbPath('limit')
-    const ids = ['gen_x1', 'gen_x2', 'gen_x3']
+    const p = dbPath('limit');
+    const ids = ['gen_x1', 'gen_x2', 'gen_x3'];
     // created_at 用当前时间微调（懒 prune 会清掉 >90 天的旧行）
-    ids.forEach((id, i) => recordGeneration(p, gen({ id, target: 'anima', created_at: Date.now() + i })))
-    const rows = listGenerations(p, { limit: 1 })
-    expect(rows).toHaveLength(1)
-    expect(rows[0].id).toBe('gen_x3')
-    recordFeedback(p, { generation_id: 'gen_x2', rating: 3 })
-    recordFeedback(p, { generation_id: 'gen_x3', rating: 4 })
-    const fb = listFeedback(p, { limit: 1 })
-    expect(fb).toHaveLength(1)
-    expect(fb[0].generation_id).toBe('gen_x3')
-  })
-})
+    ids.forEach((id, i) => recordGeneration(p, gen({ id, target: 'anima', created_at: Date.now() + i })));
+    const rows = listGenerations(p, { limit: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('gen_x3');
+    recordFeedback(p, { generation_id: 'gen_x2', rating: 3 });
+    recordFeedback(p, { generation_id: 'gen_x3', rating: 4 });
+    const fb = listFeedback(p, { limit: 1 });
+    expect(fb).toHaveLength(1);
+    expect(fb[0].generation_id).toBe('gen_x3');
+  });
+});
 
 // ---------- 7. prune ----------
 describe('pruneGenerations', () => {
-  const day = 24 * 60 * 60 * 1000
+  const day = 24 * 60 * 60 * 1000;
 
   it('deletes generations older than retention, returns count', () => {
-    const p = dbPath('prune')
+    const p = dbPath('prune');
     // 独立 db：recordGeneration 的懒 prune 在写入前执行，只此一条时不影响它自身
-    recordGeneration(p, gen({ id: 'gen_old', created_at: Date.now() - (GENERATION_RETENTION_DAYS + 5) * day }))
-    expect(getGeneration(p, 'gen_old')).toBeDefined()
-    expect(pruneGenerations(p)).toBe(1)
-    expect(getGeneration(p, 'gen_old')).toBeUndefined()
-    expect(pruneGenerations(p)).toBe(0)
-  })
+    recordGeneration(p, gen({ id: 'gen_old', created_at: Date.now() - (GENERATION_RETENTION_DAYS + 5) * day }));
+    expect(getGeneration(p, 'gen_old')).toBeDefined();
+    expect(pruneGenerations(p)).toBe(1);
+    expect(getGeneration(p, 'gen_old')).toBeUndefined();
+    expect(pruneGenerations(p)).toBe(0);
+  });
 
   it('feedback survives its generation (orphans allowed — feedback is scarce)', () => {
-    const p = dbPath('prune-orphan')
-    recordGeneration(p, gen({ id: 'gen_o1', created_at: Date.now() - 10 * day }))
-    expect(recordFeedback(p, { generation_id: 'gen_o1', rating: 2 })).toEqual({ ok: true })
+    const p = dbPath('prune-orphan');
+    recordGeneration(p, gen({ id: 'gen_o1', created_at: Date.now() - 10 * day }));
+    expect(recordFeedback(p, { generation_id: 'gen_o1', rating: 2 })).toEqual({ ok: true });
     // 收紧保留期：generation 被删，feedback 保留
-    expect(pruneGenerations(p, 5)).toBe(1)
-    expect(getGeneration(p, 'gen_o1')).toBeUndefined()
-    expect(getFeedback(p, 'gen_o1')?.rating).toBe(2)
+    expect(pruneGenerations(p, 5)).toBe(1);
+    expect(getGeneration(p, 'gen_o1')).toBeUndefined();
+    expect(getFeedback(p, 'gen_o1')?.rating).toBe(2);
     // 孤儿 feedback 仍可 list（JOIN generations 会丢弃，故 get 是孤儿读取通道）
-    expect(getFeedback(p, 'gen_o1')).toBeDefined()
-  })
+    expect(getFeedback(p, 'gen_o1')).toBeDefined();
+  });
 
   it('lazy prune: recordGeneration/recordFeedback prune expired generations first', () => {
-    const p = dbPath('prune-lazy')
-    recordGeneration(p, gen({ id: 'gen_lz', created_at: Date.now() - (GENERATION_RETENTION_DAYS + 10) * day }))
-    expect(getGeneration(p, 'gen_lz')).toBeDefined()
+    const p = dbPath('prune-lazy');
+    recordGeneration(p, gen({ id: 'gen_lz', created_at: Date.now() - (GENERATION_RETENTION_DAYS + 10) * day }));
+    expect(getGeneration(p, 'gen_lz')).toBeDefined();
     // 下一次写入顺带清理
-    recordGeneration(p, gen({ id: 'gen_lz2' }))
-    expect(getGeneration(p, 'gen_lz')).toBeUndefined()
+    recordGeneration(p, gen({ id: 'gen_lz2' }));
+    expect(getGeneration(p, 'gen_lz')).toBeUndefined();
     // prune 先于外键校验：过期 generation 的反馈回写 → generation_not_found
     expect(recordFeedback(p, { generation_id: 'gen_lz', rating: 3 })).toEqual({
       ok: false,
       code: 'generation_not_found',
-    })
-  })
+    });
+  });
 
   it('custom retentionDays', () => {
-    const p = dbPath('prune2')
-    recordGeneration(p, gen({ id: 'gen_old2', created_at: Date.now() - 10 * day }))
-    expect(pruneGenerations(p, 5)).toBe(1)
-    expect(pruneGenerations(p, 5)).toBe(0)
-  })
-})
+    const p = dbPath('prune2');
+    recordGeneration(p, gen({ id: 'gen_old2', created_at: Date.now() - 10 * day }));
+    expect(pruneGenerations(p, 5)).toBe(1);
+    expect(pruneGenerations(p, 5)).toBe(0);
+  });
+});
 
 // ---------- 8. enrich flag（二期 spec §11.3） ----------
 describe('enrich 列', () => {
   it('enrich=1/0 往返', () => {
-    const p = dbPath('enrich')
-    const g1 = gen({ enrich: 1 })
-    recordGeneration(p, g1)
-    const g0 = gen({ enrich: 0 })
-    recordGeneration(p, g0)
-    expect(getGeneration(p, g1.id)!.enrich).toBe(1)
-    expect(getGeneration(p, g0.id)!.enrich).toBe(0)
-  })
+    const p = dbPath('enrich');
+    const g1 = gen({ enrich: 1 });
+    recordGeneration(p, g1);
+    const g0 = gen({ enrich: 0 });
+    recordGeneration(p, g0);
+    expect(getGeneration(p, g1.id)!.enrich).toBe(1);
+    expect(getGeneration(p, g0.id)!.enrich).toBe(0);
+  });
 
   it('旧库（无 enrich 列）打开时自动 ALTER 成功', () => {
-    const p = dbPath('legacy')
-    const db = new DatabaseSync(p)
+    const p = dbPath('legacy');
+    const db = new DatabaseSync(p);
     db.exec(`CREATE TABLE generations (
       id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, target TEXT NOT NULL, variant TEXT,
       judge_mode TEXT NOT NULL, input_digest TEXT NOT NULL, final_output TEXT NOT NULL,
-      judge_score REAL, judge_verdict TEXT, debate_json TEXT, repair_rounds INTEGER)`)
-    db.close()
-    const g = gen({ enrich: 1 })
-    expect(() => recordGeneration(p, g)).not.toThrow()
-    expect(getGeneration(p, g.id)).toEqual(g)
-  })
-})
+      judge_score REAL, judge_verdict TEXT, debate_json TEXT, repair_rounds INTEGER)`);
+    db.close();
+    const g = gen({ enrich: 1 });
+    expect(() => recordGeneration(p, g)).not.toThrow();
+    expect(getGeneration(p, g.id)).toEqual(g);
+  });
+});
 
 // ---------- 9. 隐私 ----------
 describe('privacy shape', () => {
@@ -377,7 +379,7 @@ describe('privacy shape', () => {
       judge_verdict: 'pass',
       debate_json: '{}',
       repair_rounds: 0,
-    })
+    });
     expect(Object.keys(g).sort()).toEqual([
       'created_at',
       'debate_json',
@@ -391,10 +393,10 @@ describe('privacy shape', () => {
       'repair_rounds',
       'target',
       'variant',
-    ])
+    ]);
     // input 只以 digest 形式存在：64 位小写 hex
-    expect(g.input_digest).toMatch(/^[0-9a-f]{64}$/)
-    const f: FeedbackRow = { generation_id: 'x', rating: 3, created_at: 1 }
-    expect(Object.keys(f)).toEqual(['generation_id', 'rating', 'created_at'])
-  })
-})
+    expect(g.input_digest).toMatch(/^[0-9a-f]{64}$/);
+    const f: FeedbackRow = { generation_id: 'x', rating: 3, created_at: 1 };
+    expect(Object.keys(f)).toEqual(['generation_id', 'rating', 'created_at']);
+  });
+});

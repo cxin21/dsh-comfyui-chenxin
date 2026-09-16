@@ -3,16 +3,16 @@
  * embed seam：EmbedFn 供测试/调用方注入 stub（spec §6 接缝策略）。
  * 增强层纪律：本模块 throw 不吞——任何故障由调用方（anima-vector.createVectorSearch）捕获降级为空。
  */
-import { DatabaseSync, type DatabaseSync as DB } from 'node:sqlite'
-import { getLoadablePath } from 'sqlite-vec'
-import { statSync } from 'node:fs'
-import { join, sep } from 'node:path'
-import { getPresetRoot, resolveKnowledgePath } from '../resources/resolve.js'
+import { DatabaseSync, type DatabaseSync as DB } from 'node:sqlite';
+import { getLoadablePath } from 'sqlite-vec';
+import { statSync } from 'node:fs';
+import { join, sep } from 'node:path';
+import { getPresetRoot, resolveKnowledgePath } from '../resources/resolve.js';
 
-export const E5_QUERY_PREFIX = 'query: '
-export const E5_PASSAGE_PREFIX = 'passage: '
+export const E5_QUERY_PREFIX = 'query: ';
+export const E5_PASSAGE_PREFIX = 'passage: ';
 
-export type EmbedFn = (texts: string[], kind: 'query' | 'passage') => Promise<Float32Array[]>
+export type EmbedFn = (texts: string[], kind: 'query' | 'passage') => Promise<Float32Array[]>;
 
 /**
  * 查询向量与索引 provenance 不匹配（spec §3.3 meta 对账 fail-fast，2026-09-15 用户定案）。
@@ -22,12 +22,12 @@ export type EmbedFn = (texts: string[], kind: 'query' | 'passage') => Promise<Fl
  */
 export class VectorDimensionMismatchError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = 'VectorDimensionMismatchError'
+    super(message);
+    this.name = 'VectorDimensionMismatchError';
   }
 }
 
-type Extractor = import('@huggingface/transformers').FeatureExtractionPipeline
+type Extractor = import('@huggingface/transformers').FeatureExtractionPipeline;
 
 /**
  * HF 模型缓存稳定路径（T14-002，spec §3.3）：`<preset>/data/runtime/hf-cache`。
@@ -40,24 +40,24 @@ type Extractor = import('@huggingface/transformers').FeatureExtractionPipeline
  * 全部与 cwd 无关；解析不出 preset 根时返回 null（保持库缺省，不臆造路径）。
  */
 export function resolveHfCacheDir(): string | null {
-  const root = getPresetRoot() ?? process.env.DSH_COMFYUI_PRESET_ROOT ?? presetRootFromModulePath()
-  if (!root) return null
-  return join(root, 'data', 'runtime', 'hf-cache')
+  const root = getPresetRoot() ?? process.env.DSH_COMFYUI_PRESET_ROOT ?? presetRootFromModulePath();
+  if (!root) return null;
+  return join(root, 'data', 'runtime', 'hf-cache');
 }
 
 /** dist 位于 <preset>/plugins/prompt-master/dist/src/... → 定位 plugins 段前为 preset 根（cwd 无关） */
 function presetRootFromModulePath(): string | undefined {
   try {
-    const here = decodeURIComponent(import.meta.url.replace(/^file:\/\/\/?/, ''))
-    const parts = here.split(/[\\/]/)
+    const here = decodeURIComponent(import.meta.url.replace(/^file:\/\/\/?/, ''));
+    const parts = here.split(/[\\/]/);
     for (let i = 0; i < parts.length - 1; i++) {
       if (parts[i] === 'plugins' && parts[i + 1] === 'prompt-master') {
-        return parts.slice(0, i).join(sep)
+        return parts.slice(0, i).join(sep);
       }
     }
-    return undefined
+    return undefined;
   } catch {
-    return undefined
+    return undefined;
   }
 }
 
@@ -66,56 +66,59 @@ export function createOnnxEmbedder(opts?: { model?: string }): EmbedFn {
   // e5 系列保持旧行为（前缀 + mean 池化 + q8），bge-m3 / 其他模型经 PM_EMBED_MODEL 可切。
   // ⚠️ 默认值必须与建库脚本（build_tag_vector.py MODEL，BAAI/bge-base-en-v1.5 768 维）同模型同维度，
   // 否则查询向量与索引维度错配、semantic 层必然降级。
-  const model = opts?.model ?? process.env.PM_EMBED_MODEL ?? process.env.PM_E5_MODEL ?? 'Xenova/bge-base-en-v1.5'
-  const isE5 = /e5/i.test(model)
-  const dtype = (process.env.PM_EMBED_DTYPE ?? (isE5 ? 'q8' : 'fp32')) as 'fp32' | 'q8'
-  let extractor: Extractor | null = null
-  let failed = false
+  const model = opts?.model ?? process.env.PM_EMBED_MODEL ?? process.env.PM_E5_MODEL ?? 'Xenova/bge-base-en-v1.5';
+  const isE5 = /e5/i.test(model);
+  const dtype = (process.env.PM_EMBED_DTYPE ?? (isE5 ? 'q8' : 'fp32')) as 'fp32' | 'q8';
+  let extractor: Extractor | null = null;
+  let failed = false;
   return async (texts, kind) => {
-    if (failed) throw new Error('embedder permanently failed')
+    if (failed) throw new Error('embedder permanently failed');
     if (!extractor) {
       try {
-        const tf = await import('@huggingface/transformers')
-        if (process.env.HF_ENDPOINT) tf.env.remoteHost = process.env.HF_ENDPOINT
-        const cacheDir = resolveHfCacheDir()
-        if (cacheDir) tf.env.cacheDir = cacheDir
-        extractor = (await tf.pipeline('feature-extraction', model, { dtype })) as Extractor
+        const tf = await import('@huggingface/transformers');
+        if (process.env.HF_ENDPOINT) tf.env.remoteHost = process.env.HF_ENDPOINT;
+        const cacheDir = resolveHfCacheDir();
+        if (cacheDir) tf.env.cacheDir = cacheDir;
+        extractor = (await tf.pipeline('feature-extraction', model, { dtype })) as Extractor;
       } catch (e) {
-        failed = true
-        throw e
+        failed = true;
+        throw e;
       }
     }
-    const prefix = isE5 ? (kind === 'query' ? E5_QUERY_PREFIX : E5_PASSAGE_PREFIX) : ''
-    const out = await extractor(texts.map((t) => prefix + t), { pooling: isE5 ? 'mean' : 'cls', normalize: true })
-    const dim = out.dims[out.dims.length - 1]
-    const rows: Float32Array[] = []
-    for (let i = 0; i < texts.length; i++) rows.push(new Float32Array(out.data.slice(i * dim, (i + 1) * dim)))
-    return rows
-  }
+    const prefix = isE5 ? (kind === 'query' ? E5_QUERY_PREFIX : E5_PASSAGE_PREFIX) : '';
+    const out = await extractor(
+      texts.map((t) => prefix + t),
+      { pooling: isE5 ? 'mean' : 'cls', normalize: true },
+    );
+    const dim = out.dims[out.dims.length - 1];
+    const rows: Float32Array[] = [];
+    for (let i = 0; i < texts.length; i++) rows.push(new Float32Array(out.data.slice(i * dim, (i + 1) * dim)));
+    return rows;
+  };
 }
 
 /** API 嵌入器（OpenAI 兼容 /embeddings，PM_EMBED_PROVIDER=api 时启用）。
  *  env：PM_EMBED_API_BASE / PM_EMBED_API_KEY / PM_EMBED_API_MODEL；输出维度由 API 模型决定，
  *  必须与索引建表时的 PM_EMBED_DIM 一致。查询期需网络——失败由 createVectorSearch 捕获降级为空。 */
 export function createApiEmbedder(opts?: { baseUrl?: string; apiKey?: string; model?: string }): EmbedFn {
-  const baseUrl = (opts?.baseUrl ?? process.env.PM_EMBED_API_BASE ?? '').replace(/\/+$/, '')
-  const apiKey = opts?.apiKey ?? process.env.PM_EMBED_API_KEY ?? ''
-  const model = opts?.model ?? process.env.PM_EMBED_API_MODEL ?? ''
+  const baseUrl = (opts?.baseUrl ?? process.env.PM_EMBED_API_BASE ?? '').replace(/\/+$/, '');
+  const apiKey = opts?.apiKey ?? process.env.PM_EMBED_API_KEY ?? '';
+  const model = opts?.model ?? process.env.PM_EMBED_API_MODEL ?? '';
   if (!baseUrl || !apiKey || !model) {
-    throw new Error('api embedder requires PM_EMBED_API_BASE / PM_EMBED_API_KEY / PM_EMBED_API_MODEL')
+    throw new Error('api embedder requires PM_EMBED_API_BASE / PM_EMBED_API_KEY / PM_EMBED_API_MODEL');
   }
   return async (texts) => {
     const res = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model, input: texts }),
-    })
-    if (!res.ok) throw new Error(`embeddings API ${res.status}`)
-    const json = (await res.json()) as { data: Array<{ index: number; embedding: number[] }> }
-    const rows: Float32Array[] = new Array(texts.length)
-    for (const d of json.data) rows[d.index] = new Float32Array(d.embedding)
-    return rows
-  }
+    });
+    if (!res.ok) throw new Error(`embeddings API ${res.status}`);
+    const json = (await res.json()) as { data: Array<{ index: number; embedding: number[] }> };
+    const rows: Float32Array[] = new Array(texts.length);
+    for (const d of json.data) rows[d.index] = new Float32Array(d.embedding);
+    return rows;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -127,25 +130,25 @@ export function createApiEmbedder(opts?: { baseUrl?: string; apiKey?: string; mo
 
 /** LCG 确定性伪随机（fixture 专用） */
 function lcg(seed: number): () => number {
-  let s = seed >>> 0
+  let s = seed >>> 0;
   return () => {
-    s = (s * 1664525 + 1013904223) >>> 0
-    return s / 2 ** 32
-  }
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
 }
 
 /** 确定性单位向量（fixture 专用；seed 相同 → 向量相同） */
 export function unitVec(seed: number, dim = 384): Float32Array {
-  const rnd = lcg(seed)
-  const v = new Float32Array(dim)
-  let norm = 0
+  const rnd = lcg(seed);
+  const v = new Float32Array(dim);
+  let norm = 0;
   for (let i = 0; i < dim; i++) {
-    v[i] = rnd()
-    norm += v[i] * v[i]
+    v[i] = rnd();
+    norm += v[i] * v[i];
   }
-  norm = Math.sqrt(norm)
-  for (let i = 0; i < dim; i++) v[i] /= norm
-  return v
+  norm = Math.sqrt(norm);
+  for (let i = 0; i < dim; i++) v[i] /= norm;
+  return v;
 }
 
 /**
@@ -160,14 +163,14 @@ export function unitVec(seed: number, dim = 384): Float32Array {
  * 真实嵌入向量与 LCG fixture 向量上经 byte-exact 交叉验证一致（见 Task3-report.md）。
  */
 export function quantizeInt8(v: Float32Array): Uint8Array {
-  let max = 0
-  for (const x of v) max = Math.max(max, Math.abs(x))
-  const out = new Uint8Array(v.length)
+  let max = 0;
+  for (const x of v) max = Math.max(max, Math.abs(x));
+  const out = new Uint8Array(v.length);
   for (let i = 0; i < v.length; i++) {
-    const q = Math.round((v[i] / (max || 1)) * 127)
-    out[i] = Math.min(127, Math.max(-127, q))
+    const q = Math.round((v[i] / (max || 1)) * 127);
+    out[i] = Math.min(127, Math.max(-127, q));
   }
-  return out
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,171 +178,182 @@ export function quantizeInt8(v: Float32Array): Uint8Array {
 // ---------------------------------------------------------------------------
 
 export interface SemanticHit {
-  record_id: string
-  score: number
-  text_source: 'wiki' | 'fallback'
+  record_id: string;
+  score: number;
+  text_source: 'wiki' | 'fallback';
 }
 
-const DEFAULT_THRESHOLD = 0.55
+const DEFAULT_THRESHOLD = 0.55;
 
 /** audit P4b：向量检索闭包形状——prewarm 供检索包在并行查询前一次 extractor 调用批量嵌入
  *  （bge ONNX 单条 ~4-6s，14+ 概念逐条嵌入是管线延迟大头；批量 + 缓存把 N 次 → 1 次） */
 export type VectorSearchFn = ((query: string, k: number) => Promise<SemanticHit[]>) & {
-  prewarm: (queries: string[]) => Promise<void>
-}
+  prewarm: (queries: string[]) => Promise<void>;
+};
 
-export function createVectorSearch(opts?: {
-  dbPath?: string
-  embed?: EmbedFn
-  threshold?: number
-}): VectorSearchFn {
-  const threshold = opts?.threshold ?? (process.env.PM_SEMANTIC_THRESHOLD ? Number(process.env.PM_SEMANTIC_THRESHOLD) : DEFAULT_THRESHOLD)
+export function createVectorSearch(opts?: { dbPath?: string; embed?: EmbedFn; threshold?: number }): VectorSearchFn {
+  const threshold =
+    opts?.threshold ??
+    (process.env.PM_SEMANTIC_THRESHOLD ? Number(process.env.PM_SEMANTIC_THRESHOLD) : DEFAULT_THRESHOLD);
   // 惰性解析（对齐 anima-catalog MF-1）：dbPath 在首次查询时才求值，避免模块求值期触碰文件系统
-  let resolvedPath: string | null = null
+  let resolvedPath: string | null = null;
   const resolvePath = (): string => {
     if (resolvedPath === null) {
-      resolvedPath = opts?.dbPath ?? process.env.ANIMA_VECTOR_PATH
-        ?? resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-vector.sqlite' })
+      resolvedPath =
+        opts?.dbPath ??
+        process.env.ANIMA_VECTOR_PATH ??
+        resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-vector.sqlite' });
     }
-    return resolvedPath
-  }
+    return resolvedPath;
+  };
   // 嵌入器选择：PM_EMBED_PROVIDER=api 走 OpenAI 兼容 /embeddings（在线，查询期需网络），
   // 否则本地 ONNX（零网络）。env 不全时 api 创建即 throw → 语义层降级为空 + 一次性 warn。
-  let embedFn: EmbedFn | null = null
+  let embedFn: EmbedFn | null = null;
   if (opts?.embed) {
-    embedFn = opts.embed
+    embedFn = opts.embed;
   } else if (process.env.PM_EMBED_PROVIDER === 'api') {
     try {
-      embedFn = createApiEmbedder()
+      embedFn = createApiEmbedder();
     } catch (e) {
-      console.warn(`[prompt-master] semantic layer degraded: ${String(e)}`)
+      console.warn(`[prompt-master] semantic layer degraded: ${String(e)}`);
     }
   } else {
-    embedFn = createOnnxEmbedder()
+    embedFn = createOnnxEmbedder();
   }
-  let db: DB | null = null
-  let mtime = 0
-  let warned = false
-  let metaWarned = false
+  let db: DB | null = null;
+  let mtime = 0;
+  let warned = false;
+  let metaWarned = false;
   // audit P4b：查询向量缓存——prewarm 批量填充，查询期命中则零嵌入调用
-  const queryVecCache = new Map<string, Float32Array>()
+  const queryVecCache = new Map<string, Float32Array>();
   const getCachedOrEmbed = async (query: string): Promise<Float32Array | undefined> => {
-    const cached = queryVecCache.get(query)
-    if (cached) return cached
-    if (!embedFn) return undefined
-    const rows = await embedFn([query], 'query')
-    const v = rows[0]
-    if (v && v.length > 0) queryVecCache.set(query, v)
-    return v
-  }
+    const cached = queryVecCache.get(query);
+    if (cached) return cached;
+    if (!embedFn) return undefined;
+    const rows = await embedFn([query], 'query');
+    const v = rows[0];
+    if (v && v.length > 0) queryVecCache.set(query, v);
+    return v;
+  };
   const prewarm = async (queries: string[]): Promise<void> => {
-    if (!embedFn) return
+    if (!embedFn) return;
     // CJK/空串与查询入口同规则拒收（英文单语域）；去重 + 跳过已缓存
     const missing = [...new Set(queries)].filter((q) => {
-      if (!q || /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(q)) return false
-      return !queryVecCache.has(q)
-    })
-    if (missing.length === 0) return
+      if (!q || /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(q)) return false;
+      return !queryVecCache.has(q);
+    });
+    if (missing.length === 0) return;
     try {
-      const rows = await embedFn(missing, 'query')
+      const rows = await embedFn(missing, 'query');
       missing.forEach((q, i) => {
-        const v = rows[i]
-        if (v && v.length > 0) queryVecCache.set(q, v)
-      })
+        const v = rows[i];
+        if (v && v.length > 0) queryVecCache.set(q, v);
+      });
     } catch {
       // 预热 best-effort：失败 → 查询期各自单条嵌入照旧（或降级为空），不阻塞管线
     }
-  }
+  };
   const warn = (msg: string) => {
     if (!warned) {
-      warned = true
-      console.warn(`[prompt-master] semantic layer degraded: ${msg}`)
+      warned = true;
+      console.warn(`[prompt-master] semantic layer degraded: ${msg}`);
     }
-  }
+  };
   /** 读索引 provenance meta（建库侧 build_tag_vector.py 落盘）：{model,dim}；无 meta 表 =
    *  旧版建库产物 → 返回 'legacy'（跳过对账，一次性提示重建后可启用）。meta 表读取故障
    *  同样按 legacy 处理——对账本身不得比被保护的查询更脆弱。 */
   const readMeta = (d: DB): { model: string; dim: number } | 'legacy' => {
     try {
-      const rows = d.prepare("SELECT key, value FROM meta WHERE key IN ('model','dim')").all() as Array<{ key: string; value: string }>
-      if (rows.length === 0) return 'legacy'
-      const m: Record<string, string> = {}
-      for (const r of rows) m[r.key] = r.value
-      return { model: m.model ?? 'unknown', dim: Number(m.dim) }
+      const rows = d.prepare("SELECT key, value FROM meta WHERE key IN ('model','dim')").all() as Array<{
+        key: string;
+        value: string;
+      }>;
+      if (rows.length === 0) return 'legacy';
+      const m: Record<string, string> = {};
+      for (const r of rows) m[r.key] = r.value;
+      return { model: m.model ?? 'unknown', dim: Number(m.dim) };
     } catch {
-      return 'legacy'
+      return 'legacy';
     }
-  }
+  };
   /** 打开（缓存）句柄；文件缺失 → null。G4：mtime 变化 → 关闭陈旧句柄重开（向量库为可重建派生产物）。 */
   const open = (): DB | null => {
-    const path = resolvePath()
-    let m = 0
+    const path = resolvePath();
+    let m = 0;
     try {
-      m = statSync(path).mtimeMs
+      m = statSync(path).mtimeMs;
     } catch {
-      return null
+      return null;
     }
     if (db && m !== mtime) {
-      try { db.close() } catch { /* 陈旧句柄关闭失败不阻塞重开 */ }
-      db = null
+      try {
+        db.close();
+      } catch {
+        /* 陈旧句柄关闭失败不阻塞重开 */
+      }
+      db = null;
     }
     if (!db) {
-      db = new DatabaseSync(path, { readOnly: true, allowExtension: true })
-      db.loadExtension(getLoadablePath())
-      mtime = m
+      db = new DatabaseSync(path, { readOnly: true, allowExtension: true });
+      db.loadExtension(getLoadablePath());
+      mtime = m;
     }
-    return db
-  }
+    return db;
+  };
   const searchFn = async (query: string, k: number): Promise<SemanticHit[]> => {
-    if (!query || k < 1) return []
+    if (!query || k < 1) return [];
     // 英文匹配约束（用户定案）：查询含 CJK（汉字/假名）时直接拒绝——不编码、不检索，
     // 中文 tag 走 catalog_miss advisory 既有路径。索引与查询必须同语域，跨语言不在本层。
-    if (/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(query)) return []
+    if (/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(query)) return [];
     try {
-      const d = open()
+      const d = open();
       if (!d) {
-        warn(`vector db missing at ${resolvePath()} (run build_tag_vector.py)`)
-        return []
+        warn(`vector db missing at ${resolvePath()} (run build_tag_vector.py)`);
+        return [];
       }
       if (!embedFn) {
-        warn('api embedder unavailable (check PM_EMBED_API_BASE/KEY/MODEL)')
-        return []
+        warn('api embedder unavailable (check PM_EMBED_API_BASE/KEY/MODEL)');
+        return [];
       }
-      const q = await getCachedOrEmbed(query)
-      if (!q) return []
+      const q = await getCachedOrEmbed(query);
+      if (!q) return [];
       // provenance 对账（spec §3.3 fail-fast）：查询向量维度必须与 meta 落盘的索引维度一致。
       // 错配 = 配置错误（建库/查询两侧模型漂移），不是环境故障——显式抛类型化错误，
       // 不走下方 catch-all 静默降级（2026-09-15 实测教训：768/1024 双默认曾一度并存）。
-      const meta = readMeta(d)
+      const meta = readMeta(d);
       if (meta === 'legacy') {
         if (!metaWarned) {
-          metaWarned = true
-          warn('vector db has no meta provenance (pre-meta build) — dim verification skipped; rebuild to enable fail-fast')
+          metaWarned = true;
+          warn(
+            'vector db has no meta provenance (pre-meta build) — dim verification skipped; rebuild to enable fail-fast',
+          );
         }
       } else if (Number.isFinite(meta.dim) && q.length !== meta.dim) {
         const msg =
           `vector dim mismatch: index dim=${meta.dim} (model=${meta.model}) vs query dim=${q.length} — ` +
-          'align query-side PM_EMBED_MODEL/PM_EMBED_PROVIDER with the index, or rebuild tag-vector.sqlite'
-        console.error(`[prompt-master] semantic layer FAIL-FAST: ${msg}`)
-        throw new VectorDimensionMismatchError(msg)
+          'align query-side PM_EMBED_MODEL/PM_EMBED_PROVIDER with the index, or rebuild tag-vector.sqlite';
+        console.error(`[prompt-master] semantic layer FAIL-FAST: ${msg}`);
+        throw new VectorDimensionMismatchError(msg);
       }
-      const qv = quantizeInt8(q)
-      const rows = d.prepare(
-        `SELECT payload.record_id, payload.text_source, vec_items.distance
+      const qv = quantizeInt8(q);
+      const rows = d
+        .prepare(
+          `SELECT payload.record_id, payload.text_source, vec_items.distance
          FROM vec_items JOIN payload ON payload.rowid = vec_items.rowid
          WHERE vec_items.embedding MATCH vec_int8(?) AND k = ?`,
-      ).all(qv, BigInt(k)) as Array<{ record_id: string; text_source: 'wiki' | 'fallback'; distance: number }>
+        )
+        .all(qv, BigInt(k)) as Array<{ record_id: string; text_source: 'wiki' | 'fallback'; distance: number }>;
       return rows
         .map((r) => ({ record_id: r.record_id, score: 1 - r.distance, text_source: r.text_source }))
         .filter((h) => h.score >= threshold)
-        .slice(0, k)
+        .slice(0, k);
     } catch (e) {
       // fail-fast 例外：provenance 错配是配置错误，穿透本 catch 让调用方按型甄别
       //（searchCatalog 等降级方仍可捕获降级，但错误类型与 console.error 留痕不可静默）
-      if (e instanceof VectorDimensionMismatchError) throw e
-      warn(String(e))
-      return []
+      if (e instanceof VectorDimensionMismatchError) throw e;
+      warn(String(e));
+      return [];
     }
-  }
-  return Object.assign(searchFn, { prewarm })
+  };
+  return Object.assign(searchFn, { prewarm });
 }

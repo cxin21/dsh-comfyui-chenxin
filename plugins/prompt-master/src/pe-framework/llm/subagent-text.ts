@@ -6,33 +6,39 @@
  * 架构级禁工具（toolFilter allow:[]）、parent 线穿、超时 AbortController——
  * 模式对齐 eval/critic.ts createSubagentCriticProvider（2026-09-12 P0 先例）。
  */
-import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js'
+import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js';
 
-export type SubagentTextRunner = (taskText: string) => Promise<string>
+export type SubagentTextRunner = (taskText: string) => Promise<string>;
 
 export function createSubagentTextRunner(
   ownerCtx: any,
   opts?: { labelPrefix?: string; timeoutMs?: number; parent?: unknown },
 ): SubagentTextRunner {
-  const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '')
-  const timeoutMs = opts?.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_SUBAGENT_TIMEOUT_MS)
-  const labelPrefix = opts?.labelPrefix ?? 'pm-text'
+  const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '');
+  const timeoutMs =
+    opts?.timeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_SUBAGENT_TIMEOUT_MS);
+  const labelPrefix = opts?.labelPrefix ?? 'pm-text';
 
   return async function subagentTextRun(taskText: string): Promise<string> {
     if (!ownerCtx?.subagents?.start) {
-      throw new Error('SubagentTextRunner 不可用：ctx.subagents 未注册（plugin 未注入 "subagents"）')
+      throw new Error('SubagentTextRunner 不可用：ctx.subagents 未注册（plugin 未注入 "subagents"）');
     }
     // parent 线穿（2026-09-12 P0 同款）：host 装配子代理时读取 parent.options，缺 parent 直接
     // TypeError（Cannot read properties of undefined (reading 'options')）→ 全量静默 skipped。
-    const parent = opts?.parent ?? ownerCtx?.agent
+    const parent = opts?.parent ?? ownerCtx?.agent;
     if (!parent) {
-      throw new Error('SubagentTextRunner 需要调用 Agent 上下文（opts.parent / ownerCtx.agent 均不可用）：请从 Agent 会话内调用')
+      throw new Error(
+        'SubagentTextRunner 需要调用 Agent 上下文（opts.parent / ownerCtx.agent 均不可用）：请从 Agent 会话内调用',
+      );
     }
-    const controller = new AbortController()
-    const timeoutError = new Error(`SubagentTextRunner 超时：未在 ${timeoutMs}ms 内收到结果`)
-    let timer: ReturnType<typeof setTimeout> | undefined
+    const controller = new AbortController();
+    const timeoutError = new Error(`SubagentTextRunner 超时：未在 ${timeoutMs}ms 内收到结果`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    let run: { result: Promise<{ stopReason?: string; diagnostic?: unknown; output?: Array<{ type?: string; text?: string }> }>; dispose: () => Promise<void> | void }
+    let run: {
+      result: Promise<{ stopReason?: string; diagnostic?: unknown; output?: Array<{ type?: string; text?: string }> }>;
+      dispose: () => Promise<void> | void;
+    };
     try {
       run = await ownerCtx.subagents.start('spawn', {
         label: `${labelPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -40,10 +46,10 @@ export function createSubagentTextRunner(
         parent,
         toolFilter: { allow: [] },
         signal: controller.signal,
-      })
+      });
     } catch (error) {
-      if (controller.signal.aborted) throw timeoutError
-      throw error
+      if (controller.signal.aborted) throw timeoutError;
+      throw error;
     }
 
     try {
@@ -51,31 +57,31 @@ export function createSubagentTextRunner(
         run.result,
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
-            controller.abort(timeoutError)
-            reject(timeoutError)
-          }, timeoutMs)
+            controller.abort(timeoutError);
+            reject(timeoutError);
+          }, timeoutMs);
         }),
       ]).finally(() => {
-        if (timer !== undefined) clearTimeout(timer)
-      })
+        if (timer !== undefined) clearTimeout(timer);
+      });
       if (result.stopReason !== 'completed') {
-        const detail = result.diagnostic === undefined ? '' : `；diagnostic: ${result.diagnostic}`
-        throw new Error(`SubagentTextRunner 子代理未完成：stopReason=${result.stopReason}${detail}`)
+        const detail = result.diagnostic === undefined ? '' : `；diagnostic: ${result.diagnostic}`;
+        throw new Error(`SubagentTextRunner 子代理未完成：stopReason=${result.stopReason}${detail}`);
       }
       const text = (result.output ?? [])
         .filter((b) => b?.type === 'text')
         .map((b) => b.text ?? '')
-        .join('')
+        .join('');
       if (text.trim().length === 0) {
-        throw new Error('SubagentTextRunner 子代理未产出 assistant 文本')
+        throw new Error('SubagentTextRunner 子代理未产出 assistant 文本');
       }
-      return text
+      return text;
     } finally {
       try {
-        await run.dispose()
+        await run.dispose();
       } catch {
         /* 吞掉 dispose 异常 */
       }
     }
-  }
+  };
 }

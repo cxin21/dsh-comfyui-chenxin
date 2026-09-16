@@ -6,38 +6,51 @@
 // （如 `标准（约 150～300 字）`），EXPAND_LENGTH_OPTIONS 取 `label: p.labelUi || p.label` 作为 UI 完整文案。
 // 本 port 的数据结构不承载 labelUi（port-only 决定，T4 裁决）：preset 类型无该字段，UI label 保留短词，
 // 完整篇幅语义由 listExpandLengthsForUi 的 description（= hintZh）承载；不影响 prompt 文本（hintZh/hintEn/maxTokens 逐字一致）。
-export const EXPAND_LENGTH_PRESETS: Record<string, {
-  label: string; maxTokens: number; hintZh: string; hintEn: string;
-}> = {
+export const EXPAND_LENGTH_PRESETS: Record<
+  string,
+  {
+    label: string;
+    maxTokens: number;
+    hintZh: string;
+    hintEn: string;
+  }
+> = {
   very_short: {
-    label: '极简', maxTokens: 128,
+    label: '极简',
+    maxTokens: 128,
     hintZh: '打标/扩写结果控制在 80 字以内（或等价英文词数），只保留最关键信息，禁止冗长描述与重复堆砌。',
     hintEn: 'Keep output within 80 words or equivalent; essential details only, no verbosity.',
   },
   short: {
-    label: '简短', maxTokens: 256,
+    label: '简短',
+    maxTokens: 256,
     hintZh: '扩写结果控制在约 80～150 字（或等价英文词数），以关键词、短句为主，避免冗长段落与重复堆砌。',
     hintEn: 'Keep output concise: about 80–150 words or equivalent, keyword-focused; no long paragraphs.',
   },
   medium: {
-    label: '标准', maxTokens: 512,
+    label: '标准',
+    maxTokens: 512,
     hintZh: '扩写结果约 150～300 字，细节适中，兼顾画面信息量与可读性，不要明显偏短或偏长。',
     hintEn: 'Target about 150–300 words or equivalent detail level; balanced, not too brief or verbose.',
   },
   long: {
-    label: '详细', maxTokens: 768,
+    label: '详细',
+    maxTokens: 768,
     hintZh: '扩写结果约 300～500 字，补充丰富的视觉细节、材质、光线、构图与氛围，仍只输出提示词正文。',
     hintEn: 'Target about 300–500 words with rich visual details (materials, lighting, mood); prompt text only.',
   },
   very_long: {
-    label: '超长', maxTokens: 1024,
+    label: '超长',
+    maxTokens: 1024,
     hintZh: '扩写结果约 500～800 字，尽可能充实画面层次与专业术语，禁止废话、解释与思维链。',
     hintEn: 'Target about 500–800 words, maximize visual depth; no filler, explanation, or chain-of-thought.',
   },
 };
 
 export const EXPAND_LENGTH_OPTIONS = Object.entries(EXPAND_LENGTH_PRESETS).map(([value, p]) => ({
-  value, label: p.label, maxTokens: p.maxTokens,
+  value,
+  label: p.label,
+  maxTokens: p.maxTokens,
 }));
 
 // === 扩写规则 — 8 种 system prompt ===
@@ -167,7 +180,7 @@ Rules:
 ];
 
 export function getExpandRuleById(ruleId: string): ExpandRule {
-  return EXPAND_RULES.find(r => r.id === ruleId) || EXPAND_RULES[0];
+  return EXPAND_RULES.find((r) => r.id === ruleId) || EXPAND_RULES[0];
 }
 
 // === 输出语言 ===
@@ -203,12 +216,16 @@ export function resolveUseEnglishOutput(outputLang: string, shortText: string): 
 export function getOutputLangUserLock(outputLang: string): string {
   const lang = String(outputLang || '').toLowerCase();
   if (lang === 'zh') {
-    return '【输出语言】已锁定为中文（最高优先级）。即使用户输入是英文单词或 tag（如 1girl、solo），' +
-      '也必须用中文自然语言扩写；禁止输出英文 tag 串、禁止整段英文逗号关键词列表。';
+    return (
+      '【输出语言】已锁定为中文（最高优先级）。即使用户输入是英文单词或 tag（如 1girl、solo），' +
+      '也必须用中文自然语言扩写；禁止输出英文 tag 串、禁止整段英文逗号关键词列表。'
+    );
   }
   if (lang === 'en') {
-    return '【Output language】Locked to English (highest priority). Even if input is Chinese, ' +
-      'output must be English only; no Chinese sentences as main content.';
+    return (
+      '【Output language】Locked to English (highest priority). Even if input is Chinese, ' +
+      'output must be English only; no Chinese sentences as main content.'
+    );
   }
   return '';
 }
@@ -217,7 +234,9 @@ export function getOutputLangUserLock(outputLang: string): string {
 const STRUCTURED_EXPAND_RULE_IDS = new Set(['expand_structured_md', 'expand_structured_json']);
 
 function resolveExpandLengthKey(expandLen: string): string {
-  const k = String(expandLen || 'medium').trim().toLowerCase();
+  const k = String(expandLen || 'medium')
+    .trim()
+    .toLowerCase();
   if (k === 'custom' || /^\d+$/.test(k)) return k;
   return EXPAND_LENGTH_PRESETS[k] ? k : 'medium';
 }
@@ -229,10 +248,14 @@ export function parseCustomCharCount(expandLen: string, expandLenChars?: number)
   return null;
 }
 
-export function resolveExpandLengthSpec(expandLen: string, expandLenChars?: number, outputLang = 'auto', limits?: { expandMax?: number } | null) {
+export function resolveExpandLengthSpec(
+  expandLen: string,
+  expandLenChars?: number,
+  outputLang = 'auto',
+  limits?: { expandMax?: number } | null,
+) {
   const expandMax = limits && Number.isFinite(Number(limits.expandMax)) ? Number(limits.expandMax) : 8192;
   const chars = parseCustomCharCount(expandLen, expandLenChars);
-  const useEn = resolveUseEnglishOutput(outputLang, '');
 
   if (chars != null) {
     return {
@@ -259,7 +282,11 @@ export function resolveExpandLengthSpec(expandLen: string, expandLenChars?: numb
   };
 }
 
-export function resolveExpandMaxTokens(expandLen: string, expandLenChars?: number, limits?: { expandMax?: number } | null): number {
+export function resolveExpandMaxTokens(
+  expandLen: string,
+  expandLenChars?: number,
+  limits?: { expandMax?: number } | null,
+): number {
   let maxTokens = resolveExpandLengthSpec(expandLen, expandLenChars).maxTokens;
   // 默认上限 8192（与 PM DEFAULT_LOCAL_TOKEN_LIMITS.expandMax 对齐）
   const defaultMax = 8192;
@@ -268,7 +295,12 @@ export function resolveExpandMaxTokens(expandLen: string, expandLenChars?: numbe
   return Math.max(128, maxTokens);
 }
 
-export function applyExpandLength(systemText: string, expandLen: string, outputLang: string, expandLenChars?: number): string {
+export function applyExpandLength(
+  systemText: string,
+  expandLen: string,
+  outputLang: string,
+  expandLenChars?: number,
+): string {
   const spec = resolveExpandLengthSpec(expandLen, expandLenChars, outputLang);
   const useEn = resolveUseEnglishOutput(outputLang, '');
   const hint = useEn ? spec.hintEn : spec.hintZh;
@@ -282,12 +314,14 @@ export function applyOutputLanguage(systemText: string, outputLang: string, rule
   const rid = String(ruleId || '').trim();
 
   if (STRUCTURED_EXPAND_RULE_IDS.has(rid)) {
-    const lock = lang === 'zh'
-      ? '\n\n【输出语言锁定：中文】Markdown 小节标题可按模板英文（如 ## General）；描述正文用简体中文。'
-      : '\n\n【Output language lock: English】Keep JSON keys as specified; string values in English.';
-    const suffix = lang === 'zh'
-      ? '\n\n只输出要求的 Markdown 或 JSON 结构正文，不要解释过程。'
-      : '\n\nOutput only the required Markdown or JSON body; no explanation.';
+    const lock =
+      lang === 'zh'
+        ? '\n\n【输出语言锁定：中文】Markdown 小节标题可按模板英文（如 ## General）；描述正文用简体中文。'
+        : '\n\n【Output language lock: English】Keep JSON keys as specified; string values in English.';
+    const suffix =
+      lang === 'zh'
+        ? '\n\n只输出要求的 Markdown 或 JSON 结构正文，不要解释过程。'
+        : '\n\nOutput only the required Markdown or JSON body; no explanation.';
     return String(systemText || '').trim() + lock + suffix;
   }
 
@@ -308,7 +342,7 @@ export function resolveExpandSystemMessage(
   outputLang: string,
   expandLen: string,
   expandLenChars: number | undefined,
-  userExtraPrompt: string
+  userExtraPrompt: string,
 ): string {
   const custom = String(customRuleContent || '').trim();
   let base: string;
@@ -337,17 +371,33 @@ export function getExpandFormatHint(ruleId: string, outputLang: string): string 
       ? 'Output format: one line or comma-separated SD prompt tags/phrases; faithful visual detail.'
       : '输出格式：一行或逗号分隔 SD 正向标签/短语，强调可视细节。';
   }
-  if (id === 'Descriptive' || id === 'expand_natural' || id === 'expand_photographer' || id === 'expand_descriptive_en') {
+  if (
+    id === 'Descriptive' ||
+    id === 'expand_natural' ||
+    id === 'expand_photographer' ||
+    id === 'expand_descriptive_en'
+  ) {
     return useEn
       ? 'Output format: natural language prose only (single cohesive description). No tag dumps or markdown headings.'
       : '输出格式：单段自然语言描写，禁止 tag 串与 Markdown 小标题。';
   }
-  if (id === 'min_structured_md' || id === 'min_structured_md_body' || id === 'expand_structured_md' || id.startsWith('expand_torii_min_structured_md')) {
+  if (
+    id === 'min_structured_md' ||
+    id === 'min_structured_md_body' ||
+    id === 'expand_structured_md' ||
+    id.startsWith('expand_torii_min_structured_md')
+  ) {
     return useEn
       ? 'Output format: Markdown only (# 3. Structured description with ## sections). No JSON, no explanation.'
       : '输出格式：仅 Markdown 结构化正文（## General、分角色节等），不要 JSON、不要解释。';
   }
-  if (id === 'min_structured_json' || id === 'json' || id === 'expand_structured_json' || id.startsWith('expand_torii_min_structured_json') || id.startsWith('expand_torii_json')) {
+  if (
+    id === 'min_structured_json' ||
+    id === 'json' ||
+    id === 'expand_structured_json' ||
+    id.startsWith('expand_torii_min_structured_json') ||
+    id.startsWith('expand_torii_json')
+  ) {
     return useEn
       ? 'Output format: one valid JSON object only. No Markdown wrapper, no explanation.'
       : '输出格式：仅一个 JSON 对象，不要 Markdown、不要解释。';
@@ -361,7 +411,7 @@ export function buildExpandUserPrompt(
   outputLang: string,
   expandLenChars: number | undefined,
   ruleId: string,
-  userExtraPrompt: string
+  userExtraPrompt: string,
 ): string {
   const t = String(shortText || '').trim();
   const extra = String(userExtraPrompt || '').trim();
@@ -384,16 +434,24 @@ export function buildExpandUserPrompt(
 }
 
 export function listExpandRulesForUi() {
-  return EXPAND_RULES.map(r => ({
-    id: r.id, label: r.category ? `${r.category} / ${r.name}` : r.name,
-    name: r.name, category: r.category,
+  return EXPAND_RULES.map((r) => ({
+    id: r.id,
+    label: r.category ? `${r.category} / ${r.name}` : r.name,
+    name: r.name,
+    category: r.category,
   }));
 }
 
 export function listExpandLengthsForUi() {
-  const presets = EXPAND_LENGTH_OPTIONS.map(o => ({
-    ...o, description: EXPAND_LENGTH_PRESETS[o.value].hintZh,
+  const presets = EXPAND_LENGTH_OPTIONS.map((o) => ({
+    ...o,
+    description: EXPAND_LENGTH_PRESETS[o.value].hintZh,
   }));
-  presets.push({ value: 'custom', label: '自定义字数', maxTokens: null as any, description: '在下方输入目标字数（任意正整数）' });
+  presets.push({
+    value: 'custom',
+    label: '自定义字数',
+    maxTokens: null as any,
+    description: '在下方输入目标字数（任意正整数）',
+  });
   return presets;
 }

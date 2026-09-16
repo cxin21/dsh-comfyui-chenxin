@@ -18,9 +18,7 @@
         "matched_name": "long_hair",
         "name_type": "canonical",
         "score": 1000,
-        "aliases": [
-          "/lh"
-        ],
+        "aliases": ["/lh"],
         "provenance": [
           "raw_record_id:662719",
           "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",

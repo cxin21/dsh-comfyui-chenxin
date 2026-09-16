@@ -7,41 +7,47 @@
  *     信号计算层落实（Task 12/14 拼装 RecommendSignals 时处理）；
  *   - 非法 hint（isKnownCardId 不过）忽略，回退默认卡并记 reason 'invalid_hint_ignored'。
  */
-import { isKnownCardId, type ArtDirectionField } from '../enrich/art-direction.js'
+import { isKnownCardId, type ArtDirectionField } from '../enrich/art-direction.js';
 
 export interface RecommendSignals {
-  media: 'image' | 'video' | 'mixed'
-  hasMotionIntent: boolean
-  hasLighting: boolean
-  hasComposition: boolean
-  hasFocal: boolean
-  presetHints?: Partial<Record<ArtDirectionField, string>>
+  media: 'image' | 'video' | 'mixed';
+  hasMotionIntent: boolean;
+  hasLighting: boolean;
+  hasComposition: boolean;
+  hasFocal: boolean;
+  presetHints?: Partial<Record<ArtDirectionField, string>>;
 }
 
 export interface ArtDirectionRecommendation {
-  field: ArtDirectionField
-  cardId: string
-  reason: string
+  field: ArtDirectionField;
+  cardId: string;
+  reason: string;
 }
 
 export function recommendArtDirection(s: RecommendSignals): ArtDirectionRecommendation[] {
-  const out: ArtDirectionRecommendation[] = []
+  const out: ArtDirectionRecommendation[] = [];
   // ① motion：非纯图媒体且 motion 维度未表达（hasMotionIntent 为「已满足」信号，
   //    与 has* 平行——计划规则①文本 hasMotionIntent||media!=='image' 与其测试 3 直接矛盾，
   //    测试为验收标准，按测试钉死的语义实现）
   if (s.media !== 'image' && !s.hasMotionIntent) {
-    out.push(pick('motion', s.presetHints?.motion, 'dynamic_pose', 'video_media'))
+    out.push(pick('motion', s.presetHints?.motion, 'dynamic_pose', 'video_media'));
   }
   // ② lighting：缺光方向/造型表达
-  if (!s.hasLighting) out.push(pick('lighting', s.presetHints?.lighting, 'cinematic_lighting', 'lighting_missing'))
+  if (!s.hasLighting) out.push(pick('lighting', s.presetHints?.lighting, 'cinematic_lighting', 'lighting_missing'));
   // ③ composition：缺构图锚点
-  if (!s.hasComposition) out.push(pick('composition', s.presetHints?.composition, 'rule_of_thirds', 'composition_missing'))
+  if (!s.hasComposition)
+    out.push(pick('composition', s.presetHints?.composition, 'rule_of_thirds', 'composition_missing'));
   // ④ perspective：缺焦点/景别表达
-  if (!s.hasFocal) out.push(pick('perspective', s.presetHints?.perspective, 'close_up', 'focal_missing'))
-  return out
+  if (!s.hasFocal) out.push(pick('perspective', s.presetHints?.perspective, 'close_up', 'focal_missing'));
+  return out;
 }
 
-function pick(field: ArtDirectionField, hint: string | undefined, fallback: string, baseReason: string): ArtDirectionRecommendation {
-  if (hint && isKnownCardId(field, hint)) return { field, cardId: hint, reason: `preset_hint:${hint}` }
-  return { field, cardId: fallback, reason: hint !== undefined ? 'invalid_hint_ignored' : baseReason }
+function pick(
+  field: ArtDirectionField,
+  hint: string | undefined,
+  fallback: string,
+  baseReason: string,
+): ArtDirectionRecommendation {
+  if (hint && isKnownCardId(field, hint)) return { field, cardId: hint, reason: `preset_hint:${hint}` };
+  return { field, cardId: fallback, reason: hint !== undefined ? 'invalid_hint_ignored' : baseReason };
 }

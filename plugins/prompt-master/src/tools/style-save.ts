@@ -15,39 +15,43 @@
  * 计数取「现值+1」投射；输出 advisory 明示重启后可见（不改动 registry.ts，
  * 进程内热失效留给未来按需演进）。
  */
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import { existsSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
-import { randomBytes } from 'node:crypto'
-import { validateStylePreset, type StylePresetV2 } from '../pe-framework/styles/schema.js'
-import { getStylePreset, stylePresetCount } from '../pe-framework/styles/registry.js'
-import { getPresetRoot } from '../pe-framework/resources/resolve.js'
-import type { Config } from '../plugin/config.js'
-import type { Context } from '@deepseek-ai/cordis'
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import { existsSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { validateStylePreset, type StylePresetV2 } from '../pe-framework/styles/schema.js';
+import { getStylePreset, stylePresetCount } from '../pe-framework/styles/registry.js';
+import { getPresetRoot } from '../pe-framework/resources/resolve.js';
+import type { Config } from '../plugin/config.js';
+import type { Context } from '@deepseek-ai/cordis';
 
 /** 新保存 id 白名单：小写字母/数字/下划线（防穿越第一层；语义与既有库命名约定一致） */
-const ID_RE = /^[a-z0-9_]+$/
+const ID_RE = /^[a-z0-9_]+$/;
 
 /** 风格预设目录：与 registry.ts stylePresetsDir 同一解析链（setPresetRoot → env → 布局回溯）。
  *  刻意本地复制而非改 registry.ts 导出（M3 T2 Files 清单不含 registry.ts；两处逻辑同源，
  *  漂移风险由 resolve 链自身测试与 registry.test 兜底）。 */
 function stylePresetsDir(): string {
-  const configured = getPresetRoot()?.replace(/[\\/]+$/, '') || process.env.DSH_COMFYUI_PRESET_ROOT
-  if (configured) return join(configured, 'plugins', 'prompt-master', 'assets', 'style-presets')
+  const configured = getPresetRoot()?.replace(/[\\/]+$/, '') || process.env.DSH_COMFYUI_PRESET_ROOT;
+  if (configured) return join(configured, 'plugins', 'prompt-master', 'assets', 'style-presets');
   try {
-    const here = decodeURIComponent(import.meta.url.replace(/^file:\/\/\/?/, ''))
-    const parts = here.split(/[\\/]/)
+    const here = decodeURIComponent(import.meta.url.replace(/^file:\/\/\/?/, ''));
+    const parts = here.split(/[\\/]/);
     for (let i = 0; i < parts.length - 1; i++) {
       if (parts[i] === 'plugins' && parts[i + 1] === 'prompt-master') {
-        return join(parts.slice(0, i + 2).join(sep), 'assets', 'style-presets')
+        return join(parts.slice(0, i + 2).join(sep), 'assets', 'style-presets');
       }
     }
-  } catch { /* fall through */ }
-  throw new Error('style_save: cannot locate plugins/prompt-master/assets/style-presets (setPresetRoot / DSH_COMFYUI_PRESET_ROOT / preset layout)')
+  } catch {
+    /* fall through */
+  }
+  throw new Error(
+    'style_save: cannot locate plugins/prompt-master/assets/style-presets (setPresetRoot / DSH_COMFYUI_PRESET_ROOT / preset layout)',
+  );
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** 只写工具（无 LLM）：style_save → JSON 摘要 */
@@ -59,29 +63,38 @@ export function registerStyleSaveTool(_ctx: Context, _config: Config) {
       'id 白名单 ^[a-z0-9_]+$、与现有库重复 id 即拒（style_preset_id_conflict 语义，改写走 git）；' +
       '原子写入 assets/style-presets/<id>.json（tmp+rename，写入即工作树内容，git 提交由用户完成）；零 LLM。',
     parameters: {
-      preset: { type: 'object', additionalProperties: true, description: '完整 StylePresetV2 JSON 对象（id/name/category/rating/fragments/negative_hints/artist_hints/artist_max/applies_to/source）' },
+      preset: {
+        type: 'object',
+        additionalProperties: true,
+        description:
+          '完整 StylePresetV2 JSON 对象（id/name/category/rating/fragments/negative_hints/artist_hints/artist_max/applies_to/source）',
+      },
     },
     output: {
       schema: { type: 'string', description: 'JSON {saved,id,name,path,diff,presetCount,advisories}' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: { preset?: unknown }) {
-      if (!isPlainObject(args?.preset)) throw new Error('style_save: preset must be a JSON object (StylePresetV2)')
-      const raw = args.preset
-      const checked = validateStylePreset(raw)
-      if (!checked.ok) throw new Error(`style_save: preset invalid — ${checked.errors.join('; ')}`)
-      const preset = checked.value as StylePresetV2
-      const id = preset.id
+      if (!isPlainObject(args?.preset)) throw new Error('style_save: preset must be a JSON object (StylePresetV2)');
+      const raw = args.preset;
+      const checked = validateStylePreset(raw);
+      if (!checked.ok) throw new Error(`style_save: preset invalid — ${checked.errors.join('; ')}`);
+      const preset = checked.value as StylePresetV2;
+      const id = preset.id;
       if (!ID_RE.test(id)) {
-        throw new Error(`style_save: id "${id}" fails whitelist ^[a-z0-9_]+$ (new-save naming contract; existing library ids unaffected)`)
+        throw new Error(
+          `style_save: id "${id}" fails whitelist ^[a-z0-9_]+$ (new-save naming contract; existing library ids unaffected)`,
+        );
       }
       if (getStylePreset(id) !== undefined) {
-        throw new Error(`style_save: id conflict — "${id}" already exists in the library (style_preset_id_conflict:${id}); rewriting existing presets is out of scope, use git`)
+        throw new Error(
+          `style_save: id conflict — "${id}" already exists in the library (style_preset_id_conflict:${id}); rewriting existing presets is out of scope, use git`,
+        );
       }
-      const dir = resolve(stylePresetsDir())
-      const finalPath = resolve(join(dir, `${id}.json`))
+      const dir = resolve(stylePresetsDir());
+      const finalPath = resolve(join(dir, `${id}.json`));
       if (!finalPath.startsWith(dir + sep)) {
-        throw new Error(`style_save: resolved path escapes the style-presets whitelist dir (id="${id}")`)
+        throw new Error(`style_save: resolved path escapes the style-presets whitelist dir (id="${id}")`);
       }
       // M4-T2 existsSync 预检（TR2 minor / T3 注记的缓存镜像盲区闭合）：缓存只镜像已提交库，
       // 同进程对刚写入 id 的二次保存绕过缓存检查直达原子写——静默覆盖且不可恢复。写前磁盘
@@ -92,7 +105,7 @@ export function registerStyleSaveTool(_ctx: Context, _config: Config) {
           `style_save: uncommitted_file_conflict — "plugins/prompt-master/assets/style-presets/${id}.json" already exists on disk ` +
             'but is not in the registry cache (uncommitted working-tree file from a previous in-process save; ' +
             'silent overwrite disabled by M4-T2 hardening). Inspect with git diff / git status and commit or remove the file first (工具不碰 git)',
-        )
+        );
       }
       const diff = {
         id: preset.id,
@@ -102,14 +115,14 @@ export function registerStyleSaveTool(_ctx: Context, _config: Config) {
         fragmentsChars: preset.fragments.image.length,
         negativeCount: preset.negative_hints.length,
         artistCount: preset.artist_hints.length,
-      }
-      const tmpPath = join(dir, `.${id}.${randomBytes(4).toString('hex')}.tmp`)
-      writeFileSync(tmpPath, JSON.stringify(preset, null, 2) + '\n', 'utf8')
+      };
+      const tmpPath = join(dir, `.${id}.${randomBytes(4).toString('hex')}.tmp`);
+      writeFileSync(tmpPath, JSON.stringify(preset, null, 2) + '\n', 'utf8');
       try {
-        renameSync(tmpPath, finalPath)
+        renameSync(tmpPath, finalPath);
       } catch (e) {
-        rmSync(tmpPath, { force: true })
-        throw new Error(`style_save: atomic rename failed (${(e as Error)?.message ?? 'unknown'})`)
+        rmSync(tmpPath, { force: true });
+        throw new Error(`style_save: atomic rename failed (${(e as Error)?.message ?? 'unknown'})`);
       }
       const body = {
         saved: true,
@@ -121,8 +134,8 @@ export function registerStyleSaveTool(_ctx: Context, _config: Config) {
         advisories: [
           'style_preset_registry_cache: preset written to the working tree, in-process registry cache not invalidated — restart the plugin process (重启) for style_list/applyStyleV2 to see it; git commit is left to the user (工具不碰 git)',
         ],
-      }
-      return JSON.stringify(body)
+      };
+      return JSON.stringify(body);
     },
-  })
+  });
 }

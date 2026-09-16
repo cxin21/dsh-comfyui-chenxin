@@ -41,11 +41,9 @@ function isMixedBatch(caption: any, media_target?: string): boolean {
   return (media_target || mediaTarget(caption)) === 'mixed';
 }
 
-const COMFYUI_NEGATIVE_HINT_ZH =
-  '【ComfyUI】仅正向提示词；禁止 negative、禁止「不要/避免/no/without」。';
+const COMFYUI_NEGATIVE_HINT_ZH = '【ComfyUI】仅正向提示词；禁止 negative、禁止「不要/避免/no/without」。';
 
-const COMFYUI_NEGATIVE_HINT_EN =
-  '[ComfyUI] Positive prompt ONLY—no negative, no "no/without/avoid".';
+const COMFYUI_NEGATIVE_HINT_EN = '[ComfyUI] Positive prompt ONLY—no negative, no "no/without/avoid".';
 
 /** 还原度检查表：按类目罗列可见要素（模型须逐项观察，有则写入） */
 const FIDELITY_CHECKLIST_ZH: Record<string, string[]> = {
@@ -155,9 +153,7 @@ const FIDELITY_CHECKLIST_EN: Record<string, string[]> = {
     'leg pose (stand/sit/kneel/crossed/lifted/walking), knee/foot direction, weight on which foot',
     'contact points with furniture/people/ground',
   ],
-  objects_interaction: [
-    'held/worn/carried items, multi-subject layout, gaze/contact between subjects',
-  ],
+  objects_interaction: ['held/worn/carried items, multi-subject layout, gaze/contact between subjects'],
   style_medium: [
     'visible medium (photo/illustration/3D/anime/pixel), line/edge quality, detail level, grain/sharpness',
   ],
@@ -179,9 +175,7 @@ function formatChecklist(checklist: Record<string, string[]>, video: boolean): s
     ['style_medium', '风格媒介'],
   ];
   if (video) keys.push(['video_extra', '视频动态']);
-  return keys
-    .map(([k, title]) => `${title}：${checklist[k].join('、')}`)
-    .join('；');
+  return keys.map(([k, title]) => `${title}：${checklist[k].join('、')}`).join('；');
 }
 
 function formatChecklistEn(checklist: Record<string, string[]>, video: boolean): string {
@@ -285,15 +279,17 @@ export function buildAnima3WorkflowBlock(caption: any, media_target: string): st
     parts.push(
       zh
         ? '【视频·ANIMA3】在忠实观察基础上按槽位写 tag，并含动作/运镜；一行英文 lowercase。'
-        : '[Video·ANIMA3] Fidelity observation then slot-filled tags incl. motion/camera; one lowercase English line.'
+        : '[Video·ANIMA3] Fidelity observation then slot-filled tags incl. motion/camera; one lowercase English line.',
     );
   } else if (isMixedBatch(caption, media_target)) {
-    parts.push(zh ? '【混合】每条独立按检查表观察后 ANIMA3 组装。' : '[Mixed] Per file: checklist observe, ANIMA3 assemble.');
+    parts.push(
+      zh ? '【混合】每条独立按检查表观察后 ANIMA3 组装。' : '[Mixed] Per file: checklist observe, ANIMA3 assemble.',
+    );
   } else {
     parts.push(
       zh
         ? '【SD·ANIMA3】一行英文 tag，严格槽位顺序与输出协议；观察用还原检查表，输出用 ANIMA3 组装。'
-        : '[SD·ANIMA3] One lowercase English line; checklist for seeing, ANIMA3 slots for writing.'
+        : '[SD·ANIMA3] One lowercase English line; checklist for seeing, ANIMA3 slots for writing.',
     );
   }
 
@@ -314,20 +310,26 @@ export function buildSystemWorkflowBlock(caption: any, media_target: string): st
     parts.push(
       zh
         ? '【视频】在检查表基础上必须写清动作过程、速度感、运镜方式；勿把动态信息省略成静态快照。'
-        : '[Video] On top of the checklist: motion process, speed, camera move—do not collapse to a still.'
+        : '[Video] On top of the checklist: motion process, speed, camera move—do not collapse to a still.',
     );
   } else if (isMixedBatch(caption, media_target)) {
     parts.push(zh ? '【混合】每条独立按检查表还原。' : '[Mixed] Each file gets full checklist.');
   } else if (TAG_LINE_TYPES.has(ct)) {
-    parts.push(zh ? `【标签式·还原】一行逗号分隔，${tagOrderZh}每个标签对应可见事实。` : `[Tags] One comma line, ${tagOrderEn} visible facts only.`);
+    parts.push(
+      zh
+        ? `【标签式·还原】一行逗号分隔，${tagOrderZh}每个标签对应可见事实。`
+        : `[Tags] One comma line, ${tagOrderEn} visible facts only.`,
+    );
   } else if (PROSE_TYPES.has(ct)) {
     parts.push(
       zh
         ? '【描述式·还原】按检查表类目用连贯句写出，优先覆盖：构图→场景→光影→主体→头面→四肢→服装→风格；勿漏手脚朝向。'
-        : '[Prose] Cover checklist categories in sentences: framing→scene→light→subject→head/face→limbs→clothing→style; include hand/leg pose.'
+        : '[Prose] Cover checklist categories in sentences: framing→scene→light→subject→head/face→limbs→clothing→style; include hand/leg pose.',
     );
   } else if (ct === 'MidJourney') {
-    parts.push(zh ? '【MJ式】关键词覆盖检查表各项，含朝向与肢体。' : '[MJ] Keywords across checklist incl. orientation/limbs.');
+    parts.push(
+      zh ? '【MJ式】关键词覆盖检查表各项，含朝向与肢体。' : '[MJ] Keywords across checklist incl. orientation/limbs.',
+    );
   } else {
     parts.push(zh ? '【还原】按检查表写全可见要素。' : '[Faithful] Full checklist coverage.');
   }

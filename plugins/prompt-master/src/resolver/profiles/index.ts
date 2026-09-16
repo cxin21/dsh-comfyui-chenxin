@@ -3,11 +3,7 @@
 // 也支持运行时从 SQLite custom_profiles 加载用户 Profile
 
 import { PEProfile } from '../types.js';
-import {
-  REVERSE_TAGS,
-  ALL_SUBJECT_DOMAIN_IDS,
-  enrichProfileTaxonomy,
-} from '../taxonomy.js';
+import { REVERSE_TAGS, ALL_SUBJECT_DOMAIN_IDS, enrichProfileTaxonomy } from '../taxonomy.js';
 import { buildToriiReverseProfiles } from './torii/formats.js';
 import { buildExpandProfilesFromReverseCatalog } from './expand-mirror.js';
 import { buildBuiltinTrainCaptionProfiles } from './train/index.js';
@@ -25,7 +21,8 @@ const BUILTIN_REVERSE_PROFILES: PEProfile[] = [
     name: '自然语言 · 五点结构式',
     category: '反推',
     description: '单段连贯自然语言，按五点结构（构图、主体、环境、文字、风格）极致还原画面。',
-    enabled: true, sort: 10,
+    enabled: true,
+    sort: 10,
     outputFormat: 'prose',
     tags: REVERSE_TAGS.Descriptive,
     subjectDomains: ALL_SUBJECT_DOMAIN_IDS,
@@ -38,7 +35,8 @@ const BUILTIN_REVERSE_PROFILES: PEProfile[] = [
     name: 'SD 标签 · Stable Diffusion 提示词格式',
     category: '反推',
     description: '一行逗号分隔 SD 正向标签，含完整还原检查表。',
-    enabled: true, sort: 20,
+    enabled: true,
+    sort: 20,
     outputFormat: 'sd_tags',
     tags: REVERSE_TAGS.Stable_Diffusion_Prompt,
     subjectDomains: ALL_SUBJECT_DOMAIN_IDS,
@@ -51,7 +49,8 @@ const BUILTIN_REVERSE_PROFILES: PEProfile[] = [
     name: 'Danbooru 标签 · 标准前缀式',
     category: '反推',
     description: '一行英文 Danbooru 风格 tag（短语内空格）。',
-    enabled: true, sort: 30,
+    enabled: true,
+    sort: 30,
     outputFormat: 'danbooru_tags',
     tags: REVERSE_TAGS.Danbooru_tag_list,
     subjectDomains: ['general', 'portrait'],
@@ -73,13 +72,15 @@ function buildBuiltinExpandProfiles(): PEProfile[] {
     description: r.description,
     enabled: true,
     sort: i + 1,
-    outputFormat: (
-      r.id === 'expand_danbooru' ? 'danbooru_tags' :
-      r.id === 'expand_compact' || r.id === 'expand_cinematic' ? 'sd_tags' :
-      r.id === 'expand_structured_md' ? 'structured_md' :
-      r.id === 'expand_structured_json' ? 'structured_json' :
-      'prose'
-    ) as any,
+    outputFormat: (r.id === 'expand_danbooru'
+      ? 'danbooru_tags'
+      : r.id === 'expand_compact' || r.id === 'expand_cinematic'
+        ? 'sd_tags'
+        : r.id === 'expand_structured_md'
+          ? 'structured_md'
+          : r.id === 'expand_structured_json'
+            ? 'structured_json'
+            : 'prose') as any,
     tags: [r.category],
     subjectDomains: ALL_SUBJECT_DOMAIN_IDS,
   }));
@@ -140,11 +141,13 @@ export function getDefaultBuiltinProfiles(): PEProfile[] {
     ...train,
     ...torii,
     ...customs,
-  ].map((p) => enrichProfileTaxonomy({
-    ...p,
-    createdAt: p.createdAt || now,
-    updatedAt: p.updatedAt || now,
-  }));
+  ].map((p) =>
+    enrichProfileTaxonomy({
+      ...p,
+      createdAt: p.createdAt || now,
+      updatedAt: p.updatedAt || now,
+    }),
+  );
 
   return cached;
 }
@@ -152,9 +155,9 @@ export function getDefaultBuiltinProfiles(): PEProfile[] {
 /** 从注入源读自定义 profile；未注入或异常时返回 []（与 DB 不可用时行为一致） */
 function safeListCustomProfiles(): any[] {
   try {
-    return getCustomProfileSource()()
+    return getCustomProfileSource()();
   } catch {
-    return []
+    return [];
   }
 }
 

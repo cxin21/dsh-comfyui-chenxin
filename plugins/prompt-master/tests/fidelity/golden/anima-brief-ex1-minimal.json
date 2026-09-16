@@ -4,23 +4,10 @@
     "variant": "base",
     "subject": "smiling girl portrait",
     "slots": {
-      "count_gender": [
-        "1girl",
-        "solo"
-      ],
-      "appearance": [
-        "long hair",
-        "blue eyes",
-        "smile",
-        "blush"
-      ],
-      "expression": [
-        "smile"
-      ],
-      "camera": [
-        "close-up",
-        "looking at viewer"
-      ]
+      "count_gender": ["1girl", "solo"],
+      "appearance": ["long hair", "blue eyes", "smile", "blush"],
+      "expression": ["smile"],
+      "camera": ["close-up", "looking at viewer"]
     }
   },
   "pythonOutput": {

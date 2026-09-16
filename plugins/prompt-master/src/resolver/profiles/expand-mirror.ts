@@ -1,11 +1,21 @@
 // 反推→扩写镜像管线 — 1:1 移植自 PM expandReverseMirror.js
 
-import { resolveExpandSystemMessage, buildExpandUserPrompt, resolveExpandMaxTokens, applyExpandLength, applyUserExtraPrompt, applyOutputLanguage } from './expand-rules.js';
+import {
+
+  buildExpandUserPrompt,
+  resolveExpandMaxTokens,
+  applyExpandLength,
+  applyUserExtraPrompt,
+  applyOutputLanguage,
+} from './expand-rules.js';
 import { PROMPTS_B } from './torii/prompts.js';
 import { isStructuredTemplateProfile } from './torii/formats.js';
 import { PEProfile, ExpandResult } from '../types.js';
-import { buildSystemPrompt as routerBuildSystemPrompt, buildSystemAddons as routerBuildSystemAddons } from './reverse/router.js';
-import { renderTemplate } from '../renderer.js';
+import {
+  buildSystemPrompt as routerBuildSystemPrompt,
+  buildSystemAddons as routerBuildSystemAddons,
+} from './reverse/router.js';
+
 
 function mirrorProfileForExpand(src: PEProfile): PEProfile {
   let id = String(src.id || '').trim();
@@ -17,14 +27,20 @@ function mirrorProfileForExpand(src: PEProfile): PEProfile {
     ...src,
     id,
     kind: 'expand',
-    category: String(src.category || '').replace(/^反推$/, '扩写').replace(/^结构化 \/ /, '扩写 / ') || '扩写',
+    category:
+      String(src.category || '')
+        .replace(/^反推$/, '扩写')
+        .replace(/^结构化 \/ /, '扩写 / ') || '扩写',
     expandMirrorOf: src.id,
     systemPrompt: undefined,
     userPromptTemplate: undefined,
   };
 }
 
-export function buildExpandProfilesFromReverseCatalog(reverseProfiles: PEProfile[], toriiProfiles: PEProfile[]): PEProfile[] {
+export function buildExpandProfilesFromReverseCatalog(
+  reverseProfiles: PEProfile[],
+  toriiProfiles: PEProfile[],
+): PEProfile[] {
   return [...(reverseProfiles || []), ...(toriiProfiles || [])].map(mirrorProfileForExpand);
 }
 
@@ -32,7 +48,12 @@ export function isReverseCatalogExpandProfile(profile: PEProfile | null): boolea
   if (!profile || profile.kind !== 'expand') return false;
   if ((profile as any).expandMirrorOf) return true;
   const id = String(profile.id || '');
-  return id === 'pe_expand_descriptive' || id === 'pe_expand_sd' || id === 'pe_expand_danbooru' || id.startsWith('pe_expand_torii_');
+  return (
+    id === 'pe_expand_descriptive' ||
+    id === 'pe_expand_sd' ||
+    id === 'pe_expand_danbooru' ||
+    id.startsWith('pe_expand_torii_')
+  );
 }
 
 function adaptReversePeSystemForExpand(system: string, outputLang: string): string {
@@ -50,7 +71,13 @@ function adaptReversePeSystemForExpand(system: string, outputLang: string): stri
   );
 }
 
-function buildStructuredExpandSystem(profile: PEProfile, outputLang: string, expandLen: string, expandLenChars: number | undefined, userExtraPrompt: string): string {
+function buildStructuredExpandSystem(
+  profile: PEProfile,
+  outputLang: string,
+  expandLen: string,
+  expandLenChars: number | undefined,
+  userExtraPrompt: string,
+): string {
   const fmt = String((profile as any).builtinKey || '').trim();
   const formatBlock = (PROMPTS_B as any)[fmt] || '';
   const useEn = String(outputLang || 'zh') === 'en';
@@ -78,7 +105,7 @@ export function resolveExpandFromReverseMirror(profile: PEProfile, params: any):
       outputLang,
       expandLenChars,
       `expand_torii_${(profile as any).builtinKey}`,
-      userExtraPrompt
+      userExtraPrompt,
     );
     return {
       system,
@@ -109,7 +136,7 @@ export function resolveExpandFromReverseMirror(profile: PEProfile, params: any):
     outputLang,
     expandLenChars,
     (profile as any).builtinKey,
-    userExtraPrompt
+    userExtraPrompt,
   );
 
   return {

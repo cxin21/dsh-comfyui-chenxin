@@ -5,4 +5,4 @@
 export const FEEDBACK_TAG_VOCAB: Record<'anima' | 'h3', readonly string[]> = {
   anima: ['构图', '肢体', '风格偏差', '颜色', '细节崩坏', '与描述不符', '比例', '背景'],
   h3: ['角色不一致', '镜头冗余', '节奏', '运镜', '穿帮', '与描述不符', '口型', '转场'],
-}
+};

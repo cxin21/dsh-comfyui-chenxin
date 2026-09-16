@@ -8,89 +8,87 @@
  * 存在的 id 须在对应卡组中，否则 ok:false reason='invalid_art_direction'（与 brief_too_large 同款整体降级，不静默修补）。
  */
 
-import { isKnownCardId, type ArtDirectionField } from './art-direction.js'
+import { isKnownCardId, type ArtDirectionField } from './art-direction.js';
 
-export type BriefItem = { text: string; source: 'user' | 'enriched' }
+export type BriefItem = { text: string; source: 'user' | 'enriched' };
 
 /** Round8 T3Q：所选艺术指导卡片 id（值须为对应类目卡组中的卡片 id；字段全部可选） */
 export interface ArtDirectionSelection {
-  perspective?: string
-  composition?: string
-  lighting?: string
-  color?: string
-  motion?: string
+  perspective?: string;
+  composition?: string;
+  lighting?: string;
+  color?: string;
+  motion?: string;
 }
 
 export interface EnrichedBrief {
-  outputLang: 'en' | 'zh' | 'ja'
-  subject: BriefItem[]
-  scene: BriefItem[]
-  composition: BriefItem[]
-  lighting: BriefItem[]
-  color: BriefItem[]
-  style: BriefItem[]
-  mood: BriefItem[]
-  nameAnchors: Array<{ original: string; anchored: string }>
-  artDirection?: ArtDirectionSelection
+  outputLang: 'en' | 'zh' | 'ja';
+  subject: BriefItem[];
+  scene: BriefItem[];
+  composition: BriefItem[];
+  lighting: BriefItem[];
+  color: BriefItem[];
+  style: BriefItem[];
+  mood: BriefItem[];
+  nameAnchors: Array<{ original: string; anchored: string }>;
+  artDirection?: ArtDirectionSelection;
 }
 
-export const BRIEF_MAX_ITEMS_PER_DIM = 6
-export const BRIEF_MAX_TEXT_LEN = 200
+export const BRIEF_MAX_ITEMS_PER_DIM = 6;
+export const BRIEF_MAX_TEXT_LEN = 200;
 
-const DIMENSIONS = ['subject', 'scene', 'composition', 'lighting', 'color', 'style', 'mood'] as const
+const DIMENSIONS = ['subject', 'scene', 'composition', 'lighting', 'color', 'style', 'mood'] as const;
 
-const ART_DIRECTION_KEYS: readonly ArtDirectionField[] = ['perspective', 'composition', 'lighting', 'color', 'motion']
+const ART_DIRECTION_KEYS: readonly ArtDirectionField[] = ['perspective', 'composition', 'lighting', 'color', 'motion'];
 
-const OUTPUT_LANGS = new Set(['en', 'zh', 'ja'])
+const OUTPUT_LANGS = new Set(['en', 'zh', 'ja']);
 
 function fail(reason: string): { ok: false; reason: string } {
-  return { ok: false, reason }
+  return { ok: false, reason };
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 function validItem(v: unknown): v is BriefItem {
-  return isPlainObject(v)
-    && typeof v['text'] === 'string'
-    && (v['source'] === 'user' || v['source'] === 'enriched')
+  return isPlainObject(v) && typeof v['text'] === 'string' && (v['source'] === 'user' || v['source'] === 'enriched');
 }
 
 /** 校验 EnrichedBrief：形状不合 → ok:false（描述性 reason）；任一大小超限 → reason='brief_too_large'（不截断）。 */
 export function validateBrief(raw: unknown): { ok: true; brief: EnrichedBrief } | { ok: false; reason: string } {
-  if (!isPlainObject(raw)) return fail('invalid_shape:not_an_object')
-  const lang = raw['outputLang']
-  if (typeof lang !== 'string' || !OUTPUT_LANGS.has(lang)) return fail('invalid_outputLang')
+  if (!isPlainObject(raw)) return fail('invalid_shape:not_an_object');
+  const lang = raw['outputLang'];
+  if (typeof lang !== 'string' || !OUTPUT_LANGS.has(lang)) return fail('invalid_outputLang');
   for (const dim of DIMENSIONS) {
-    const arr = raw[dim]
-    if (!Array.isArray(arr)) return fail(`invalid_dim:${dim}`)
-    if (arr.length > BRIEF_MAX_ITEMS_PER_DIM) return fail('brief_too_large')
+    const arr = raw[dim];
+    if (!Array.isArray(arr)) return fail(`invalid_dim:${dim}`);
+    if (arr.length > BRIEF_MAX_ITEMS_PER_DIM) return fail('brief_too_large');
     for (const it of arr) {
-      if (!validItem(it)) return fail(`invalid_item:${dim}`)
-      if (it.text.length > BRIEF_MAX_TEXT_LEN) return fail('brief_too_large')
+      if (!validItem(it)) return fail(`invalid_item:${dim}`);
+      if (it.text.length > BRIEF_MAX_TEXT_LEN) return fail('brief_too_large');
     }
   }
-  const anchors = raw['nameAnchors']
-  if (!Array.isArray(anchors)) return fail('invalid_nameAnchors')
+  const anchors = raw['nameAnchors'];
+  if (!Array.isArray(anchors)) return fail('invalid_nameAnchors');
   for (const a of anchors) {
     if (!isPlainObject(a) || typeof a['original'] !== 'string' || typeof a['anchored'] !== 'string') {
-      return fail('invalid_nameAnchors')
+      return fail('invalid_nameAnchors');
     }
   }
   // Round8 T3Q：artDirection 可选——出现即逐字段校验（未选字段忽略；未知/跨类目/非串 id → 整体 invalid_art_direction）
-  let artDirection: ArtDirectionSelection | undefined
-  const rawAd = raw['artDirection']
+  let artDirection: ArtDirectionSelection | undefined;
+  const rawAd = raw['artDirection'];
   if (rawAd !== undefined) {
-    if (!isPlainObject(rawAd)) return fail('invalid_art_direction')
-    const sel: ArtDirectionSelection = {}
+    if (!isPlainObject(rawAd)) return fail('invalid_art_direction');
+    const sel: ArtDirectionSelection = {};
     for (const field of ART_DIRECTION_KEYS) {
-      const v = rawAd[field]
-      if (v === undefined) continue
-      if (typeof v !== 'string' || !isKnownCardId(field, v)) return fail('invalid_art_direction')
-      sel[field] = v
+      const v = rawAd[field];
+      if (v === undefined) continue;
+      if (typeof v !== 'string' || !isKnownCardId(field, v)) return fail('invalid_art_direction');
+      sel[field] = v;
     }
-    if (ART_DIRECTION_KEYS.some((field) => sel[field] !== undefined)) artDirection = sel
+    if (ART_DIRECTION_KEYS.some((field) => sel[field] !== undefined)) artDirection = sel;
   }
   return {
     ok: true,
@@ -106,5 +104,5 @@ export function validateBrief(raw: unknown): { ok: true; brief: EnrichedBrief } 
       nameAnchors: anchors as EnrichedBrief['nameAnchors'],
       ...(artDirection ? { artDirection } : {}),
     },
-  }
+  };
 }

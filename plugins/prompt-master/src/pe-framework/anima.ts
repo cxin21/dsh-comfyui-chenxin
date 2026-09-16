@@ -1,4 +1,4 @@
-import type { Target } from './types.js'
+import type { Target } from './types.js';
 
 /**
  * Anima 槽序（前端权重敏感，顺序不得更改）。
@@ -19,8 +19,8 @@ export const SLOT_ORDER: string[] = [
   'camera',
   'scene',
   'detail_mood',
-]
+];
 
-export const TARGETS: Target[] = ['anima', 'h3', 'sd', 'generic']
+export const TARGETS: Target[] = ['anima', 'h3', 'sd', 'generic'];
 
-export const THREE_VARIANTS = ['base', 'aesthetic', 'turbo'] as const
+export const THREE_VARIANTS = ['base', 'aesthetic', 'turbo'] as const;

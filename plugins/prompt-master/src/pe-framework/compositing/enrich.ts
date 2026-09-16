@@ -4,10 +4,10 @@
  * patch 路径白名单（COMPOSITING_SET_ALLOWED/ADDITIONS_ALLOWED）确定性剥离越权叶；
  * 降级铁律：解析/应用失败 → v0 原样 + enrich_skipped advisory，永不抛出（不阻塞出稿）。
  */
-import { buildTaskText } from '../llm/task-text.js'
-import { extractFirstJsonObject } from '../llm/json-extract.js'
-import { prunePatchPaths, COMPOSITING_SET_ALLOWED, COMPOSITING_ADDITIONS_ALLOWED } from '../enrichment/engine.js'
-import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
+import { buildTaskText } from '../llm/task-text.js';
+import { extractFirstJsonObject } from '../llm/json-extract.js';
+import { prunePatchPaths, COMPOSITING_SET_ALLOWED, COMPOSITING_ADDITIONS_ALLOWED } from '../enrichment/engine.js';
+import type { SemanticBlueprint } from '../blueprint/semantic-schema.js';
 
 export const ENRICH_SEMANTIC_PERSONA = `角色：你是画面美学扩展引擎。输入是画面语义蓝图 v0，你的任务是把美学维度补足为 v1：
 光影（光源物件与人物曝光）、色彩（主色+≤2辅色、冷暖主导）、质感、氛围粒子、构图细节。只补美学，不改语义。
@@ -26,39 +26,39 @@ export const ENRICH_SEMANTIC_PERSONA = `角色：你是画面美学扩展引擎�
 【信息密度基准（few-shot——patch 的粒度即目标形态）】
 输入 v0.mood = "nocturnal" →
 {"set":{"mood":"nocturnal with quiet tension","composition":{"placement":"right third, stone steps leading lines behind"}},"additions":{"core":{"style_hints":["flat cel shading with muted palette"]}}}
-（只补美学语义，不出现任何词库拼写）`
+（只补美学语义，不出现任何词库拼写）`;
 
 export interface SemanticEnrichResult {
-  v1: SemanticBlueprint
-  advisories: string[]
+  v1: SemanticBlueprint;
+  advisories: string[];
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** A7 类型守卫：写入值与目标字段类型一致才放行（目标未定义视为新字段，放行） */
 function typeOk(tv: unknown, v: unknown): boolean {
-  if (tv === undefined) return true
-  if (Array.isArray(v)) return Array.isArray(tv)
-  if (Array.isArray(tv)) return false
-  if (isPlainObject(v) !== isPlainObject(tv)) return false
-  return typeof v === typeof tv
+  if (tv === undefined) return true;
+  if (Array.isArray(v)) return Array.isArray(tv);
+  if (Array.isArray(tv)) return false;
+  if (isPlainObject(v) !== isPlainObject(tv)) return false;
+  return typeof v === typeof tv;
 }
 
 function deepMergeChecked(target: Record<string, unknown>, patch: Record<string, unknown>): number {
-  let violations = 0
+  let violations = 0;
   for (const [k, v] of Object.entries(patch)) {
-    const tv = target[k]
+    const tv = target[k];
     if (isPlainObject(v) && isPlainObject(tv)) {
-      violations += deepMergeChecked(tv as Record<string, unknown>, v)
+      violations += deepMergeChecked(tv as Record<string, unknown>, v);
     } else if (!typeOk(tv, v)) {
-      violations++ // A7：类型不匹配确定性丢弃（run1 崩溃根因：对象覆写字符串 mood）
+      violations++; // A7：类型不匹配确定性丢弃（run1 崩溃根因：对象覆写字符串 mood）
     } else {
-      target[k] = v
+      target[k] = v;
     }
   }
-  return violations
+  return violations;
 }
 
 /**
@@ -70,42 +70,42 @@ function deepMergeChecked(target: Record<string, unknown>, patch: Record<string,
  * 返回违规计数（0 = 无）。
  */
 function mergeAdditionsChecked(target: Record<string, unknown>, additions: Record<string, unknown>): number {
-  let violations = 0
+  let violations = 0;
   const walk = (t: Record<string, unknown>, p: Record<string, unknown>): void => {
     for (const [k, v] of Object.entries(p)) {
-      const tv = t[k]
+      const tv = t[k];
       if (Array.isArray(v)) {
         if (tv !== undefined && !Array.isArray(tv)) {
-          violations++ // 数组字段禁非数组写入
-          continue
+          violations++; // 数组字段禁非数组写入
+          continue;
         }
-        const base = Array.isArray(tv) ? (tv as unknown[]) : []
-        t[k] = [...base, ...v.filter((x) => !base.some((b) => JSON.stringify(b) === JSON.stringify(x)))]
+        const base = Array.isArray(tv) ? (tv as unknown[]) : [];
+        t[k] = [...base, ...v.filter((x) => !base.some((b) => JSON.stringify(b) === JSON.stringify(x)))];
       } else if (typeof v === 'string') {
         if (tv !== undefined && typeof tv !== 'string' && !Array.isArray(tv)) {
-          violations++ // 标量写入非标量字段
-          continue
+          violations++; // 标量写入非标量字段
+          continue;
         }
         if (typeof tv === 'string') {
-          t[k] = tv.toLowerCase().includes(v.toLowerCase()) ? tv : `${tv}, ${v}`
+          t[k] = tv.toLowerCase().includes(v.toLowerCase()) ? tv : `${tv}, ${v}`;
         } else {
-          t[k] = v
+          t[k] = v;
         }
       } else if (isPlainObject(v)) {
         if (tv !== undefined && !isPlainObject(tv)) {
-          violations++ // 对象写入非对象字段（run1 崩溃根因：对象覆写字符串 mood）
-          continue
+          violations++; // 对象写入非对象字段（run1 崩溃根因：对象覆写字符串 mood）
+          continue;
         }
-        if (!isPlainObject(tv)) t[k] = {}
-        walk(t[k] as Record<string, unknown>, v)
+        if (!isPlainObject(tv)) t[k] = {};
+        walk(t[k] as Record<string, unknown>, v);
       } else {
-        violations++ // 其他标量：仅允许写入 undefined 或同型标量字段
-        continue
+        violations++; // 其他标量：仅允许写入 undefined 或同型标量字段
+        continue;
       }
     }
-  }
-  walk(target, additions)
-  return violations
+  };
+  walk(target, additions);
+  return violations;
 }
 
 /**
@@ -116,7 +116,6 @@ function mergeAdditionsChecked(target: Record<string, unknown>, additions: Recor
  * - 其余（嵌套对象）：递归同规则
  * A7：值类型不匹配的写入确定性丢弃（见 mergeAdditionsChecked）。
  */
-const mergeAdditions = mergeAdditionsChecked
 
 export function buildEnrichPrompt(v0: SemanticBlueprint): string {
   return buildTaskText([
@@ -139,47 +138,47 @@ export function buildEnrichPrompt(v0: SemanticBlueprint): string {
         'set/additions 块按需省略；本任务为 one-shot 结构产出：不要调用任何工具',
       ].join('\n'),
     },
-  ])
+  ]);
 }
 
 /** patch 解析 + 白名单剥离 + set 深合并 + additions 追加（导出供测试）；非法 JSON 抛错由 runSemanticEnrich 捕获降级 */
-export function applySemanticPatch(
-  v0: SemanticBlueprint,
-  raw: string,
-): SemanticEnrichResult {
+export function applySemanticPatch(v0: SemanticBlueprint, raw: string): SemanticEnrichResult {
   // 2026-09-16 活跑实证（gen_1789522875279）：LLM 在 JSON 后追加说明文字 → 首{到尾}切片跨界
   // parse 失败 → 扩写整轮被跳过。统一改用平衡花括号扫描（截取第一个完整 JSON 对象）。
-  const body = extractFirstJsonObject(raw)
-  const parsed = JSON.parse(body) as Record<string, unknown>
-  const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed
-  const additions = isPlainObject(parsed['additions']) ? (parsed['additions'] as Record<string, unknown>) : undefined
-  let pathViolations = prunePatchPaths(set, COMPOSITING_SET_ALLOWED)
-  if (additions) pathViolations += prunePatchPaths(additions, COMPOSITING_ADDITIONS_ALLOWED)
-  const v1 = structuredClone(v0) as unknown as Record<string, unknown>
-  let typeViolations = deepMergeChecked(v1, set)
-  if (additions) typeViolations += mergeAdditionsChecked(v1, additions) // 追加语义（数组 concat 去重 / 字符串增量），非覆盖
-  const advisories: string[] = []
-  if (pathViolations > 0) advisories.push(`enrich_path_violation:${pathViolations}`)
-  if (typeViolations > 0) advisories.push(`enrich_type_violation:${typeViolations}`)
-  return { v1: v1 as unknown as SemanticBlueprint, advisories }
+  const body = extractFirstJsonObject(raw);
+  const parsed = JSON.parse(body) as Record<string, unknown>;
+  const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed;
+  const additions = isPlainObject(parsed['additions']) ? (parsed['additions'] as Record<string, unknown>) : undefined;
+  let pathViolations = prunePatchPaths(set, COMPOSITING_SET_ALLOWED);
+  if (additions) pathViolations += prunePatchPaths(additions, COMPOSITING_ADDITIONS_ALLOWED);
+  const v1 = structuredClone(v0) as unknown as Record<string, unknown>;
+  let typeViolations = deepMergeChecked(v1, set);
+  if (additions) typeViolations += mergeAdditionsChecked(v1, additions); // 追加语义（数组 concat 去重 / 字符串增量），非覆盖
+  const advisories: string[] = [];
+  if (pathViolations > 0) advisories.push(`enrich_path_violation:${pathViolations}`);
+  if (typeViolations > 0) advisories.push(`enrich_type_violation:${typeViolations}`);
+  return { v1: v1 as unknown as SemanticBlueprint, advisories };
 }
 
 export interface SemanticEnrichOpts {
   /** 子代理文本 runner（pm-enrich）；缺省（无 Agent 会话）→ enrich_skipped 降级 */
-  runner?: (taskText: string) => Promise<string>
+  runner?: (taskText: string) => Promise<string>;
 }
 
-export async function runSemanticEnrich(v0: SemanticBlueprint, opts: SemanticEnrichOpts): Promise<SemanticEnrichResult> {
-  if (!opts.runner) return { v1: v0, advisories: ['enrich_skipped:no_runner'] }
-  let raw: string
+export async function runSemanticEnrich(
+  v0: SemanticBlueprint,
+  opts: SemanticEnrichOpts,
+): Promise<SemanticEnrichResult> {
+  if (!opts.runner) return { v1: v0, advisories: ['enrich_skipped:no_runner'] };
+  let raw: string;
   try {
-    raw = await opts.runner(buildEnrichPrompt(v0))
+    raw = await opts.runner(buildEnrichPrompt(v0));
   } catch (e) {
-    return { v1: v0, advisories: [`enrich_skipped:llm:${(e as Error).message.slice(0, 120)}`] }
+    return { v1: v0, advisories: [`enrich_skipped:llm:${(e as Error).message.slice(0, 120)}`] };
   }
   try {
-    return applySemanticPatch(v0, raw)
+    return applySemanticPatch(v0, raw);
   } catch (e) {
-    return { v1: v0, advisories: [`enrich_skipped:parse:${(e as Error).message.slice(0, 120)}`] }
+    return { v1: v0, advisories: [`enrich_skipped:parse:${(e as Error).message.slice(0, 120)}`] };
   }
 }

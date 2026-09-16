@@ -3,10 +3,10 @@
  * 独立于成文引擎的专一角色——对着违规清单（机器 gates + 审计 findings）改稿，
  * 工具查字典验证新 tag，最小改动原则，蓝图语义冻结。输出契约与 WriterOutput 一致。
  */
-import { buildTaskText } from '../llm/task-text.js'
-import type { WriterOutput } from './writer.js'
-import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
-import { parseWriterOutput } from './writer.js'
+import { buildTaskText } from '../llm/task-text.js';
+import type { WriterOutput } from './writer.js';
+import type { SemanticBlueprint } from '../blueprint/semantic-schema.js';
+import { parseWriterOutput } from './writer.js';
 
 export const REPAIRER_PERSONA = `角色：你是 Anima 提示词修复引擎。输入 = 画面语义蓝图 v1 + 当前成文产物 + 违规清单
 （机器审计 gates + 审计引擎 findings）。你有一个工具：catalog_search（tag 字典查询）。
@@ -30,22 +30,24 @@ R5. 违规清单无法在不违反 R3 的前提下满足时，如实输出当前
 violations：duplicate... near-duplicate long hair + hair over shoulder / NL restates tag night
 修复输出（只动被点名的两处，其余逐字保留）：
 {"tags":[{"text":"1girl","source_concept":"S1.count"},{"text":"solo","source_concept":"S1.count"},{"text":"long hair","source_concept":"S1.appearance"},{"text":"black leather jacket","source_concept":"S1.appearance"},{"text":"looking back","source_concept":"S1.pose"}],"nl":"She stands on the rain-wet street while signboard glow from both sides keeps her face clearly exposed with no silhouette.","negative":[]}
-（删 'hair over shoulder'；NL 的夜景改写为 signboard 光源物件句——tag 'night' 不再被复述）`
+（删 'hair over shoulder'；NL 的夜景改写为 signboard 光源物件句——tag 'night' 不再被复述）`;
 
 export interface RepairInput {
-  bp: SemanticBlueprint
-  draft: WriterOutput
+  bp: SemanticBlueprint;
+  draft: WriterOutput;
   /** 机器审计 gates 文本（rule/severity/detail） */
-  gateViolations: string[]
+  gateViolations: string[];
   /** 审计 LLM findings 文本（[severity] requiredFix） */
-  auditorFindings: string[]
+  auditorFindings: string[];
 }
 
 export function buildRepairPrompt(input: RepairInput): string {
   const violations = [
     ...(input.gateViolations.length > 0 ? ['【机器审计 gates】', ...input.gateViolations.map((g) => `- ${g}`)] : []),
-    ...(input.auditorFindings.length > 0 ? ['【审计引擎 findings】', ...input.auditorFindings.map((f) => `- ${f}`)] : []),
-  ].join('\n')
+    ...(input.auditorFindings.length > 0
+      ? ['【审计引擎 findings】', ...input.auditorFindings.map((f) => `- ${f}`)]
+      : []),
+  ].join('\n');
   return buildTaskText([
     { tag: 'task_persona', body: REPAIRER_PERSONA },
     { tag: 'blueprint_v1', body: JSON.stringify(input.bp, null, 2) },
@@ -58,10 +60,10 @@ export function buildRepairPrompt(input: RepairInput): string {
         '{"tags":[{"text":"…","source_concept":"…"}…],"nl":"…2-4 句英文…","negative":["…"]}',
       ].join('\n'),
     },
-  ])
+  ]);
 }
 
 /** 修复产物解析：契约与 WriterOutput 完全一致（复用 parseWriterOutput） */
 export function parseRepairOutput(raw: string): WriterOutput {
-  return parseWriterOutput(raw)
+  return parseWriterOutput(raw);
 }

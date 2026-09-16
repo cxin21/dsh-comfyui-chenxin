@@ -3,11 +3,7 @@
 // 纯函数；PM 的 Settings 读取（readLocalTokenLimitsFromSettingsService）为 Electron 依赖，不移植，
 // 默认 token 上限内联 DEFAULT_LOCAL_TOKEN_LIMITS.reverseMax = 1024（与 PM localTokenLimits.js 一致）。
 
-import {
-  resolveExpandLengthSpec,
-  parseCustomCharCount,
-  EXPAND_LENGTH_PRESETS,
-} from '../expand-rules.js';
+import { resolveExpandLengthSpec, parseCustomCharCount, EXPAND_LENGTH_PRESETS } from '../expand-rules.js';
 
 const DEFAULT_REVERSE_MAX = 1024;
 
@@ -42,7 +38,7 @@ function capTokens(n: number, min: number, max: number): number {
 
 /** @returns {{ lenKey: string, lenChars: number|null }} */
 export function normalizeCaptionLenKeys(caption: any): { lenKey: string; lenChars: number | null } {
-  let len = caption.len == null || caption.len === '' ? 'medium' : String(caption.len).trim();
+  const len = caption.len == null || caption.len === '' ? 'medium' : String(caption.len).trim();
   const charsFromField = parseCustomCharCount(len, caption.caption_len_chars);
 
   if (charsFromField != null) {

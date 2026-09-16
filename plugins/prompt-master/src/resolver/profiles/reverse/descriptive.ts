@@ -6,17 +6,13 @@ import * as ComfyuiPE from './comfyui.js';
 // 返回档位文案如「150～300」；旧内联 maxTokens×0.75 裸数字系统性偏离上游）
 import { resolveCaptionWordCountHint } from './length.js';
 
-const DESCRIPTIVE_TYPE = 'Descriptive';
+const _DESCRIPTIVE_TYPE = 'Descriptive';
 
 const FIDELITY_PREAMBLE_ZH =
   '【极致还原总则】你的职责是「视觉取证式」反推：像为后续文生图/图生图提供可复现的所见要素清单，而非写作文、讲故事或审美评论。写作前须逐项扫视画面；有则必写、无则省略；只写可见事实，禁止臆造。若画面含人物或拟人主体，头/面/视线、双臂双手（含持物与握法）、双腿双脚与重心、服装配饰材质均为硬性必写项，禁止用「美女/帅哥/精致/一个人」等套话代替。';
 
 const FIDELITY_PREAMBLE_EN =
   '[MAX FIDELITY] Forensic visual extraction for faithful regeneration—not creative writing or story. Scan the frame before writing; include every visible fact, invent nothing. For people/anthropomorphic subjects: head/face orientation, gaze, expression, both arms/hands (grip if holding), legs/feet/weight, clothing materials are mandatory—no generic praise or category-only labels.';
-
-function applies(caption: any): boolean {
-  return (caption.type || '') === DESCRIPTIVE_TYPE;
-}
 
 export function resolveWordCountHint(caption: any): string {
   return resolveCaptionWordCountHint(caption);
@@ -143,9 +139,7 @@ export function buildUserTaskBody(caption: any): string {
 }
 
 export function buildUserTailAddon(): string {
-  return (
-    ' 输出前确认：已按五点+检查表覆盖所有可见要素；人物已写头/视线/双手/双腿；单段自然文；无 **/-/#/序号标题；无虚构文字与套话概括。'
-  );
+  return ' 输出前确认：已按五点+检查表覆盖所有可见要素；人物已写头/视线/双手/双腿；单段自然文；无 **/-/#/序号标题；无虚构文字与套话概括。';
 }
 
 /**

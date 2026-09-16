@@ -1,5 +1,5 @@
 // 测试共享 fixtures — 复用于 resolver / tool / provider 测试
-import type { PEProfile } from '../../src/resolver/types.js';
+
 
 export const expandInputs = {
   natural: '1girl, sunset, beach',

@@ -6,13 +6,13 @@
  * 降级铁律（spec §2.5）：单个依赖构造失败 → 该键缺省（bridge 自动剔除，
  * evidence_partial advisory 由管线层标）；provider 内部故障 → 管线层 skipped 降级。
  */
-import type { BlueprintV1 } from '../blueprint/schema.js'
-import { checkConcreteness } from '../aesthetics/check.js'
-import { countTokensH3 } from '../audit/tokenizer-h3.js'
-import type { CriticProvider } from '../eval/critic.js'
-import { createSubagentCriticProvider } from '../eval/critic.js'
-import type { EvidenceDeps } from '../eval/evidence.js'
-import { searchCatalog } from '../dialect/anima-catalog.js'
+import type { BlueprintV1 } from '../blueprint/schema.js';
+import { checkConcreteness } from '../aesthetics/check.js';
+import { countTokensH3 } from '../audit/tokenizer-h3.js';
+import type { CriticProvider } from '../eval/critic.js';
+import { createSubagentCriticProvider } from '../eval/critic.js';
+import type { EvidenceDeps } from '../eval/evidence.js';
+import { searchCatalog } from '../dialect/anima-catalog.js';
 
 /**
  * 真实证据依赖装配。适配器映射（T2 carry 逐条落实）：
@@ -24,7 +24,7 @@ import { searchCatalog } from '../dialect/anima-catalog.js'
  *   checkConcreteness 全程可选链兼容）→ 扁平摘要；最小构造失败 → lexicon-only 降级摘要。
  */
 export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDeps {
-  const deps: EvidenceDeps = {}
+  const deps: EvidenceDeps = {};
 
   // Round7 T6 catalog 分流防护：仅 anima 装配 catalog 适配器——h3 方言未声明 catalog 工具；
   // 若未来声明需提供 h3 侧证据源。target !== 'anima' 时 catalog 键不进 deps
@@ -34,14 +34,14 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
       deps.catalog = async (query: string) => {
         // searchCatalog 现为 async 公共入口（spec §3.2）：auto 级联末位含 semantic 层；
         // EvidenceDeps.catalog 本就允许 Promise（evidence.ts 桥层 await），适配器直接透传
-        const hits = await searchCatalog(query)
-        if (!Array.isArray(hits)) return []
+        const hits = await searchCatalog(query);
+        if (!Array.isArray(hits)) return [];
         return hits.map((h) => ({
           tag: h.prompt_form ?? h.raw ?? query,
           kind: h.match_type,
           count: typeof h.usage_count === 'number' ? h.usage_count : 0,
-        }))
-      }
+        }));
+      };
     } catch {
       /* 构造失败 → 键缺省 */
     }
@@ -49,13 +49,13 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
 
   try {
     deps.tokenizer = (query: string) => {
-      const r = countTokensH3(query) as { tokens?: number; ids?: number[] }
+      const r = countTokensH3(query) as { tokens?: number; ids?: number[] };
       if (typeof r?.tokens === 'number' && Number.isFinite(r.tokens)) {
-        return { tokens: r.tokens, ...(r.ids !== undefined ? { ids: r.ids } : {}) }
+        return { tokens: r.tokens, ...(r.ids !== undefined ? { ids: r.ids } : {}) };
       }
       // T2 carry：恒带 tokens；undefined → 0 并标 estimate
-      return { tokens: 0, estimate: true }
-    }
+      return { tokens: 0, estimate: true };
+    };
   } catch {
     /* 构造失败 → 键缺省 */
   }
@@ -64,22 +64,22 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
     deps.aesthetics = (query: string) => {
       try {
         // BlueprintV1 最小构造可行：checkConcreteness 对缺失字段全程可选链；core 必须存在
-        const bp = { core: { concept: query } } as unknown as BlueprintV1
-        const r = checkConcreteness(bp)
+        const bp = { core: { concept: query } } as unknown as BlueprintV1;
+        const r = checkConcreteness(bp);
         return {
           concreteness: r.pass ? 'pass' : 'fail',
           ...(r.issues.length > 0 ? { issues: r.issues } : {}),
-        }
+        };
       } catch {
         // 最小构造不可行兜底：仅词法面检查（VAGUE_WORDS 摘要），摘要注明 lexicon-only
-        return { concreteness: 'unknown', mode: 'lexicon-only', query_len: query.length }
+        return { concreteness: 'unknown', mode: 'lexicon-only', query_len: query.length };
       }
-    }
+    };
   } catch {
     /* 构造失败 → 键缺省 */
   }
 
-  return deps
+  return deps;
 }
 
 /**
@@ -89,7 +89,9 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
  * 2026-09-12 P0：opts.parent 透传（工具层从 exec.agent 线穿调用方 Agent，缺 parent 时
  * host 装配子代理直接 TypeError——详见 docs/2026-09-12-camera-language-research.md §2）。
  */
-export function createProductionCriticProvider(ownerCtx: any, opts?: { timeoutMs?: number; parent?: unknown }): CriticProvider {
-  return createSubagentCriticProvider(ownerCtx, opts)
+export function createProductionCriticProvider(
+  ownerCtx: any,
+  opts?: { timeoutMs?: number; parent?: unknown },
+): CriticProvider {
+  return createSubagentCriticProvider(ownerCtx, opts);
 }
-

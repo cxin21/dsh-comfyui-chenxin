@@ -1,21 +1,21 @@
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { Context } from '@deepseek-ai/cordis'
-import { resolve as pathResolve } from 'node:path'
-import { buildCatalog } from '../pe-framework/anima-knowledge/catalog-build.js'
-import { resolveKnowledgePath } from '../pe-framework/resources/resolve.js'
-import type { Config } from '../plugin/config.js'
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import type { Context } from '@deepseek-ai/cordis';
+import { resolve as pathResolve } from 'node:path';
+import { buildCatalog } from '../pe-framework/anima-knowledge/catalog-build.js';
+import { resolveKnowledgePath } from '../pe-framework/resources/resolve.js';
+import type { Config } from '../plugin/config.js';
 
-type LogCtx = { logger?: { info?: (msg: string) => void } }
-const logInfo = (ctx: Context | null, msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg)
+type LogCtx = { logger?: { info?: (msg: string) => void } };
+const logInfo = (ctx: Context | null, msg: string) => (ctx as unknown as LogCtx | undefined)?.logger?.info?.(msg);
 
 function defaultSource(): string {
-  return resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tags.sqlite' })
+  return resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tags.sqlite' });
 }
 function defaultOutput(): string {
-  return resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' })
+  return resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' });
 }
 function defaultManifest(): string {
-  return resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'manifest.json' })
+  return resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'manifest.json' });
 }
 
 /**
@@ -34,46 +34,49 @@ export function registerCatalogBuildTool(ctx: Context, _config: Config) {
       '替换后用 G4 mtime 刷新让 catalog_search 自动读新文件；默认同时重写 manifest.json。',
     parameters: {
       source: { type: 'string', description: '源 tags.sqlite 路径（resolveKnowledgePath default，见根路径注入）' },
-      output: { type: 'string', description: '输出 tag-catalog.sqlite 路径（resolveKnowledgePath default，见根路径注入）' },
+      output: {
+        type: 'string',
+        description: '输出 tag-catalog.sqlite 路径（resolveKnowledgePath default，见根路径注入）',
+      },
     },
     output: {
       schema: { type: 'string', description: 'Envelope JSON {ok, stats?, errors?}' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
     async execute(args: { source?: string; output?: string }) {
-      const sourcePath = args.source?.trim() ? pathResolve(args.source) : defaultSource()
-      const writtenOutput = args.output?.trim() ? pathResolve(args.output) : defaultOutput()
-      const outputPath = writtenOutput
+      const sourcePath = args.source?.trim() ? pathResolve(args.source) : defaultSource();
+      const writtenOutput = args.output?.trim() ? pathResolve(args.output) : defaultOutput();
+      const outputPath = writtenOutput;
       // manifest 仅当目标是默认 knowledge catalog（就地重建）时更新；
       // win32（NTFS 默认不区分大小写）用 case-insensitive 比较，避免大小写差异把自定义 output 误判成默认
       const sameAsDefault =
         process.platform === 'win32'
           ? pathResolve(outputPath).toLowerCase() === pathResolve(defaultOutput()).toLowerCase()
-          : pathResolve(outputPath) === pathResolve(defaultOutput())
-      const manifestPath = sameAsDefault ? defaultManifest() : undefined
+          : pathResolve(outputPath) === pathResolve(defaultOutput());
+      const manifestPath = sameAsDefault ? defaultManifest() : undefined;
       try {
-        const stats = buildCatalog({ sourcePath, outputPath, manifestPath })
+        const stats = buildCatalog({ sourcePath, outputPath, manifestPath });
         logInfo(
           ctx,
           `[prompt-master] catalog_build action=build records=${stats.records} names=${stats.names} ftsRows=${stats.ftsRows} output=${outputPath}`,
-        )
+        );
         return JSON.stringify({
           ok: true,
           stats,
           source: sourcePath,
           output: outputPath,
           manifest: manifestPath ?? null,
-        })
+        });
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
+        const message = e instanceof Error ? e.message : String(e);
         const code = /not found/i.test(message)
           ? 'input_file_missing'
           : /must not overwrite source/i.test(message)
             ? 'argument_error'
-            : 'catalog_build_failed'
-        logInfo(ctx, `[prompt-master] catalog_build failed code=${code} ${message}`)
-        return JSON.stringify({ ok: false, errors: [{ code, message }] })
+            : 'catalog_build_failed';
+        logInfo(ctx, `[prompt-master] catalog_build failed code=${code} ${message}`);
+        return JSON.stringify({ ok: false, errors: [{ code, message }] });
       }
     },
-  })
+  });
 }

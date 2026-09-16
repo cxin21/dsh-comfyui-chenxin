@@ -12,43 +12,43 @@
  * 内 → rejection 落 advisory blueprint_save_failed，fail-open 成立；旧实现的浮空 rejection 在
  * Node 默认 unhandledRejection 语义下直接杀死 DSH 进程）。
  */
-import type { BlueprintV1 } from './schema.js'
+import type { BlueprintV1 } from './schema.js';
 
 export interface BlueprintRepo {
-  save(id: string, bp: BlueprintV1): Promise<unknown>
-  load(id: string): BlueprintV1 | undefined
-  list(): string[]
+  save(id: string, bp: BlueprintV1): Promise<unknown>;
+  load(id: string): BlueprintV1 | undefined;
+  list(): string[];
 }
 
 /** 注入的 settings scope（测试 stub 与真实 scope 的公共形状） */
 export interface RepoSettingsScope {
-  get(): Record<string, string> | undefined
-  update(patch: Record<string, string>): unknown
-  replace(section: Record<string, string>): unknown
+  get(): Record<string, string> | undefined;
+  update(patch: Record<string, string>): unknown;
+  replace(section: Record<string, string>): unknown;
 }
 
 export function createBlueprintRepo(ctx: { settings: RepoSettingsScope }): BlueprintRepo {
-  const settings = ctx.settings
+  const settings = ctx.settings;
   return {
     save(id, bp) {
       try {
-        return Promise.resolve(settings.update({ [id]: JSON.stringify(bp) }))
+        return Promise.resolve(settings.update({ [id]: JSON.stringify(bp) }));
       } catch (error) {
-        return Promise.reject(error) // 同步 throw 也统一到异步面（调用方单一 await 通道）
+        return Promise.reject(error); // 同步 throw 也统一到异步面（调用方单一 await 通道）
       }
     },
     load(id) {
-      const section = settings.get()
-      const raw = section?.[id]
-      if (raw == null) return undefined
+      const section = settings.get();
+      const raw = section?.[id];
+      if (raw == null) return undefined;
       try {
-        return JSON.parse(raw) as BlueprintV1
+        return JSON.parse(raw) as BlueprintV1;
       } catch {
-        return undefined // JSON 解析失败视为缺失（spec §5.3 容错）
+        return undefined; // JSON 解析失败视为缺失（spec §5.3 容错）
       }
     },
     list() {
-      return Object.keys(settings.get() ?? {})
+      return Object.keys(settings.get() ?? {});
     },
-  }
+  };
 }

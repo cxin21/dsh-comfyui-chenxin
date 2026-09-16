@@ -60,13 +60,9 @@ function buildOutputProtocolBlock(zh: boolean): string {
 
 function buildSelfCheckBlock(zh: boolean): string {
   if (zh) {
-    return (
-      ' 【§3 内心自检·勿写出】①人数与 count 一致 ②无 §3.1 互斥 ③无重复 tag ④场景与动作物理合理 ⑤无光线禁令 tag ⑥总量在 §4.2 范围。'
-    );
+    return ' 【§3 内心自检·勿写出】①人数与 count 一致 ②无 §3.1 互斥 ③无重复 tag ④场景与动作物理合理 ⑤无光线禁令 tag ⑥总量在 §4.2 范围。';
   }
-  return (
-    ' [§3 INTERNAL SELF-CHECK] count match; no §3.1 conflicts; no duplicates; scene-action OK; no banned lighting; tag count in §4.2 range.'
-  );
+  return ' [§3 INTERNAL SELF-CHECK] count match; no §3.1 conflicts; no duplicates; scene-action OK; no banned lighting; tag count in §4.2 range.';
 }
 
 function buildConflictBlock(zh: boolean): string {
@@ -78,9 +74,7 @@ function buildConflictBlock(zh: boolean): string {
       ' 动作：missionary↔doggystyle、spread legs↔legs together；同部位细节 tag ≤2 且不矛盾（禁 spread toes+toe scrunch）。'
     );
   }
-  return (
-    ' [§3.1 CONFLICTS] No front+behind; solo+hetero; nude+clothing; pantyhose+barefoot; missionary+doggystyle; spread legs+legs together; ≤2 detail tags/body part, no contradictions.'
-  );
+  return ' [§3.1 CONFLICTS] No front+behind; solo+hetero; nude+clothing; pantyhose+barefoot; missionary+doggystyle; spread legs+legs together; ≤2 detail tags/body part, no contradictions.';
 }
 
 function buildSlotOrderBlock(zh: boolean, band: string, tier: string): string {
@@ -113,9 +107,7 @@ function buildAssemblyTreeBlock(zh: boolean): string {
       ' 按匹配类型侧重各槽位（appearance/clothing/pose/expression/camera/scene/detail），勿堆无关 tag。'
     );
   }
-  return (
-    ' [§5 ASSEMBLY] Match 5.1 solo / 5.2 foreplay / 5.3 sex / 5.4 special pose / 5.5 group / 5.6 yuri / 5.7 special theme—fill slots accordingly.'
-  );
+  return ' [§5 ASSEMBLY] Match 5.1 solo / 5.2 foreplay / 5.3 sex / 5.4 special pose / 5.5 group / 5.6 yuri / 5.7 special theme—fill slots accordingly.';
 }
 
 function buildDanbooruPrefixBlock(zh: boolean): string {
@@ -125,12 +117,14 @@ function buildDanbooruPrefixBlock(zh: boolean): string {
       ' IP 角色须 ≥5 外观锚点；禁止编造未知角色特征。'
     );
   }
-  return (
-    ' [Danbooru PREFIX before count] artist:/copyright:/character:/meta:; unknown/original/none; ≥5 appearance anchors for IP; no invented traits.'
-  );
+  return ' [Danbooru PREFIX before count] artist:/copyright:/character:/meta:; unknown/original/none; ≥5 appearance anchors for IP; no invented traits.';
 }
 
-export function buildPrimarySystemPrompt(caption: any, media_target: string, opts: { danbooru?: boolean } = {}): string {
+export function buildPrimarySystemPrompt(
+  caption: any,
+  media_target: string,
+  opts: { danbooru?: boolean } = {},
+): string {
   const zh = isZh(caption);
   const video = (media_target || caption.media_target || 'image') === 'video';
   const { band, tier } = resolveTagCountBand(caption);
@@ -156,7 +150,7 @@ export function buildPrimarySystemPrompt(caption: any, media_target: string, opt
   return out;
 }
 
-export function buildSystemAddons(caption: any, media_target: string): string {
+export function buildSystemAddons(caption: any, _media_target: string): string {
   const zh = isZh(caption);
   return zh
     ? ' 【执行】仅按 ANIMA3 组装，勿改用 ComfyUI 中文关键词或分段分析。'
@@ -214,8 +208,11 @@ function isMetaCaptionLine(line: string): boolean {
   if (/^#{1,6}\s/.test(l)) return true;
   if (/^\*\*[^*]+\*\*$/i.test(l)) return true;
   if (
-    /self[- ]?check|fidelity\s*analysis|checklist|quality\s*assurance|还原检查|自检|分析过程|thought\s*process|§\d/i.test(l)
-  ) return true;
+    /self[- ]?check|fidelity\s*analysis|checklist|quality\s*assurance|还原检查|自检|分析过程|thought\s*process|§\d/i.test(
+      l,
+    )
+  )
+    return true;
   const seps = countSeparators(l);
   if (seps === 0 && !/^(artist|copyright|character|meta|score_|1girl|1boy|2girl|\d+girls?)/i.test(l)) return true;
   return false;
@@ -230,17 +227,25 @@ function isMetaTagFragment(frag: string): boolean {
 }
 
 function normalizeTagFragment(frag: string): string {
-  const t = String(frag || '').trim().replace(/^\*\*|\*\*$/g, '');
+  const t = String(frag || '')
+    .trim()
+    .replace(/^\*\*|\*\*$/g, '');
   if (!t || isMetaTagFragment(t)) return '';
   if (/^(artist|copyright|character|meta|score_):/i.test(t)) {
     const idx = t.indexOf(':');
-    return t.slice(0, idx + 1).toLowerCase() + t.slice(idx + 1).trim().toLowerCase();
+    return (
+      t.slice(0, idx + 1).toLowerCase() +
+      t
+        .slice(idx + 1)
+        .trim()
+        .toLowerCase()
+    );
   }
   return t.toLowerCase();
 }
 
 export function sanitizeTagLine(text: string): string {
-  let s = String(text || '').trim();
+  const s = String(text || '').trim();
   if (!s) return s;
 
   const lines = s
@@ -252,7 +257,10 @@ export function sanitizeTagLine(text: string): string {
   let bestSeps = countSeparators(best);
   for (let i = 1; i < lines.length; i++) {
     const c = countSeparators(lines[i]);
-    if (c > bestSeps) { bestSeps = c; best = lines[i]; }
+    if (c > bestSeps) {
+      bestSeps = c;
+      best = lines[i];
+    }
   }
 
   if (!best || isMetaCaptionLine(best)) {
@@ -266,7 +274,10 @@ export function sanitizeTagLine(text: string): string {
   const cleaned = cleanTagLineBody(best);
   if (!cleaned) return '';
 
-  const parts = cleaned.split(/[,，]\s*/).map(normalizeTagFragment).filter(Boolean);
+  const parts = cleaned
+    .split(/[,，]\s*/)
+    .map(normalizeTagFragment)
+    .filter(Boolean);
   if (parts.length > 0) return parts.join(', ');
   return normalizeTagFragment(cleaned);
 }

@@ -8,11 +8,11 @@
  * 2026-09-12 spec §7 P2：anima persona 增【内容分级】块（三档扩写纪律 + 评级由管线强制）；
  * h3 仅 safe，不加分级块。
  */
-import type { Rating } from '../types.js'
+import type { Rating } from '../types.js';
 
 export function buildEnrichPersona(target: 'anima' | 'h3', opts?: { rating?: Rating }): string {
   if (target === 'anima') {
-    const rating = opts?.rating ?? 'safe'
+    const rating = opts?.rating ?? 'safe';
     return [
       '【任务】',
       '角色：你是一位资深的 Anima 图像提示词艺术指导兼扩写专家。',
@@ -50,7 +50,7 @@ export function buildEnrichPersona(target: 'anima' | 'h3', opts?: { rating?: Rat
       '【输出契约（硬性）】',
       '- 只输出一个 JSON：裸 JSON（不要 markdown fence、不要解释、不要任何前后缀文字）',
       '- 本任务为 one-shot 结构产出：不要调用任何工具',
-    ].join('\n')
+    ].join('\n');
   }
   return [
     '【任务】',
@@ -76,5 +76,5 @@ export function buildEnrichPersona(target: 'anima' | 'h3', opts?: { rating?: Rat
     '【输出契约（硬性）】',
     '- 只输出一个 JSON：裸 JSON（不要 markdown fence、不要解释、不要任何前后缀文字）',
     '- 本任务为 one-shot 结构产出：不要调用任何工具',
-  ].join('\n')
+  ].join('\n');
 }

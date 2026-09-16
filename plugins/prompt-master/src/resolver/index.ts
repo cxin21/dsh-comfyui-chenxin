@@ -26,10 +26,15 @@ import {
 import { isReverseCatalogExpandProfile, resolveExpandFromReverseMirror } from './profiles/expand-mirror.js';
 // V1：自定义反推分支的长度块走 CaptionLen（PM promptEngineeringResolver.js:227 CaptionLen.buildCaptionLengthBlock）
 import { buildCaptionLengthBlock } from './profiles/reverse/length.js';
-import { isMinimaxScenarioProfile, resolveMinimaxScenarioExpand, isH3FullReferenceProfile, resolveH3FullReferenceExpand } from './minimax/index.js';
+import {
+  isMinimaxScenarioProfile,
+  resolveMinimaxScenarioExpand,
+  isH3FullReferenceProfile,
+  resolveH3FullReferenceExpand,
+} from './minimax/index.js';
 
-// 给 router 函数起别名避免和上面 expand 解析中的 buildSystemPrompt 冲突
-const buildSystemPrompt = routerBuildSystemPrompt;
+
+
 
 /**
  * 扩写管道：profile + params  →  {system, user, maxTokens}
@@ -185,13 +190,13 @@ export function resolveReverse(profile: PEProfile, params: ReverseParams): Rever
 
   // 走模板
   const userTpl = (cap.userPromptTemplate || '{{task_lead}}\n\n{{length_block}}\n\n{{extra_block}}').toString();
-  let user = userTpl.includes('{{') ? renderTemplate(userTpl, {
-    task_lead: taskLead,
-    length_block: '',
-    extra_block: cap.extra_prompt
-      ? blockOrEmpty(`【附加要求】${String(cap.extra_prompt).trim()}`)
-      : '',
-  }) : taskLead;
+  const user = userTpl.includes('{{')
+    ? renderTemplate(userTpl, {
+        task_lead: taskLead,
+        length_block: '',
+        extra_block: cap.extra_prompt ? blockOrEmpty(`【附加要求】${String(cap.extra_prompt).trim()}`) : '',
+      })
+    : taskLead;
 
   return {
     captionType: cap.type,

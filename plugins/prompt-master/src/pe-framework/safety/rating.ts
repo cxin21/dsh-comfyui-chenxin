@@ -2,9 +2,9 @@
  * 内容分级定档 + 三档策略表（spec §5.1-5.3）——纯确定性数据与纯函数，零 LLM。
  * Rating 序：safe < sensitive < explicit（定义于 types.ts）。
  */
-import type { Rating } from '../types.js'
+import type { Rating } from '../types.js';
 // type-only import：编译期取 AnimaSlots 形状，运行时零依赖，规避与 dialect 层的环。
-import type { AnimaSlots } from '../dialect/anima.js'
+import type { AnimaSlots } from '../dialect/anima.js';
 
 /** types.py EXPLICIT_SAFETY_MARKERS 逐字（自 dialect/anima.ts 平移，原位再导出保兼容）。
  *  M1 审计 ⑤a 裁决增补：pussy（vulva 的 catalog alias 形态，与 vulva 同类 explicit 解剖俚语，
@@ -17,19 +17,50 @@ import type { AnimaSlots } from '../dialect/anima.js'
  *  boundaries 侧 MINOR/BESTIALITY 表的 y→ies（baby/bestiality）走 boundaries.ts 后缀模式 +
  *  PLURAL_VARIANTS 编译机制（\b 通道），两文件口径分工见各自注释。 */
 export const EXPLICIT_MARKERS: readonly string[] = [
-  'explicit', 'nude', 'nudity', 'nudities', 'genitals', 'genital', 'vulva', 'pussy', 'pussies', 'penis',
-  '乳头', '乳房', '生殖器', '阴部', '阴茎', '阴道', '隐私部位', '裸露', '露骨', '色情', 'pornographic', 'nsfw',
-]
+  'explicit',
+  'nude',
+  'nudity',
+  'nudities',
+  'genitals',
+  'genital',
+  'vulva',
+  'pussy',
+  'pussies',
+  'penis',
+  '乳头',
+  '乳房',
+  '生殖器',
+  '阴部',
+  '阴茎',
+  '阴道',
+  '隐私部位',
+  '裸露',
+  '露骨',
+  '色情',
+  'pornographic',
+  'nsfw',
+];
 
 /** 敏感（非露骨）标记词表：任一命中即 sensitive（spec §5.2） */
-export const SENSITIVE_MARKERS: readonly string[] = ['swimsuit', 'bikini', 'lingerie', 'underwear', 'cleavage', 'seductive', '泳装', '内衣', '性感', '撩人']
+export const SENSITIVE_MARKERS: readonly string[] = [
+  'swimsuit',
+  'bikini',
+  'lingerie',
+  'underwear',
+  'cleavage',
+  'seductive',
+  '泳装',
+  '内衣',
+  '性感',
+  '撩人',
+];
 
 /** 关键词扫描：显式/敏感双命中取高（explicit > sensitive），未命中 safe */
 function keywordRating(corpus: string): Rating {
-  const low = corpus.toLowerCase()
-  if (EXPLICIT_MARKERS.some((m) => low.includes(m))) return 'explicit'
-  if (SENSITIVE_MARKERS.some((m) => low.includes(m))) return 'sensitive'
-  return 'safe'
+  const low = corpus.toLowerCase();
+  if (EXPLICIT_MARKERS.some((m) => low.includes(m))) return 'explicit';
+  if (SENSITIVE_MARKERS.some((m) => low.includes(m))) return 'sensitive';
+  return 'safe';
 }
 
 /**
@@ -40,11 +71,11 @@ export function resolveRating(
   input: Rating | undefined,
   corpus: string,
 ): { rating: Rating; escalatedFrom?: Rating; source: 'input' | 'keyword' } {
-  if (input) return { rating: input, source: 'input' }
-  const kw = keywordRating(corpus)
+  if (input) return { rating: input, source: 'input' };
+  const kw = keywordRating(corpus);
   return kw === 'safe'
     ? { rating: 'safe', source: 'keyword' }
-    : { rating: kw, escalatedFrom: 'safe', source: 'keyword' }
+    : { rating: kw, escalatedFrom: 'safe', source: 'keyword' };
 }
 
 /** positive 端分级锚 tag（装配 3b 用，spec §5.3） */
@@ -52,26 +83,26 @@ export const RATING_SEEDS: Record<Rating, readonly string[]> = {
   safe: ['safe'],
   sensitive: ['rating_sensitive'],
   explicit: ['rating_explicit'],
-}
+};
 
 /** negative 端策略追加（policy 通道）：sensitive 阻断 explicit 词汇；explicit 阻断未成年硬排除 */
 export const RATING_NEGATIVE_ADDITIONS: Record<Rating, readonly string[]> = {
   safe: [],
   sensitive: ['nude', 'nudity', 'genitals', 'rating_explicit'],
   explicit: ['child', 'loli', 'shota', 'toddler', 'kid', 'preteen'],
-}
+};
 
 /**
  * slots → 有效分级（spec §5.3）：slots.rating > explicit 布尔 > 全槽关键词扫描 > safe。
  * 入参 AnimaSlots & { rating?: Rating }：rating 槽由 Task 8 正式加入 AnimaSlots，此处结构前向兼容。
  */
 export function resolveEffectiveRating(slots: AnimaSlots & { rating?: Rating }): Rating {
-  if (slots.rating) return slots.rating
-  if (slots.explicit === true) return 'explicit'
-  const pieces: string[] = []
+  if (slots.rating) return slots.rating;
+  if (slots.explicit === true) return 'explicit';
+  const pieces: string[] = [];
   for (const value of Object.values(slots)) {
-    if (Array.isArray(value)) pieces.push(...value.map((t) => String(t)))
-    else if (typeof value === 'string') pieces.push(value)
+    if (Array.isArray(value)) pieces.push(...value.map((t) => String(t)));
+    else if (typeof value === 'string') pieces.push(value);
   }
-  return keywordRating(pieces.join(' '))
+  return keywordRating(pieces.join(' '));
 }

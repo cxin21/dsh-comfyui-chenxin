@@ -55,7 +55,7 @@ describe('sanitizeFinalCaption', () => {
   it('Danbooru 展开方括号、去 hex 垃圾、去下划线、去重', () => {
     const out = sanitizeFinalCaption(
       'artist:unknown, copyright:original, character:none, 1girl, [long hair], 1f1f3b, long_hair, 1girl',
-      { type: 'Danbooru_tag_list', caption_lang: 'en', len: 'medium' }
+      { type: 'Danbooru_tag_list', caption_lang: 'en', len: 'medium' },
     );
     expect(out).toContain('long hair');
     expect(out).not.toContain('[long hair]');

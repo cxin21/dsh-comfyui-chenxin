@@ -42,7 +42,15 @@ describe('E1: labelUi 不承载（port-only 决定，T4 裁决）', () => {
 describe('ensureCustomExpandSystem 守卫文案（上游 promptEngineeringResolver.js:82-83 逐字）', () => {
   it('en 守卫含 "in the user message" 与 "or expansion rules"', () => {
     const r = resolveExpand(
-      { id: 'custom_expand', kind: 'expand', builtin: false, name: 'x', category: 'x', description: 'x', systemPrompt: '自定义扩写规则。' } as any,
+      {
+        id: 'custom_expand',
+        kind: 'expand',
+        builtin: false,
+        name: 'x',
+        category: 'x',
+        description: 'x',
+        systemPrompt: '自定义扩写规则。',
+      } as any,
       { outputLang: 'en', expandLen: 'medium', shortText: 'a cat' },
     );
     expect(r.system).toContain('in the user message');
@@ -52,7 +60,15 @@ describe('ensureCustomExpandSystem 守卫文案（上游 promptEngineeringResolv
 
   it('zh 守卫含「或散文」', () => {
     const r = resolveExpand(
-      { id: 'custom_expand', kind: 'expand', builtin: false, name: 'x', category: 'x', description: 'x', systemPrompt: '自定义扩写规则。' } as any,
+      {
+        id: 'custom_expand',
+        kind: 'expand',
+        builtin: false,
+        name: 'x',
+        category: 'x',
+        description: 'x',
+        systemPrompt: '自定义扩写规则。',
+      } as any,
       { outputLang: 'zh', expandLen: 'medium', shortText: '一只猫' },
     );
     expect(r.system).toContain('扩写成说明文或散文');

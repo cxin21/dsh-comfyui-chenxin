@@ -224,9 +224,7 @@ export function makeUserQuery(
   shuffleInPlace(tags);
   let tagsString: string;
   if (underscoresReplace) {
-    tagsString = tags
-      .map((a) => (a.length > 3 ? a.replace(/_/g, ' ') : a))
-      .join(', ');
+    tagsString = tags.map((a) => (a.length > 3 ? a.replace(/_/g, ' ') : a)).join(', ');
   } else {
     tagsString = tags.join(' ');
   }
@@ -261,10 +259,7 @@ export function makeUserQuery(
       const descrChars = charsDescription.chars || {};
       const descrSkins = charsDescription.skins || {};
 
-      if (
-        Object.keys(popularTagsChars).length > 0 &&
-        (addCharTags || addDescription)
-      ) {
+      if (Object.keys(popularTagsChars).length > 0 && (addCharTags || addDescription)) {
         userRequest += '# Known traits for characters\n';
         const charUnderscores = underscoresReplace;
 
@@ -273,9 +268,7 @@ export function makeUserQuery(
           for (const [cName, cTags] of Object.entries(popularTagsChars)) {
             const name = charUnderscores ? cName.replace(/_/g, ' ') : cName;
             const tagsS = charUnderscores
-              ? cTags
-                  .map((a) => (a.length > 3 ? a.replace(/_/g, ' ') : a))
-                  .join(', ')
+              ? cTags.map((a) => (a.length > 3 ? a.replace(/_/g, ' ') : a)).join(', ')
               : cTags.join(' ');
             userRequest += `${name}: [${tagsS}]\n`;
           }
@@ -284,23 +277,19 @@ export function makeUserQuery(
             for (const [cName, cTags] of Object.entries(popularTagsSkins)) {
               const name = charUnderscores ? cName.replace(/_/g, ' ') : cName;
               const tagsS = charUnderscores
-                ? cTags
-                    .map((a) => (a.length > 3 ? a.replace(/_/g, ' ') : a))
-                    .join(', ')
+                ? cTags.map((a) => (a.length > 3 ? a.replace(/_/g, ' ') : a)).join(', ')
                 : cTags.join(' ');
               userRequest += `${name}: [${tagsS}]\n`;
             }
           }
         } else if (addDescription) {
-          userRequest +=
-            'Here are general descriptions for each characters on the picture:\n';
+          userRequest += 'Here are general descriptions for each characters on the picture:\n';
           for (const [cName, cDescr] of Object.entries(descrChars)) {
             const name = charUnderscores ? cName.replace(/_/g, ' ') : cName;
             userRequest += `## ${name}\n${cDescr}\n\n`;
           }
           if (Object.keys(descrSkins).length > 0) {
-            userRequest +=
-              'Here are also descriptions for specific skin of characters:\n';
+            userRequest += 'Here are also descriptions for specific skin of characters:\n';
             for (const [cName, cDescr] of Object.entries(descrSkins)) {
               const name = charUnderscores ? cName.replace(/_/g, ' ') : cName;
               userRequest += `## ${name}\n${cDescr}\n\n`;
@@ -309,8 +298,7 @@ export function makeUserQuery(
         }
       }
     } else {
-      userRequest +=
-        '# Characters on picture:\nTry to recognize the characters in the picture and use their names.\n';
+      userRequest += '# Characters on picture:\nTry to recognize the characters in the picture and use their names.\n';
     }
     userRequest += '\n';
   } else {

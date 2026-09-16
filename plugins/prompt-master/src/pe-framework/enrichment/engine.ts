@@ -22,97 +22,97 @@
  * 都会在思考期被吃满（1024/4096/1400 三档同指纹）。故插件直连通道全面省略 maxTokens，交由宿主
  * defaultMaxTokens 语义（主对话同路径正常出内容）；输出纪律保留，兜底机制不变。
  */
-import type { Context } from '@deepseek-ai/cordis'
-import { complete } from '../../llm/complete.js'
-import type { BlueprintMedia, BlueprintV1 } from '../blueprint/schema.js'
-import { applyStyle } from './style.js'
-import { getStylePreset } from '../styles/registry.js'
-import { checkConcreteness, checkFidelity, checkShotDensity } from '../aesthetics/check.js'
-import { CINEMA_LEXICON } from '../aesthetics/lexicon.js'
-import { LIGHTING_BAN } from '../dialect/anima.js'
+import type { Context } from '@deepseek-ai/cordis';
+import { complete } from '../../llm/complete.js';
+import type { BlueprintMedia, BlueprintV1 } from '../blueprint/schema.js';
+import { applyStyle } from './style.js';
+import { getStylePreset } from '../styles/registry.js';
+import { checkConcreteness, checkFidelity, checkShotDensity } from '../aesthetics/check.js';
+import { CINEMA_LEXICON } from '../aesthetics/lexicon.js';
+import { LIGHTING_BAN } from '../dialect/anima.js';
 
 export interface EnrichRoute {
-  provider: string
-  model: string
+  provider: string;
+  model: string;
 }
 
 export interface EnrichOptions {
-  styleId?: string
-  conformity?: number
-  missing?: string[]
+  styleId?: string;
+  conformity?: number;
+  missing?: string[];
   /** M5-T3（D7 推荐先验通道）：T10 推荐器输出（recommendArtDirection）→ user 段【推荐先验】块。
    *  文案与 enrich/engine.ts buildUser（spec §7 P2/§6.2）同源逐字，改动必须两处同步；LLM 仍做最终设计决策。
    *  消费方：M5-T2 编排接线（prompt-author 推荐卡透传）。 */
-  recommendations?: Array<{ field: string; cardId: string; reason: string }>
+  recommendations?: Array<{ field: string; cardId: string; reason: string }>;
   /** M5-DIAG：调用方取消信号透传（取消可传播到 ctx.llm.stream；prompt-author exec.signal 接线
    *  留待后续任务，缺省行为不变——孤儿 AbortController 兜底）。 */
-  signal?: AbortSignal
+  signal?: AbortSignal;
   /** 2026-09-15（用户定案「全部 LLM 调用改子代理」）：子代理文本 runner——注入后扩写经
    *  ctx.subagents.start 以子代理形态执行（与 intent/judge 三方可见）；缺省走 ctx.llm.stream
    *  直连（无 Agent 会话的兜底路径，行为不变）。 */
-  llm?: (req: { system: string; user: string }) => Promise<string>
+  llm?: (req: { system: string; user: string }) => Promise<string>;
   /** 2026-09-15 管线重设计（spec §4）：compositing 形态——patch 路径白名单（越权路径确定性剥离 +
    *  enrich_path_violation:N advisory），persona 换美学扩展版（语义蓝图 V0 输入） */
-  compositingMode?: boolean
+  compositingMode?: boolean;
 }
 
 /** spec §4 patch 路径白名单：set 允许前缀 / additions 允许前缀（越权即剥离 + advisory） */
-export const COMPOSITING_SET_ALLOWED = ['core.scene.lighting_idea', 'composition', 'mood']
-export const COMPOSITING_ADDITIONS_ALLOWED = ['core.style_hints', 'mood']
+export const COMPOSITING_SET_ALLOWED = ['core.scene.lighting_idea', 'composition', 'mood'];
+export const COMPOSITING_ADDITIONS_ALLOWED = ['core.style_hints', 'mood'];
 
 /**
  * 递归剥离 allowed 前缀之外的 patch 叶路径（spec §4 D3 哲学：契约靠谓词不靠自觉）。
  * 返回被剥离的叶子数。in-place 修改（与 stripCoreRatingFromPatch 同风格）。
  */
 export function prunePatchPaths(patch: Record<string, unknown>, allowed: string[]): number {
-  let dropped = 0
+  let dropped = 0;
   const walk = (node: Record<string, unknown>, prefix: string): void => {
     for (const key of Object.keys(node)) {
-      const path = prefix ? `${prefix}.${key}` : key
+      const path = prefix ? `${prefix}.${key}` : key;
       if (allowed.some((a) => path === a || path.startsWith(`${a}.`))) {
-        const v = node[key]
-        if (isPlainObject(v)) walk(v, path)
-        continue
+        const v = node[key];
+        if (isPlainObject(v)) walk(v, path);
+        continue;
       }
-      const v = node[key]
+      const v = node[key];
       if (isPlainObject(v) && allowed.some((a) => a.startsWith(`${path}.`) || a === path)) {
         // 前缀路径本身被允许（如 allowed=core.scene.lighting_idea 而当前是 core.scene）→ 继续下探
-        walk(v, path)
-        continue
+        walk(v, path);
+        continue;
       }
-      delete node[key]
-      dropped++
+      delete node[key];
+      dropped++;
     }
-  }
-  walk(patch, '')
-  return dropped
+  };
+  walk(patch, '');
+  return dropped;
 }
 
 export interface EnrichResult {
-  blueprint: BlueprintV1
-  expansions: string[]
+  blueprint: BlueprintV1;
+  expansions: string[];
   /** M2-T2（spec §4.3 备注）：风格应用层面的非阻塞 advisory（如 style_negative_hints_h3_ignored:<id>）——由编排层并入 envelope advisories */
-  advisories?: string[]
+  advisories?: string[];
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** M5-DIAG：诊断条目净化——单行化 + 截断，保证 expansions 条目可进 envelope（不携带原始多行文本） */
 function clip(s: string, n = 160): string {
-  return s.replace(/\s+/g, ' ').trim().slice(0, n)
+  return s.replace(/\s+/g, ' ').trim().slice(0, n);
 }
 
 /** set 语义：深合并对象字段，数组整体替换（保留未提及的既有字段） */
 function deepMerge(target: Record<string, unknown>, patch: Record<string, unknown>): void {
   for (const k of Object.keys(patch)) {
-    const pv = patch[k]
-    const tv = target[k]
+    const pv = patch[k];
+    const tv = target[k];
     if (isPlainObject(pv) && isPlainObject(tv)) {
-      deepMerge(tv as Record<string, unknown>, pv)
+      deepMerge(tv as Record<string, unknown>, pv);
     } else {
-      target[k] = pv
+      target[k] = pv;
     }
   }
 }
@@ -120,24 +120,24 @@ function deepMerge(target: Record<string, unknown>, patch: Record<string, unknow
 /** additions 语义：数组追加，对象深合并，标量覆盖 */
 function applyAdditions(target: Record<string, unknown>, additions: Record<string, unknown>): void {
   for (const k of Object.keys(additions)) {
-    const pv = additions[k]
+    const pv = additions[k];
     if (Array.isArray(pv)) {
-      target[k] = [...(Array.isArray(target[k]) ? (target[k] as unknown[]) : []), ...pv]
+      target[k] = [...(Array.isArray(target[k]) ? (target[k] as unknown[]) : []), ...pv];
     } else if (isPlainObject(pv)) {
       // M5-T3b：对象值 additions 合并进既有节点（修复 void 赋值缺陷——旧实现把 deepMerge 的 void
       // 返回值赋给键，把节点覆成 undefined 摧毁既有内容，如 additions.media_layer）。
       // target[k] 为对象时就地深合并（既有键保留、patch 键并入），否则以空对象承接。
-      const base = isPlainObject(target[k]) ? (target[k] as Record<string, unknown>) : {}
-      deepMerge(base, pv)
-      target[k] = base
+      const base = isPlainObject(target[k]) ? (target[k] as Record<string, unknown>) : {};
+      deepMerge(base, pv);
+      target[k] = base;
     } else {
-      target[k] = pv
+      target[k] = pv;
     }
   }
 }
 
 /** M5-T3（D6/R7）：core.rating 覆写企图 advisory token（契约原文，勿改——T2/T4 断言面） */
-const RATING_OVERWRITE_ADVISORY = 'enrich_rating_overwrite_blocked'
+const RATING_OVERWRITE_ADVISORY = 'enrich_rating_overwrite_blocked';
 
 /**
  * M5-T3（D6/R7）core.rating 信任边界：patch 应用前 strip 会写入 core.rating 的路径。
@@ -160,21 +160,24 @@ const RATING_OVERWRITE_ADVISORY = 'enrich_rating_overwrite_blocked'
  * @returns 是否发生 strip（true = 覆写企图成立，调用方补 advisory enrich_rating_overwrite_blocked）
  */
 function stripCoreRatingFromPatch(patch: Record<string, unknown>, opts: { wholeCore?: boolean } = {}): boolean {
-  const core = patch['core']
-  if (core == null) return false
+  const core = patch['core'];
+  if (core == null) return false;
   if (isPlainObject(core) && !opts.wholeCore) {
     if ('rating' in core) {
-      delete core['rating']
-      return true
+      delete core['rating'];
+      return true;
     }
-    return false
+    return false;
   }
-  delete patch['core']
-  return true
+  delete patch['core'];
+  return true;
 }
 
 function stripFences(text: string): string {
-  return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  return text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .trim();
 }
 
 /** M5-T3（V8）：video shot 五维密度规则——video/mixed 保持原文逐字不动（mixed 可能含 video.shots，checkShotDensity video 分支同样适用） */
@@ -186,7 +189,7 @@ const VIDEO_SHOT_DENSITY_RULES = [
   '   ④ 运镜（景别/机位/镜头运动，从候选词库选，或填 shot_size/camera）',
   '   ⑤ 情绪（氛围/气氛，具体可感，≥4 字）',
   '   禁止一句话带过（如「两名女剑客持剑对峙」缺环境/光影/情绪即不合格）；用「，」连接各维度描述。',
-]
+];
 
 /**
  * M5-T3（V8）：image 蓝图的画面密度纪律——与设计稿 §2.2 ANIMA 蓝图 persona discipline 同源
@@ -195,7 +198,7 @@ const VIDEO_SHOT_DENSITY_RULES = [
  */
 const IMAGE_DETAIL_DENSITY_RULES = [
   '3. 画面细节密度（硬性，image）：media_layer.image.pose_action 写动作峰值瞬间的单一画面（主体+动作，具体名词，≥8 字）；expression ≤2 个具体可感表情词；scene_anchors ≤3 个高影响场景锚点（保序）；camera_angle 只允许 anima 景别词（full body / cowboy shot / upper body / close-up）+ 至多 1 个视角词；focal_length/depth_of_field 不确定规范写法时留空（camera 是结构槽，脏词会全文穿透）；光源物件/曝光/空间纵深/色彩主次写进 core.scene.lighting 与 core.narrative。',
-]
+];
 
 function buildExpansionPersona(media: BlueprintMedia): string {
   return [
@@ -227,7 +230,7 @@ function buildExpansionPersona(media: BlueprintMedia): string {
     '10. 总长上限目标：输出 JSON 全文 ≤ 1200 字符（含空白）；expansions ≤ 8 条、每条 ≤ 24 字符。',
     '11. 语言纪律（硬性）：所有字段值一律英文 Anima tag 词汇——无论用户输入是什么语言，禁止中文/日文字符出现在任何值中（含 concept/scene/lighting/detail_mood 等自由文本字段）；中文创意概念必须翻译成英文画面词再写入；expansions 描述亦用英文。违反语言纪律 = 无效输出。',
     '紧凑样板（形状示范——注意它有多小；内容按 v0 实际增量替换）：{"set":{"core":{"style":{"base":"cyberpunk neon nightscape, cold cyan dominant","theme":"neon metropolis"},"scene":{"lighting":"neon sign rim light, wet asphalt reflections"}}},"expansions":["scene.lighting rewritten"]}',
-  ].join('\n')
+  ].join('\n');
 }
 
 /**
@@ -236,14 +239,14 @@ function buildExpansionPersona(media: BlueprintMedia): string {
  * 返回缺失维度描述列表（空 = 完整）；缺失仅作 advisory，不阻断（由调用方追加进 expansions）。
  */
 export function checkFieldCompleteness(bp: BlueprintV1): string[] {
-  const missing: string[] = []
-  if (!bp.media) missing.push('media')
-  if (!bp.core?.concept || bp.core.concept.trim().length === 0) missing.push('core.concept')
-  const hasStyle = bp.core?.style != null && Object.keys(bp.core.style).length > 0
-  const hasScene = bp.core?.scene != null && Object.keys(bp.core.scene).length > 0
-  const hasEmotion = bp.core?.emotion != null && bp.core.emotion.trim().length > 0
-  if (!hasStyle && !hasScene && !hasEmotion) missing.push('style|scene|emotion')
-  return missing
+  const missing: string[] = [];
+  if (!bp.media) missing.push('media');
+  if (!bp.core?.concept || bp.core.concept.trim().length === 0) missing.push('core.concept');
+  const hasStyle = bp.core?.style != null && Object.keys(bp.core.style).length > 0;
+  const hasScene = bp.core?.scene != null && Object.keys(bp.core.scene).length > 0;
+  const hasEmotion = bp.core?.emotion != null && bp.core.emotion.trim().length > 0;
+  if (!hasStyle && !hasScene && !hasEmotion) missing.push('style|scene|emotion');
+  return missing;
 }
 
 export async function enrichBlueprint(
@@ -252,7 +255,7 @@ export async function enrichBlueprint(
   v0: BlueprintV1,
   opts: EnrichOptions = {},
 ): Promise<EnrichResult> {
-  const recs = opts.recommendations ?? []
+  const recs = opts.recommendations ?? [];
   const user = [
     'v0 蓝图：',
     JSON.stringify(v0),
@@ -273,17 +276,17 @@ export async function enrichBlueprint(
           ...recs.map((r) => `- ${r.field}: ${r.cardId}（${r.reason}）`),
         ]
       : []),
-  ].join('\n')
+  ].join('\n');
 
-  let raw = ''
-  let finishKind = 'unknown'
-  const expansionSystem = buildExpansionPersona(v0.media)
+  let raw = '';
+  let finishKind = 'unknown';
+  const expansionSystem = buildExpansionPersona(v0.media);
   try {
     // 2026-09-15（用户定案「全部 LLM 调用改子代理」）：注入 llm runner 时走子代理形态
     // （三方可见）；缺省保留 ctx.llm.stream 直连（无 Agent 会话的兜底路径，行为不变）。
     if (opts.llm) {
-      raw = await opts.llm({ system: expansionSystem, user })
-      finishKind = 'subagent'
+      raw = await opts.llm({ system: expansionSystem, user });
+      finishKind = 'subagent';
     } else {
       const res = await complete(ctx, {
         provider: route.provider,
@@ -299,121 +302,138 @@ export async function enrichBlueprint(
         temperature: 0.4,
         // M5-DIAG：opts.signal 透传（缺省孤儿 controller，行为不变）
         signal: opts.signal ?? new AbortController().signal,
-      })
-      raw = res.text
-      finishKind = res.finish.kind
+      });
+      raw = res.text;
+      finishKind = res.finish.kind;
     }
   } catch (error) {
     // M5-DIAG：失败原因进 expansions（legacy token 首位不变 = 既有断言面零漂移）——
     // 真实会话据此直接分类（AUTH/NO_ADAPTER/TIMEOUT/...），不再需要盲猜
-    const err = error as Error & { code?: string }
+    const err = error as Error & { code?: string };
     return {
       blueprint: v0,
-      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:llm:${err.code ?? 'unknown'}:${clip(err.message || 'no message')}`],
-    }
+      expansions: [
+        'enrichment_failed:fallback_to_v0',
+        `enrichment_failed_reason:llm:${err.code ?? 'unknown'}:${clip(err.message || 'no message')}`,
+      ],
+    };
   }
 
-  let parsed: unknown
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(stripFences(raw))
+    parsed = JSON.parse(stripFences(raw));
   } catch {
     // M5-DIAG：截断/非 JSON 文本诊断面——finish kind（max-tokens=预算截断）+ 文本 head（≤200 字符）
     return {
       blueprint: v0,
-      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:parse:${finishKind}:${clip(JSON.stringify(raw), 200)}`],
-    }
+      expansions: [
+        'enrichment_failed:fallback_to_v0',
+        `enrichment_failed_reason:parse:${finishKind}:${clip(JSON.stringify(raw), 200)}`,
+      ],
+    };
   }
   if (!isPlainObject(parsed)) {
     return {
       blueprint: v0,
-      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:parse:${finishKind}:non-object:${typeof parsed}`],
-    }
+      expansions: [
+        'enrichment_failed:fallback_to_v0',
+        `enrichment_failed_reason:parse:${finishKind}:non-object:${typeof parsed}`,
+      ],
+    };
   }
 
-  let expansions: string[] = []
+  let expansions: string[] = [];
   try {
-    const v1 = structuredClone(v0) as BlueprintV1
+    const v1 = structuredClone(v0) as BlueprintV1;
     // patch 形状：{set, additions, expansions}；兼容裸部分蓝图（整个对象视为 set）
-    const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed
+    const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed;
     // 2026-09-15 管线重设计（spec §4）：compositing 模式 patch 路径白名单——越权叶确定性剥离 + advisory
-    let enrichPathViolations = 0
+    let enrichPathViolations = 0;
     if (opts.compositingMode) {
-      enrichPathViolations += prunePatchPaths(set, COMPOSITING_SET_ALLOWED)
+      enrichPathViolations += prunePatchPaths(set, COMPOSITING_SET_ALLOWED);
     }
     // M5-T3（D6/R7）：core.rating 信任边界——patch 应用前 strip（set 含裸形态 + additions 两通道全覆盖）。
     // 两条通道都要实际执行 strip（不可短路），advisory 只出一次。
-    let ratingOverwriteBlocked = stripCoreRatingFromPatch(set)
+    let ratingOverwriteBlocked = stripCoreRatingFromPatch(set);
     if (isPlainObject(parsed['additions'])) {
       // additions 通道整键阻断（wholeCore）：只删 rating 键不足以保住 rating（见 stripCoreRatingFromPatch ③）
-      ratingOverwriteBlocked = stripCoreRatingFromPatch(parsed['additions'] as Record<string, unknown>, { wholeCore: true }) || ratingOverwriteBlocked
+      ratingOverwriteBlocked =
+        stripCoreRatingFromPatch(parsed['additions'] as Record<string, unknown>, { wholeCore: true }) ||
+        ratingOverwriteBlocked;
       if (opts.compositingMode) {
-        enrichPathViolations += prunePatchPaths(parsed['additions'] as Record<string, unknown>, COMPOSITING_ADDITIONS_ALLOWED)
+        enrichPathViolations += prunePatchPaths(
+          parsed['additions'] as Record<string, unknown>,
+          COMPOSITING_ADDITIONS_ALLOWED,
+        );
       }
     }
-    deepMerge(v1 as unknown as Record<string, unknown>, set)
+    deepMerge(v1 as unknown as Record<string, unknown>, set);
     if (isPlainObject(parsed['additions'])) {
-      applyAdditions(v1 as unknown as Record<string, unknown>, parsed['additions'] as Record<string, unknown>)
+      applyAdditions(v1 as unknown as Record<string, unknown>, parsed['additions'] as Record<string, unknown>);
     }
     if (Array.isArray(parsed['expansions'])) {
-      expansions = (parsed['expansions'] as unknown[]).filter((e): e is string => typeof e === 'string')
+      expansions = (parsed['expansions'] as unknown[]).filter((e): e is string => typeof e === 'string');
     } else if (opts.missing && opts.missing.length > 0) {
-      expansions = opts.missing.map((m) => `missing_filled:${m}`)
+      expansions = opts.missing.map((m) => `missing_filled:${m}`);
     }
 
     // 风格注入（确定性；用户选择优先于 LLM 隐含风格）
     // spec §4.3 ③：未知 styleId 仍返回原对象，engine 层补 advisory（applyStyle 不感知展示通道）
-    let styleAdvisories: string[] = []
-    const preset = opts.styleId ? getStylePreset(opts.styleId) : undefined
-    if (opts.styleId && !preset) expansions.push(`style_preset_unknown:${opts.styleId}`)
-    let enriched = v1
+    let styleAdvisories: string[] = [];
+    const preset = opts.styleId ? getStylePreset(opts.styleId) : undefined;
+    if (opts.styleId && !preset) expansions.push(`style_preset_unknown:${opts.styleId}`);
+    let enriched = v1;
     if (opts.styleId && preset) {
-      enriched = applyStyle(v1, opts.styleId, opts.conformity ?? 0.6)
+      enriched = applyStyle(v1, opts.styleId, opts.conformity ?? 0.6);
       // M2-T2（spec §4.3 备注）：h3 通道（video 蓝图）negative_hints 被忽略必须可观测——
       // applyStyle 不感知展示通道，advisory 由 engine 层补（与 style_preset_unknown 同口径）
       if (v1.media === 'video' && preset.negative_hints.length > 0) {
-        styleAdvisories = [`style_negative_hints_h3_ignored:${opts.styleId}`]
+        styleAdvisories = [`style_negative_hints_h3_ignored:${opts.styleId}`];
       }
     }
 
     // 质量自检（spec §7.1 确定性项）：具体性（可感知名词比例+禁词）+ 字段完整度 + 保真
     // 任一失败追加 advisory 进 expansions，不阻断
-    const cc = checkConcreteness(enriched)
-    if (!cc.pass) expansions.push(`concreteness_failed:${cc.issues.join(';')}`)
-    const completeFields = checkFieldCompleteness(enriched)
-    if (completeFields.length > 0) expansions.push(`field_completeness:missing:${completeFields.join(';')}`)
-    const sd = checkShotDensity(enriched)
-    if (!sd.pass) expansions.push(`shot_density:missing:${sd.issues.join(';')}`)
-    const fid = checkFidelity(v0.core?.concept ?? '', enriched)
-    if (!fid.pass) expansions.push(`fidelity_failed:${fid.missingEntities.join(';')}`)
+    const cc = checkConcreteness(enriched);
+    if (!cc.pass) expansions.push(`concreteness_failed:${cc.issues.join(';')}`);
+    const completeFields = checkFieldCompleteness(enriched);
+    if (completeFields.length > 0) expansions.push(`field_completeness:missing:${completeFields.join(';')}`);
+    const sd = checkShotDensity(enriched);
+    if (!sd.pass) expansions.push(`shot_density:missing:${sd.issues.join(';')}`);
+    const fid = checkFidelity(v0.core?.concept ?? '', enriched);
+    if (!fid.pass) expansions.push(`fidelity_failed:${fid.missingEntities.join(';')}`);
 
     // M5-DIAG2（真实会话 c12 实证）：LLM 创意负向推断越权声明 severity:'hard'（复合 target 6 项粘连）
     // → 投影器按 spec §8.1 档 3 拒绝 hard。hard 是内容安全通道的专属域（boundaries/rating seeds），
     // 与 core.rating strip（D6/R7）同一条信任边界哲学：安全分级数据由管线独占，LLM 产物不可信。
     // 确定性降格 soft（创意负向的合法档位）+ advisory 留痕；单点收口覆盖 set/additions/v0 自带/预设四来源。
-    let hardDowngraded = 0
+    let hardDowngraded = 0;
     if (Array.isArray(enriched.core?.negative)) {
       enriched.core.negative = enriched.core.negative.map((n) => {
         if (n != null && n.severity === 'hard') {
-          hardDowngraded++
-          return { ...n, severity: 'soft' as const }
+          hardDowngraded++;
+          return { ...n, severity: 'soft' as const };
         }
-        return n
-      })
+        return n;
+      });
     }
 
     // M5-T3（D6/R7）：core.rating 覆写企图 → advisory（与 styleAdvisories 同通道并入 envelope advisories）
-    const advisories = [...styleAdvisories]
-    if (ratingOverwriteBlocked) advisories.push(RATING_OVERWRITE_ADVISORY)
-    if (enrichPathViolations > 0) advisories.push(`enrich_path_violation:${enrichPathViolations}`)
-    if (hardDowngraded > 0) advisories.push(`llm_hard_negative_downgraded:${hardDowngraded}`)
+    const advisories = [...styleAdvisories];
+    if (ratingOverwriteBlocked) advisories.push(RATING_OVERWRITE_ADVISORY);
+    if (enrichPathViolations > 0) advisories.push(`enrich_path_violation:${enrichPathViolations}`);
+    if (hardDowngraded > 0) advisories.push(`llm_hard_negative_downgraded:${hardDowngraded}`);
 
-    return { blueprint: enriched, expansions, ...(advisories.length > 0 ? { advisories } : {}) }
+    return { blueprint: enriched, expansions, ...(advisories.length > 0 ? { advisories } : {}) };
   } catch (error) {
     // M5-DIAG：应用阶段 throw（strip/deepMerge/applyAdditions/自检）同样携带原因，不再静默
-    const err = error as Error
+    const err = error as Error;
     return {
       blueprint: v0,
-      expansions: ['enrichment_failed:fallback_to_v0', `enrichment_failed_reason:apply:${clip(err?.message || 'no message')}`],
-    }
+      expansions: [
+        'enrichment_failed:fallback_to_v0',
+        `enrichment_failed_reason:apply:${clip(err?.message || 'no message')}`,
+      ],
+    };
   }
 }

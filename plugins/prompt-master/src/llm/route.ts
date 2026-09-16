@@ -4,14 +4,19 @@
  * → ③无任何信息 → 报可操作错误（不硬编码默认、不回落插件 Config）。
  */
 export interface ExecLike {
-  agent?: { session?: { requestHeader?: () => { config?: { provider?: string; model?: string } } | undefined }; options?: { provider?: string; model?: string } }
-  signal: AbortSignal
+  agent?: {
+    session?: { requestHeader?: () => { config?: { provider?: string; model?: string } } | undefined };
+    options?: { provider?: string; model?: string };
+  };
+  signal: AbortSignal;
 }
 
 export function resolveRoute(exec: ExecLike): { provider: string; model: string } {
-  const routed = exec.agent?.session?.requestHeader?.()?.config
-  if (routed?.provider && routed?.model) return { provider: routed.provider, model: routed.model }
-  const opts = exec.agent?.options
-  if (opts?.provider && opts?.model) return { provider: opts.provider, model: opts.model }
-  throw new Error('无法解析模型路由：请先在当前会话选择 provider/model（Settings→Models）。插件不内置默认模型，完全跟随会话路由。')
+  const routed = exec.agent?.session?.requestHeader?.()?.config;
+  if (routed?.provider && routed?.model) return { provider: routed.provider, model: routed.model };
+  const opts = exec.agent?.options;
+  if (opts?.provider && opts?.model) return { provider: opts.provider, model: opts.model };
+  throw new Error(
+    '无法解析模型路由：请先在当前会话选择 provider/model（Settings→Models）。插件不内置默认模型，完全跟随会话路由。',
+  );
 }

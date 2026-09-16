@@ -1,159 +1,174 @@
-import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { TARGETS, type Target } from '../pe-framework/index.js'
-import { serializeReport } from '../pe-framework/audit/index.js'
-import type { AnimaSlots } from '../pe-framework/dialect/anima.js'
-import { SLOT_ORDER } from '../pe-framework/anima.js'
+import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
+import { TARGETS, type Target } from '../pe-framework/index.js';
+import { serializeReport } from '../pe-framework/audit/index.js';
+import type { AnimaSlots } from '../pe-framework/dialect/anima.js';
+import { SLOT_ORDER } from '../pe-framework/anima.js';
 // 方言模块副作用注册（Task 6：DIALECT_READY 静态表 → 注册表查询）
-import '../pe-framework/dialect/anima.js'
-import '../pe-framework/dialect/h3.js'
-import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js'
-import { buildTextZh } from '../pe-framework/dialect/h3.js'
-import { runStage } from '../pe-framework/pipeline/runStage.js'
-import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
-import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js'
-import { createSubagentToolRunner } from '../pe-framework/llm/subagent-tool-runner.js'
-import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js'
+import '../pe-framework/dialect/anima.js';
+import '../pe-framework/dialect/h3.js';
+import { isDialectReady as registryIsDialectReady, getDialect } from '../pe-framework/dialect/registry.js';
+import { buildTextZh } from '../pe-framework/dialect/h3.js';
+import { runStage } from '../pe-framework/pipeline/runStage.js';
+import {
+  createProductionEvidenceDeps,
+  createProductionCriticProvider,
+} from '../pe-framework/pipeline/judge-assembly.js';
+import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js';
+import { createSubagentToolRunner } from '../pe-framework/llm/subagent-tool-runner.js';
+import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js';
 // audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
-import { getSharedBgeOverlapSim } from '../pe-framework/compositing/vector-sim.js'
-import { searchCatalogSync } from '../pe-framework/dialect/anima-catalog.js'
-import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
-import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
-import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
-import type { StageResult, CriticRebuttal } from '../pe-framework/pipeline/types.js'
-import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blueprint/repo.js'
-import { projectToH3, projectToAnima, preflightRepair } from '../pe-framework/blueprint/project.js'
-import { enrichBlueprint } from '../pe-framework/enrichment/engine.js'
-import type { BlueprintV1 } from '../pe-framework/blueprint/schema.js'
-import type { SemanticBlueprint } from '../pe-framework/blueprint/semantic-schema.js'
+import { getSharedBgeOverlapSim } from '../pe-framework/compositing/vector-sim.js';
+import { searchCatalogSync } from '../pe-framework/dialect/anima-catalog.js';
+import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js';
+import type { EvidenceDeps } from '../pe-framework/eval/evidence.js';
+import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js';
+import type { StageResult, CriticRebuttal } from '../pe-framework/pipeline/types.js';
+import { createBlueprintRepo, type RepoSettingsScope } from '../pe-framework/blueprint/repo.js';
+import { projectToH3, projectToAnima, preflightRepair } from '../pe-framework/blueprint/project.js';
+import { enrichBlueprint } from '../pe-framework/enrichment/engine.js';
+import type { BlueprintV1 } from '../pe-framework/blueprint/schema.js';
+import type { SemanticBlueprint } from '../pe-framework/blueprint/semantic-schema.js';
 // M5-HOTFIX（P0）：蓝图落库真实 settings 接线——register-or-reuse owner scope（与 plugin/index.ts
 // custom-profiles 同款成熟模式），替代对裸 ctx.settings 的危险类型断言（本次 DSH 进程死亡根因）
-import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js'
-import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js'
-import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js'
-import type { Config } from '../plugin/config.js'
-import type { Context } from '@deepseek-ai/cordis'
-import { complete } from '../llm/complete.js'
-import { resolveRoute, type ExecLike } from '../llm/route.js'
-import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js'
-import { recordGeneration } from '../pe-framework/feedback/store.js'
-import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
-import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js'
+import z from '@deepseek-ai/schemastery';
+import { settingsNamespace } from '@deepseek-ai/dsh-settings';
+import { registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js';
+import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js';
+import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js';
+import type { Config } from '../plugin/config.js';
+import type { Context } from '@deepseek-ai/cordis';
+import { complete } from '../llm/complete.js';
+import { resolveRoute, type ExecLike } from '../llm/route.js';
+import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js';
+import { recordGeneration } from '../pe-framework/feedback/store.js';
+import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js';
+import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js';
 // 2026-09-16 定稿：catalogCandidatesForText（B7 前置召回）随 legacy slots 路径移除——
 // anima 词表证据唯一由 compositing S2.5 检索包承载（retrieval-pack.ts）
-import { resolveRating } from '../pe-framework/safety/rating.js'
-import { h3RatingUnsupportedError } from './h3-rating-gate.js'
-import { checkBoundaries } from '../pe-framework/safety/boundaries.js'
-import { recommendArtDirection } from '../pe-framework/aesthetics/recommend.js'
-import { analyzeBlueprintIncremental, parseBlueprintJson, ANIMA_BLUEPRINT_PERSONA } from '../pe-framework/blueprint/analyzer.js'
-import { applyArtDirectionCards, type ArtDirectionRecommendation } from '../pe-framework/enrichment/art-direction-apply.js'
-import { getStylePreset } from '../pe-framework/styles/registry.js'
-import type { Rating } from '../pe-framework/types.js'
-import { tokensOf } from '../pe-framework/tokens.js'
-import { appendFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { resolveRating } from '../pe-framework/safety/rating.js';
+import { h3RatingUnsupportedError } from './h3-rating-gate.js';
+import { checkBoundaries } from '../pe-framework/safety/boundaries.js';
+import { recommendArtDirection } from '../pe-framework/aesthetics/recommend.js';
+import {
+  analyzeBlueprintIncremental,
+  parseBlueprintJson,
+  ANIMA_BLUEPRINT_PERSONA,
+} from '../pe-framework/blueprint/analyzer.js';
+import {
+  applyArtDirectionCards,
+  type ArtDirectionRecommendation,
+} from '../pe-framework/enrichment/art-direction-apply.js';
+import { getStylePreset } from '../pe-framework/styles/registry.js';
+import type { Rating } from '../pe-framework/types.js';
+import { tokensOf } from '../pe-framework/tokens.js';
+import { appendFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // M5-DIAG2（c07 真实会话确定性 trim 崩溃）：文件级阶段 trace——%TEMP%/pm-author-trace.log，
 // 插件日志面（logger.info）不可离线检索，文件 trace 供 captain 直接读取；appendFileSync 逐行落盘。
 // 诊断辅助设施：任何写失败静默吞掉（永不阻塞主流程）。移除时机 = 缺陷定位并修复后。
-const TRACE_PATH = join(tmpdir(), 'pm-author-trace.log')
+const TRACE_PATH = join(tmpdir(), 'pm-author-trace.log');
 function trace(stage: string, detail?: unknown): void {
   try {
-    appendFileSync(TRACE_PATH, `${new Date().toISOString()} ${stage}${detail !== undefined ? ` ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}\n`)
-  } catch { /* 诊断辅助，永不阻塞 */ }
+    appendFileSync(
+      TRACE_PATH,
+      `${new Date().toISOString()} ${stage}${detail !== undefined ? ` ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}\n`,
+    );
+  } catch {
+    /* 诊断辅助，永不阻塞 */
+  }
 }
-import type { EnrichedBrief } from '../pe-framework/enrich/brief.js'
-import { defaultFeedbackDbPath } from './prompt-feedback.js'
-import { createHash } from 'node:crypto'
+import type { EnrichedBrief } from '../pe-framework/enrich/brief.js';
+import { defaultFeedbackDbPath } from './prompt-feedback.js';
+import { createHash } from 'node:crypto';
 
 export interface AuthorArgs {
-  target: Target
-  input: string
-  profile?: string
-  variant?: string
-  stage?: string
-  scenario_id?: string
-  form_fields?: Record<string, unknown>
+  target: Target;
+  input: string;
+  profile?: string;
+  variant?: string;
+  stage?: string;
+  scenario_id?: string;
+  form_fields?: Record<string, unknown>;
   /** Task 14（spec §8）：内容分级——缺省 undefined = 按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；显式声明优先不升级 */
-  rating?: Rating
+  rating?: Rating;
   /** Task 10 蓝图管线：风格模板 id（MINIMAL_STYLES，如 cinematic_real） */
-  style_id?: string
+  style_id?: string;
   /** Task 10 蓝图管线：风格注入 conformity（0=全量注入；>0 仅引用） */
-  conformity?: number
+  conformity?: number;
   /** Task 10 蓝图管线：关键维度缺失时的澄清策略 ask|auto */
-  clarify?: 'ask' | 'auto'
+  clarify?: 'ask' | 'auto';
   /** Task 14：增量修改入口——传蓝图 id 时跳过直连 analyzeIntent，改走 <old_blueprint> 锚定的增量意图分析（spec §8 恒跑无旁路） */
-  blueprint_id?: string
+  blueprint_id?: string;
   /** Task 6（spec §2.4/§3.1）：评审模式；T9 起缺省 'fast'（显式 'off' 回退旧路径） */
-  judge_mode?: 'off' | 'fast' | 'strict'
+  judge_mode?: 'off' | 'fast' | 'strict';
   /** T4（spec §10.4-A12）：修正轮评审成本开关；缺省 true（现状每修正轮重评）；false=修正轮 runStage 不带 judgeOpts（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动） */
-  judgeRepair?: boolean
+  judgeRepair?: boolean;
   /** 二期（spec §2.4）：enrich 扩写层开关；T9 起缺省 true（显式 false 关闭）；blueprint_id 时忽略 */
-  enrich?: boolean
+  enrich?: boolean;
   /** 二期（spec §4）：输出语言偏好透传 runEnrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 纠正 + advisory enrich_lang_forced） */
-  outputLang?: 'en' | 'zh' | 'ja'
+  outputLang?: 'en' | 'zh' | 'ja';
   /** 2026-09-12 P1：调用方显式指定艺术指导卡片（每类至多 1 张；字段 perspective/composition/lighting/color/motion → 卡片 id）。
    *  仅 anima + enrich 开启时消费；无效字段/id fail-fast 抛错；enrich 关/blueprint/h3 目标 → advisory art_direction_ignored_*。 */
-  art_direction?: Record<string, string>
+  art_direction?: Record<string, string>;
 }
 
 /** 方言归化状态机：查注册表（anima/h3 由上方副作用 import 装配）；sd/generic 未归化 */
 export function isDialectReady(target: Target): boolean {
-  return registryIsDialectReady(target)
+  return registryIsDialectReady(target);
 }
 
 /* ── intent 层（LLM；测试注入 seam）── */
 
 export interface AuthorDraft {
-  slots?: AnimaSlots
-  shots?: H3ShotsInput
+  slots?: AnimaSlots;
+  shots?: H3ShotsInput;
   /** Task 10 蓝图管线：蓝图 v0（意图分析产出）；存在时走 enrich→project 分支 */
-  blueprint?: BlueprintV1
+  blueprint?: BlueprintV1;
   /** Task 10 蓝图管线：缺失维度标记（spec §6），传入 enrichBlueprint 作扩展引导 */
-  missing?: string[]
+  missing?: string[];
   /** 2026-09-15 管线重设计（spec §3）：compositing 形态 S1 语义蓝图 v0——纯画面语义，零词表 */
-  semantic?: SemanticBlueprint
+  semantic?: SemanticBlueprint;
 }
 
 export interface AuthorIntentRequest {
-  target: string
-  input: string
-  variant?: string
-  scenarioId?: string
-  formFields?: Record<string, unknown>
-  round: number
-  feedback?: string
+  target: string;
+  input: string;
+  variant?: string;
+  scenarioId?: string;
+  formFields?: Record<string, unknown>;
+  round: number;
+  feedback?: string;
   /** Task 7 方言化：author 按 getDialect(target).intent 注入（req > opts > DEFAULT 兜底在 provider 内） */
-  persona?: string
-  schema?: string
+  persona?: string;
+  schema?: string;
   /** B7（外部基准 2026-09）：catalog 候选召回——intent 前置检索的已验证规范 tag（provider 渲染为候选块） */
-  catalogCandidates?: string[]
+  catalogCandidates?: string[];
   /** Task 10 蓝图管线：关键维度缺失澄清策略透传（→ analyzeIntent opts.clarify；t22 F2 修复） */
-  clarify?: 'ask' | 'auto'
+  clarify?: 'ask' | 'auto';
   /** M5-T2（D1，design §2.1）：蓝图形态路由——prompt-author 唯一读取点（registry intent.form +
    *  env kill-switch）下行；provider 据此走蓝图 persona/schema 与 parseBlueprintJson */
-  blueprintMode?: boolean
+  blueprintMode?: boolean;
   /** M5-T2（D2）：期望蓝图 media（parse 层 expectedMedia 守卫）；仅 blueprintMode 下行 */
-  blueprintExpectedMedia?: string
+  blueprintExpectedMedia?: string;
   /** M5-T2（D5a/V6）：修复轮增量锚定——上一版蓝图经 INCREMENTAL_ANCHOR 进 <old_blueprint> 专用块 */
-  anchorBlueprint?: BlueprintV1
+  anchorBlueprint?: BlueprintV1;
   /** 2026-09-15 管线重设计（spec §3）：compositing 形态路由——provider 据此走语义蓝图 persona/schema
    *  与 parseSemanticBlueprint；与 blueprintMode 互斥（compositing 优先） */
-  compositingMode?: boolean
+  compositingMode?: boolean;
 }
 
-export type AuthorIntentFn = (req: AuthorIntentRequest, exec?: ExecLike) => Promise<AuthorDraft>
+export type AuthorIntentFn = (req: AuthorIntentRequest, exec?: ExecLike) => Promise<AuthorDraft>;
 
-let _intentProvider: AuthorIntentFn | null = null
+let _intentProvider: AuthorIntentFn | null = null;
 
 export function setAuthorIntentProvider(fn: AuthorIntentFn | null): void {
-  _intentProvider = fn
+  _intentProvider = fn;
 }
 
 export function getAuthorIntentProvider(): AuthorIntentFn | null {
-  return _intentProvider
+  return _intentProvider;
 }
 
 /**
@@ -162,19 +177,23 @@ export function getAuthorIntentProvider(): AuthorIntentFn | null {
  * 该槽任何 tag → 视为越权改动，回滚为上一轮值。文本约束（修订纪律）靠 LLM 自觉，
  * 这里用代码兜底。仅 anima slots 路径；h3 shots 不做（结构不同，未观察到该问题）。
  */
-function mergeRepairSlots(prev: AnimaSlots | undefined, next: AnimaSlots | undefined, feedback: string): AnimaSlots | undefined {
-  if (!prev || !next) return next
-  const fb = feedback.toLowerCase()
-  const merged: Record<string, unknown> = { ...next }
+function mergeRepairSlots(
+  prev: AnimaSlots | undefined,
+  next: AnimaSlots | undefined,
+  feedback: string,
+): AnimaSlots | undefined {
+  if (!prev || !next) return next;
+  const fb = feedback.toLowerCase();
+  const merged: Record<string, unknown> = { ...next };
   for (const key of SLOT_ORDER) {
-    const p = (prev as Record<string, unknown>)[key]
-    const n = (next as Record<string, unknown>)[key]
-    if (p === undefined || JSON.stringify(p) === JSON.stringify(n)) continue
-    const mentioned = fb.includes(key.toLowerCase()) ||
-      (Array.isArray(p) && p.some((t) => fb.includes(String(t).toLowerCase())))
-    if (!mentioned) merged[key] = p
+    const p = (prev as Record<string, unknown>)[key];
+    const n = (next as Record<string, unknown>)[key];
+    if (p === undefined || JSON.stringify(p) === JSON.stringify(n)) continue;
+    const mentioned =
+      fb.includes(key.toLowerCase()) || (Array.isArray(p) && p.some((t) => fb.includes(String(t).toLowerCase())));
+    if (!mentioned) merged[key] = p;
   }
-  return merged as unknown as AnimaSlots
+  return merged as unknown as AnimaSlots;
 }
 
 /**
@@ -185,20 +204,27 @@ function mergeRepairSlots(prev: AnimaSlots | undefined, next: AnimaSlots | undef
  * （仅首轮 + mergeRepairSlots 后重写，修复轮语义不同）。
  */
 function injectBlueprintCoreRating(d: AuthorDraft, rating: Rating): AuthorDraft {
-  if (d.blueprint) d.blueprint.core.rating = rating
-  return d
+  if (d.blueprint) d.blueprint.core.rating = rating;
+  return d;
 }
 
 /** 缺省 intent（真实运行）：经 ctx.llm 走 complete 组装；测试一律注入 provider（route 在 execute 入口经 resolveRoute 解析） */
-async function defaultIntent(ctx: Context, route: { provider: string; model: string }, req: AuthorIntentRequest): Promise<AuthorDraft> {
+async function defaultIntent(
+  ctx: Context,
+  route: { provider: string; model: string },
+  req: AuthorIntentRequest,
+): Promise<AuthorDraft> {
   // M5-T2（D4）：蓝图形态 parity——降级面（provider seam 未装配）与主面行为一致：system 用
   // req.persona（ANIMA 蓝图 persona，registry 下行），解析走 parseBlueprintJson(+expectedMedia)。
   if (req.blueprintMode === true) {
-    const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
+    const user =
+      (req.feedback
+        ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n`
+        : '') +
       (req.catalogCandidates && req.catalogCandidates.length > 0
         ? `可用 catalog 规范候选（Anima tag 知识库中已验证存在的规范写法——写法权威源，命中概念的 tag 应优先采用候选的拼写形式，未命中概念保留你的写法）:\n${req.catalogCandidates.join(', ')}\n\n`
         : '') +
-      `创作意图: ${req.input}`
+      `创作意图: ${req.input}`;
     const { text } = await complete(ctx, {
       provider: route.provider,
       model: route.model,
@@ -207,21 +233,24 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
       // M5-DIAG2（用户裁定：不设 maxTokens 上限）——reasoning 模型思考预算不可预支，交由宿主 defaultMaxTokens
       temperature: 0.3,
       signal: new AbortController().signal,
-    })
-    const expected = req.blueprintExpectedMedia
+    });
+    const expected = req.blueprintExpectedMedia;
     return parseBlueprintJson(text, {
       ...(expected === 'image' || expected === 'video' || expected === 'mixed' ? { expectedMedia: expected } : {}),
-    })
+    });
   }
   const system =
     req.target === 'anima'
       ? '你是 Anima 提示词意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图拆成槽位 JSON（形如 {"slots": {"count_gender": [...], "appearance": [...], ...}}，键为 count_gender/character/appearance/clothing/pose_action/expression/camera/scene/detail_mood/narrative）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的维度给最小化合理解释，不编造情节；所有 tag 用英文 danbooru 词表写法（全小写、空格分隔），中文创意概念必须翻译成英文画面词，禁止中文字符出现在任何 tag 槽位。'
-      : '你是 MiniMax-H3 意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图写成 shots JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的字段给最小化合理解释，不编造情节；what 正文用英文书写，画面内文字与原生对白原样保留（对白放 dialogue 字段）。'
-  const user = (req.feedback ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n` : '') +
+      : '你是 MiniMax-H3 意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图写成 shots JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的字段给最小化合理解释，不编造情节；what 正文用英文书写，画面内文字与原生对白原样保留（对白放 dialogue 字段）。';
+  const user =
+    (req.feedback
+      ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n`
+      : '') +
     (req.catalogCandidates && req.catalogCandidates.length > 0
       ? `可用 catalog 规范候选（Anima tag 知识库中已验证存在的规范写法——写法权威源，命中概念的 tag 应优先采用候选的拼写形式，未命中概念保留你的写法）:\n${req.catalogCandidates.join(', ')}\n\n`
       : '') +
-    `创作意图: ${req.input}`
+    `创作意图: ${req.input}`;
   const { text } = await complete(ctx, {
     provider: route.provider,
     model: route.model,
@@ -230,142 +259,152 @@ async function defaultIntent(ctx: Context, route: { provider: string; model: str
     // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
     temperature: 0.3,
     signal: new AbortController().signal,
-  })
+  });
   // 剥离 markdown code fence 与前后非 JSON 杂质（LLM 常见 ```json ... ``` 包裹；与 subagent-provider 同款策略）
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const cleaned = (fenced ? fenced[1] : text).trim()
-  const parsed = JSON.parse(cleaned) as { slots?: Record<string, unknown>; shots?: H3ShotsInput }
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const cleaned = (fenced ? fenced[1] : text).trim();
+  const parsed = JSON.parse(cleaned) as { slots?: Record<string, unknown>; shots?: H3ShotsInput };
   // 归一化 slots：narrative 强制 string；其余槽强制 string[]
-  const slots = parsed.slots ? normalizeSlots(parsed.slots) : undefined
-  if (req.target === 'anima') return { slots: slots ?? ({} as AnimaSlots) }
-  return { shots: parsed.shots ?? undefined }
+  const slots = parsed.slots ? normalizeSlots(parsed.slots) : undefined;
+  if (req.target === 'anima') return { slots: slots ?? ({} as AnimaSlots) };
+  return { shots: parsed.shots ?? undefined };
 }
 
 /** LLM 输出形状兜底：narrative 强转 string；其余槽强转 string[]（数组→join / 标量→[标量] / null→[]） */
 function normalizeSlots(raw: Record<string, unknown>): AnimaSlots {
-  const out: Record<string, unknown> = {}
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
     if (k === 'narrative') {
-      out[k] = typeof v === 'string' ? v : (Array.isArray(v) ? (v as unknown[]).map(String).join(' ') : v == null ? '' : String(v))
+      out[k] =
+        typeof v === 'string'
+          ? v
+          : Array.isArray(v)
+            ? (v as unknown[]).map(String).join(' ')
+            : v == null
+              ? ''
+              : String(v);
     } else {
-      out[k] = Array.isArray(v) ? (v as unknown[]).map((x) => String(x))
-        : v == null ? [] : [String(v)]
+      out[k] = Array.isArray(v) ? (v as unknown[]).map((x) => String(x)) : v == null ? [] : [String(v)];
     }
   }
-  return out as AnimaSlots
+  return out as AnimaSlots;
 }
 
 /* ── 视图层（意图 → runStage 内核 → 场景表单闸门合并 → Envelope + 修正闭环）── */
 
-const VARIANT_SET = new Set(['base', 'aesthetic', 'turbo'])
-const MAX_CORRECTIONS = 2
+const VARIANT_SET = new Set(['base', 'aesthetic', 'turbo']);
+const MAX_CORRECTIONS = 2;
 
 /* ── Task 6 评审接线（spec §2.4/§3.1）：注入点 + 生产装配 ── */
 
 /** strict 修正稿生产者（与 PipelineInput.revisionProvider 同形；T4 增 praise 参与结构化 rebuttals 产物） */
-export type AuthorRevisionProvider = (compiled: unknown, findings: CriticFinding[], praise: string[]) => Promise<{
-  compiled: unknown
-  changes: string[]
-  revisionNote: string
-  rebuttals: CriticRebuttal[]
-}>
+export type AuthorRevisionProvider = (
+  compiled: unknown,
+  findings: CriticFinding[],
+  praise: string[],
+) => Promise<{
+  compiled: unknown;
+  changes: string[];
+  revisionNote: string;
+  rebuttals: CriticRebuttal[];
+}>;
 
 /** 评审依赖注入 seam：生产缺省走 createProduction* 装配；e2e/单测经此注入 mock */
 export interface AuthorJudgeDeps {
-  criticProvider?: CriticProvider
-  evidenceDeps?: EvidenceDeps
-  revisionProvider?: AuthorRevisionProvider
+  criticProvider?: CriticProvider;
+  evidenceDeps?: EvidenceDeps;
+  revisionProvider?: AuthorRevisionProvider;
 }
 
-let _judgeDeps: AuthorJudgeDeps | null = null
+let _judgeDeps: AuthorJudgeDeps | null = null;
 
 export function setAuthorJudgeDeps(deps: AuthorJudgeDeps | null): void {
-  _judgeDeps = deps
+  _judgeDeps = deps;
 }
 
 export function getAuthorJudgeDeps(): AuthorJudgeDeps | null {
-  return _judgeDeps
+  return _judgeDeps;
 }
 
 /* ── 二期 T6（spec §2.1/§4/§11.3/§11.4）：enrich 接线 ── */
 
 /** enrich provider 注入 seam：生产缺省 createProductionCriticProvider（createSubagentCriticProvider 同款带超时包装，T5 carry②）；e2e/单测经此注入 mock */
-let _enrichProvider: CriticProvider | null = null
+let _enrichProvider: CriticProvider | null = null;
 
 export function setAuthorEnrichProvider(p: CriticProvider | null): void {
-  _enrichProvider = p
+  _enrichProvider = p;
 }
 
 /** nameAnchors 硬上限（T5 carry③，接线层强制）：条目 ≤10、单条 original/anchored ≤100 字符 */
-const NAME_ANCHORS_MAX = 10
-const NAME_ANCHOR_LEN_MAX = 100
+const NAME_ANCHORS_MAX = 10;
+const NAME_ANCHOR_LEN_MAX = 100;
 
 /** 超限条目直接丢弃（不截断文本），发生丢弃 → trimmed=true（调用方标 advisory name_anchors_trimmed） */
 function trimNameAnchors(brief: EnrichedBrief): boolean {
   const kept = brief.nameAnchors
     .filter((a) => a.original.length <= NAME_ANCHOR_LEN_MAX && a.anchored.length <= NAME_ANCHOR_LEN_MAX)
-    .slice(0, NAME_ANCHORS_MAX)
-  const trimmed = kept.length !== brief.nameAnchors.length
-  brief.nameAnchors = kept
-  return trimmed
+    .slice(0, NAME_ANCHORS_MAX);
+  const trimmed = kept.length !== brief.nameAnchors.length;
+  brief.nameAnchors = kept;
+  return trimmed;
 }
 
-const BRIEF_DIMENSIONS = ['subject', 'scene', 'composition', 'lighting', 'color', 'style', 'mood'] as const
+const BRIEF_DIMENSIONS = ['subject', 'scene', 'composition', 'lighting', 'color', 'style', 'mood'] as const;
 
 /** brief → intent 权威输入文本：七维度逐条列出（标注 source）+ 权威指令 + 角色名固定映射（spec §2.1/§4/§11.4） */
 export function briefToIntentText(brief: EnrichedBrief): string {
   const lines: string[] = [
     '以下为 enrich 扩写后的七维度结构化 brief（brief 是权威输入，source=user 字段不可改，须原样保留；source=enriched 字段可按画面需要取舍）：',
-  ]
+  ];
   for (const dim of BRIEF_DIMENSIONS) {
-    for (const it of brief[dim]) lines.push(`- ${dim} [${it.source}] ${it.text}`)
+    for (const it of brief[dim]) lines.push(`- ${dim} [${it.source}] ${it.text}`);
   }
-  lines.push(`- outputLang: ${brief.outputLang}`)
+  lines.push(`- outputLang: ${brief.outputLang}`);
   if (brief.nameAnchors.length > 0) {
-    lines.push('角色名固定映射，全程一致（不得改名、不得音译变体）：')
-    for (const a of brief.nameAnchors) lines.push(`- ${a.original} → ${a.anchored}`)
+    lines.push('角色名固定映射，全程一致（不得改名、不得音译变体）：');
+    for (const a of brief.nameAnchors) lines.push(`- ${a.original} → ${a.anchored}`);
   }
-  return lines.join('\n')
+  return lines.join('\n');
 }
 
 /** runStage 评审透传段（judge=off 时为 undefined → 同步旧路径零变化） */
 interface JudgeStageOpts {
-  judge: 'fast' | 'strict'
-  criticProvider: CriticProvider
-  evidenceDeps: EvidenceDeps
-  originalIntent: string
+  judge: 'fast' | 'strict';
+  criticProvider: CriticProvider;
+  evidenceDeps: EvidenceDeps;
+  originalIntent: string;
   /** M2-T2（spec §7 P3）：预检定档透传进评审通道——buildPersona/buildRevisionPersona 评级中立尾行生效 */
-  declaredRating: Rating
-  revisionProvider?: AuthorRevisionProvider
+  declaredRating: Rating;
+  revisionProvider?: AuthorRevisionProvider;
 }
 
 /** generation_id（spec §3.1）：唯一允许的缺省新增 Envelope 字段——gen_<Date.now()>_<random36> */
 export function makeGenerationId(): string {
-  return `gen_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  return `gen_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /* ── final review C1：generations 落库（质量飞轮 §3.2）── */
 
 /** 测试/特殊部署注入 db 路径（与 prompt-feedback 的 setFeedbackDbPath 同款 seam）；null 恢复默认解析 */
-let _feedbackDbPathOverride: string | null = null
+let _feedbackDbPathOverride: string | null = null;
 export function setAuthorFeedbackDbPath(p: string | null): void {
-  _feedbackDbPathOverride = p
+  _feedbackDbPathOverride = p;
 }
 
 function resolveFeedbackDbPath(): string | undefined {
   try {
-    return _feedbackDbPathOverride ?? defaultFeedbackDbPath()
+    return _feedbackDbPathOverride ?? defaultFeedbackDbPath();
   } catch {
-    return undefined // presetRoot 未配置 → 不落库（增强层，不阻塞出稿）
+    return undefined; // presetRoot 未配置 → 不落库（增强层，不阻塞出稿）
   }
 }
 
 /** StageResult.result → final_output 文本（编译产物整体 JSON，≤32KB 由 store 层裁剪） */
 function finalOutputText(stage: StageResult): string {
   try {
-    return JSON.stringify(stage.result) ?? ''
+    return JSON.stringify(stage.result) ?? '';
   } catch {
-    return ''
+    return '';
   }
 }
 
@@ -374,24 +413,24 @@ function finalOutputText(stage: StageResult): string {
  * 写失败只 push `feedback_write_failed` advisory，绝不阻塞出稿）。
  */
 function recordGenerationSafe(args: {
-  id: string
-  target: Target
-  variant?: string
-  judgeMode: 'off' | 'fast' | 'strict'
-  input: string
-  stage: StageResult
-  repairRounds: number
-  advisories: string[]
+  id: string;
+  target: Target;
+  variant?: string;
+  judgeMode: 'off' | 'fast' | 'strict';
+  input: string;
+  stage: StageResult;
+  repairRounds: number;
+  advisories: string[];
   /** 二期 spec §11.3：enrich 扩写标记（0|1） */
-  enrich: 0 | 1
+  enrich: 0 | 1;
   /** Task 14 ⑥（spec §8）：预检定档的内容分级（generations.rating 列） */
-  rating: Rating
+  rating: Rating;
 }): void {
   try {
-    const dbPath = resolveFeedbackDbPath()
-    if (!dbPath) return
-    const j = args.stage.judge
-    const judged = j !== undefined && 'verdict' in j
+    const dbPath = resolveFeedbackDbPath();
+    if (!dbPath) return;
+    const j = args.stage.judge;
+    const judged = j !== undefined && 'verdict' in j;
     recordGeneration(dbPath, {
       id: args.id,
       created_at: Date.now(),
@@ -400,53 +439,56 @@ function recordGenerationSafe(args: {
       judge_mode: args.judgeMode,
       input_digest: createHash('sha256').update(args.input, 'utf8').digest('hex'),
       final_output: finalOutputText(args.stage),
-      ...(judged ? { judge_score: (j as { score: number }).score, judge_verdict: (j as { verdict: string }).verdict } : {}),
+      ...(judged
+        ? { judge_score: (j as { score: number }).score, judge_verdict: (j as { verdict: string }).verdict }
+        : {}),
       ...(args.stage.debate !== undefined ? { debate_json: JSON.stringify(args.stage.debate) } : {}),
       repair_rounds: args.repairRounds,
       enrich: args.enrich,
       rating: args.rating,
-    })
+    });
   } catch {
-    args.advisories.push('feedback_write_failed')
+    args.advisories.push('feedback_write_failed');
   }
 }
 
 /** StageResult → Envelope 顶层评审投影：字段仅在评审实际发生时出现 */
 export function judgeTopLevel(stage: StageResult): Record<string, unknown> {
-  const j = stage.judge
+  const j = stage.judge;
   // F1（review fix1，控制器裁决方案 a，spec §2.5）：规则 critical 跳过评审不是评审结果——不投影 judge
   // （闭环仍由 gates 驱动）；其他 skipped reason（如 LLM 故障）保持投影（judge_skipped advisory 可见）。
   // Round7 T4 规格5：投影联动收紧——ruleCriticalSkip 分支下 debate/judgeFeedback 同样不投影，杜绝
   // 「judge 缺省却带 debate/judgeFeedback」的不一致 envelope（终审防御性契约：runStage 该分支本就
   // 早退 debate=[]/judgeFeedback=undefined，此处为投影层兜底；导出仅供契约测试直调构造）。
-  const ruleCriticalSkip = j !== undefined && 'skipped' in j && j.skipped === true && (j as { reason?: string }).reason === 'rule_critical'
-  if (ruleCriticalSkip) return {}
+  const ruleCriticalSkip =
+    j !== undefined && 'skipped' in j && j.skipped === true && (j as { reason?: string }).reason === 'rule_critical';
+  if (ruleCriticalSkip) return {};
   return {
     ...(j !== undefined ? { judge: j } : {}),
     ...(stage.debate !== undefined ? { debate: stage.debate } : {}),
     ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
-  }
+  };
 }
 
 /* ── T4（spec §10.2-A3/A4, §10.4-A13）：makeRevisionProvider v2 —— 稿内编辑 + praise 锚点 + 结构化 rebuttals ── */
 
 /** 与 eval/critic.ts tokensOf 同款词元集（F1 三期 Task 2：改为引用公共 util pe-framework/tokens.ts） */
 function patchTokens(s: string): Set<string> {
-  return tokensOf(s)
+  return tokensOf(s);
 }
 
 function patchIntersects(a: string, b: string): boolean {
-  const ta = patchTokens(a)
-  for (const t of patchTokens(b)) if (ta.has(t)) return true
-  return false
+  const ta = patchTokens(a);
+  for (const t of patchTokens(b)) if (ta.has(t)) return true;
+  return false;
 }
 
 /** finding 定位键：优先证据查询串，缺省回落 problem 描述 */
 function locatorOf(f: CriticFinding): string {
-  return (f.evidence?.query ?? '') + ' ' + f.problem
+  return (f.evidence?.query ?? '') + ' ' + f.problem;
 }
 
-type PatchResult = { compiled: unknown; changes: string[]; rebuttals: CriticRebuttal[] } | null
+type PatchResult = { compiled: unknown; changes: string[]; rebuttals: CriticRebuttal[] } | null;
 
 /**
  * anima 稿内编辑：从 compiled.segments 重建槽字段（slot→tags / narrative / exclusions），
@@ -455,54 +497,67 @@ type PatchResult = { compiled: unknown; changes: string[]; rebuttals: CriticRebu
  * 任一 finding 定位不到槽 → null（调用方回退整稿重拆）。
  */
 function patchAnima(compiled: unknown, findings: CriticFinding[], variant: string): PatchResult {
-  const c = compiled as { segments?: unknown; positive?: unknown }
-  if (!Array.isArray(c?.segments) || typeof c.positive !== 'string') return null
-  const positiveText = String(c.positive).toLowerCase()
-  const fields: Record<string, string[]> = {}
-  let narrative: string | undefined
-  let exclusions: string[] | undefined
+  const c = compiled as { segments?: unknown; positive?: unknown };
+  if (!Array.isArray(c?.segments) || typeof c.positive !== 'string') return null;
+  const positiveText = String(c.positive).toLowerCase();
+  const fields: Record<string, string[]> = {};
+  let narrative: string | undefined;
+  let exclusions: string[] | undefined;
   for (const seg of c.segments as Array<Record<string, unknown>>) {
-    const slot = typeof seg['slot'] === 'string' ? seg['slot'] : null
-    const text = typeof seg['text'] === 'string' ? seg['text'] : null
-    const origin = seg['origin']
-    const channel = seg['channel']
-    if (!text) return null
-    if (origin === 'narrative' && channel === 'positive') { narrative = text; continue }
-    if (origin === 'exclusion' && channel === 'negative') { (exclusions ??= []).push(text); continue }
-    if (channel !== 'positive' || typeof slot !== 'string') continue
-    (fields[slot] ??= []).push(text)
+    const slot = typeof seg['slot'] === 'string' ? seg['slot'] : null;
+    const text = typeof seg['text'] === 'string' ? seg['text'] : null;
+    const origin = seg['origin'];
+    const channel = seg['channel'];
+    if (!text) return null;
+    if (origin === 'narrative' && channel === 'positive') {
+      narrative = text;
+      continue;
+    }
+    if (origin === 'exclusion' && channel === 'negative') {
+      (exclusions ??= []).push(text);
+      continue;
+    }
+    if (channel !== 'positive' || typeof slot !== 'string') continue;
+    (fields[slot] ??= []).push(text);
   }
-  const changes: string[] = []
-  const rebuttals: CriticRebuttal[] = []
-  let patched = false
+  const changes: string[] = [];
+  const rebuttals: CriticRebuttal[] = [];
+  let patched = false;
   for (const f of findings) {
-    const fix = f.requiredFix.trim()
-    if (!fix) return null
+    const fix = f.requiredFix.trim();
+    if (!fix) return null;
     if (positiveText.includes(fix.toLowerCase())) {
       // A4：所需内容已在稿内 → 结构化反驳（带稿内证据），不改稿
-      rebuttals.push({ finding_id: f.id, rebuttal: `requiredFix 内容已在稿内（无需修改）: ${fix}`, evidence: String(c.positive) })
-      continue
+      rebuttals.push({
+        finding_id: f.id,
+        rebuttal: `requiredFix 内容已在稿内（无需修改）: ${fix}`,
+        evidence: String(c.positive),
+      });
+      continue;
     }
-    let target: string | null = null
+    let target: string | null = null;
     for (const [slot, tags] of Object.entries(fields)) {
-      if (tags.some((t) => patchIntersects(t, locatorOf(f)))) { target = slot; break }
+      if (tags.some((t) => patchIntersects(t, locatorOf(f)))) {
+        target = slot;
+        break;
+      }
     }
-    if (target === null) return null // 定位不到槽 → 整体回退整稿重拆
-    fields[target].push(fix)
-    changes.push(`patch:slot ${target} += "${fix}" (finding ${f.id})`)
-    patched = true
+    if (target === null) return null; // 定位不到槽 → 整体回退整稿重拆
+    fields[target].push(fix);
+    changes.push(`patch:slot ${target} += "${fix}" (finding ${f.id})`);
+    patched = true;
   }
-  if (!patched && rebuttals.length === 0) return null
-  const d = getDialect('anima')
-  if (!d) return null
-  const slots: Record<string, unknown> = { ...fields }
-  if (narrative !== undefined) slots['narrative'] = narrative
-  if (exclusions !== undefined) slots['exclusions'] = exclusions
+  if (!patched && rebuttals.length === 0) return null;
+  const d = getDialect('anima');
+  if (!d) return null;
+  const slots: Record<string, unknown> = { ...fields };
+  if (narrative !== undefined) slots['narrative'] = narrative;
+  if (exclusions !== undefined) slots['exclusions'] = exclusions;
   try {
-    const compiled2 = d.compile(slots as never, { variant: (variant as 'base' | 'aesthetic' | 'turbo') ?? 'base' })
-    return { compiled: compiled2, changes, rebuttals }
+    const compiled2 = d.compile(slots as never, { variant: (variant as 'base' | 'aesthetic' | 'turbo') ?? 'base' });
+    return { compiled: compiled2, changes, rebuttals };
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -512,48 +567,51 @@ function patchAnima(compiled: unknown, findings: CriticFinding[], variant: strin
  * 任一 finding 定位不到镜头 / 结构不合规 → null（回退整稿重拆）。
  */
 function patchH3(compiled: unknown, findings: CriticFinding[]): PatchResult {
-  const text = (compiled as { text?: unknown } | null | undefined)?.text
-  if (typeof text !== 'string' || !text.includes('[Shot ')) return null
-  let cur = text
-  const changes: string[] = []
-  const rebuttals: CriticRebuttal[] = []
+  const text = (compiled as { text?: unknown } | null | undefined)?.text;
+  if (typeof text !== 'string' || !text.includes('[Shot ')) return null;
+  let cur = text;
+  const changes: string[] = [];
+  const rebuttals: CriticRebuttal[] = [];
   for (const f of findings) {
-    const fix = f.requiredFix.trim()
-    if (!fix) return null
+    const fix = f.requiredFix.trim();
+    if (!fix) return null;
     // 镜头段切分：[Shot N] 起点到下一 [Shot 或文本末尾
-    const starts: number[] = []
-    const re = /\[Shot (\d+)\]/g
-    for (const m of cur.matchAll(re)) starts.push(m.index)
-    if (starts.length === 0) return null
-    let hitIdx = -1
+    const starts: number[] = [];
+    const re = /\[Shot (\d+)\]/g;
+    for (const m of cur.matchAll(re)) starts.push(m.index);
+    if (starts.length === 0) return null;
+    let hitIdx = -1;
     for (let i = 0; i < starts.length; i++) {
-      const end = i + 1 < starts.length ? starts[i + 1] : cur.length
-      const seg = cur.slice(starts[i], end)
-      if (patchIntersects(seg, locatorOf(f))) { hitIdx = i; break }
+      const end = i + 1 < starts.length ? starts[i + 1] : cur.length;
+      const seg = cur.slice(starts[i], end);
+      if (patchIntersects(seg, locatorOf(f))) {
+        hitIdx = i;
+        break;
+      }
     }
-    if (hitIdx < 0) return null
-    const start = starts[hitIdx]
+    if (hitIdx < 0) return null;
+    const start = starts[hitIdx];
     // 段边界：下一 [Shot，或本行行尾（最后一个镜头不得吞掉后续字段行）
-    const nl = cur.indexOf('\n', start)
-    const end = hitIdx + 1 < starts.length ? starts[hitIdx + 1] : (nl >= 0 ? nl : cur.length)
-    const seg = cur.slice(start, end)
-    const headerM = /^\[Shot \d+\] /.exec(seg)
-    if (!headerM) return null
-    const body = seg.slice(headerM[0].length).replace(/\s+$/, '')
+    const nl = cur.indexOf('\n', start);
+    const end = hitIdx + 1 < starts.length ? starts[hitIdx + 1] : nl >= 0 ? nl : cur.length;
+    const seg = cur.slice(start, end);
+    const headerM = /^\[Shot \d+\] /.exec(seg);
+    if (!headerM) return null;
+    const body = seg.slice(headerM[0].length).replace(/\s+$/, '');
     if (body.toLowerCase().includes(fix.toLowerCase())) {
-      rebuttals.push({ finding_id: f.id, rebuttal: `requiredFix 内容已在稿内（无需修改）: ${fix}`, evidence: body })
-      continue
+      rebuttals.push({ finding_id: f.id, rebuttal: `requiredFix 内容已在稿内（无需修改）: ${fix}`, evidence: body });
+      continue;
     }
     // 保留 dialogue 后缀（body 首个「 <d>」之后的部分）
-    const dIdx = body.indexOf(' <d>')
-    const dialogue = dIdx >= 0 ? body.slice(dIdx) : ''
-    const segNo = hitIdx + 1
-    const replaced = `[Shot ${segNo}] ${fix}.${dialogue} `
-    cur = cur.slice(0, start) + replaced + cur.slice(end)
-    changes.push(`patch:shot ${segNo} (finding ${f.id})`)
+    const dIdx = body.indexOf(' <d>');
+    const dialogue = dIdx >= 0 ? body.slice(dIdx) : '';
+    const segNo = hitIdx + 1;
+    const replaced = `[Shot ${segNo}] ${fix}.${dialogue} `;
+    cur = cur.slice(0, start) + replaced + cur.slice(end);
+    changes.push(`patch:shot ${segNo} (finding ${f.id})`);
   }
-  if (changes.length === 0 && rebuttals.length === 0) return null
-  return { compiled: { text: cur.trimEnd(), text_zh: buildTextZh(cur.trimEnd()) }, changes, rebuttals }
+  if (changes.length === 0 && rebuttals.length === 0) return null;
+  return { compiled: { text: cur.trimEnd(), text_zh: buildTextZh(cur.trimEnd()) }, changes, rebuttals };
 }
 
 /**
@@ -566,11 +624,11 @@ function patchH3(compiled: unknown, findings: CriticFinding[]): PatchResult {
  *    回退路径一律照改 → 空数组。
  */
 function makeRevisionProvider(args: {
-  target: Target
-  provider: AuthorIntentFn
-  intentBase: Omit<AuthorIntentRequest, 'round' | 'feedback'>
-  runOpts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }
-  exec: ToolRunContext
+  target: Target;
+  provider: AuthorIntentFn;
+  intentBase: Omit<AuthorIntentRequest, 'round' | 'feedback'>;
+  runOpts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string };
+  exec: ToolRunContext;
 }): AuthorRevisionProvider {
   return async (compiled, findings, praise) => {
     const feedback = [
@@ -578,50 +636,100 @@ function makeRevisionProvider(args: {
       ...(praise.length > 0
         ? ['', '以下优点须保留：', ...praise.map((p) => `- ${p}`), '（修订时不得删除上述优点对应的内容）']
         : []),
-    ].join('\n')
+    ].join('\n');
     // 1) 稿内编辑优先（A13）：patch 成功 → 不重拆
-    const patched = args.target === 'anima'
-      ? patchAnima(compiled, findings, args.runOpts.variant ?? 'base')
-      : args.target === 'h3'
-        ? patchH3(compiled, findings)
-        : null
+    const patched =
+      args.target === 'anima'
+        ? patchAnima(compiled, findings, args.runOpts.variant ?? 'base')
+        : args.target === 'h3'
+          ? patchH3(compiled, findings)
+          : null;
     if (patched) {
-      return { compiled: patched.compiled, changes: patched.changes, revisionNote: feedback, rebuttals: patched.rebuttals }
+      return {
+        compiled: patched.compiled,
+        changes: patched.changes,
+        revisionNote: feedback,
+        rebuttals: patched.rebuttals,
+      };
     }
     // 2) 回退整稿重拆（原 makeRevisionProvider 行为），changes 标注 fallback（A13）
-    const draft = await args.provider({ ...args.intentBase, round: 1, feedback }, args.exec)
-    const input = normalizeDraftToInput(args.target, draft, args.runOpts)
-    const d = getDialect(args.target)
-    if (!d) throw new Error(`方言 ${args.target} 未注册（revisionProvider 内部）`)
+    const draft = await args.provider({ ...args.intentBase, round: 1, feedback }, args.exec);
+    const input = normalizeDraftToInput(args.target, draft, args.runOpts);
+    const d = getDialect(args.target);
+    if (!d) throw new Error(`方言 ${args.target} 未注册（revisionProvider 内部）`);
     const normalized = d.normalize(
-      { target: args.target, slots: input.slots, variant: input.variant, shots: input.shots, stage: input.stage, scenarioId: input.scenarioId, formFields: input.formFields, auditOnly: false },
+      {
+        target: args.target,
+        slots: input.slots,
+        variant: input.variant,
+        shots: input.shots,
+        stage: input.stage,
+        scenarioId: input.scenarioId,
+        formFields: input.formFields,
+        auditOnly: false,
+      },
       { stage: input.stage, scenarioId: input.scenarioId, formFields: input.formFields },
-    )
-    if (normalized.error !== undefined) throw new Error(normalized.error)
-    const revised = d.compile(normalized.value as never, { variant: input.variant, stage: normalized.stage ?? input.stage })
-    return { compiled: revised, changes: [...findings.map((f) => f.requiredFix), 'fallback:full-rebuild'], revisionNote: feedback, rebuttals: [] }
-  }
+    );
+    if (normalized.error !== undefined) throw new Error(normalized.error);
+    const revised = d.compile(normalized.value as never, {
+      variant: input.variant,
+      stage: normalized.stage ?? input.stage,
+    });
+    return {
+      compiled: revised,
+      changes: [...findings.map((f) => f.requiredFix), 'fallback:full-rebuild'],
+      revisionNote: feedback,
+      rebuttals: [],
+    };
+  };
 }
 
 /** draft → PipelineInput 输入段：anima {slots, variant}；h3 {shots, stage, scenarioId, formFields}
  *  Task 10 蓝图分支：draft.blueprint 存在时先 projectTo* 再入 runStage（扩展在 execute 完成——LLM 异步） */
-function normalizeDraftToInput(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }): { slots?: Record<string, unknown>; variant?: string; shots?: unknown; stage?: string; scenarioId?: string; formFields?: Record<string, unknown> } {
+function normalizeDraftToInput(
+  target: string,
+  draft: AuthorDraft,
+  opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string },
+): {
+  slots?: Record<string, unknown>;
+  variant?: string;
+  shots?: unknown;
+  stage?: string;
+  scenarioId?: string;
+  formFields?: Record<string, unknown>;
+} {
   if (target === 'anima') {
-    if (draft.blueprint) return { slots: projectToAnima(draft.blueprint) as unknown as Record<string, unknown>, variant: opts.variant ?? 'base' }
-    if (!draft.slots || typeof draft.slots !== 'object') throw new Error('intent 未产出 slots 结构')
-    return { slots: draft.slots as unknown as Record<string, unknown>, variant: opts.variant ?? 'base' }
+    if (draft.blueprint)
+      return {
+        slots: projectToAnima(draft.blueprint) as unknown as Record<string, unknown>,
+        variant: opts.variant ?? 'base',
+      };
+    if (!draft.slots || typeof draft.slots !== 'object') throw new Error('intent 未产出 slots 结构');
+    return { slots: draft.slots as unknown as Record<string, unknown>, variant: opts.variant ?? 'base' };
   }
-  if (draft.blueprint) return { shots: projectToH3(draft.blueprint), stage: opts.stage || undefined, scenarioId: opts.scenarioId, formFields: opts.formFields }
-  if (!draft.shots || !Array.isArray(draft.shots.shots) || draft.shots.shots.length === 0) throw new Error('intent 未产出 shots 结构')
-  return { shots: draft.shots, stage: opts.stage || undefined, scenarioId: opts.scenarioId, formFields: opts.formFields }
+  if (draft.blueprint)
+    return {
+      shots: projectToH3(draft.blueprint),
+      stage: opts.stage || undefined,
+      scenarioId: opts.scenarioId,
+      formFields: opts.formFields,
+    };
+  if (!draft.shots || !Array.isArray(draft.shots.shots) || draft.shots.shots.length === 0)
+    throw new Error('intent 未产出 shots 结构');
+  return {
+    shots: draft.shots,
+    stage: opts.stage || undefined,
+    scenarioId: opts.scenarioId,
+    formFields: opts.formFields,
+  };
 }
 
 /** h3 references 计数（原 L144-146 优先级：shots.references > form_fields.references） */
 function referencesCount(draft: AuthorDraft, formFields?: Record<string, unknown>): number {
-  const refs = Array.isArray(draft.shots?.references) ? draft.shots!.references : []
-  if (refs.length > 0) return refs.length
-  const formRefs = Array.isArray(formFields?.references) ? (formFields!.references as unknown[]) : []
-  return formRefs.length
+  const refs = Array.isArray(draft.shots?.references) ? draft.shots!.references : [];
+  if (refs.length > 0) return refs.length;
+  const formRefs = Array.isArray(formFields?.references) ? (formFields!.references as unknown[]) : [];
+  return formRefs.length;
 }
 
 /**
@@ -629,27 +737,39 @@ function referencesCount(draft: AuthorDraft, formFields?: Record<string, unknown
  * sceneToShotsChecked 的 extraGates/advisories 并入 stage；references 非空时抑制 references_unmapped；
  * 合并后 ok 按全部 gates 重算（extraGates 可能引入 critical）。
  */
-function applyScenarioGates(stage: StageResult, opts: { scenarioId?: string; formFields?: Record<string, unknown>; refsCount: number }): StageResult {
-  if (!opts.scenarioId) return stage
-  const checked = sceneToShotsChecked(opts.scenarioId, opts.formFields ?? {})
-  const unmapped = opts.refsCount > 0
-  const extraGates = checked.gates.filter((g) => !(g.rule === 'references_unmapped' && unmapped))
-  const extraAdvisories = checked.advisories.filter((a) => !(a === 'references_unmapped' && unmapped))
-  const gates = [...stage.gates, ...extraGates]
+function applyScenarioGates(
+  stage: StageResult,
+  opts: { scenarioId?: string; formFields?: Record<string, unknown>; refsCount: number },
+): StageResult {
+  if (!opts.scenarioId) return stage;
+  const checked = sceneToShotsChecked(opts.scenarioId, opts.formFields ?? {});
+  const unmapped = opts.refsCount > 0;
+  const extraGates = checked.gates.filter((g) => !(g.rule === 'references_unmapped' && unmapped));
+  const extraAdvisories = checked.advisories.filter((a) => !(a === 'references_unmapped' && unmapped));
+  const gates = [...stage.gates, ...extraGates];
   return {
     ...stage,
     gates,
     advisories: [...stage.advisories, ...extraAdvisories],
     ok: gates.every((g) => g.severity !== 'critical'),
-  }
+  };
 }
 
 /** draft → runStage → applyScenarioGates（author 每轮统一入口；audit 不通过不在此处理——闭环在 execute）
  *  Task 6：judgeOpts 传入时 runStage 走评审（Promise，必须 await）；off/缺省时同步旧路径零变化 */
-async function runDraftThroughStage(target: string, draft: AuthorDraft, opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string }, judgeOpts?: JudgeStageOpts): Promise<StageResult> {
-  const input = normalizeDraftToInput(target, draft, opts)
-  const stageResult = await runStage({ target: target as Target, ...input, ...judgeOpts })
-  return applyScenarioGates(stageResult, { scenarioId: opts.scenarioId, formFields: opts.formFields, refsCount: referencesCount(draft, opts.formFields) })
+async function runDraftThroughStage(
+  target: string,
+  draft: AuthorDraft,
+  opts: { stage?: string; scenarioId?: string; formFields?: Record<string, unknown>; variant?: string },
+  judgeOpts?: JudgeStageOpts,
+): Promise<StageResult> {
+  const input = normalizeDraftToInput(target, draft, opts);
+  const stageResult = await runStage({ target: target as Target, ...input, ...judgeOpts });
+  return applyScenarioGates(stageResult, {
+    scenarioId: opts.scenarioId,
+    formFields: opts.formFields,
+    refsCount: referencesCount(draft, opts.formFields),
+  });
 }
 
 /**
@@ -658,20 +778,20 @@ async function runDraftThroughStage(target: string, draft: AuthorDraft, opts: { 
  * 返回 true 表示发生了实际剔除。
  */
 function applyAnimaJoyExtraFilter(stage: StageResult, formFields?: Record<string, unknown>): boolean {
-  if (!formFields) return false
-  const res = resolveJoyExtraOptions({ joyExtraOptions: formFields.joy_extra_options, extraPrompt: '' })
-  if (res.options.length === 0) return false
-  let filtered = false
+  if (!formFields) return false;
+  const res = resolveJoyExtraOptions({ joyExtraOptions: formFields.joy_extra_options, extraPrompt: '' });
+  if (res.options.length === 0) return false;
+  let filtered = false;
   for (const key of ['positive', 'negative'] as const) {
-    const text = stage.result[key]
-    if (typeof text !== 'string' || !text.trim()) continue
-    const out = filterJoyExtraClauses(text, res)
+    const text = stage.result[key];
+    if (typeof text !== 'string' || !text.trim()) continue;
+    const out = filterJoyExtraClauses(text, res);
     if (out !== text) {
-      stage.result[key] = out
-      filtered = true
+      stage.result[key] = out;
+      filtered = true;
     }
   }
-  return filtered
+  return filtered;
 }
 
 /**
@@ -680,25 +800,35 @@ function applyAnimaJoyExtraFilter(stage: StageResult, formFields?: Record<string
  * 独立新字段，不与 observability.corrections（修正闭环轮次）语义混淆。
  */
 function canonicalObservabilityOf(stage: StageResult): { canonicalSubstitutions: number; substitutions: string[] } {
-  const r = stage.result as { corrections?: unknown; substitutions?: unknown }
+  const r = stage.result as { corrections?: unknown; substitutions?: unknown };
   return {
     canonicalSubstitutions: typeof r.corrections === 'number' ? r.corrections : 0,
-    substitutions: Array.isArray(r.substitutions) ? r.substitutions.filter((s): s is string => typeof s === 'string') : [],
-  }
+    substitutions: Array.isArray(r.substitutions)
+      ? r.substitutions.filter((s): s is string => typeof s === 'string')
+      : [],
+  };
 }
 
 /** F5：trace 耗时子条目（enrich/intent/catalog）——catalog ms 来自 anima compile result 的 catalogMs 字段 */
 function catalogTraceEntry(stage: StageResult, out: Array<{ name: string; ms: number }>): void {
-  const ms = (stage.result as { catalogMs?: unknown }).catalogMs
-  if (typeof ms === 'number') out.push({ name: 'catalog', ms })
+  const ms = (stage.result as { catalogMs?: unknown }).catalogMs;
+  if (typeof ms === 'number') out.push({ name: 'catalog', ms });
 }
 
 /* ── A6（外部基准 2026-09）：design_notes 设计说明投影 ── */
 
 const SLOT_LABELS_ZH: Record<string, string> = {
-  count_gender: '人数', character: '角色', artist: '画师', appearance: '外观', clothing: '服装',
-  pose_action: '动作', expression: '表情', camera: '景别', scene: '场景', detail_mood: '细节与氛围',
-}
+  count_gender: '人数',
+  character: '角色',
+  artist: '画师',
+  appearance: '外观',
+  clothing: '服装',
+  pose_action: '动作',
+  expression: '表情',
+  camera: '景别',
+  scene: '场景',
+  detail_mood: '细节与氛围',
+};
 
 /**
  * design_notes（确定性，零 LLM）：从 compiled.segments 按槽位汇总实际采用的设计选择
@@ -707,40 +837,46 @@ const SLOT_LABELS_ZH: Record<string, string> = {
  * 事实视角（互补）。非 anima（无 segments）返回 []。
  */
 export function designNotesOf(stage: StageResult): string[] {
-  const r = stage.result as { segments?: unknown }
-  if (!Array.isArray(r.segments)) return []
-  const bySlot = new Map<string, string[]>()
-  let narrative: string | null = null
-  const exclusions: string[] = []
-  let grounded = 0
-  let contentTags = 0
+  const r = stage.result as { segments?: unknown };
+  if (!Array.isArray(r.segments)) return [];
+  const bySlot = new Map<string, string[]>();
+  let narrative: string | null = null;
+  const exclusions: string[] = [];
+  let grounded = 0;
+  let contentTags = 0;
   for (const seg of r.segments as Array<Record<string, unknown>>) {
-    const text = typeof seg['text'] === 'string' ? seg['text'] : ''
-    const slot = typeof seg['slot'] === 'string' ? seg['slot'] : null
-    const origin = seg['origin']
-    const channel = seg['channel']
+    const text = typeof seg['text'] === 'string' ? seg['text'] : '';
+    const slot = typeof seg['slot'] === 'string' ? seg['slot'] : null;
+    const origin = seg['origin'];
+    const channel = seg['channel'];
     if (origin === 'grounded' || origin === 'user-fuzzy') {
-      contentTags++
-      if (origin === 'grounded') grounded++
+      contentTags++;
+      if (origin === 'grounded') grounded++;
     }
-    if (origin === 'narrative' && channel === 'positive') { narrative = text; continue }
-    if (origin === 'exclusion' && channel === 'negative') { exclusions.push(text); continue }
-    if (channel !== 'positive' || slot === null) continue
-    if (!text) continue
-    const arr = bySlot.get(slot) ?? []
-    arr.push(text)
-    bySlot.set(slot, arr)
+    if (origin === 'narrative' && channel === 'positive') {
+      narrative = text;
+      continue;
+    }
+    if (origin === 'exclusion' && channel === 'negative') {
+      exclusions.push(text);
+      continue;
+    }
+    if (channel !== 'positive' || slot === null) continue;
+    if (!text) continue;
+    const arr = bySlot.get(slot) ?? [];
+    arr.push(text);
+    bySlot.set(slot, arr);
   }
-  const notes: string[] = []
+  const notes: string[] = [];
   for (const [slot, tags] of bySlot) {
-    if (tags.length === 0) continue
-    const label = SLOT_LABELS_ZH[slot] ?? slot
-    notes.push(`${label}（${tags.length}）: ${tags.slice(0, 6).join(' / ')}${tags.length > 6 ? ' 等' : ''}`)
+    if (tags.length === 0) continue;
+    const label = SLOT_LABELS_ZH[slot] ?? slot;
+    notes.push(`${label}（${tags.length}）: ${tags.slice(0, 6).join(' / ')}${tags.length > 6 ? ' 等' : ''}`);
   }
-  if (narrative) notes.push(`场景叙述（构图/曝光/色彩职责）: ${narrative}`)
-  if (exclusions.length > 0) notes.push(`排除项: ${exclusions.join(', ')}`)
-  if (contentTags > 0) notes.push(`catalog 锚定: ${grounded}/${contentTags} 个内容段命中规范库`)
-  return notes
+  if (narrative) notes.push(`场景叙述（构图/曝光/色彩职责）: ${narrative}`);
+  if (exclusions.length > 0) notes.push(`排除项: ${exclusions.join(', ')}`);
+  if (contentTags > 0) notes.push(`catalog 锚定: ${grounded}/${contentTags} 个内容段命中规范库`);
+  return notes;
 }
 
 /**
@@ -751,37 +887,48 @@ export function designNotesOf(stage: StageResult): string[] {
  * negativeAdded=预设 negative_hints 中实际并入 core.negative 的（用户已有同名单去重跳过的不计）。
  * 无 styleId / 预设未知 / 无蓝图 → 空摘要（字段仍在，acceptance「两条出口都有三字段」）。
  */
-function styleSummaryOf(styleId: string | undefined, bp: BlueprintV1 | undefined): {
-  id?: string
-  name?: string
-  injectedFragmentPhrases: string[]
-  artists: string[]
-  negativeAdded: string[]
+function styleSummaryOf(
+  styleId: string | undefined,
+  bp: BlueprintV1 | undefined,
+): {
+  id?: string;
+  name?: string;
+  injectedFragmentPhrases: string[];
+  artists: string[];
+  negativeAdded: string[];
 } {
-  const preset = styleId ? getStylePreset(styleId) : undefined
-  if (!preset || !bp) return { injectedFragmentPhrases: [], artists: [], negativeAdded: [] }
-  const phrases: string[] = []
-  const image = bp.media_layer.image
+  const preset = styleId ? getStylePreset(styleId) : undefined;
+  if (!preset || !bp) return { injectedFragmentPhrases: [], artists: [], negativeAdded: [] };
+  const phrases: string[] = [];
+  const image = bp.media_layer.image;
   if (typeof image?.lighting_detail === 'string') {
-    for (const p of preset.fragments.image.split(/[，,]/).map((s) => s.trim()).filter(Boolean)) {
-      if (!phrases.includes(p) && image.lighting_detail.includes(p)) phrases.push(p)
+    for (const p of preset.fragments.image
+      .split(/[，,]/)
+      .map((s) => s.trim())
+      .filter(Boolean)) {
+      if (!phrases.includes(p) && image.lighting_detail.includes(p)) phrases.push(p);
     }
   }
-  const video = bp.media_layer.video
+  const video = bp.media_layer.video;
   if (video) {
-    for (const p of preset.fragments.video.split(/[，,]/).map((s) => s.trim()).filter(Boolean)) {
-      if (phrases.includes(p)) continue
-      if ((video.shots ?? []).some((sh) => typeof sh.action === 'string' && sh.action.includes(p))) phrases.push(p)
+    for (const p of preset.fragments.video
+      .split(/[，,]/)
+      .map((s) => s.trim())
+      .filter(Boolean)) {
+      if (phrases.includes(p)) continue;
+      if ((video.shots ?? []).some((sh) => typeof sh.action === 'string' && sh.action.includes(p))) phrases.push(p);
     }
   }
-  const negatives = bp.core.negative ?? []
+  const negatives = bp.core.negative ?? [];
   return {
     id: preset.id,
     name: preset.name,
     injectedFragmentPhrases: phrases,
     artists: Array.isArray(bp.core.style?.artist_hints) ? bp.core.style!.artist_hints! : [],
-    negativeAdded: preset.negative_hints.filter((h) => negatives.some((n) => n.target.toLowerCase() === h.toLowerCase())),
-  }
+    negativeAdded: preset.negative_hints.filter((h) =>
+      negatives.some((n) => n.target.toLowerCase() === h.toLowerCase()),
+    ),
+  };
 }
 
 /* ═══ M5-HOTFIX（P0）：蓝图落库真实 settings 接线 ═══
@@ -807,44 +954,44 @@ function styleSummaryOf(styleId: string | undefined, bp: BlueprintV1 | undefined
  * register（异常形状/误传 owner scope 假扮服务——运行期可检反例）或 register 抛非 already
  * registered 错 → undefined，由调用方落 advisory blueprint_save_failed，绝不阻塞出稿。
  */
-const BLUEPRINT_SETTINGS_NS = 'prompt-master-blueprints'
-const blueprintScopeCache = new WeakMap<object, RepoSettingsScope | undefined>()
+const BLUEPRINT_SETTINGS_NS = 'prompt-master-blueprints';
+const blueprintScopeCache = new WeakMap<object, RepoSettingsScope | undefined>();
 
 function blueprintSettingsScope(ctx: Context): RepoSettingsScope | undefined {
-  const service = (ctx as unknown as { settings?: unknown }).settings
+  const service = (ctx as unknown as { settings?: unknown }).settings;
   if (!service || typeof service !== 'object' || typeof (service as { register?: unknown }).register !== 'function') {
     // 无 settings → undefined（D9 静默跳过）；有 settings 但缺 register（异常形状/误传 owner
     // scope 假扮服务）→ 同样 undefined，由调用方落 advisory（运行期可检，不炸进程）
-    return undefined
+    return undefined;
   }
-  if (blueprintScopeCache.has(service)) return blueprintScopeCache.get(service)
-  let scope: RepoSettingsScope | undefined
+  if (blueprintScopeCache.has(service)) return blueprintScopeCache.get(service);
+  let scope: RepoSettingsScope | undefined;
   try {
     const owner = registerOrReuseNamespace<{ blueprints: Record<string, string> }>(
       ctx,
       settingsNamespace(BLUEPRINT_SETTINGS_NS),
       z.object({ blueprints: z.dict(z.string(), z.string()).default({}) }),
-    )
+    );
     const read = (): Record<string, string> =>
-      (owner.get() as unknown as { blueprints?: Record<string, string> } | undefined)?.blueprints ?? {}
+      (owner.get() as unknown as { blueprints?: Record<string, string> } | undefined)?.blueprints ?? {};
     scope = {
       get: () => read(),
       update: async (patch) => {
-        const next = { ...read(), ...patch }
-        await owner.update({ blueprints: next })
+        const next = { ...read(), ...patch };
+        await owner.update({ blueprints: next });
       },
       replace: async (section) => {
-        await owner.replace({ blueprints: section })
+        await owner.replace({ blueprints: section });
       },
-    }
+    };
   } catch {
-    scope = undefined // 注册失败 → 不可接线 → fail-open（调用方 advisory）
+    scope = undefined; // 注册失败 → 不可接线 → fail-open（调用方 advisory）
   }
-  blueprintScopeCache.set(service, scope)
-  return scope
+  blueprintScopeCache.set(service, scope);
+  return scope;
 }
 
-export function registerAuthorTool(ctx: Context, config: Config) {
+export function registerAuthorTool(ctx: Context, _config: Config) {
   return defineTool({
     name: 'prompt_author',
     description:
@@ -859,579 +1006,830 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       variant: { type: 'string', default: 'base', description: 'anima variant：base/aesthetic/turbo' },
       stage: { type: 'string', default: '', description: 'h3 stage（t2va/ref2va…；缺省按 references/场景推断）' },
       scenario_id: { type: 'string', default: '', description: 'h3 场景 id（如 full_reference；可配合 form_fields）' },
-      form_fields: { type: 'object', description: 'h3 场景表单字段（含 references 可选）', default: {}, additionalProperties: true },
-      rating: { type: 'string', enum: ['safe', 'sensitive', 'explicit'], default: 'safe', description: '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错；target=h3 仅支持 safe（MiniMax 政策，spec §5.5），非 safe 拒收不降级' },
+      form_fields: {
+        type: 'object',
+        description: 'h3 场景表单字段（含 references 可选）',
+        default: {},
+        additionalProperties: true,
+      },
+      rating: {
+        type: 'string',
+        enum: ['safe', 'sensitive', 'explicit'],
+        default: 'safe',
+        description:
+          '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错；target=h3 仅支持 safe（MiniMax 政策，spec §5.5），非 safe 拒收不降级',
+      },
       style_id: { type: 'string', default: '', description: '风格预设 id（style_list 可查，82 条）' },
-      conformity: { type: 'number', default: 0.6, description: '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用' },
-      clarify: { type: 'string', enum: ['ask', 'auto'], default: 'auto', description: '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展' },
-      blueprint_id: { type: 'string', default: '', description: '增量修改入口：传蓝图 id 时以 <old_blueprint> 锚定运行增量意图分析（仅做与修改意图相关的局部改动，禁止整图重解释）→扩展→投影' },
-      judge_mode: { type: 'string', enum: ['off', 'fast', 'strict'], default: 'fast', description: 'LLM 评审模式（spec §2.4）：fast=单轮评审（缺省）；strict=评审+对抗修正一轮；off=不评审（显式关闭，回退旧路径）' },
-      judgeRepair: { type: 'boolean', default: true, description: '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）' },
-      enrich: { type: 'boolean', default: true, description: 'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。blueprint_id 时忽略' },
-      outputLang: { type: 'string', enum: ['en', 'zh', 'ja'], description: '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 被纠正 + advisory enrich_lang_forced）' },
-      art_direction: { type: 'object', default: {}, additionalProperties: true, description: 'anima 专用：显式指定艺术指导卡片（每类至多 1 张，缺省由 enrich LLM 自选）。字段: perspective/composition/lighting/color/motion；值=卡片 id（perspective: low_angle/three_quarter_view/over_shoulder_glance/dutch_angle/wide_panorama/close_up/top_down/side_silhouette；composition: rule_of_thirds/diagonal_dynamics/negative_space/framed_subject/perfect_symmetry/leading_lines/golden_ratio/strong_silhouette；lighting: cinematic_lighting/rim_backlight/god_rays/moonlight_cool/golden_hour/lantern_glow/high_contrast/soft_dreamlight；color: warm_cool_contrast/limited_palette/cinematic_grading/accent_on_mono/soft_pastel/vivid_fantasy；motion: dynamic_pose/flowing_dress/flowing_hair/weapon_trail/falling_petals/frozen_peak）。无效字段/id 直接报错；enrich=false 或 blueprint_id 或 target=h3 时忽略 + advisory' },
+      conformity: {
+        type: 'number',
+        default: 0.6,
+        description:
+          '风格注入 conformity：0=全量注入素材（base+theme+palette 进 style 与 media_layer 片段），>0=仅蓝图 style 引用',
+      },
+      clarify: {
+        type: 'string',
+        enum: ['ask', 'auto'],
+        default: 'auto',
+        description:
+          '关键维度缺失（style/media/negative 边界）时的澄清策略：ask=产出 clarify_questions，auto=直接进入扩展',
+      },
+      blueprint_id: {
+        type: 'string',
+        default: '',
+        description:
+          '增量修改入口：传蓝图 id 时以 <old_blueprint> 锚定运行增量意图分析（仅做与修改意图相关的局部改动，禁止整图重解释）→扩展→投影',
+      },
+      judge_mode: {
+        type: 'string',
+        enum: ['off', 'fast', 'strict'],
+        default: 'fast',
+        description:
+          'LLM 评审模式（spec §2.4）：fast=单轮评审（缺省）；strict=评审+对抗修正一轮；off=不评审（显式关闭，回退旧路径）',
+      },
+      judgeRepair: {
+        type: 'boolean',
+        default: true,
+        description:
+          '修正轮评审成本开关（spec §10.4-A12）：true（缺省）=每修正轮照常重评；false=修正轮 runStage 不带评审（省 critic 调用，闭环由规则 gates + judgeFeedback 首轮投影驱动）',
+      },
+      enrich: {
+        type: 'boolean',
+        default: true,
+        description:
+          'enrich 扩写层（二期 spec §2.1/§2.4）：true（缺省）=先 LLM 扩写为七维度 brief 再拆解（brief 为 intent 权威输入，降级不阻塞）；false=显式关闭。blueprint_id 时忽略',
+      },
+      outputLang: {
+        type: 'string',
+        enum: ['en', 'zh', 'ja'],
+        description:
+          '输出语言偏好（spec §4）：透传 enrich（仅 h3 显式生效；anima 恒锁 en，显式 zh/ja 被纠正 + advisory enrich_lang_forced）',
+      },
+      art_direction: {
+        type: 'object',
+        default: {},
+        additionalProperties: true,
+        description:
+          'anima 专用：显式指定艺术指导卡片（每类至多 1 张，缺省由 enrich LLM 自选）。字段: perspective/composition/lighting/color/motion；值=卡片 id（perspective: low_angle/three_quarter_view/over_shoulder_glance/dutch_angle/wide_panorama/close_up/top_down/side_silhouette；composition: rule_of_thirds/diagonal_dynamics/negative_space/framed_subject/perfect_symmetry/leading_lines/golden_ratio/strong_silhouette；lighting: cinematic_lighting/rim_backlight/god_rays/moonlight_cool/golden_hour/lantern_glow/high_contrast/soft_dreamlight；color: warm_cool_contrast/limited_palette/cinematic_grading/accent_on_mono/soft_pastel/vivid_fantasy；motion: dynamic_pose/flowing_dress/flowing_hair/weapon_trail/falling_petals/frozen_peak）。无效字段/id 直接报错；enrich=false 或 blueprint_id 或 target=h3 时忽略 + advisory',
+      },
     },
     output: {
       schema: { type: 'string', description: 'P1 Envelope JSON 字符串' },
       render: (_a, v) => [{ type: 'text', text: v }],
     },
-    async execute(args: { target?: string; input?: string; variant?: string; stage?: string; scenario_id?: string; form_fields?: Record<string, unknown>; rating?: 'safe' | 'sensitive' | 'explicit'; style_id?: string; conformity?: number; clarify?: 'ask' | 'auto'; blueprint_id?: string; judge_mode?: 'off' | 'fast' | 'strict'; judgeRepair?: boolean; enrich?: boolean; outputLang?: 'en' | 'zh' | 'ja'; art_direction?: Record<string, unknown> }, exec: ToolRunContext) {
-      const a = args as unknown as AuthorArgs
-      try { // M5-DIAG2：诊断包裹——CRASH stack 落盘后原样 rethrow（行为零变化，仅证据采集）
-      const target = String(a.target || 'anima') as Target
-      trace('call_start', { target, rating: a.rating ?? null, judge: a.judge_mode ?? null, style: a.style_id ?? null, input: String(a.input ?? '').slice(0, 60) })
-      if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`)
-      if (!isDialectReady(target)) {
-        return serializeReport({
-          ok: false,
-          audit: {
-            passed: false,
-            gates: [{ rule: 'dialect_not_available', target, severity: 'critical', detail: `方言 ${target} 未归化（P4 范围外），请改用 anima / h3 或 prompt_compile`, source: 'tools/prompt-author' }],
-          },
-          advisories: [],
-        } as never)
-      }
-      const input = String(a.input ?? '')
-      if (!input.trim()) throw new Error('input 必填')
-
-      const scenarioId = String(a.scenario_id ?? '').trim() || undefined
-      const runOpts = { stage: a.stage || undefined, scenarioId, formFields: a.form_fields, variant: a.variant }
-
-      // anima variant 参数校验（runStage 的 compileAnima 对未知 variant 静默回退 base——契约要求显式报错）
-      if (target === 'anima' && a.variant !== undefined && !VARIANT_SET.has(a.variant)) {
-        throw new Error(`未知 variant: ${a.variant}；可选 base|aesthetic|turbo`)
-      }
-
-      // Task 14 预检（spec §8）：input 校验后、任何 LLM 之前——硬边界违规 0 token 抛错。
-      // captain ③（t4 交接）：a.rating 原样透传（缺省 undefined）——物化 'safe' 会以显式输入身份令
-      // resolveRating 记 source='input'、永不记 escalatedFrom，rating_escalated advisory 被压死。
-      const resolved = resolveRating(a.rating, input)
-      trace('rating_resolved', resolved)
-      const preflightAdvisories: string[] = []
-      if (resolved.escalatedFrom) preflightAdvisories.push(`rating_escalated:${resolved.rating}`)
-      // M3-T1b（spec §5.5 L185）：h3 rating 硬约束——MiniMax 官方内容政策只支持 safe。
-      // gate 挂在 resolved.rating 上（显式声明与关键词升档两路径同拦），不做降级猜测；
-      // 0 token（预检段，与硬边界检查同层）。M4-T2：错误串共享常量（h3-rating-gate.ts
-      // 单一来源，与 t62 minimax_scenario 同源，文案零变化）。
-      if (target === 'h3' && resolved.rating !== 'safe') {
-        throw h3RatingUnsupportedError(
-          `target=h3 且 rating=${resolved.rating}（${resolved.source === 'input' ? '显式声明' : '关键词升档'}）`,
-          ' target=anima',
-        )
-      }
-      const violations = checkBoundaries(input, resolved.rating)
-      if (violations.length > 0) throw new Error(violations.map((v) => `${v.gate}:${v.matched}`).join('; '))
-
-      // Task 14 ④：推荐器信号拼装（spec §6.2/§6.3）。captain ①②（t6 裁定 + t17 预登记）：
-      // hasMotionIntent 仅在 motion 维度已满足（style 预设 hints.motion 存在）时置 true，
-      // 绝不以 input 动作词扫描置 true（计划 Task 14 的关键词扫描公式已被裁定作废）；
-      // presetHints（style 预设 art_direction_hints）只换被推荐维度的卡 id，不算已满足。
-      const recommendationMedia: 'image' | 'video' = target === 'h3' ? 'video' : 'image'
-      const presetHints = a.style_id ? getStylePreset(a.style_id)?.art_direction_hints : undefined
-      const recommendedCards = recommendArtDirection({
-        media: recommendationMedia,
-        hasMotionIntent: presetHints?.motion !== undefined,
-        hasLighting: false,
-        hasComposition: false,
-        hasFocal: false,
-        ...(presetHints !== undefined ? { presetHints } : {}),
-      })
-
-      const provider = _intentProvider ?? ((req: AuthorIntentRequest, exec2?: ExecLike) => defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req))
-      // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
-      // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
-      const intentCfg = getDialect(target)?.intent
-
-      // 2026-09-16 管线重设计定稿（用户裁决「不向后兼容、不保留旧逻辑」）：
-      // anima 一律走 compositing 五段（意图蓝图→扩写→成文→审核→修复），M5 蓝图形态/slots 直译/
-      // PM_AUTHOR_INTENT_FORM/PM_PIPELINE_FORM 双态开关全部移除——anima 无回滚面，回滚 = revert 提交。
-      // h3 未迁移，维持原 shots 路径（runEnrich brief + slots/shots 装配仅服务 h3）。
-
-      // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
-      // blueprint_id 路径跳过 enrich（自带 enrichBlueprint 扩展层）。
-      // 降级铁律：runEnrich 永不抛出；skipped → intent 吃原始输入 + advisory enrich_skipped，照常出稿。
-      let intentInput = input
-      const enrichAdvisories: string[] = []
-      let enrichFlag: 0 | 1 = 0
-      let enrichmentTop: Record<string, unknown> | undefined
-      const traceExtra: Array<{ name: string; ms: number }> = [] // F5：enrich/intent/catalog 耗时子条目
-      // 2026-09-12 P1：调用方显式指定艺术指导卡——fail-fast 校验（不烧 LLM）；不消费的路径补 advisory（参数被忽略必须可观测）
-      const artDirectionSpecified = a.art_direction !== undefined && a.art_direction !== null && Object.keys(a.art_direction).length > 0
-      if (artDirectionSpecified) {
-        const invalid = validateArtDirectionSpec(a.art_direction as Record<string, string>)
-        if (invalid) throw new Error(invalid)
-        // M5-T2（D7 advisory 矩阵修订）：蓝图形态（默认蓝图路径或 blueprint_id）不再 ignored——
-        // 显式卡由 applyArtDirectionCards 确定性注入（新消费面）；仅 enrich=false（调用方 opt-out）
-        // 与 h3 目标维持 ignored advisory
-        if (target !== 'anima') enrichAdvisories.push('art_direction_ignored_h3')
-        else if (a.enrich === false) enrichAdvisories.push('art_direction_ignored_enrich_off')
-      }
-      // 2026-09-12 P0：exec.agent 线穿为 enrich/judge 子代理的 parent——critic provider 此前定义时只绑 ctx，
-      // host 装配子代理读 parent.options 缺 parent 直接 TypeError → 全量静默 skipped
-      // （docs/2026-09-12-camera-language-research.md §2）
-      const criticParent = (exec as unknown as ExecLike | undefined)?.agent ?? (ctx as { agent?: unknown } | undefined)?.agent
-      // 2026-09-15（用户定案「全部 LLM 调用一次性子代理」终态）：扩写/增量蓝图的嵌套 LLM 调用
-      // 统一走子代理形态（三方可见）；subagents 未注册时保持 complete 直连兜底（无 Agent 会话可用）。
-      const subagentsReady = Boolean((ctx as { subagents?: { start?: unknown } | undefined })?.subagents?.start)
-      const asLlm = (runner: ReturnType<typeof createSubagentTextRunner>) =>
-        (req: { system: string; user: string }) => runner(`${req.system}\n\n${req.user}`)
-      const enrichLlm = subagentsReady
-        ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent }))
-        : undefined
-      const blueprintLlm = subagentsReady
-        ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent }))
-        : undefined
-      // runEnrich（brief 扩写）仅服务 h3（未迁移方言）；anima 的美学扩展在 compositing 编排层
-      // runSemanticEnrich（spec §4）。降级铁律不变：runEnrich 永不抛出。
-      if (a.enrich !== false && !a.blueprint_id && target === 'h3') {
-        const tEnrich0 = performance.now()
-        const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent })
-        const eRes = await runEnrich({
-          target: target as EnrichTarget,
-          userInput: input,
-          outputLang: a.outputLang,
-          provider: enrichProvider,
-          rating: resolved.rating, // Task 14 ④：预检定档透传（Task 12 persona 【内容分级】块）
-          recommendations: recommendedCards, // Task 14 ④：推荐器输出 →【推荐先验】（Task 12 P2，LLM 终决）
-        })
-        if ('brief' in eRes) {
-          const brief = eRes.brief
-          if (trimNameAnchors(brief)) enrichAdvisories.push('name_anchors_trimmed') // T5 carry③：条目 ≤10、单条 ≤100 字符
-          intentInput = briefToIntentText(brief)
-          enrichFlag = 1
-          enrichmentTop = { brief }
-        } else {
-          enrichAdvisories.push('enrich_skipped')
-          // 审计 #1（2026-09-12，spec §7 L223 降级语义原文）：enrich 在 explicit 档被 LLM 拒绝 →
-          // 现有故障语义回退不变（enrich_skipped + user brief 直拆照常出稿），增发档位可观测
-          // advisory——兼容/拒绝路径的静默降级必须可见。safe/sensitive 档不打（spec 仅明文 explicit）。
-          if (resolved.rating === 'explicit') enrichAdvisories.push('enrich_refused_at_rating:explicit')
-          enrichFlag = 0
-          enrichmentTop = { skipped: true, reason: eRes.reason }
+    async execute(
+      args: {
+        target?: string;
+        input?: string;
+        variant?: string;
+        stage?: string;
+        scenario_id?: string;
+        form_fields?: Record<string, unknown>;
+        rating?: 'safe' | 'sensitive' | 'explicit';
+        style_id?: string;
+        conformity?: number;
+        clarify?: 'ask' | 'auto';
+        blueprint_id?: string;
+        judge_mode?: 'off' | 'fast' | 'strict';
+        judgeRepair?: boolean;
+        enrich?: boolean;
+        outputLang?: 'en' | 'zh' | 'ja';
+        art_direction?: Record<string, unknown>;
+      },
+      exec: ToolRunContext,
+    ) {
+      const a = args as unknown as AuthorArgs;
+      try {
+        // M5-DIAG2：诊断包裹——CRASH stack 落盘后原样 rethrow（行为零变化，仅证据采集）
+        const target = String(a.target || 'anima') as Target;
+        trace('call_start', {
+          target,
+          rating: a.rating ?? null,
+          judge: a.judge_mode ?? null,
+          style: a.style_id ?? null,
+          input: String(a.input ?? '').slice(0, 60),
+        });
+        if (!TARGETS.includes(target)) throw new Error(`Unknown target: ${target}; 可选 ${TARGETS.join('|')}`);
+        if (!isDialectReady(target)) {
+          return serializeReport({
+            ok: false,
+            audit: {
+              passed: false,
+              gates: [
+                {
+                  rule: 'dialect_not_available',
+                  target,
+                  severity: 'critical',
+                  detail: `方言 ${target} 未归化（P4 范围外），请改用 anima / h3 或 prompt_compile`,
+                  source: 'tools/prompt-author',
+                },
+              ],
+            },
+            advisories: [],
+          } as never);
         }
-        traceExtra.push({ name: 'enrich', ms: performance.now() - tEnrich0 })
-      } else if (a.enrich === true && a.blueprint_id) {
-        // Round7 T6：blueprint 路径忽略 enrich 参数（blueprint 分支自带 enrichBlueprint 扩展层）。
-        // 显式 enrich=true 补 advisory 消除静默忽略（与 judge_mode 忽略口径一致：参数被忽略必须可观测）。
-        // M5-T2（D4）：默认蓝图形态同样适用（runEnrich 已被 swap 掉）
-        enrichAdvisories.push('enrich_ignored_blueprint')
-      }
+        const input = String(a.input ?? '');
+        if (!input.trim()) throw new Error('input 必填');
 
-      // 2026-09-16 定稿：B7 前置召回随 legacy slots 路径移除——anima 词表证据唯一由 S2.5 检索包承载（spec §5 D2）
+        const scenarioId = String(a.scenario_id ?? '').trim() || undefined;
+        const runOpts = { stage: a.stage || undefined, scenarioId, formFields: a.form_fields, variant: a.variant };
 
-      const intentBase = {
-        target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, clarify: a.clarify,
-        // 2026-09-15 管线重设计（spec §3）：anima 一律 compositing——provider 走语义蓝图
-        // persona/schema 与 parseSemanticBlueprint。persona/schema 键不下发（provider 内部落
-        // ANIMA_SEMANTIC_* 常量）——真实会话冒烟实证：此前三元展开无条件注入 registry slots
-        // persona（ANIMA_PERSONA），踩踏 compositingMode，LLM 收到旧 persona 产出 slots JSON。
-        ...(target === 'anima' ? { compositingMode: true as const } : {}),
-        // h3（未迁移方言）：registry slots/shots persona 照旧
-        ...(target === 'h3' ? { persona: intentCfg?.persona, schema: intentCfg?.schema } : {}),
-      }
-
-      // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化
-      const judgeMode = a.judge_mode ?? 'fast'
-      let judgeOpts: JudgeStageOpts | undefined
-      if (judgeMode !== 'off') {
-        judgeOpts = {
-          judge: judgeMode,
-          // 2026-09-15 复位终态（29edaad，用户定案恢复「全部 LLM 调用一次性子代理」，附录 A2）：
-          // 评审经 createProductionCriticProvider → createSubagentCriticProvider（one-shot spawn，
-          // 架构级禁工具）。历史：2b9b2a4 曾改直连 complete 以规避 session-init 表单污染
-          // （delegated 子代理不可交互）；污染在会话初始化代理侧修复后恢复子代理形态——
-          // 此处注释曾在该中间态遗留「直连」表述，现正名。注入 seam（测试/e2e mock）优先级不变。
-          criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
-          evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
-          originalIntent: input,
-          declaredRating: resolved.rating, // M2-T2（spec §7 P3）：T13 四接线点从编排流可达
+        // anima variant 参数校验（runStage 的 compileAnima 对未知 variant 静默回退 base——契约要求显式报错）
+        if (target === 'anima' && a.variant !== undefined && !VARIANT_SET.has(a.variant)) {
+          throw new Error(`未知 variant: ${a.variant}；可选 base|aesthetic|turbo`);
         }
-        if (judgeMode === 'strict') {
-          judgeOpts.revisionProvider = _judgeDeps?.revisionProvider ?? makeRevisionProvider({ target, provider, intentBase, runOpts, exec })
+
+        // Task 14 预检（spec §8）：input 校验后、任何 LLM 之前——硬边界违规 0 token 抛错。
+        // captain ③（t4 交接）：a.rating 原样透传（缺省 undefined）——物化 'safe' 会以显式输入身份令
+        // resolveRating 记 source='input'、永不记 escalatedFrom，rating_escalated advisory 被压死。
+        const resolved = resolveRating(a.rating, input);
+        trace('rating_resolved', resolved);
+        const preflightAdvisories: string[] = [];
+        if (resolved.escalatedFrom) preflightAdvisories.push(`rating_escalated:${resolved.rating}`);
+        // M3-T1b（spec §5.5 L185）：h3 rating 硬约束——MiniMax 官方内容政策只支持 safe。
+        // gate 挂在 resolved.rating 上（显式声明与关键词升档两路径同拦），不做降级猜测；
+        // 0 token（预检段，与硬边界检查同层）。M4-T2：错误串共享常量（h3-rating-gate.ts
+        // 单一来源，与 t62 minimax_scenario 同源，文案零变化）。
+        if (target === 'h3' && resolved.rating !== 'safe') {
+          throw h3RatingUnsupportedError(
+            `target=h3 且 rating=${resolved.rating}（${resolved.source === 'input' ? '显式声明' : '关键词升档'}）`,
+            ' target=anima',
+          );
         }
-      }
-      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}${a.blueprint_id ? ` blueprint_id=${a.blueprint_id}` : ''}`)
-      // T4（spec §10.4-A12）：judgeRepair=false → 修正轮 runStage 不带 judgeOpts（provider 零调用）
-      const repairJudgeOpts = a.judgeRepair === false ? undefined : judgeOpts
+        const violations = checkBoundaries(input, resolved.rating);
+        if (violations.length > 0) throw new Error(violations.map((v) => `${v.gate}:${v.matched}`).join('; '));
 
-      // Task 14 恒跑（spec §8 D6）：blueprint_id → <old_blueprint> 锚定的增量意图分析（无旁路；
-      // input 必填豁免已取消）；否则走 intent provider seam——两条蓝图来源统一
-      const tIntent0 = performance.now()
-      let draft: AuthorDraft
-      let blueprintRepairRetried = false // M5-T2（D5c）：validate 失败单次反馈重试是否发生（计 1 次 correction）
-      if (a.blueprint_id && target === 'anima') {
-        // 2026-09-16 定稿：anima blueprint_id 增量路径未接入 compositing（semantic 增量分析 = T1R 项）——
-        // 旧 BlueprintV1 增量随 legacy 蓝图分支对 anima 移除，宁显式报错不做静默旧路径
-        throw new Error('blueprint_id 增量路径未接入 compositing 管线（anima）——请直接用 input 全新生成，或对 h3 使用 blueprint_id')
-      }
-      if (a.blueprint_id) {
-        // M5-HOTFIX（P0）：增量入口与落库同源接线——blueprintSettingsScope（register owner scope），
-        // 废除裸 ctx.settings 的 RepoSettingsScope 断言（同款 Bug B：服务级 get(ns)/update(ns,patch)
-        // 形状被当 owner scope 用，load 恒拿不到表 → blueprint_id 入口在生产一调即报「blueprint 不存在」）。
-        // settings 缺失/不可接线 → 显式报错（fail-closed：增量入口无锚定即无意义，错误文案可机检）。
-        const repoScope = blueprintSettingsScope(ctx)
-        if (!repoScope) throw new Error('blueprint_id 需要 repo 后端（ctx.settings 缺失或不可注册 blueprints namespace）')
-        const repo = createBlueprintRepo({ settings: repoScope })
-        const oldBp = repo.load(a.blueprint_id)
-        if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`)
-        draft = { blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, { llm: blueprintLlm }) }
-      } else if (target === 'anima') {
-        // 2026-09-15 管线重设计（spec §3）：compositing S1——语义蓝图产出；
-        // 校验/tag_in_blueprint 失败单次反馈重试（沿蓝图形态 D5c 语义，计 1 次 correction）
-        try {
-          draft = await provider({ ...intentBase, round: 0 }, exec)
-        } catch (error) {
-          blueprintRepairRetried = true
-          preflightAdvisories.push('blueprint_repair_retry')
-          const message = error instanceof Error ? error.message : String(error)
-          draft = await provider({
-            ...intentBase,
-            round: 1,
-            feedback: `上一轮语义蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence、任何字段不得出现 tag 形式词）。`,
-          }, exec)
+        // Task 14 ④：推荐器信号拼装（spec §6.2/§6.3）。captain ①②（t6 裁定 + t17 预登记）：
+        // hasMotionIntent 仅在 motion 维度已满足（style 预设 hints.motion 存在）时置 true，
+        // 绝不以 input 动作词扫描置 true（计划 Task 14 的关键词扫描公式已被裁定作废）；
+        // presetHints（style 预设 art_direction_hints）只换被推荐维度的卡 id，不算已满足。
+        const recommendationMedia: 'image' | 'video' = target === 'h3' ? 'video' : 'image';
+        const presetHints = a.style_id ? getStylePreset(a.style_id)?.art_direction_hints : undefined;
+        const recommendedCards = recommendArtDirection({
+          media: recommendationMedia,
+          hasMotionIntent: presetHints?.motion !== undefined,
+          hasLighting: false,
+          hasComposition: false,
+          hasFocal: false,
+          ...(presetHints !== undefined ? { presetHints } : {}),
+        });
+
+        const provider =
+          _intentProvider ??
+          ((req: AuthorIntentRequest, exec2?: ExecLike) =>
+            defaultIntent(ctx, resolveRoute((exec2 ?? exec) as ExecLike), req));
+        // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
+        // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
+        const intentCfg = getDialect(target)?.intent;
+
+        // 2026-09-16 管线重设计定稿（用户裁决「不向后兼容、不保留旧逻辑」）：
+        // anima 一律走 compositing 五段（意图蓝图→扩写→成文→审核→修复），M5 蓝图形态/slots 直译/
+        // PM_AUTHOR_INTENT_FORM/PM_PIPELINE_FORM 双态开关全部移除——anima 无回滚面，回滚 = revert 提交。
+        // h3 未迁移，维持原 shots 路径（runEnrich brief + slots/shots 装配仅服务 h3）。
+
+        // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
+        // blueprint_id 路径跳过 enrich（自带 enrichBlueprint 扩展层）。
+        // 降级铁律：runEnrich 永不抛出；skipped → intent 吃原始输入 + advisory enrich_skipped，照常出稿。
+        let intentInput = input;
+        const enrichAdvisories: string[] = [];
+        let enrichFlag: 0 | 1 = 0;
+        let enrichmentTop: Record<string, unknown> | undefined;
+        const traceExtra: Array<{ name: string; ms: number }> = []; // F5：enrich/intent/catalog 耗时子条目
+        // 2026-09-12 P1：调用方显式指定艺术指导卡——fail-fast 校验（不烧 LLM）；不消费的路径补 advisory（参数被忽略必须可观测）
+        const artDirectionSpecified =
+          a.art_direction !== undefined && a.art_direction !== null && Object.keys(a.art_direction).length > 0;
+        if (artDirectionSpecified) {
+          const invalid = validateArtDirectionSpec(a.art_direction as Record<string, string>);
+          if (invalid) throw new Error(invalid);
+          // M5-T2（D7 advisory 矩阵修订）：蓝图形态（默认蓝图路径或 blueprint_id）不再 ignored——
+          // 显式卡由 applyArtDirectionCards 确定性注入（新消费面）；仅 enrich=false（调用方 opt-out）
+          // 与 h3 目标维持 ignored advisory
+          if (target !== 'anima') enrichAdvisories.push('art_direction_ignored_h3');
+          else if (a.enrich === false) enrichAdvisories.push('art_direction_ignored_enrich_off');
         }
-      } else {
-        draft = await provider({ ...intentBase, round: 0 }, exec)
-      }
-      // Task 14 ③：core.rating 确定性注入（安全数据不信任 LLM 产物，t7 交接）——两条蓝图来源统一
-      // M5-T2（D5b）：统一 helper 承载（修复轮同 helper 重注入，缺口#2）
-      draft = injectBlueprintCoreRating(draft, resolved.rating)
-      // P0 修复（t1，spec §5.1 链路完整性）：标准 slots 路径同样确定性写入——此前该路径无任何
-      // 注入点，compileAnima resolveEffectiveRating 回退全槽关键词扫描，声明 explicit 会被 slots
-      // 内容（cleavage 命中 SENSITIVE_MARKERS）静默降档为 sensitive 组装（真实会话 8e31ff2a 实证）。
-      // 与上一行同理由：安全数据不信任 LLM 产物，声明档位必须确定性直达组装层。
-      // h3 不适用（shots 无 rating 槽；h3 仅 safe，预检 gate 已挡非 safe）。
-      if (!draft.blueprint && target === 'anima' && draft.slots) draft.slots.rating = resolved.rating
-      traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
-      trace('intent_done', { form: draft.blueprint ? 'blueprint' : (draft.shots ? 'shots' : (draft.semantic ? 'semantic' : 'slots')), retried: blueprintRepairRetried, missing: draft.missing?.length ?? null })
-
-      // ── compositing 分支（spec 2026-09-17 agentic-pipeline-redesign）：S2 扩写 →
-      // S3 成文(pm-writer 工具查字典) → S4 双轨审核(机器门 ∥ pm-auditor 每轮必跑) →
-      // S5 修复(pm-repairer)；检索层已废除（A1）。编排细节在 compositing/orchestrate.ts。
-      if (target === 'anima' && draft.semantic) {
-        const enrichRunner = subagentsReady
-          ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent })
-          : undefined
-        // A2：成文/审计/修复三个 LLM 均开放 catalog_search 工具（toolFilter allow）
-        const writerRunner = subagentsReady
-          ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
-          : undefined
-        const auditorRunner = subagentsReady && judgeMode !== 'off'
-          ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-auditor', parent: criticParent })
-          : undefined
-        const repairRunner = subagentsReady
-          ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-repairer', parent: criticParent })
-          : undefined
-        // A5：机审 fabricated_tag 直查 catalog（canonical/alias/artist 同步级联，毫秒级）
-        const verifyTag = (tag: string): boolean => searchCatalogSync(tag, { mode: 'auto', limit: 5 }).length > 0
-        // A6：回退直查缝
-        const fallbackSearch = (q: string) => searchCatalogSync(q, { mode: 'auto', limit: 5 })
-        // audit P1：bge 余弦注入 nl_tag_overlap（嵌入在审计前经 vectorPrewarm 预热进进程缓存）
-        const overlapSim = getSharedBgeOverlapSim()
-        const tOrch0 = performance.now()
-        const outcome = await orchestrateCompositing(draft.semantic, resolved.rating, {
-          ...(enrichRunner ? { enrichRunner } : {}),
-          ...(writerRunner ? { writerRunner } : {}),
-          ...(auditorRunner ? { auditorRunner } : {}),
-          ...(repairRunner ? { repairRunner } : {}),
-          verifyTag,
-          search: fallbackSearch,
-          vectorSim: overlapSim.sim,
-          vectorPrewarm: overlapSim.prewarm,
-        }, { maxCorrections: MAX_CORRECTIONS })
-        traceExtra.push({ name: 'compositing_orchestrate', ms: performance.now() - tOrch0 })
-
-        const stage: StageResult = {
-          ok: outcome.ok,
-          result: { positive: outcome.positive, negative: outcome.negative },
-          gates: outcome.gates.map((g) => ({ rule: g.rule, target: 'anima', severity: g.severity, detail: g.detail, source: g.source })),
-          advisories: outcome.advisories,
-          assumptions: [],
-          targetSlotHint: 't2i.prompt',
-          judgeFeedback: outcome.auditorFeedback,
-          trace: { stages: outcome.trace },
-        }
-        const generationId = makeGenerationId()
-        const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...outcome.advisories]
-        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: outcome.corrections, advisories: finalAdvisories, enrich: 0, rating: resolved.rating })
-        ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(compositing) → ok=${stage.ok} quality=${outcome.quality} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} auditor=${outcome.auditor?.verdict ?? 'skipped'} corrections=${outcome.corrections} fallback=${outcome.fallbackUsed}`)
-        return assembleEnvelope(stage, finalAdvisories, {
-          corrections: outcome.corrections,
-          loopExhausted: outcome.advisories.includes('loop_exhausted:true'),
-          joyExtraFiltered: false,
-          traceStages: [
-            ...traceExtra.filter((e) => e.name !== 'catalog'),
-            ...(stage.trace?.stages ?? []),
-            ...traceExtra.filter((e) => e.name === 'catalog'),
-          ],
-          compositing: { form: 'semantic', writer_retries: outcome.corrections, fallback_used: outcome.fallbackUsed, auditor: outcome.auditor?.verdict ?? 'skipped' },
-          designNotes: [
-            ...outcome.v1.subjects.map((s) => `主体（${s.count}）: ${s.identity}`),
-            `场景: ${outcome.v1.core.scene.environment} / ${outcome.v1.core.scene.lighting_idea}`,
-          ],
-        }, {
-          generation_id: generationId,
-          // audit P3：compositing 分支顶层质量三态（passed/degraded/fallback），条件键风格对齐 blueprint_id
-          quality: outcome.quality,
-          // agentic 管线（A3）：审计 LLM 裁决顶层投影（verdict + findings，无 score/rebuttal 面向）
-          ...(outcome.auditor !== undefined ? { auditor: outcome.auditor } : {}),
-          ...judgeTopLevel(stage),
-          rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
-          aesthetics: { recommendedCards },
-        }, {
-          next_action: computeNextAction(stage, { repairHints: [], repaired: outcome.corrections > 0 && !outcome.advisories.includes('loop_exhausted:true') }),
-        })
-      }
-
-      // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
-      // → Level 2 LLM 结构化修复（≤2 次，计入 MAX_CORRECTIONS）→ Level 3 manual + loop_exhausted
-      if (draft.blueprint) {
-        const route = resolveRoute(exec as ExecLike)
-        const enrichOpts = { styleId: a.style_id, conformity: a.conformity, missing: (draft.missing ?? []).length > 0 ? draft.missing : undefined }
-        const expansions: string[] = []
-        const repairs: string[] = []
-        let repaired = false
-        let joyExtraFiltered = false
-        const trailAdvisories: string[] = []
-
-        // M5-T2（D7/F1）：显式卡确定性注入（纯函数零 LLM，先于 enrichBlueprint——注入结果进 v0，
-        // 扩展层可继续加工）；color 卡折进推荐先验通道（F1 否决 palette 假注入）。调用方 opt-out
-        // （enrich=false）已在预检出 art_direction_ignored_enrich_off advisory，此处不再注入。
-        let bpForEnrich = draft.blueprint
-        const explicitCardRecs: ArtDirectionRecommendation[] = []
-        if (artDirectionSpecified && a.enrich !== false) {
-          const applied = applyArtDirectionCards(bpForEnrich, a.art_direction as Record<string, string>)
-          bpForEnrich = applied.blueprint
-          trailAdvisories.push(...applied.advisories)
-          explicitCardRecs.push(...applied.colorRecommendations)
-        }
-        // M5-T2（D7）：推荐先验通道——推荐器输出（+显式 color 卡）进 enrichBlueprint user 段
-        // 【推荐先验】（t4 落地的 recommendations 签名；文案同源逐字由 engine 层保证）；
-        // 显式 color 卡与推荐器 color 卡同场时显式卡优先（每类至多 1 张）
-        const recommendations: ArtDirectionRecommendation[] = [
-          ...recommendedCards.filter((r) => !(explicitCardRecs.length > 0 && r.field === 'color')),
-          ...explicitCardRecs,
-        ]
-
-        const tBlueprintEnrich0 = performance.now()
-        trace('enrich_start', { coreRating: bpForEnrich.core?.rating ?? null, media: bpForEnrich.media })
-        const e0 = await enrichBlueprint(ctx, route, bpForEnrich, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}), llm: enrichLlm })
-        trace('enrich_done', { expansions: e0.expansions.length, advisories: e0.advisories?.length ?? 0, firstExpansion: e0.expansions[0] ?? null })
-        traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tBlueprintEnrich0 }) // M5-T2（D4）envelope 增量②
-        expansions.push(...e0.expansions)
-        // M2-T2（spec §4.3 备注）：applyStyle 不感知展示通道——h3 negative_hints 忽略 advisory 由 engine 层产出、此处并入 envelope
-        const styleAdvisories = new Set<string>()
-        for (const sa of e0.advisories ?? []) styleAdvisories.add(sa)
-        const l1 = preflightRepair(e0.blueprint)
-        trace('l1_done', { repairs: l1.repairs.length })
-        if (l1.repairs.length > 0) { repaired = true; repairs.push(...l1.repairs) }
-        let bp = l1.bp
-        let stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts)
-        trace('stage_done', { ok: stage.ok, gates: stage.gates.length, critical: stage.gates.filter((g) => g.severity === 'critical').length })
-        // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果（envelope 可见性，不影响闭环）
-        let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined
-        if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
-
-        // M5-T2（D5c）：validate 失败重试计入修正预算（计 1 次 correction——envelope corrections 与
-        // MAX_CORRECTIONS 预算同口径）
-        const correctionsInitial = blueprintRepairRetried ? 1 : 0
-        let corrections = correctionsInitial
-        while (((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (stage.judgeFeedback?.length ?? 0) > 0) && corrections < MAX_CORRECTIONS) {
-          corrections++
-          repaired = true
-          // Task 6：feedback = 规则 critical gate + judgeFeedback（needs_revision 终态投影）
-          // F7（Round 8）：important 级 gate（如 tag_budget_exceeded 软预算裁剪指令）随 feedback
-          // 一并传达——闭环触发条件不变（critical/judgeFeedback），important 只搭车不出车
-          const feedback = JSON.stringify({
-            gates: stage.gates.filter((g) => g.severity === 'critical' || g.severity === 'important').map((g) => ({ rule: g.rule, severity: g.severity, detail: g.detail })),
-            ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
-          })
-          // M5-T2（D5a/V6）：修复轮携带增量锚定（当前蓝图 → <old_blueprint>，禁整图重解释）；
-          // V5：intentBase 携带 blueprintMode（D1）→ provider 蓝图形态返回——修复轮死路修复
-          const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec)
-          if (!d2.blueprint) break // provider 未返回蓝图 → 保留当前 stage，走 Level 3
-          injectBlueprintCoreRating(d2, resolved.rating) // M5-T2（D5b）缺口#2：修复轮重注入
-          const tE2 = performance.now()
-          const e2 = await enrichBlueprint(ctx, route, d2.blueprint, { ...enrichOpts, ...(recommendations.length > 0 ? { recommendations } : {}), llm: enrichLlm })
-          traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tE2 }) // D4 增量②：修复轮同计
-          expansions.push(...e2.expansions)
-          for (const sa of e2.advisories ?? []) styleAdvisories.add(sa)
-          const l2 = preflightRepair(e2.blueprint)
-          repairs.push(...l2.repairs)
-          bp = l2.bp
-          stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, repairJudgeOpts)
-          if (repairJudgeOpts) lastJudged = stage
-          if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
-        }
-        // 2026-09-15 对称性修复（真实会话 gen_1789485485442 实证）：标准路径 2026-09-12 P3 已把
-        // 「judge needs_revision 耗尽修正轮后静默交付」补打 loop_exhausted:true，蓝图分支当时漏改——
-        // 只认 critical gate，评审闭环耗尽（judgeFeedback 仍非空且 corrections 已达 MAX_CORRECTIONS）
-        // 时 next_action=ok 静默出稿。此处镜像标准路径口径（下方非蓝图分支同款条件）。
-        const reviewStillFailed = (stage.judgeFeedback?.length ?? 0) > 0
-        if ((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (reviewStillFailed && corrections >= MAX_CORRECTIONS)) {
-          trailAdvisories.push('loop_exhausted:true') // Level 3：仍失败 → manual + loop_exhausted
-        }
-        const repair_hints: RepairHint[] = repairs.map((r) => ({
-          field: r.startsWith('duration_') ? 'total_duration_seconds' : 'shots',
-          fix: r,
-        }))
-        // t22 F1：computeNextAction 只读 stage.advisories——把 trailAdvisories（loop_exhausted:true）并入
-        // stage 视图；且循环耗尽时 repaired 失效化（否则 repaired 分支在 manual 判定前短路 → 误报 auto_repair）
-        const loopExhausted = trailAdvisories.includes('loop_exhausted:true')
-        const projStage: StageResult = (repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined)
-          ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
-          : stage
-        const nextStage: StageResult = loopExhausted
-          ? { ...stage, advisories: [...stage.advisories, ...trailAdvisories] }
-          : stage
-        ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
-        const generationId = makeGenerationId()
-        // M5-T2（D9，design §2.4）：蓝图落库（fail-open）——blueprint_id 增量入口从此有料（V7 验尸：
-        // 此前 repo.save 生产零调用）；落库键 = generation_id（Q2 裁定）。settings 缺失 → 静默跳过；
-        // 写失败 → advisory blueprint_save_failed，均不阻塞出稿。
-        // M5-HOTFIX（P0）：接线改 blueprintSettingsScope（settings.register owner scope 惰性注册 +
-        // 按服务复用），废除裸 ctx.settings 的 RepoSettingsScope 断言（patch 落 ns 位 →
-        // parseSettingsNamespace TypeError = 本次 DSH 进程死亡根因）；save 返回 promise 且此处
-        // await 于 try/catch 内——任何 rejection（含 scope.update 磁盘故障）落 advisory
-        // blueprint_save_failed，杜绝浮空 rejection（unhandledRejection 杀进程根因②）。
-        let savedBlueprintId: string | undefined
-        try {
-          const settingsPresent = (ctx as unknown as { settings?: unknown }).settings !== undefined
-          const repoScope = blueprintSettingsScope(ctx)
-          if (repoScope) {
-            await createBlueprintRepo({ settings: repoScope }).save(generationId, bp)
-            savedBlueprintId = generationId
-          } else if (settingsPresent) {
-            // 服务在场但不可接线（缺 register / 注册失败）→ 可观测 fail-open（运行期可检反例：
-            // 误传裸服务或 owner-scope 形状对象都会落到这条 advisory，而非静默假成功或崩溃）
-            trailAdvisories.push('blueprint_save_failed')
+        // 2026-09-12 P0：exec.agent 线穿为 enrich/judge 子代理的 parent——critic provider 此前定义时只绑 ctx，
+        // host 装配子代理读 parent.options 缺 parent 直接 TypeError → 全量静默 skipped
+        // （docs/2026-09-12-camera-language-research.md §2）
+        const criticParent =
+          (exec as unknown as ExecLike | undefined)?.agent ?? (ctx as { agent?: unknown } | undefined)?.agent;
+        // 2026-09-15（用户定案「全部 LLM 调用一次性子代理」终态）：扩写/增量蓝图的嵌套 LLM 调用
+        // 统一走子代理形态（三方可见）；subagents 未注册时保持 complete 直连兜底（无 Agent 会话可用）。
+        const subagentsReady = Boolean((ctx as { subagents?: { start?: unknown } | undefined })?.subagents?.start);
+        const asLlm =
+          (runner: ReturnType<typeof createSubagentTextRunner>) => (req: { system: string; user: string }) =>
+            runner(`${req.system}\n\n${req.user}`);
+        const enrichLlm = subagentsReady
+          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent }))
+          : undefined;
+        const blueprintLlm = subagentsReady
+          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent }))
+          : undefined;
+        // runEnrich（brief 扩写）仅服务 h3（未迁移方言）；anima 的美学扩展在 compositing 编排层
+        // runSemanticEnrich（spec §4）。降级铁律不变：runEnrich 永不抛出。
+        if (a.enrich !== false && !a.blueprint_id && target === 'h3') {
+          const tEnrich0 = performance.now();
+          const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent });
+          const eRes = await runEnrich({
+            target: target as EnrichTarget,
+            userInput: input,
+            outputLang: a.outputLang,
+            provider: enrichProvider,
+            rating: resolved.rating, // Task 14 ④：预检定档透传（Task 12 persona 【内容分级】块）
+            recommendations: recommendedCards, // Task 14 ④：推荐器输出 →【推荐先验】（Task 12 P2，LLM 终决）
+          });
+          if ('brief' in eRes) {
+            const brief = eRes.brief;
+            if (trimNameAnchors(brief)) enrichAdvisories.push('name_anchors_trimmed'); // T5 carry③：条目 ≤10、单条 ≤100 字符
+            intentInput = briefToIntentText(brief);
+            enrichFlag = 1;
+            enrichmentTop = { brief };
+          } else {
+            enrichAdvisories.push('enrich_skipped');
+            // 审计 #1（2026-09-12，spec §7 L223 降级语义原文）：enrich 在 explicit 档被 LLM 拒绝 →
+            // 现有故障语义回退不变（enrich_skipped + user brief 直拆照常出稿），增发档位可观测
+            // advisory——兼容/拒绝路径的静默降级必须可见。safe/sensitive 档不打（spec 仅明文 explicit）。
+            if (resolved.rating === 'explicit') enrichAdvisories.push('enrich_refused_at_rating:explicit');
+            enrichFlag = 0;
+            enrichmentTop = { skipped: true, reason: eRes.reason };
           }
-        } catch {
-          trailAdvisories.push('blueprint_save_failed')
+          traceExtra.push({ name: 'enrich', ms: performance.now() - tEnrich0 });
+        } else if (a.enrich === true && a.blueprint_id) {
+          // Round7 T6：blueprint 路径忽略 enrich 参数（blueprint 分支自带 enrichBlueprint 扩展层）。
+          // 显式 enrich=true 补 advisory 消除静默忽略（与 judge_mode 忽略口径一致：参数被忽略必须可观测）。
+          // M5-T2（D4）：默认蓝图形态同样适用（runEnrich 已被 swap 掉）
+          enrichAdvisories.push('enrich_ignored_blueprint');
         }
-        // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
-        const canon = canonicalObservabilityOf(stage)
-        const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
-        catalogTraceEntry(stage, traceExtra)
-        const blueprintAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...styleAdvisories, ...trailAdvisories, ...substAdvisories]
-        recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: blueprintAdvisories, enrich: enrichFlag, rating: resolved.rating })
-        return assembleEnvelope(projStage, blueprintAdvisories, {
-          corrections,
-          loopExhausted,
-          joyExtraFiltered,
-          // 2026-09-15（真实会话 gen_1789459886481 实证）：traceStages 原为 runStage 内阶段在前、
-          // intent/扩写追加在后——字面读序会误判「评审先于蓝图」。修正为时间序：
-          // intent/扩写 → runStage 内阶段（schema→…→judge）→ catalog。
-          traceStages: [
-            ...traceExtra.filter((e) => e.name !== 'catalog'),
-            ...(stage.trace?.stages ?? []),
-            ...traceExtra.filter((e) => e.name === 'catalog'),
-          ],
-          canonicalSubstitutions: canon.canonicalSubstitutions,
-          substitutions: canon.substitutions,
-          expansions,
-          repairs,
-          designNotes: designNotesOf(projStage),
-          // M5-T2（D4）envelope 增量①：蓝图痕迹（slots 形态/rollback 不产出该字段）
-          blueprint: {
-            form: 'blueprint' as const,
-            media: bp.media,
-            missing_count: (draft.missing ?? []).length,
-            expansions_count: expansions.length,
-            repairs_count: repairs.length,
-            anchor_rounds: corrections - correctionsInitial,
-          },
-        }, {
-          generation_id: generationId,
-          // M5-T2（D9/F2）：条件顶层键 blueprint_id——仅落库成功时出现（blueprint_id 链式入口）
-          ...(savedBlueprintId !== undefined ? { blueprint_id: savedBlueprintId } : {}),
-          ...judgeTopLevel(projStage),
-          ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
-          // Task 14 ⑤（spec §9）：result 顶层三字段——rating 定档 / aesthetics 推荐卡 / style 注入摘要
-          rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
-          aesthetics: { recommendedCards },
-          style: styleSummaryOf(a.style_id, bp),
-        }, {
-          next_action: computeNextAction(nextStage, { repairHints: repair_hints, repaired: loopExhausted ? false : repaired }),
-          repair_hints,
-        })
-      }
 
-      // 旧 slots/shots 直传路径（向后兼容——AuthorDraft.blueprint 缺省时走原逻辑）
-      let stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts)
-      // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果
-      let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined
-      let joyExtraFiltered = false
-      if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
-      const trailAdvisories: string[] = []
-      let corrections = 0
-      // Task 6：闭环条件在规则 critical 之上追加 judgeFeedback（needs_revision 终态）；
-      // feedback 拼接 = 规则 gate 的 `[rule] detail` 行 + judgeFeedback 行；max-2 / loop_exhausted 语义不变
-      while (((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (stage.judgeFeedback?.length ?? 0) > 0) && corrections < MAX_CORRECTIONS) {
-        corrections++
-        // F7（Round 8）：important 级 gate（如 tag_budget_exceeded 软预算裁剪指令）随 feedback
-        // 一并拼接——闭环触发条件不变（critical/judgeFeedback），important 只搭车不出车
-        const feedback = [
-          ...stage.gates.filter((g) => g.severity === 'critical' || g.severity === 'important').map((g) => `[${g.rule}] ${g.detail}`),
-          ...(stage.judgeFeedback ?? []),
-        ].join('\n')
-        const prevDraft = draft
-        draft = await provider({ ...intentBase, round: corrections, feedback }, exec)
-        // P2：未点名槽回滚（两轮真实样本中修复 LLM 均越权删除 artist 槽）
-        if (target === 'anima' && draft.slots) {
-          const merged = mergeRepairSlots(prevDraft?.slots, draft.slots, feedback) ?? draft.slots
-          // P0 修复（t1）：mergeRepairSlots 以 provider 新产物为底重建（SLOT_ORDER 不含 rating，
-          // LLM 产物亦不可信）——合并后重写声明档位，防降档在修复轮回归
-          merged.rating = resolved.rating
-          draft.slots = merged
+        // 2026-09-16 定稿：B7 前置召回随 legacy slots 路径移除——anima 词表证据唯一由 S2.5 检索包承载（spec §5 D2）
+
+        const intentBase = {
+          target,
+          input: intentInput,
+          variant: a.variant,
+          scenarioId,
+          formFields: a.form_fields,
+          clarify: a.clarify,
+          // 2026-09-15 管线重设计（spec §3）：anima 一律 compositing——provider 走语义蓝图
+          // persona/schema 与 parseSemanticBlueprint。persona/schema 键不下发（provider 内部落
+          // ANIMA_SEMANTIC_* 常量）——真实会话冒烟实证：此前三元展开无条件注入 registry slots
+          // persona（ANIMA_PERSONA），踩踏 compositingMode，LLM 收到旧 persona 产出 slots JSON。
+          ...(target === 'anima' ? { compositingMode: true as const } : {}),
+          // h3（未迁移方言）：registry slots/shots persona 照旧
+          ...(target === 'h3' ? { persona: intentCfg?.persona, schema: intentCfg?.schema } : {}),
+        };
+
+        // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化
+        const judgeMode = a.judge_mode ?? 'fast';
+        let judgeOpts: JudgeStageOpts | undefined;
+        if (judgeMode !== 'off') {
+          judgeOpts = {
+            judge: judgeMode,
+            // 2026-09-15 复位终态（29edaad，用户定案恢复「全部 LLM 调用一次性子代理」，附录 A2）：
+            // 评审经 createProductionCriticProvider → createSubagentCriticProvider（one-shot spawn，
+            // 架构级禁工具）。历史：2b9b2a4 曾改直连 complete 以规避 session-init 表单污染
+            // （delegated 子代理不可交互）；污染在会话初始化代理侧修复后恢复子代理形态——
+            // 此处注释曾在该中间态遗留「直连」表述，现正名。注入 seam（测试/e2e mock）优先级不变。
+            criticProvider: _judgeDeps?.criticProvider ?? createProductionCriticProvider(ctx, { parent: criticParent }),
+            evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
+            originalIntent: input,
+            declaredRating: resolved.rating, // M2-T2（spec §7 P3）：T13 四接线点从编排流可达
+          };
+          if (judgeMode === 'strict') {
+            judgeOpts.revisionProvider =
+              _judgeDeps?.revisionProvider ?? makeRevisionProvider({ target, provider, intentBase, runOpts, exec });
+          }
         }
-        stage = await runDraftThroughStage(target, draft, runOpts, repairJudgeOpts)
-        if (repairJudgeOpts) lastJudged = stage
-        if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered
-      }
-      // P3（2026-09-12 真实样本）：judge needs_revision 耗尽修正轮后静默交付——补打点，
-      // 与 critical-gates 路径同款 loop_exhausted:true（否则下游误报「评审 pass」）
-      const reviewStillFailed = (stage.judgeFeedback?.length ?? 0) > 0
-      if ((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) || (reviewStillFailed && corrections >= MAX_CORRECTIONS)) {
-        trailAdvisories.push('loop_exhausted:true')
-      }
-      ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`)
-      const projStage: StageResult = (repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined)
-        ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
-        : stage
-      const generationId = makeGenerationId()
-      // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
-      const canon = canonicalObservabilityOf(stage)
-      const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`)
-      catalogTraceEntry(stage, traceExtra)
-      const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...trailAdvisories, ...substAdvisories]
-      recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage: projStage, repairRounds: corrections, advisories: finalAdvisories, enrich: enrichFlag, rating: resolved.rating })
-      return assembleEnvelope(projStage, finalAdvisories, {
-        corrections,
-        loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
-        joyExtraFiltered,
-        // 同上：时间序修正（slots 路径：enrich → intent → runStage 内阶段 → catalog）
-        traceStages: [
-          ...traceExtra.filter((e) => e.name !== 'catalog'),
-          ...(stage.trace?.stages ?? []),
-          ...traceExtra.filter((e) => e.name === 'catalog'),
-        ],
-        canonicalSubstitutions: canon.canonicalSubstitutions,
-        substitutions: canon.substitutions,
-        designNotes: designNotesOf(projStage),
-      }, {
-        generation_id: generationId,
-        ...judgeTopLevel(projStage),
-        ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
-        // Task 14 ⑤（spec §9）：result 顶层三字段——rating 定档 / aesthetics 推荐卡 / style 注入摘要
-        rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
-        aesthetics: { recommendedCards },
-        style: styleSummaryOf(a.style_id, draft.blueprint),
-      })
+        (ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(
+          `[prompt-master] prompt_author target=${target}${a.variant ? ` variant=${a.variant}` : ''}${a.stage ? ` stage=${a.stage}` : ''}${a.blueprint_id ? ` blueprint_id=${a.blueprint_id}` : ''}`,
+        );
+        // T4（spec §10.4-A12）：judgeRepair=false → 修正轮 runStage 不带 judgeOpts（provider 零调用）
+        const repairJudgeOpts = a.judgeRepair === false ? undefined : judgeOpts;
+
+        // Task 14 恒跑（spec §8 D6）：blueprint_id → <old_blueprint> 锚定的增量意图分析（无旁路；
+        // input 必填豁免已取消）；否则走 intent provider seam——两条蓝图来源统一
+        const tIntent0 = performance.now();
+        let draft: AuthorDraft;
+        let blueprintRepairRetried = false; // M5-T2（D5c）：validate 失败单次反馈重试是否发生（计 1 次 correction）
+        if (a.blueprint_id && target === 'anima') {
+          // 2026-09-16 定稿：anima blueprint_id 增量路径未接入 compositing（semantic 增量分析 = T1R 项）——
+          // 旧 BlueprintV1 增量随 legacy 蓝图分支对 anima 移除，宁显式报错不做静默旧路径
+          throw new Error(
+            'blueprint_id 增量路径未接入 compositing 管线（anima）——请直接用 input 全新生成，或对 h3 使用 blueprint_id',
+          );
+        }
+        if (a.blueprint_id) {
+          // M5-HOTFIX（P0）：增量入口与落库同源接线——blueprintSettingsScope（register owner scope），
+          // 废除裸 ctx.settings 的 RepoSettingsScope 断言（同款 Bug B：服务级 get(ns)/update(ns,patch)
+          // 形状被当 owner scope 用，load 恒拿不到表 → blueprint_id 入口在生产一调即报「blueprint 不存在」）。
+          // settings 缺失/不可接线 → 显式报错（fail-closed：增量入口无锚定即无意义，错误文案可机检）。
+          const repoScope = blueprintSettingsScope(ctx);
+          if (!repoScope)
+            throw new Error('blueprint_id 需要 repo 后端（ctx.settings 缺失或不可注册 blueprints namespace）');
+          const repo = createBlueprintRepo({ settings: repoScope });
+          const oldBp = repo.load(a.blueprint_id);
+          if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`);
+          draft = {
+            blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, {
+              llm: blueprintLlm,
+            }),
+          };
+        } else if (target === 'anima') {
+          // 2026-09-15 管线重设计（spec §3）：compositing S1——语义蓝图产出；
+          // 校验/tag_in_blueprint 失败单次反馈重试（沿蓝图形态 D5c 语义，计 1 次 correction）
+          try {
+            draft = await provider({ ...intentBase, round: 0 }, exec);
+          } catch (error) {
+            blueprintRepairRetried = true;
+            preflightAdvisories.push('blueprint_repair_retry');
+            const message = error instanceof Error ? error.message : String(error);
+            draft = await provider(
+              {
+                ...intentBase,
+                round: 1,
+                feedback: `上一轮语义蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence、任何字段不得出现 tag 形式词）。`,
+              },
+              exec,
+            );
+          }
+        } else {
+          draft = await provider({ ...intentBase, round: 0 }, exec);
+        }
+        // Task 14 ③：core.rating 确定性注入（安全数据不信任 LLM 产物，t7 交接）——两条蓝图来源统一
+        // M5-T2（D5b）：统一 helper 承载（修复轮同 helper 重注入，缺口#2）
+        draft = injectBlueprintCoreRating(draft, resolved.rating);
+        // P0 修复（t1，spec §5.1 链路完整性）：标准 slots 路径同样确定性写入——此前该路径无任何
+        // 注入点，compileAnima resolveEffectiveRating 回退全槽关键词扫描，声明 explicit 会被 slots
+        // 内容（cleavage 命中 SENSITIVE_MARKERS）静默降档为 sensitive 组装（真实会话 8e31ff2a 实证）。
+        // 与上一行同理由：安全数据不信任 LLM 产物，声明档位必须确定性直达组装层。
+        // h3 不适用（shots 无 rating 槽；h3 仅 safe，预检 gate 已挡非 safe）。
+        if (!draft.blueprint && target === 'anima' && draft.slots) draft.slots.rating = resolved.rating;
+        traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }); // F5：始终存在
+        trace('intent_done', {
+          form: draft.blueprint ? 'blueprint' : draft.shots ? 'shots' : draft.semantic ? 'semantic' : 'slots',
+          retried: blueprintRepairRetried,
+          missing: draft.missing?.length ?? null,
+        });
+
+        // ── compositing 分支（spec 2026-09-17 agentic-pipeline-redesign）：S2 扩写 →
+        // S3 成文(pm-writer 工具查字典) → S4 双轨审核(机器门 ∥ pm-auditor 每轮必跑) →
+        // S5 修复(pm-repairer)；检索层已废除（A1）。编排细节在 compositing/orchestrate.ts。
+        if (target === 'anima' && draft.semantic) {
+          const enrichRunner = subagentsReady
+            ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent })
+            : undefined;
+          // A2：成文/审计/修复三个 LLM 均开放 catalog_search 工具（toolFilter allow）
+          const writerRunner = subagentsReady
+            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
+            : undefined;
+          const auditorRunner =
+            subagentsReady && judgeMode !== 'off'
+              ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-auditor', parent: criticParent })
+              : undefined;
+          const repairRunner = subagentsReady
+            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-repairer', parent: criticParent })
+            : undefined;
+          // A5：机审 fabricated_tag 直查 catalog（canonical/alias/artist 同步级联，毫秒级）
+          const verifyTag = (tag: string): boolean => searchCatalogSync(tag, { mode: 'auto', limit: 5 }).length > 0;
+          // A6：回退直查缝
+          const fallbackSearch = (q: string) => searchCatalogSync(q, { mode: 'auto', limit: 5 });
+          // audit P1：bge 余弦注入 nl_tag_overlap（嵌入在审计前经 vectorPrewarm 预热进进程缓存）
+          const overlapSim = getSharedBgeOverlapSim();
+          const tOrch0 = performance.now();
+          const outcome = await orchestrateCompositing(
+            draft.semantic,
+            resolved.rating,
+            {
+              ...(enrichRunner ? { enrichRunner } : {}),
+              ...(writerRunner ? { writerRunner } : {}),
+              ...(auditorRunner ? { auditorRunner } : {}),
+              ...(repairRunner ? { repairRunner } : {}),
+              verifyTag,
+              search: fallbackSearch,
+              vectorSim: overlapSim.sim,
+              vectorPrewarm: overlapSim.prewarm,
+            },
+            { maxCorrections: MAX_CORRECTIONS },
+          );
+          traceExtra.push({ name: 'compositing_orchestrate', ms: performance.now() - tOrch0 });
+
+          const stage: StageResult = {
+            ok: outcome.ok,
+            result: { positive: outcome.positive, negative: outcome.negative },
+            gates: outcome.gates.map((g) => ({
+              rule: g.rule,
+              target: 'anima',
+              severity: g.severity,
+              detail: g.detail,
+              source: g.source,
+            })),
+            advisories: outcome.advisories,
+            assumptions: [],
+            targetSlotHint: 't2i.prompt',
+            judgeFeedback: outcome.auditorFeedback,
+            trace: { stages: outcome.trace },
+          };
+          const generationId = makeGenerationId();
+          const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...outcome.advisories];
+          recordGenerationSafe({
+            id: generationId,
+            target,
+            variant: a.variant,
+            judgeMode,
+            input,
+            stage,
+            repairRounds: outcome.corrections,
+            advisories: finalAdvisories,
+            enrich: 0,
+            rating: resolved.rating,
+          });
+          (ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(
+            `[prompt-master] prompt_author(compositing) → ok=${stage.ok} quality=${outcome.quality} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} auditor=${outcome.auditor?.verdict ?? 'skipped'} corrections=${outcome.corrections} fallback=${outcome.fallbackUsed}`,
+          );
+          return assembleEnvelope(
+            stage,
+            finalAdvisories,
+            {
+              corrections: outcome.corrections,
+              loopExhausted: outcome.advisories.includes('loop_exhausted:true'),
+              joyExtraFiltered: false,
+              traceStages: [
+                ...traceExtra.filter((e) => e.name !== 'catalog'),
+                ...(stage.trace?.stages ?? []),
+                ...traceExtra.filter((e) => e.name === 'catalog'),
+              ],
+              compositing: {
+                form: 'semantic',
+                writer_retries: outcome.corrections,
+                fallback_used: outcome.fallbackUsed,
+                auditor: outcome.auditor?.verdict ?? 'skipped',
+              },
+              designNotes: [
+                ...outcome.v1.subjects.map((s) => `主体（${s.count}）: ${s.identity}`),
+                `场景: ${outcome.v1.core.scene.environment} / ${outcome.v1.core.scene.lighting_idea}`,
+              ],
+            },
+            {
+              generation_id: generationId,
+              // audit P3：compositing 分支顶层质量三态（passed/degraded/fallback），条件键风格对齐 blueprint_id
+              quality: outcome.quality,
+              // agentic 管线（A3）：审计 LLM 裁决顶层投影（verdict + findings，无 score/rebuttal 面向）
+              ...(outcome.auditor !== undefined ? { auditor: outcome.auditor } : {}),
+              ...judgeTopLevel(stage),
+              rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
+              aesthetics: { recommendedCards },
+            },
+            {
+              next_action: computeNextAction(stage, {
+                repairHints: [],
+                repaired: outcome.corrections > 0 && !outcome.advisories.includes('loop_exhausted:true'),
+              }),
+            },
+          );
+        }
+
+        // 蓝图分支：enrich（LLM 1 次）→ Level 1 预修（零 LLM，不计入 MAX_CORRECTIONS）→ 投影 → runStage
+        // → Level 2 LLM 结构化修复（≤2 次，计入 MAX_CORRECTIONS）→ Level 3 manual + loop_exhausted
+        if (draft.blueprint) {
+          const route = resolveRoute(exec as ExecLike);
+          const enrichOpts = {
+            styleId: a.style_id,
+            conformity: a.conformity,
+            missing: (draft.missing ?? []).length > 0 ? draft.missing : undefined,
+          };
+          const expansions: string[] = [];
+          const repairs: string[] = [];
+          let repaired = false;
+          let joyExtraFiltered = false;
+          const trailAdvisories: string[] = [];
+
+          // M5-T2（D7/F1）：显式卡确定性注入（纯函数零 LLM，先于 enrichBlueprint——注入结果进 v0，
+          // 扩展层可继续加工）；color 卡折进推荐先验通道（F1 否决 palette 假注入）。调用方 opt-out
+          // （enrich=false）已在预检出 art_direction_ignored_enrich_off advisory，此处不再注入。
+          let bpForEnrich = draft.blueprint;
+          const explicitCardRecs: ArtDirectionRecommendation[] = [];
+          if (artDirectionSpecified && a.enrich !== false) {
+            const applied = applyArtDirectionCards(bpForEnrich, a.art_direction as Record<string, string>);
+            bpForEnrich = applied.blueprint;
+            trailAdvisories.push(...applied.advisories);
+            explicitCardRecs.push(...applied.colorRecommendations);
+          }
+          // M5-T2（D7）：推荐先验通道——推荐器输出（+显式 color 卡）进 enrichBlueprint user 段
+          // 【推荐先验】（t4 落地的 recommendations 签名；文案同源逐字由 engine 层保证）；
+          // 显式 color 卡与推荐器 color 卡同场时显式卡优先（每类至多 1 张）
+          const recommendations: ArtDirectionRecommendation[] = [
+            ...recommendedCards.filter((r) => !(explicitCardRecs.length > 0 && r.field === 'color')),
+            ...explicitCardRecs,
+          ];
+
+          const tBlueprintEnrich0 = performance.now();
+          trace('enrich_start', { coreRating: bpForEnrich.core?.rating ?? null, media: bpForEnrich.media });
+          const e0 = await enrichBlueprint(ctx, route, bpForEnrich, {
+            ...enrichOpts,
+            ...(recommendations.length > 0 ? { recommendations } : {}),
+            llm: enrichLlm,
+          });
+          trace('enrich_done', {
+            expansions: e0.expansions.length,
+            advisories: e0.advisories?.length ?? 0,
+            firstExpansion: e0.expansions[0] ?? null,
+          });
+          traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tBlueprintEnrich0 }); // M5-T2（D4）envelope 增量②
+          expansions.push(...e0.expansions);
+          // M2-T2（spec §4.3 备注）：applyStyle 不感知展示通道——h3 negative_hints 忽略 advisory 由 engine 层产出、此处并入 envelope
+          const styleAdvisories = new Set<string>();
+          for (const sa of e0.advisories ?? []) styleAdvisories.add(sa);
+          const l1 = preflightRepair(e0.blueprint);
+          trace('l1_done', { repairs: l1.repairs.length });
+          if (l1.repairs.length > 0) {
+            repaired = true;
+            repairs.push(...l1.repairs);
+          }
+          let bp = l1.bp;
+          let stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts);
+          trace('stage_done', {
+            ok: stage.ok,
+            gates: stage.gates.length,
+            critical: stage.gates.filter((g) => g.severity === 'critical').length,
+          });
+          // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果（envelope 可见性，不影响闭环）
+          let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined;
+          if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered;
+
+          // M5-T2（D5c）：validate 失败重试计入修正预算（计 1 次 correction——envelope corrections 与
+          // MAX_CORRECTIONS 预算同口径）
+          const correctionsInitial = blueprintRepairRetried ? 1 : 0;
+          let corrections = correctionsInitial;
+          while (
+            ((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) ||
+              (stage.judgeFeedback?.length ?? 0) > 0) &&
+            corrections < MAX_CORRECTIONS
+          ) {
+            corrections++;
+            repaired = true;
+            // Task 6：feedback = 规则 critical gate + judgeFeedback（needs_revision 终态投影）
+            // F7（Round 8）：important 级 gate（如 tag_budget_exceeded 软预算裁剪指令）随 feedback
+            // 一并传达——闭环触发条件不变（critical/judgeFeedback），important 只搭车不出车
+            const feedback = JSON.stringify({
+              gates: stage.gates
+                .filter((g) => g.severity === 'critical' || g.severity === 'important')
+                .map((g) => ({ rule: g.rule, severity: g.severity, detail: g.detail })),
+              ...(stage.judgeFeedback !== undefined ? { judgeFeedback: stage.judgeFeedback } : {}),
+            });
+            // M5-T2（D5a/V6）：修复轮携带增量锚定（当前蓝图 → <old_blueprint>，禁整图重解释）；
+            // V5：intentBase 携带 blueprintMode（D1）→ provider 蓝图形态返回——修复轮死路修复
+            const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec);
+            if (!d2.blueprint) break; // provider 未返回蓝图 → 保留当前 stage，走 Level 3
+            injectBlueprintCoreRating(d2, resolved.rating); // M5-T2（D5b）缺口#2：修复轮重注入
+            const tE2 = performance.now();
+            const e2 = await enrichBlueprint(ctx, route, d2.blueprint, {
+              ...enrichOpts,
+              ...(recommendations.length > 0 ? { recommendations } : {}),
+              llm: enrichLlm,
+            });
+            traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tE2 }); // D4 增量②：修复轮同计
+            expansions.push(...e2.expansions);
+            for (const sa of e2.advisories ?? []) styleAdvisories.add(sa);
+            const l2 = preflightRepair(e2.blueprint);
+            repairs.push(...l2.repairs);
+            bp = l2.bp;
+            stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, repairJudgeOpts);
+            if (repairJudgeOpts) lastJudged = stage;
+            if (target === 'anima')
+              joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered;
+          }
+          // 2026-09-15 对称性修复（真实会话 gen_1789485485442 实证）：标准路径 2026-09-12 P3 已把
+          // 「judge needs_revision 耗尽修正轮后静默交付」补打 loop_exhausted:true，蓝图分支当时漏改——
+          // 只认 critical gate，评审闭环耗尽（judgeFeedback 仍非空且 corrections 已达 MAX_CORRECTIONS）
+          // 时 next_action=ok 静默出稿。此处镜像标准路径口径（下方非蓝图分支同款条件）。
+          const reviewStillFailed = (stage.judgeFeedback?.length ?? 0) > 0;
+          if (
+            (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) ||
+            (reviewStillFailed && corrections >= MAX_CORRECTIONS)
+          ) {
+            trailAdvisories.push('loop_exhausted:true'); // Level 3：仍失败 → manual + loop_exhausted
+          }
+          const repair_hints: RepairHint[] = repairs.map((r) => ({
+            field: r.startsWith('duration_') ? 'total_duration_seconds' : 'shots',
+            fix: r,
+          }));
+          // t22 F1：computeNextAction 只读 stage.advisories——把 trailAdvisories（loop_exhausted:true）并入
+          // stage 视图；且循环耗尽时 repaired 失效化（否则 repaired 分支在 manual 判定前短路 → 误报 auto_repair）
+          const loopExhausted = trailAdvisories.includes('loop_exhausted:true');
+          const projStage: StageResult =
+            repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined
+              ? {
+                  ...stage,
+                  judge: lastJudged.judge,
+                  debate: lastJudged.debate,
+                  judgeFeedback: lastJudged.judgeFeedback,
+                }
+              : stage;
+          const nextStage: StageResult = loopExhausted
+            ? { ...stage, advisories: [...stage.advisories, ...trailAdvisories] }
+            : stage;
+          (ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(
+            `[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`,
+          );
+          const generationId = makeGenerationId();
+          // M5-T2（D9，design §2.4）：蓝图落库（fail-open）——blueprint_id 增量入口从此有料（V7 验尸：
+          // 此前 repo.save 生产零调用）；落库键 = generation_id（Q2 裁定）。settings 缺失 → 静默跳过；
+          // 写失败 → advisory blueprint_save_failed，均不阻塞出稿。
+          // M5-HOTFIX（P0）：接线改 blueprintSettingsScope（settings.register owner scope 惰性注册 +
+          // 按服务复用），废除裸 ctx.settings 的 RepoSettingsScope 断言（patch 落 ns 位 →
+          // parseSettingsNamespace TypeError = 本次 DSH 进程死亡根因）；save 返回 promise 且此处
+          // await 于 try/catch 内——任何 rejection（含 scope.update 磁盘故障）落 advisory
+          // blueprint_save_failed，杜绝浮空 rejection（unhandledRejection 杀进程根因②）。
+          let savedBlueprintId: string | undefined;
+          try {
+            const settingsPresent = (ctx as unknown as { settings?: unknown }).settings !== undefined;
+            const repoScope = blueprintSettingsScope(ctx);
+            if (repoScope) {
+              await createBlueprintRepo({ settings: repoScope }).save(generationId, bp);
+              savedBlueprintId = generationId;
+            } else if (settingsPresent) {
+              // 服务在场但不可接线（缺 register / 注册失败）→ 可观测 fail-open（运行期可检反例：
+              // 误传裸服务或 owner-scope 形状对象都会落到这条 advisory，而非静默假成功或崩溃）
+              trailAdvisories.push('blueprint_save_failed');
+            }
+          } catch {
+            trailAdvisories.push('blueprint_save_failed');
+          }
+          // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
+          const canon = canonicalObservabilityOf(stage);
+          const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`);
+          catalogTraceEntry(stage, traceExtra);
+          const blueprintAdvisories = [
+            ...preflightAdvisories,
+            ...enrichAdvisories,
+            ...styleAdvisories,
+            ...trailAdvisories,
+            ...substAdvisories,
+          ];
+          recordGenerationSafe({
+            id: generationId,
+            target,
+            variant: a.variant,
+            judgeMode,
+            input,
+            stage: projStage,
+            repairRounds: corrections,
+            advisories: blueprintAdvisories,
+            enrich: enrichFlag,
+            rating: resolved.rating,
+          });
+          return assembleEnvelope(
+            projStage,
+            blueprintAdvisories,
+            {
+              corrections,
+              loopExhausted,
+              joyExtraFiltered,
+              // 2026-09-15（真实会话 gen_1789459886481 实证）：traceStages 原为 runStage 内阶段在前、
+              // intent/扩写追加在后——字面读序会误判「评审先于蓝图」。修正为时间序：
+              // intent/扩写 → runStage 内阶段（schema→…→judge）→ catalog。
+              traceStages: [
+                ...traceExtra.filter((e) => e.name !== 'catalog'),
+                ...(stage.trace?.stages ?? []),
+                ...traceExtra.filter((e) => e.name === 'catalog'),
+              ],
+              canonicalSubstitutions: canon.canonicalSubstitutions,
+              substitutions: canon.substitutions,
+              expansions,
+              repairs,
+              designNotes: designNotesOf(projStage),
+              // M5-T2（D4）envelope 增量①：蓝图痕迹（slots 形态/rollback 不产出该字段）
+              blueprint: {
+                form: 'blueprint' as const,
+                media: bp.media,
+                missing_count: (draft.missing ?? []).length,
+                expansions_count: expansions.length,
+                repairs_count: repairs.length,
+                anchor_rounds: corrections - correctionsInitial,
+              },
+            },
+            {
+              generation_id: generationId,
+              // M5-T2（D9/F2）：条件顶层键 blueprint_id——仅落库成功时出现（blueprint_id 链式入口）
+              ...(savedBlueprintId !== undefined ? { blueprint_id: savedBlueprintId } : {}),
+              ...judgeTopLevel(projStage),
+              ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
+              // Task 14 ⑤（spec §9）：result 顶层三字段——rating 定档 / aesthetics 推荐卡 / style 注入摘要
+              rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
+              aesthetics: { recommendedCards },
+              style: styleSummaryOf(a.style_id, bp),
+            },
+            {
+              next_action: computeNextAction(nextStage, {
+                repairHints: repair_hints,
+                repaired: loopExhausted ? false : repaired,
+              }),
+              repair_hints,
+            },
+          );
+        }
+
+        // 旧 slots/shots 直传路径（向后兼容——AuthorDraft.blueprint 缺省时走原逻辑）
+        let stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts);
+        // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果
+        let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined;
+        let joyExtraFiltered = false;
+        if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered;
+        const trailAdvisories: string[] = [];
+        let corrections = 0;
+        // Task 6：闭环条件在规则 critical 之上追加 judgeFeedback（needs_revision 终态）；
+        // feedback 拼接 = 规则 gate 的 `[rule] detail` 行 + judgeFeedback 行；max-2 / loop_exhausted 语义不变
+        while (
+          ((!stage.ok && stage.gates.some((g) => g.severity === 'critical')) ||
+            (stage.judgeFeedback?.length ?? 0) > 0) &&
+          corrections < MAX_CORRECTIONS
+        ) {
+          corrections++;
+          // F7（Round 8）：important 级 gate（如 tag_budget_exceeded 软预算裁剪指令）随 feedback
+          // 一并拼接——闭环触发条件不变（critical/judgeFeedback），important 只搭车不出车
+          const feedback = [
+            ...stage.gates
+              .filter((g) => g.severity === 'critical' || g.severity === 'important')
+              .map((g) => `[${g.rule}] ${g.detail}`),
+            ...(stage.judgeFeedback ?? []),
+          ].join('\n');
+          const prevDraft = draft;
+          draft = await provider({ ...intentBase, round: corrections, feedback }, exec);
+          // P2：未点名槽回滚（两轮真实样本中修复 LLM 均越权删除 artist 槽）
+          if (target === 'anima' && draft.slots) {
+            const merged = mergeRepairSlots(prevDraft?.slots, draft.slots, feedback) ?? draft.slots;
+            // P0 修复（t1）：mergeRepairSlots 以 provider 新产物为底重建（SLOT_ORDER 不含 rating，
+            // LLM 产物亦不可信）——合并后重写声明档位，防降档在修复轮回归
+            merged.rating = resolved.rating;
+            draft.slots = merged;
+          }
+          stage = await runDraftThroughStage(target, draft, runOpts, repairJudgeOpts);
+          if (repairJudgeOpts) lastJudged = stage;
+          if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered;
+        }
+        // P3（2026-09-12 真实样本）：judge needs_revision 耗尽修正轮后静默交付——补打点，
+        // 与 critical-gates 路径同款 loop_exhausted:true（否则下游误报「评审 pass」）
+        const reviewStillFailed = (stage.judgeFeedback?.length ?? 0) > 0;
+        if (
+          (!stage.ok && stage.gates.some((g) => g.severity === 'critical')) ||
+          (reviewStillFailed && corrections >= MAX_CORRECTIONS)
+        ) {
+          trailAdvisories.push('loop_exhausted:true');
+        }
+        (ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(
+          `[prompt-master] prompt_author → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} joy_extra filtered=${joyExtraFiltered ? 'yes' : 'no'} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`,
+        );
+        const projStage: StageResult =
+          repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined
+            ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
+            : stage;
+        const generationId = makeGenerationId();
+        // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
+        const canon = canonicalObservabilityOf(stage);
+        const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`);
+        catalogTraceEntry(stage, traceExtra);
+        const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...trailAdvisories, ...substAdvisories];
+        recordGenerationSafe({
+          id: generationId,
+          target,
+          variant: a.variant,
+          judgeMode,
+          input,
+          stage: projStage,
+          repairRounds: corrections,
+          advisories: finalAdvisories,
+          enrich: enrichFlag,
+          rating: resolved.rating,
+        });
+        return assembleEnvelope(
+          projStage,
+          finalAdvisories,
+          {
+            corrections,
+            loopExhausted: trailAdvisories.includes('loop_exhausted:true'),
+            joyExtraFiltered,
+            // 同上：时间序修正（slots 路径：enrich → intent → runStage 内阶段 → catalog）
+            traceStages: [
+              ...traceExtra.filter((e) => e.name !== 'catalog'),
+              ...(stage.trace?.stages ?? []),
+              ...traceExtra.filter((e) => e.name === 'catalog'),
+            ],
+            canonicalSubstitutions: canon.canonicalSubstitutions,
+            substitutions: canon.substitutions,
+            designNotes: designNotesOf(projStage),
+          },
+          {
+            generation_id: generationId,
+            ...judgeTopLevel(projStage),
+            ...(enrichmentTop !== undefined ? { enrichment: enrichmentTop } : {}),
+            // Task 14 ⑤（spec §9）：result 顶层三字段——rating 定档 / aesthetics 推荐卡 / style 注入摘要
+            rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
+            aesthetics: { recommendedCards },
+            style: styleSummaryOf(a.style_id, draft.blueprint),
+          },
+        );
       } catch (err) {
-        trace('CRASH', err instanceof Error ? (err.stack ?? err.message) : String(err))
-        throw err
+        trace('CRASH', err instanceof Error ? (err.stack ?? err.message) : String(err));
+        throw err;
       }
     },
-  })
+  });
 }

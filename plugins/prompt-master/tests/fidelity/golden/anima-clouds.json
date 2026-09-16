@@ -18,9 +18,7 @@
         "matched_name": "clouds",
         "name_type": "alias",
         "score": 850,
-        "aliases": [
-          "clouds"
-        ],
+        "aliases": ["clouds"],
         "provenance": [
           "raw_record_id:214603",
           "source_id:gelbooru_canonical:4dd87da139254abc9f18d2da04ee7b6b691d4e63",

@@ -10,75 +10,73 @@
  * overall_soundscape / non_diegetic_music 由 compileH3 从 shots[].ambient / shots[].music 派生，
  * 故投影器只需映射 audio_focus→ambient、music→music。
  */
-import type { BlueprintV1, Character, NegativeConstraint } from './schema.js'
-import type { H3ShotsInput, H3Shot } from '../schema/h3-shots.js'
-import { max_shots, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS } from '../schema/h3-shots.js'
-import type { AnimaSlots } from '../dialect/anima.js'
-import { getDialectPackage } from '../dialect/package.js'
+import type { BlueprintV1, Character, NegativeConstraint } from './schema.js';
+import type { H3ShotsInput, H3Shot } from '../schema/h3-shots.js';
+import { max_shots, MIN_DURATION_SECONDS, MAX_DURATION_SECONDS } from '../schema/h3-shots.js';
+import type { AnimaSlots } from '../dialect/anima.js';
+import { getDialectPackage } from '../dialect/package.js';
 
 /** hard 负向（内容安全类）在投影前应由调用方过滤；投影器遇 hard 直接拒绝（spec §8.1 档 3） */
 export class BlueprintHardNegativeError extends Error {
   constructor(target: string) {
-    super(`hard negative constraint found during projection: ${target}`)
-    this.name = 'BlueprintHardNegativeError'
+    super(`hard negative constraint found during projection: ${target}`);
+    this.name = 'BlueprintHardNegativeError';
   }
 }
 
 /** 模块级 advisory：每次投影前清空；soft 负向改写等写入（spec §8.1 档 2 advisory 标记） */
-export let projectAdvisories: string[] = []
+export let projectAdvisories: string[] = [];
 
 function resetAdvisories(): void {
-  projectAdvisories = []
+  projectAdvisories = [];
 }
 
 /** 最近一次投影的 advisory 文案快照（返回拷贝，避免外部引用被下次投影清空） */
 export function lastProjectAdvisories(): string[] {
-  return [...projectAdvisories]
+  return [...projectAdvisories];
 }
 
 function subjectLabelsOf(bp: BlueprintV1): Map<string, number> {
-  const m = new Map<string, number>()
-  ;(bp.core.characters ?? []).forEach((c, i) => m.set(c.id, i + 1))
-  return m
+  const m = new Map<string, number>();
+  (bp.core.characters ?? []).forEach((c, i) => m.set(c.id, i + 1));
+  return m;
 }
 
 /** soft 负向 → 正向改写短语：例 {target:'文字', attribute:'字幕'} → 「无字幕纯净画面」；无 attribute 用 target */
 function softRewriteOf(n: NegativeConstraint): string {
-  return `无${n.attribute ?? n.target}纯净画面`
+  return `无${n.attribute ?? n.target}纯净画面`;
 }
 
 function continuityAnchorsOf(bp: BlueprintV1, who: string[] | undefined): string[] {
-  const characters = bp.core.characters ?? []
+  const characters = bp.core.characters ?? [];
   return (who ?? [])
     .map((id) => characters.find((c) => c.id === id))
     .filter((c): c is Character => c !== undefined && c.continuity_lock === true)
-    .flatMap((c) => c.appearance_anchors)
+    .flatMap((c) => c.appearance_anchors);
 }
 
 export function projectToH3(bp: BlueprintV1): H3ShotsInput {
-  resetAdvisories()
-  const hard = (bp.core.negative ?? []).find((n) => n.severity === 'hard')
-  if (hard) throw new BlueprintHardNegativeError(hard.target)
+  resetAdvisories();
+  const hard = (bp.core.negative ?? []).find((n) => n.severity === 'hard');
+  if (hard) throw new BlueprintHardNegativeError(hard.target);
 
-  const video = bp.media_layer.video
-  const labels = subjectLabelsOf(bp)
-  const softNegatives = (bp.core.negative ?? []).filter((n) => n.severity === 'soft')
+  const video = bp.media_layer.video;
+  const labels = subjectLabelsOf(bp);
+  const softNegatives = (bp.core.negative ?? []).filter((n) => n.severity === 'soft');
   for (const n of softNegatives) {
-    projectAdvisories.push(`soft_negative_rewritten:${n.attribute ?? n.target}`)
+    projectAdvisories.push(`soft_negative_rewritten:${n.attribute ?? n.target}`);
   }
 
   const duration_seconds =
-    video?.total_duration_seconds ??
-    (video?.shots ?? []).reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0) ??
-    0
+    video?.total_duration_seconds ?? (video?.shots ?? []).reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0) ?? 0;
 
   const shots: H3Shot[] = (video?.shots ?? []).map((shot) => {
-    const anchors = continuityAnchorsOf(bp, shot.who).join('，')
+    const anchors = continuityAnchorsOf(bp, shot.who).join('，');
     const who =
       (shot.who ?? []).length > 0
         ? (shot.who ?? []).map((id) => (labels.has(id) ? `<Subject ${labels.get(id)}>` : id)).join('，')
-        : undefined
-    const beatPart = [shot.beat, shot.shot_size, shot.camera].filter(Boolean).join('，')
+        : undefined;
+    const beatPart = [shot.beat, shot.shot_size, shot.camera].filter(Boolean).join('，');
     // 组装：锚点首句 + beat/景别/运镜 + 场景光线（spec §8.1 高 ROI）+ 动作 + 情绪（低 ROI）+
     // 风格引用 base/theme（spec §8.1 L285 core.style 并入 what，风格为最低 ROI 放末位）+ soft 负向改写末句；
     // action 空时 beat 兜底保证 what 非空
@@ -90,47 +88,49 @@ export function projectToH3(bp: BlueprintV1): H3ShotsInput {
       bp.core.emotion,
       bp.core.style?.base,
       bp.core.style?.theme,
-    ].filter(Boolean).join('，')
+    ]
+      .filter(Boolean)
+      .join('，');
     for (const n of softNegatives) {
-      what = `${what}，${softRewriteOf(n)}`
+      what = `${what}，${softRewriteOf(n)}`;
     }
-    if (!what) what = shot.beat
+    if (!what) what = shot.beat;
     return {
       what,
       ...(who !== undefined ? { who } : {}),
       ...(shot.audio_focus && shot.audio_focus.trim() ? { ambient: shot.audio_focus } : {}),
       ...(shot.music && shot.music.trim() ? { music: shot.music } : {}),
       ...(shot.dialogue != null ? { dialogue: shot.dialogue } : {}),
-    }
-  })
+    };
+  });
 
   // spec §8.1：media_layer.video.audio（全局声景）→ 并入首镜 ambient（compileH3 的 soundscapeOf
   // 从 shots[].ambient 派生 overall_soundscape）；无首镜则丢弃并记 advisory（O9）
-  const globalAudio = video?.audio
+  const globalAudio = video?.audio;
   if (globalAudio && globalAudio.trim()) {
     if (shots.length > 0) {
-      const first = shots[0]
-      first.ambient = first.ambient && first.ambient.trim() ? `${first.ambient}；${globalAudio}` : globalAudio
+      const first = shots[0];
+      first.ambient = first.ambient && first.ambient.trim() ? `${first.ambient}；${globalAudio}` : globalAudio;
     } else {
-      projectAdvisories.push('audio_dropped:no_shots')
+      projectAdvisories.push('audio_dropped:no_shots');
     }
   }
 
-  return { duration_seconds, shots }
+  return { duration_seconds, shots };
 }
 
 export function projectToAnima(bp: BlueprintV1): AnimaSlots {
-  resetAdvisories()
+  resetAdvisories();
   // 2026-09-15（真实会话实证，子代理通道修复轮）：LLM 产出的蓝图可能把数组型槽位写成
   // 字符串（形状漂移）——消费点强制归一为 string[]，非数组单值包一层数组，防 .map 崩溃。
   const asTagArray = (v: unknown): string[] => {
-    if (v === undefined || v === null) return []
-    if (Array.isArray(v)) return v.map((t) => String(t).trim()).filter((t) => t.length > 0)
-    const s = String(v).trim()
-    return s.length > 0 ? [s] : []
-  }
-  const hard = (bp.core.negative ?? []).find((n) => n.severity === 'hard')
-  if (hard) throw new BlueprintHardNegativeError(hard.target)
+    if (v === undefined || v === null) return [];
+    if (Array.isArray(v)) return v.map((t) => String(t).trim()).filter((t) => t.length > 0);
+    const s = String(v).trim();
+    return s.length > 0 ? [s] : [];
+  };
+  const hard = (bp.core.negative ?? []).find((n) => n.severity === 'hard');
+  if (hard) throw new BlueprintHardNegativeError(hard.target);
 
   // M5-T2（D3，design §2.3）deliberate non-mapping 留痕（防后人当 bug 修）——以下蓝图字段
   // **有意**不映射进 anima slots：
@@ -141,41 +141,45 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
   //   characters.variant：spec §8.2 映射表无此行；时段/氛围经 scene_anchors 与 persona 引导
   //   进 scene/narrative。
   // - core.aspect_ratio：不属提示词表面（camera-anima 请求面参数，工作流层处理）。
-  const image = bp.media_layer.image
-  const characters = bp.core.characters ?? []
-  const appearance = characters.flatMap((c) => c.appearance_anchors)
-  const clothing = characters.map((c) => c.outfit).filter((o): o is string => typeof o === 'string' && o.trim().length > 0)
+  const image = bp.media_layer.image;
+  const characters = bp.core.characters ?? [];
+  const appearance = characters.flatMap((c) => c.appearance_anchors);
+  const clothing = characters
+    .map((c) => c.outfit)
+    .filter((o): o is string => typeof o === 'string' && o.trim().length > 0);
   const character = characters.flatMap((c, i) =>
     (c.reference_slots ?? []).map((_slot, j) => `Subject ${i + 1} from <Picture ${j + 1}>`),
-  )
+  );
   // B8（外部基准 2026-09）：风格画师候选 → artist 槽（裸名；grounding 命中后升 @形）
-  const artist = asTagArray(bp.core.style?.artist_hints)
+  const artist = asTagArray(bp.core.style?.artist_hints);
   // M5-T2（D3）：scene = environment（自然语言）+ scene_anchors（≤3 高影响锚点 tag），保序去重
-  const scene = [...new Set([
-    ...(bp.core.scene?.environment && bp.core.scene.environment.trim() ? [bp.core.scene.environment] : []),
-    ...(asTagArray(image?.scene_anchors)),
-  ])]
+  const scene = [
+    ...new Set([
+      ...(bp.core.scene?.environment && bp.core.scene.environment.trim() ? [bp.core.scene.environment] : []),
+      ...asTagArray(image?.scene_anchors),
+    ]),
+  ];
   // M5-T2（D3）：主干槽位来源——count_gender / pose_action / expression 直映射（此前无来源，
   // 主干槽位塌陷）
-  const countGender = asTagArray(image?.count_gender)
-  const poseAction = asTagArray(image?.pose_action)
-  const expression = asTagArray(image?.expression)
+  const countGender = asTagArray(image?.count_gender);
+  const poseAction = asTagArray(image?.pose_action);
+  const expression = asTagArray(image?.expression);
   const detailMood = [
     ...(bp.core.scene?.lighting ? [bp.core.scene.lighting] : []),
     ...(image?.lighting_detail ? [image.lighting_detail] : []),
     ...(bp.core.composition ?? []),
     ...(bp.core.style?.base ? [bp.core.style.base] : []),
     ...(bp.core.style?.theme ? [bp.core.style.theme] : []),
-  ]
+  ];
   const camera = [
     ...(image?.focal_length ? [image.focal_length] : []),
     ...(image?.depth_of_field ? [image.depth_of_field] : []),
     ...(image?.camera_angle ? [image.camera_angle] : []),
-  ]
+  ];
   const exclusions = (bp.core.negative ?? [])
     .filter((n) => n.severity === 'soft')
     .map((n) => n.target)
-    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
 
   const slots: AnimaSlots = {
     ...(countGender.length > 0 ? { count_gender: countGender } : {}),
@@ -194,8 +198,8 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
     // 映射到 slots.rating——此前投影丢弃 rating，蓝图路径组装层回退关键词扫描（同源静默降档）。
     // 缺省不写槽：裸蓝图（未经 prompt_author 注入）维持「无声明 → 关键词回退」既有语义。
     ...(bp.core.rating ? { rating: bp.core.rating } : {}),
-  }
-  return slots
+  };
+  return slots;
 }
 
 /**
@@ -205,37 +209,37 @@ export function projectToAnima(bp: BlueprintV1): AnimaSlots {
  * 返回 { bp（已修复克隆）, repairs[] }；非 video 蓝图原样返回（空 repairs）。
  */
 export function preflightRepair(bp: BlueprintV1): { bp: BlueprintV1; repairs: string[] } {
-  const repairs: string[] = []
+  const repairs: string[] = [];
   // M5-DIAG2（真实会话 c07 确定性崩溃根因）：enrich patch 产物可携带缺 target / 非法 severity 的
   // 负向条目（validateBlueprint 此前不校验 negative 形状）——直达投影器前由 L1 确定性丢弃并留痕
   // （LLM 产物不可信；validateBlueprint 已同步收口，此层兜住 enrich patch 不重校验的路径）。
-  const negatives = Array.isArray(bp.core.negative) ? bp.core.negative : []
+  const negatives = Array.isArray(bp.core.negative) ? bp.core.negative : [];
   const validNegatives = negatives.filter((n) => {
-    if (n == null || typeof n !== 'object') return false
-    const t = (n as { target?: unknown }).target
-    const s = (n as { severity?: unknown }).severity
-    return typeof t === 'string' && t.trim().length > 0 && (s === 'soft' || s === 'hard')
-  })
+    if (n == null || typeof n !== 'object') return false;
+    const t = (n as { target?: unknown }).target;
+    const s = (n as { severity?: unknown }).severity;
+    return typeof t === 'string' && t.trim().length > 0 && (s === 'soft' || s === 'hard');
+  });
   if (validNegatives.length !== negatives.length) {
-    const dropped = negatives.length - validNegatives.length
-    repairs.push(`negative_invalid_dropped:${dropped}`)
-    return { bp: { ...bp, core: { ...bp.core, negative: validNegatives } }, repairs }
+    const dropped = negatives.length - validNegatives.length;
+    repairs.push(`negative_invalid_dropped:${dropped}`);
+    return { bp: { ...bp, core: { ...bp.core, negative: validNegatives } }, repairs };
   }
-  if (bp.media !== 'video' || !bp.media_layer.video) return { bp, repairs }
-  const out: BlueprintV1 = structuredClone(bp)
-  const video = out.media_layer.video!
-  const pkg = getDialectPackage('h3')
-  const [minD, maxD] = pkg?.capabilities?.duration_range ?? [MIN_DURATION_SECONDS, MAX_DURATION_SECONDS]
-  const total = video.total_duration_seconds
+  if (bp.media !== 'video' || !bp.media_layer.video) return { bp, repairs };
+  const out: BlueprintV1 = structuredClone(bp);
+  const video = out.media_layer.video!;
+  const pkg = getDialectPackage('h3');
+  const [minD, maxD] = pkg?.capabilities?.duration_range ?? [MIN_DURATION_SECONDS, MAX_DURATION_SECONDS];
+  const total = video.total_duration_seconds;
   if (total != null && !(minD <= total && total <= maxD)) {
-    const clamped = Math.min(maxD, Math.max(minD, total))
-    video.total_duration_seconds = clamped
-    repairs.push(`duration_${total}→${clamped}`)
+    const clamped = Math.min(maxD, Math.max(minD, total));
+    video.total_duration_seconds = clamped;
+    repairs.push(`duration_${total}→${clamped}`);
   }
-  const effective = video.total_duration_seconds ?? maxD
-  const cap = max_shots(effective)
+  const effective = video.total_duration_seconds ?? maxD;
+  const cap = max_shots(effective);
   if (video.shots.length > cap) {
-    repairs.push(`shots_${video.shots.length}>max_${cap}:merge_shots_or_extend_duration`)
+    repairs.push(`shots_${video.shots.length}>max_${cap}:merge_shots_or_extend_duration`);
   }
-  return { bp: out, repairs }
+  return { bp: out, repairs };
 }

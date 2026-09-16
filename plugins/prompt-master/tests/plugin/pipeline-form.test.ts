@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
-import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js'
+import { registerAuthorTool, setAuthorIntentProvider, setAuthorEnrichProvider } from '../../src/tools/prompt-author.js'
 import { stubCtx, runTool, textStream } from './helpers.js'
 
 const SEMANTIC_JSON = JSON.stringify({
@@ -16,7 +16,7 @@ const SEMANTIC_JSON = JSON.stringify({
   negative_hints: [],
 })
 
-afterEach(() => { delete process.env.PM_PIPELINE_FORM; setAuthorIntentProvider(null) })
+afterEach(() => { delete process.env.PM_PIPELINE_FORM; setAuthorIntentProvider(null); setAuthorEnrichProvider(null) })
 
 describe('PM_PIPELINE_FORM switch (spec §9 D8)', () => {
   it('compositing form: no subagents → writer fallback fail-open, envelope carries compositing observability', async () => {
@@ -61,5 +61,23 @@ describe('PM_PIPELINE_FORM switch (spec §9 D8)', () => {
     expect(v.ok).toBe(true)
     expect(v.observability.compositing).toMatchObject({ form: 'semantic' })
     expect(v.advisories.some((a: string) => a.startsWith('pipeline_form_override'))).toBe(false) // 未显式设置 → 无 override advisory
+  })
+  it('compositing 接线回归锁（真实会话冒烟双缺陷）：provider 收到 compositingMode 且**无 persona/schema 踩踏**；legacy runEnrich 零调用', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    setAuthorIntentProvider((async (req: unknown) => { seen.push(req as Record<string, unknown>); return { semantic: JSON.parse(SEMANTIC_JSON) as never, missing: [] } }) as never)
+    let enrichCalls = 0
+    setAuthorEnrichProvider((async () => { enrichCalls++; return '{}' }) as never)
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
+    const def = registerAuthorTool(ctx as never, { temperature: 0.7 })
+    await runTool(ctx, def, { target: 'anima', input: '黄昏天台的少女', judge_mode: 'off' })
+    expect(seen.length).toBe(1)
+    expect(seen[0].compositingMode).toBe(true)
+    // 缺陷①回归锁：persona/schema 键必须缺省——provider 内部落 ANIMA_SEMANTIC_* 常量，
+    // registry slots persona（ANIMA_PERSONA）不得踩踏（真实会话实证 schema_version 校验失败根因）
+    expect('persona' in seen[0]).toBe(false)
+    expect('schema' in seen[0]).toBe(false)
+    expect(seen[0].blueprintMode).toBeUndefined()
+    // 缺陷②回归锁：runEnrich（legacy brief 扩写）在 compositing 态零调用（spec §4 D2）
+    expect(enrichCalls).toBe(0)
   })
 })

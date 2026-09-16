@@ -995,7 +995,10 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       // M5-T2（D4，design §2.4）：runEnrich 退出 anima 蓝图形态默认路径（enrichBlueprint 扩展层顶上
       // ——spec §4/§8 字面流无 brief 层；LLM 调用数首轮持平）。blueprint_id 路径既有跳过语义不变。
       // 回滚面：env PM_AUTHOR_INTENT_FORM=slots → blueprintForm=false → runEnrich 原样恢复（D8）。
-      if (a.enrich !== false && !a.blueprint_id && !blueprintForm) {
+      // 2026-09-15 管线重设计（spec §4 D2）：compositing 形态跳过 legacy brief 扩写（runEnrich）——
+      // 美学扩展由 compositing 编排层的 runSemanticEnrich 承载；真实会话冒烟实证：漏加此守卫时
+      // runEnrich 白烧一个 pm-critic 子代理并把 brief 混进 intentInput。
+      if (a.enrich !== false && !a.blueprint_id && !blueprintForm && pipelineForm !== 'compositing') {
         const tEnrich0 = performance.now()
         const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent })
         const eRes = await runEnrich({
@@ -1043,10 +1046,14 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       const intentBase = {
         target, input: intentInput, variant: a.variant, scenarioId, formFields: a.form_fields, clarify: a.clarify, catalogCandidates,
         // 2026-09-15 管线重设计（spec §3）：compositing 形态路由下行——provider 走语义蓝图
-        // persona/schema 与 parseSemanticBlueprint
+        // persona/schema 与 parseSemanticBlueprint。注意：persona/schema 键必须在 compositing 态
+        // 下**缺省**（provider 内部落 ANIMA_SEMANTIC_* 常量）——真实会话冒烟实证：此前三元展开
+        // 无条件注入 registry slots persona（ANIMA_PERSONA），踩踏 compositingMode，LLM 收到旧
+        // persona 产出 slots JSON → schema_version 校验失败。
         ...(pipelineForm === 'compositing' && target === 'anima' ? { compositingMode: true as const } : {}),
         // M5-T2（D1）：蓝图形态下行——persona/schema 换 ANIMA 蓝图版（registry blueprintPersona/Schema），
-        // blueprintExpectedMedia 供 parse 层守卫（D2）。slots 形态（含 rollback）保持 registry slots persona。
+        // blueprintExpectedMedia 供 parse 层守卫（D2）。slots 形态（含 rollback）保持 registry slots persona；
+        // compositing 形态不下发 persona/schema（语义蓝图常量由 provider 兜底）。
         ...(blueprintForm
           ? {
               persona: intentCfg?.blueprintPersona,
@@ -1054,7 +1061,9 @@ export function registerAuthorTool(ctx: Context, config: Config) {
               blueprintMode: true as const,
               blueprintExpectedMedia: intentCfg?.blueprintExpectedMedia,
             }
-          : { persona: intentCfg?.persona, schema: intentCfg?.schema }),
+          : pipelineForm === 'compositing' && target === 'anima'
+            ? {}
+            : { persona: intentCfg?.persona, schema: intentCfg?.schema }),
       }
 
       // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化

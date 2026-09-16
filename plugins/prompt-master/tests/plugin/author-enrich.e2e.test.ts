@@ -4,6 +4,11 @@
  * 最高约束（T9 后）：显式 `judge_mode:'off', enrich:false` 与一期缺省逐字段一致；缺省=fast+enrich 见 T9 describe。
  */
 import { describe, expect, it, afterAll, beforeEach, afterEach } from 'vitest'
+
+// T13 缺省翻转后：本文件钉 legacy 态（验证的是 pre-compositing 的 enrich brief 行为）
+beforeEach(() => { process.env.PM_PIPELINE_FORM = 'legacy' })
+afterEach(() => { delete process.env.PM_PIPELINE_FORM })
+
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

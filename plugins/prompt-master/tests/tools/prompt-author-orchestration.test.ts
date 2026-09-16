@@ -22,6 +22,11 @@ import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js'
 
 const cfg = { temperature: 0.7 }
 
+// T13 缺省翻转后：本文件整体钉 legacy 态（验证的是 pre-compositing 的编排行为基线；
+// 个别 describe 另有 env 覆盖与之叠加不冲突）
+beforeEach(() => { process.env.PM_PIPELINE_FORM = 'legacy' })
+afterEach(() => { delete process.env.PM_PIPELINE_FORM })
+
 function validBriefJson(): string {
   const item = { text: '1girl', source: 'user' }
   return JSON.stringify({

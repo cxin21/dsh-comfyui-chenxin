@@ -5,6 +5,10 @@
  * 全程零 LLM：mock enrich/intent provider；替换场景走 tmp fixture catalog。
  */
 import { describe, expect, it, afterAll, beforeEach, afterEach } from 'vitest'
+
+// T13 缺省翻转后：本文件钉 legacy 态（验证的是 pre-compositing 的 slots 路径 trace/canonical 行为）
+beforeEach(() => { process.env.PM_PIPELINE_FORM = 'legacy' })
+afterEach(() => { delete process.env.PM_PIPELINE_FORM })
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

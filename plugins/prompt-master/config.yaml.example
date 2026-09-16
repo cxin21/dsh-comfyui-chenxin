@@ -26,7 +26,7 @@ providers:
     models:
       deepseek-chat: { label: DeepSeek V3, context: 65536 }
       deepseek-reasoner: { label: DeepSeek R1, context: 65536 }
-    apiKey: "sk-1a05a502628c4338876db1a99a60eb76"
+    apiKey: "<YOUR_API_KEY>"
 
   - id: openai
     label: OpenAI

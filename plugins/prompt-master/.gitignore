@@ -15,5 +15,7 @@ dist/
 .superpowers/
 .agent-teams/
 
-# Env
+# Env / real config (secrets never enter the repo — 规范七 P0)
 .env
+config.yaml
+*.report.json

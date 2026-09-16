@@ -72,6 +72,7 @@ interface EnrichedBrief {
 ## 5. 文件清单
 
 新增：
+
 ```
 src/pe-framework/enrich/brief.ts          EnrichedBrief schema + 校验
 src/pe-framework/enrich/engine.ts         enrich 意图执行（persona/schema 组装 + subagent 调用 + 降级）
@@ -81,6 +82,7 @@ tests/plugin/author-enrich.e2e.test.ts    author 接线 e2e（默认开、audit_
 ```
 
 修改：
+
 ```
 src/tools/prompt-author.ts                enrich 接线（intent 输入从原文变 brief 文本）、judge/enrich 默认值
 src/pe-framework/intent/subagent-provider.ts   persona 注入扩展（若现有机制不够）
@@ -89,11 +91,11 @@ docs/2026-09-08-*.md、preset AGENTS.md / troubleshooting   文档同步
 
 ## 6. 降级汇总
 
-| 故障 | 行为 |
-|---|---|
+| 故障                               | 行为                                                                |
+| ---------------------------------- | ------------------------------------------------------------------- |
 | enrich LLM 不可用/超时/schema 不合 | 跳过 enrich，intent 吃原始输入，advisory `enrich_skipped`，出稿照常 |
-| 用户输入与 enrich 冲突 | intent 以 `source='user'` 为准，advisory 标注被覆盖的 enriched 字段 |
-| judge 写失败/评审故障 | 沿用质量飞轮 §6 既有降级 |
+| 用户输入与 enrich 冲突             | intent 以 `source='user'` 为准，advisory 标注被覆盖的 enriched 字段 |
+| judge 写失败/评审故障              | 沿用质量飞轮 §6 既有降级                                            |
 
 ## 7. 测试策略
 

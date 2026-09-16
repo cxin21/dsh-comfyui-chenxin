@@ -10,6 +10,7 @@
 **插件存在的唯一理由**：把三类提示词知识资产（提示词大师 PE 引擎、Anima catalog 证据库、MiniMax H3 官方方言）统一成"一条生成优秀提示词的管线"，让模型/用户以最少认知负担产出合规、可审计、可迭代的提示词。
 
 由此推导的架构约束：
+
 1. **管线只有一条，方言会变** → 内核不做 `if(target)`，方言按 target 注册（可扩展任何未来模型）。
 2. **纯函数层与 IO 层分离** → runStage/dialect/audit 是纯函数（可测、可 trace），资源/subagent/日志在边界注入。
 3. **数据资源归 preset 所有** → 插件是借用者，路径必须可注入，绝不硬编码。
@@ -44,32 +45,32 @@ PipelineInput ──▶  │  normalize → compile → audit+budget → envelop
 ```ts
 // pe-framework/pipeline/types.ts
 export interface PipelineInput {
-  target: Target                       // 'anima' | 'h3' | 'sd' | 'generic'（开放式，见 §3.4）
-  slots?: AnimaSlots                   // anima 侧
-  variant?: 'aesthetic' | 'turbo' | 'base'
-  shots?: H3ShotsInput                 // h3 侧
-  stage?: string                       // 缺省由 dialect.normalize 推断
-  scenarioId?: string
-  formFields?: Record<string, unknown>
-  auditOnly?: boolean
+  target: Target; // 'anima' | 'h3' | 'sd' | 'generic'（开放式，见 §3.4）
+  slots?: AnimaSlots; // anima 侧
+  variant?: 'aesthetic' | 'turbo' | 'base';
+  shots?: H3ShotsInput; // h3 侧
+  stage?: string; // 缺省由 dialect.normalize 推断
+  scenarioId?: string;
+  formFields?: Record<string, unknown>;
+  auditOnly?: boolean;
 }
 
 export interface StageResult {
-  ok: boolean
-  result: Record<string, unknown>      // anima: {positive,negative} | h3: {text,text_zh}
-  gates: AuditGate[]
-  advisories: string[]
-  assumptions: string[]                // 显式记录（catalog_miss 等）——进入 Envelope
-  budget?: Budget
-  targetSlotHint: string
-  trace?: PipelineTrace                // §5.2 可观测性
+  ok: boolean;
+  result: Record<string, unknown>; // anima: {positive,negative} | h3: {text,text_zh}
+  gates: AuditGate[];
+  advisories: string[];
+  assumptions: string[]; // 显式记录（catalog_miss 等）——进入 Envelope
+  budget?: Budget;
+  targetSlotHint: string;
+  trace?: PipelineTrace; // §5.2 可观测性
 }
 
 export interface PipelineTrace {
-  stages: Array<{ name: 'schema'|'dialect'|'audit'|'budget'|'render'; ms: number }>
-  catalogHits?: number
-  tokenCounter?: 'official-tokenizer' | 'estimate'
-  references?: number
+  stages: Array<{ name: 'schema' | 'dialect' | 'audit' | 'budget' | 'render'; ms: number }>;
+  catalogHits?: number;
+  tokenCounter?: 'official-tokenizer' | 'estimate';
+  references?: number;
 }
 ```
 
@@ -81,14 +82,14 @@ export interface PipelineTrace {
 ```ts
 // pe-framework/pipeline/runStage.ts
 export function runStage(input: PipelineInput): StageResult {
-  const d = getDialect(input.target)
-  if (!d) return DIALECT_NOT_AVAILABLE(input.target)
-  const norm = d.normalize(input, { stage: input.stage, scenarioId, formFields })
-  if (norm.error) throw new Error(norm.error)          // schema 校验失败 → 工具层转 isError
-  const compiled = d.compile(norm.value, { variant, stage: norm.stage })
-  const audit = d.audit(compiled, { stage: norm.stage, references: norm.references, shots: norm.value })  // 含 contractGates
-  const budget = d.budget?.(compiled, { stage: norm.stage, references: norm.references })
-  return assembleEnvelope({ ok, result: compiled, ...audit, budget, targetSlotHint: d.targetSlotHint })
+  const d = getDialect(input.target);
+  if (!d) return DIALECT_NOT_AVAILABLE(input.target);
+  const norm = d.normalize(input, { stage: input.stage, scenarioId, formFields });
+  if (norm.error) throw new Error(norm.error); // schema 校验失败 → 工具层转 isError
+  const compiled = d.compile(norm.value, { variant, stage: norm.stage });
+  const audit = d.audit(compiled, { stage: norm.stage, references: norm.references, shots: norm.value }); // 含 contractGates
+  const budget = d.budget?.(compiled, { stage: norm.stage, references: norm.references });
+  return assembleEnvelope({ ok, result: compiled, ...audit, budget, targetSlotHint: d.targetSlotHint });
 }
 ```
 
@@ -102,20 +103,23 @@ export function runStage(input: PipelineInput): StageResult {
 ```ts
 // pe-framework/dialect/contract.ts
 export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
-  id: Target
-  label: string
-  auditOnlyOk: boolean
-  normalize(input: PipelineInput, opts): {
-    error?: string
-    value?: TSlots
-    stage?: string
-    references?: Reference[]
-  }
-  compile(slots: TSlots, opts): TCompiled
-  audit(compiled: TCompiled, ctx): { gates: AuditGate[]; assumptions?: string[] }
-  budget?(compiled: TCompiled, opts): Budget | undefined
-  targetSlotHint: string
-  intent?: { persona: string; schema: string }
+  id: Target;
+  label: string;
+  auditOnlyOk: boolean;
+  normalize(
+    input: PipelineInput,
+    opts,
+  ): {
+    error?: string;
+    value?: TSlots;
+    stage?: string;
+    references?: Reference[];
+  };
+  compile(slots: TSlots, opts): TCompiled;
+  audit(compiled: TCompiled, ctx): { gates: AuditGate[]; assumptions?: string[] };
+  budget?(compiled: TCompiled, opts): Budget | undefined;
+  targetSlotHint: string;
+  intent?: { persona: string; schema: string };
 }
 ```
 
@@ -123,32 +127,34 @@ export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
 
 ```ts
 // pe-framework/dialect/registry.ts
-const dialects = new Map<Target, DialectContract>()
+const dialects = new Map<Target, DialectContract>();
 export function registerDialect(contract: DialectContract): void {
-  if (dialects.has(contract.id)) throw new Error(`dialect already registered: ${contract.id}`)  // fail loud，拒绝静默覆盖
-  dialects.set(contract.id, contract)
+  if (dialects.has(contract.id)) throw new Error(`dialect already registered: ${contract.id}`); // fail loud，拒绝静默覆盖
+  dialects.set(contract.id, contract);
 }
-export function getDialect(target: Target): DialectContract | undefined
-export function isDialectReady(target: Target): boolean   // = getDialect !== undefined（替换原状态机）
+export function getDialect(target: Target): DialectContract | undefined;
+export function isDialectReady(target: Target): boolean; // = getDialect !== undefined（替换原状态机）
 ```
 
 装配 = 插件 `apply` 前模块副作用注册：
+
 ```ts
 // plugin/index.ts（顶部）
-import './pe-framework/dialect/anima.js'   // 内部 registerDialect({id:'anima', ...})
-import './pe-framework/dialect/h3.js'
+import './pe-framework/dialect/anima.js'; // 内部 registerDialect({id:'anima', ...})
+import './pe-framework/dialect/h3.js';
 ```
+
 （注册发生在 import 副作用阶段，先于任何 runStage 调用；两个模块在 apply 之前就绪。）
 
 ### 3.3 anima / h3 重构落点
 
-| 现文件 | 重构后 |
-|---|---|
-| `prompt-author.ts` 的 `runDraftStage`/`inferH3Stage`/`toRefs` | **删除**，逻辑归 dialect.normalize + runStage |
-| `prompt-compile.ts` 的 `inferH3Stage`/`toReferences`/`compileH3Envelope` | **删除**，变薄视图：`runStage({target:'h3', ...})` |
-| `prompt-audit.ts` 的 `toRefs` | **删除**，薄视图：`runStage({target, auditOnly:true})` |
-| `pe-framework/dialect/anima.ts` | `registerDialect({ id:'anima', normalize: validateAnimaSlots, compile: compileAnima, audit: auditAnima, targetSlotHint:'t2i.prompt', intent:{persona,schema} })` |
-| `pe-framework/dialect/h3.ts` | `registerDialect({ id:'h3', normalize: normalizeH3Input(inferH3Stage+toRefs), compile: compileH3, audit: auditH3Full+contractGates, budget: buildH3Budget, targetSlotHint:'t2v.prompt', intent:{...} })` |
+| 现文件                                                                   | 重构后                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt-author.ts` 的 `runDraftStage`/`inferH3Stage`/`toRefs`            | **删除**，逻辑归 dialect.normalize + runStage                                                                                                                                                            |
+| `prompt-compile.ts` 的 `inferH3Stage`/`toReferences`/`compileH3Envelope` | **删除**，变薄视图：`runStage({target:'h3', ...})`                                                                                                                                                       |
+| `prompt-audit.ts` 的 `toRefs`                                            | **删除**，薄视图：`runStage({target, auditOnly:true})`                                                                                                                                                   |
+| `pe-framework/dialect/anima.ts`                                          | `registerDialect({ id:'anima', normalize: validateAnimaSlots, compile: compileAnima, audit: auditAnima, targetSlotHint:'t2i.prompt', intent:{persona,schema} })`                                         |
+| `pe-framework/dialect/h3.ts`                                             | `registerDialect({ id:'h3', normalize: normalizeH3Input(inferH3Stage+toRefs), compile: compileH3, audit: auditH3Full+contractGates, budget: buildH3Budget, targetSlotHint:'t2v.prompt', intent:{...} })` |
 
 - `normalizeH3Input` 从三处重复收敛为 dialect/h3.ts 内唯一实现（stage 推断 + toRefs）。
 - `validateAnimaSlots` 从 composition.py `_coerce_brief` 移植：AnimaSlot 键白名单 + 类型校验（narrative string、其余 string[]）。
@@ -163,14 +169,19 @@ import './pe-framework/dialect/h3.js'
 
 ```ts
 // pe-framework/resources/resolve.ts
-export interface ResourceOptions { presetRoot?: string; skillDir: string; asset: string }
-export function resolveKnowledgePath(opts: ResourceOptions): string
+export interface ResourceOptions {
+  presetRoot?: string;
+  skillDir: string;
+  asset: string;
+}
+export function resolveKnowledgePath(opts: ResourceOptions): string;
 // 优先级：opts.presetRoot（plugin config）→ env DSH_COMFYUI_PRESET_ROOT → 插件包向上寻 preset 根
 // 最终：<presetRoot>/skills/<skillDir>/knowledge/<asset>
-export function setPresetRoot(root: string | undefined): void   // plugin apply 时注入（模块级单值）
+export function setPresetRoot(root: string | undefined): void; // plugin apply 时注入（模块级单值）
 ```
 
 **presetRoot 注入与多会话**：
+
 - 值来自 **plugin config**（agent.cordis.yml 的 prompt-master `config.presetRoot`）——per-preset 配置，同一 preset 的多会话值相同。
 - `setPresetRoot` 是模块级单值，假定**一个进程内同 preset 插件只挂一次**（preset 是 per-session 挂载——**多会话会各挂一个插件实例**）。
 - **风险与定案**：两个不同 preset 引用同一插件包且配不同 presetRoot 时，模块级单值会互相覆盖。**本轮定案**：prompt-master 只服务 comfyui-chenxin preset（现状），单值足够；若未来多 preset 复用，升级为 `resolveKnowledgePath` 显式传参（config 每调用传入，去掉模块级单值）——**在 §10 决策记录标注此演进路径**。
@@ -185,7 +196,11 @@ export function setPresetRoot(root: string | undefined): void   // plugin apply 
 
 ```ts
 // pe-framework/resources/manifest.ts
-export function assertAssetPresent(skillDir: string, asset: string, manifestCheck: (m: unknown) => string | null): { ok: true } | { ok: false; reason: string }
+export function assertAssetPresent(
+  skillDir: string,
+  asset: string,
+  manifestCheck: (m: unknown) => string | null,
+): { ok: true } | { ok: false; reason: string };
 // anima：manifest.json output checksum vs tag-catalog.sqlite 实算 → 不匹配 reason
 // h3：manifest.json snapshot_id/integrity vs tokenizer 文件 → 不匹配 reason
 ```
@@ -196,39 +211,42 @@ export function assertAssetPresent(skillDir: string, asset: string, manifestChec
 ## 5. 生产级可观测性
 
 ### 5.1 原则
+
 - 用 DSH `ctx.logger`（Cordis，包名标记 `prompt-master`），绝不用 console.log。
 - 阶段日志打摘要（耗时/命中数/预算/stopReason），不打完整正文/图片/API key/customProfiles。
 - 与会话日志互补：会话记"发生了什么"（tool/call+result），插件记"内部为什么"（阶段/回退/错误）。
 
 ### 5.2 注入模型
+
 - **纯函数层**（runStage/dialect/audit）**零日志副作用** → 返回 `trace`（§2.1），由持有 ctx.logger 的工具层统一打。
 - **IO 边界**（intent/subagent、资源层）→ 直接注入 ctx.logger。
 
 ### 5.3 日志清单
 
-| 层 | 事件 | 级别 |
-|---|---|---|
-| 工具入口 | `prompt_author/compile/audit/expand/reverse 调用 target/variant/stage` | info |
-| schema | normalize 失败（白名单/类型） | error（转 isError 给模型，日志记堆栈） |
-| dialect | compile 完成 `→ keys + ms` | debug |
-| audit | gates 数 + critical 数 + budget over 明细 | info |
-| render | envelope 组装完成 | debug |
-| intent | subagent start/childId/stopReason/timeout/重跑轮次 | info |
-| 资源 | 路径解析 / manifest 校验通过·失败 / estimate 回退原因 | warn（回退时） |
-| 修正闭环 | 每轮 feedback 摘要 + 收敛 / loop_exhausted | info |
+| 层       | 事件                                                                   | 级别                                   |
+| -------- | ---------------------------------------------------------------------- | -------------------------------------- |
+| 工具入口 | `prompt_author/compile/audit/expand/reverse 调用 target/variant/stage` | info                                   |
+| schema   | normalize 失败（白名单/类型）                                          | error（转 isError 给模型，日志记堆栈） |
+| dialect  | compile 完成 `→ keys + ms`                                             | debug                                  |
+| audit    | gates 数 + critical 数 + budget over 明细                              | info                                   |
+| render   | envelope 组装完成                                                      | debug                                  |
+| intent   | subagent start/childId/stopReason/timeout/重跑轮次                     | info                                   |
+| 资源     | 路径解析 / manifest 校验通过·失败 / estimate 回退原因                  | warn（回退时）                         |
+| 修正闭环 | 每轮 feedback 摘要 + 收敛 / loop_exhausted                             | info                                   |
 
 ### 5.4 错误可诊断
+
 失败统一 `ctx.logger.error({target, stage, message, error})`；模型看到 isError 的可读 hint，日志保留完整堆栈。
 
 ## 6. intent 决策表
 
-| 入口 | 任务形态 | 模型交互 | 理由 |
-|---|---|---|---|
-| `prompt_author` 首轮 | 一句话 → slots/shots | subagent（`getDialect(target).intent.persona/schema`） | 隔离、专用 persona、输出 schema 校验 |
-| `prompt_author` 修正闭环 | 带 feedback 重拆 | subagent（同 persona） | 与首轮一致 |
-| `prompt_expand` | 润色扩写 | 直接 llm（complete.ts） | 轻任务；subagent 浪费一次启动 |
-| `prompt_reverse` | 图/描述 → 反推 | 直接 llm（completeWithBlocks） | 需图片 block 直传；subagent 会丢附件 |
-| `prompt_compile`/`prompt_audit` | 无 LLM | —（纯函数 runStage） | — |
+| 入口                            | 任务形态             | 模型交互                                               | 理由                                 |
+| ------------------------------- | -------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `prompt_author` 首轮            | 一句话 → slots/shots | subagent（`getDialect(target).intent.persona/schema`） | 隔离、专用 persona、输出 schema 校验 |
+| `prompt_author` 修正闭环        | 带 feedback 重拆     | subagent（同 persona）                                 | 与首轮一致                           |
+| `prompt_expand`                 | 润色扩写             | 直接 llm（complete.ts）                                | 轻任务；subagent 浪费一次启动        |
+| `prompt_reverse`                | 图/描述 → 反推       | 直接 llm（completeWithBlocks）                         | 需图片 block 直传；subagent 会丢附件 |
+| `prompt_compile`/`prompt_audit` | 无 LLM               | —（纯函数 runStage）                                   | —                                    |
 
 > 决策表写入 `usage-prompt-engineering.md`（分工标注，消除 double-implementation 歧义——延续设计文档 §11 风险 5 的处理）。
 
@@ -259,27 +277,27 @@ return assembleEnvelope(stage, trail)
 
 ## 8. 测试策略
 
-| 层 | 内容 |
-|---|---|
-| 内核单测 | `runStage` 各 target 分支、auditOnly、`DIALECT_NOT_AVAILABLE`、错误 throw |
-| 注册表 | 重复注册拒绝、getDialect 查表、isDialectReady |
-| 方言白盒 | normalize stage 推断/toRefs 唯一实现、validateAnimaSlots 白名单 |
-| 资源层 | resolveKnowledgePath 优先级；manifest 通过/失败两分支 |
-| 工具薄视图 | author/compile/audit 测 runStage 映射（内层已覆盖） |
-| fidelity | 保留 golden；manifest 对账后资产变更 → re-capture 流程（pwsh 落文件，沙箱规则已在 harness.ts） |
-| intent mock | subagent-provider 既有用例 + 修正闭环收敛（audit-loop） |
-| 日志 | trace 断言（内核返回值）；工具层 logger 打点用 spy 断言级别与摘要字段（不含正文） |
+| 层          | 内容                                                                                           |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| 内核单测    | `runStage` 各 target 分支、auditOnly、`DIALECT_NOT_AVAILABLE`、错误 throw                      |
+| 注册表      | 重复注册拒绝、getDialect 查表、isDialectReady                                                  |
+| 方言白盒    | normalize stage 推断/toRefs 唯一实现、validateAnimaSlots 白名单                                |
+| 资源层      | resolveKnowledgePath 优先级；manifest 通过/失败两分支                                          |
+| 工具薄视图  | author/compile/audit 测 runStage 映射（内层已覆盖）                                            |
+| fidelity    | 保留 golden；manifest 对账后资产变更 → re-capture 流程（pwsh 落文件，沙箱规则已在 harness.ts） |
+| intent mock | subagent-provider 既有用例 + 修正闭环收敛（audit-loop）                                        |
+| 日志        | trace 断言（内核返回值）；工具层 logger 打点用 spy 断言级别与摘要字段（不含正文）              |
 
 ## 9. 实施批次（writing-plans 细化）
 
-| 批 | 内容 | 验收 |
-|---|---|---|
-| R1 | 资源层：resolveKnowledgePath + setPresetRoot + manifest 对账；替换 2 处硬编码 | tsc 干净；270 测试绿；硬编码消失 | 
-| R2 | 方言注册表 + runStage 内核 + render/ 层（assembleEnvelope）+ StageResult 公有化 | registry/内核单测绿；author/compile/audit 改薄视图 |
-| R3 | 删 3 处重复（inferH3Stage/toRefs/renderEnvelope 重复实现）；intent persona/schema 从 dialect 读 | 无重复；author/compile/audit 全走 runStage |
-| R4 | budget 帧底精确化（countContext('', N)）+ intent 决策表文档化 | golden 新增帧底断言 |
-| R5 | 日志贯穿（trace + logger 打点）+ resolver 与 3.1.0 diff 核对 | 日志清单全覆盖；diff 无遗漏 |
-| R6 | 全量回归 + 真实会话 prompt_author 端到端（subagent intent）+ fidelity re-capture | prompt_author anima/h3 产出 Envelope；修正闭环收敛 |
+| 批  | 内容                                                                                            | 验收                                               |
+| --- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| R1  | 资源层：resolveKnowledgePath + setPresetRoot + manifest 对账；替换 2 处硬编码                   | tsc 干净；270 测试绿；硬编码消失                   |
+| R2  | 方言注册表 + runStage 内核 + render/ 层（assembleEnvelope）+ StageResult 公有化                 | registry/内核单测绿；author/compile/audit 改薄视图 |
+| R3  | 删 3 处重复（inferH3Stage/toRefs/renderEnvelope 重复实现）；intent persona/schema 从 dialect 读 | 无重复；author/compile/audit 全走 runStage         |
+| R4  | budget 帧底精确化（countContext('', N)）+ intent 决策表文档化                                   | golden 新增帧底断言                                |
+| R5  | 日志贯穿（trace + logger 打点）+ resolver 与 3.1.0 diff 核对                                    | 日志清单全覆盖；diff 无遗漏                        |
+| R6  | 全量回归 + 真实会话 prompt_author 端到端（subagent intent）+ fidelity re-capture                | prompt_author anima/h3 产出 Envelope；修正闭环收敛 |
 
 ## 10. 决策记录
 

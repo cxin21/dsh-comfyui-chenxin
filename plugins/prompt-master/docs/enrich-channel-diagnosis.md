@@ -8,14 +8,14 @@
 
 ## 1. 现象（实测 6/6）
 
-| 项 | 观测 |
-|---|---|
-| 失败率 | 6/6（两代 dist、多案例一致，非输入相关） |
-| 时长 | traceStages `blueprint_enrich` 10.3s / 11.3s / 10.5s / 10.4s / 10.9s（高度均匀） |
-| envelope 痕迹 | `expansions=['enrichment_failed:fallback_to_v0']`，蓝图回退 v0 |
-| 对照通道 | intent 走 DSH 子代理基础设施 15-95s 全部成功（同会话路由可用） |
-| mock 面 | engine/orchestration 全绿——stub route 不暴露真实通道问题 |
-| 级联后果 | 美学扩展层生产空转 → `tag_count_out_of_range`（c02 11/c03 9/c04 6 content tags）+ `aesthetic_*_missing` 全家桶 |
+| 项            | 观测                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| 失败率        | 6/6（两代 dist、多案例一致，非输入相关）                                                                       |
+| 时长          | traceStages `blueprint_enrich` 10.3s / 11.3s / 10.5s / 10.4s / 10.9s（高度均匀）                               |
+| envelope 痕迹 | `expansions=['enrichment_failed:fallback_to_v0']`，蓝图回退 v0                                                 |
+| 对照通道      | intent 走 DSH 子代理基础设施 15-95s 全部成功（同会话路由可用）                                                 |
+| mock 面       | engine/orchestration 全绿——stub route 不暴露真实通道问题                                                       |
+| 级联后果      | 美学扩展层生产空转 → `tag_count_out_of_range`（c02 11/c03 9/c04 6 content tags）+ `aesthetic_*_missing` 全家桶 |
 
 ## 2. 链路核查（route.ts + complete.ts + engine.ts）
 
@@ -43,12 +43,12 @@ prompt-author 蓝图出口 → enrichBlueprint(ctx, route, v0, opts)   [enrichme
 
 三处 catch 分支现已各自携带原因进 `expansions`（legacy token `enrichment_failed:fallback_to_v0` 保持**首位不变**，既有断言面零漂移）：
 
-| 失败类 | 新增 expansions 条目 |
-|---|---|
-| llm 调用抛错（auth/timeout/transport…） | `enrichment_failed_reason:llm:<code>:<message≤160>` |
-| parse 失败（含截断文本） | `enrichment_failed_reason:parse:<finishKind>:<文本head JSON≤200>` |
-| parse 成功但非对象 | `enrichment_failed_reason:parse:<finishKind>:non-object:<typeof>` |
-| patch 应用/自检抛错 | `enrichment_failed_reason:apply:<message≤160>` |
+| 失败类                                  | 新增 expansions 条目                                              |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| llm 调用抛错（auth/timeout/transport…） | `enrichment_failed_reason:llm:<code>:<message≤160>`               |
+| parse 失败（含截断文本）                | `enrichment_failed_reason:parse:<finishKind>:<文本head JSON≤200>` |
+| parse 成功但非对象                      | `enrichment_failed_reason:parse:<finishKind>:non-object:<typeof>` |
+| patch 应用/自检抛错                     | `enrichment_failed_reason:apply:<message≤160>`                    |
 
 真实会话下一次运行即可直接读出分类：若为 `llm:AUTH/NO_ADAPTER/...` → 届时才是宿主侧限制，按 code 升级宿主问题；若为 `parse:max-tokens:` → 预算仍不足（再调）；若为 `parse:stop:` → 模型输出形态问题（persona/解析策略再修）。
 

@@ -16,13 +16,13 @@ canonical → alias → artistRegistry 填隙 → fuzzy（FTS5 词根前缀 + F3
 
 ## 2. 决策记录
 
-| 决策点 | 结论 | 理由 |
-|---|---|---|
-| 语义能力来源 | **本地向量索引**（否决外挂 DSO 服务 / 分阶段混合） | 守住查询期"零 LLM、零网络、零外部进程"的确定性底线 |
-| 建库期 LLM 翻译/扩写 | **v1 不做** | 成本与周期不可控；多语言嵌入模型直接编码 wiki 释义已可覆盖中文跨语言 |
-| wiki 释义覆盖 | **全量**：有 wiki 页的拉释义（`text_source=wiki`），无页用 tag+alias+category 兜底（`fallback`） | 无 tag 被漏掉，仅描述丰富度不同 |
-| 运行时形态 | **Node 内嵌量化模型 + sqlite-vec**（方案 A；否决 Python sidecar / 仅 recall 层向量） | 亚秒级、无部署面；质量不足时只换模型文件，架构不动 |
-| 兼容性 | **完全重写，不向后兼容**（用户授权） | `searchCatalog` 返回形状、`classifyTag`、G7 单级直查等历史包袱一并重构 |
+| 决策点               | 结论                                                                                             | 理由                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| 语义能力来源         | **本地向量索引**（否决外挂 DSO 服务 / 分阶段混合）                                               | 守住查询期"零 LLM、零网络、零外部进程"的确定性底线                     |
+| 建库期 LLM 翻译/扩写 | **v1 不做**                                                                                      | 成本与周期不可控；多语言嵌入模型直接编码 wiki 释义已可覆盖中文跨语言   |
+| wiki 释义覆盖        | **全量**：有 wiki 页的拉释义（`text_source=wiki`），无页用 tag+alias+category 兜底（`fallback`） | 无 tag 被漏掉，仅描述丰富度不同                                        |
+| 运行时形态           | **Node 内嵌量化模型 + sqlite-vec**（方案 A；否决 Python sidecar / 仅 recall 层向量）             | 亚秒级、无部署面；质量不足时只换模型文件，架构不动                     |
+| 兼容性               | **完全重写，不向后兼容**（用户授权）                                                             | `searchCatalog` 返回形状、`classifyTag`、G7 单级直查等历史包袱一并重构 |
 
 ## 3. 架构
 
@@ -69,12 +69,12 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 
 ## 5. 错误处理
 
-| 故障 | 处置 |
-|---|---|
+| 故障                         | 处置                                                           |
+| ---------------------------- | -------------------------------------------------------------- |
 | ONNX 模型文件缺失 / 加载失败 | semantic 层降级为空（不阻塞前级级联），console.warn 一次性提示 |
-| 向量库缺失 / mtime 对账异常 | 同上，语义层静默缺席，查询行为退化为现状 |
-| wiki 拉取限速 429 / 网络故障 | 退避重试；超限跳过该 tag（标记 `fallback`），不阻塞建库 |
-| embed 超时/异常 | 该次查询 semantic 层返回空，异常上抛前级结果不受影响 |
+| 向量库缺失 / mtime 对账异常  | 同上，语义层静默缺席，查询行为退化为现状                       |
+| wiki 拉取限速 429 / 网络故障 | 退避重试；超限跳过该 tag（标记 `fallback`），不阻塞建库        |
+| embed 超时/异常              | 该次查询 semantic 层返回空，异常上抛前级结果不受影响           |
 
 原则：semantic 层是**增强层**，任何故障只降级不阻塞——与 `catalog-recall` 的故障兜底语义一致。
 
@@ -93,12 +93,12 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 
 **环境**：真实 ONNX 模型（`Xenova/multilingual-e5-small` q8，118MB，本地缓存离线）+ 全量库 `tag-vector.sqlite`（payload 1,374,902 = wiki 198,738 / fallback 1,176,164，fallback 占 85.5%）；经 dist `searchCatalog(mode='auto', limit=10)` 驱动（探针脚本 `temp/sdd-t8/probe_acceptance.mjs`）。全量回归基线：**138 files / 1255 passed / 1 skipped / 0 failed**（`npx vitest run` exit 0）。
 
-| 输入 | 期望 | 实际 top hit + score（逐字） | 判定 |
-|---|---|---|---|
-| `水手服` | top hit semantic → serafuku | `1女孩蓝色 眼睛蓝色 头发绯红katagiri himeko长袖momotsuki gakuen 校服…水手领`（fallback 拼接长串，usage 0）0.8786；#2 `水着` 0.8740；#3–#10 全部 water 词形噪声（`hand in water` 0.8735 / `water clothes` 0.8729 / `water in hands` 0.8709…）；canonical `serafuku`（wiki）不在 top-10 | **未达标** |
-| `selafuku` | top hit semantic → serafuku | `@selpuku`（画师 tag，usage 6）0.8644；serafuku 家族部分召回：#2 `serafuku,`（usage 0 退化 tag）0.8627、#3 `seerafuku` 0.8622、#5 `seafuku` 0.8616、#10 `serafuk` 0.8589；canonical `serafuku`（wiki）不在 top-10 | **未达标**（拼写容错召回存在但被画师/退化 tag 压顶） |
-| `twintail` | top hit prompt_form 含 twintails | `twintails`（**alias 级**命中，usage 1,310,823，2ms；semantic 未触发——前级已接住） | **达标**（单复数词形变体由既有 alias 级覆盖，验收目标达成） |
-| `兔耳朵` | ≥3 个耳型相关 tag | `hair米语 (blue archive)裤袜兔 ears`（fallback 拼接串，usage 0）0.8635；#2 `huan` 0.8627、#3 `huan455210` 0.8627、#4 `huannnnn` 0.8563、#5 `yorn` 0.8555…——**0 个规范耳型 tag**（animal_ears / rabbit_ears / animal_ear_fluff 均未出现） | **未达标** |
+| 输入       | 期望                             | 实际 top hit + score（逐字）                                                                                                                                                                                                                                                          | 判定                                                        |
+| ---------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `水手服`   | top hit semantic → serafuku      | `1女孩蓝色 眼睛蓝色 头发绯红katagiri himeko长袖momotsuki gakuen 校服…水手领`（fallback 拼接长串，usage 0）0.8786；#2 `水着` 0.8740；#3–#10 全部 water 词形噪声（`hand in water` 0.8735 / `water clothes` 0.8729 / `water in hands` 0.8709…）；canonical `serafuku`（wiki）不在 top-10 | **未达标**                                                  |
+| `selafuku` | top hit semantic → serafuku      | `@selpuku`（画师 tag，usage 6）0.8644；serafuku 家族部分召回：#2 `serafuku,`（usage 0 退化 tag）0.8627、#3 `seerafuku` 0.8622、#5 `seafuku` 0.8616、#10 `serafuk` 0.8589；canonical `serafuku`（wiki）不在 top-10                                                                     | **未达标**（拼写容错召回存在但被画师/退化 tag 压顶）        |
+| `twintail` | top hit prompt_form 含 twintails | `twintails`（**alias 级**命中，usage 1,310,823，2ms；semantic 未触发——前级已接住）                                                                                                                                                                                                    | **达标**（单复数词形变体由既有 alias 级覆盖，验收目标达成） |
+| `兔耳朵`   | ≥3 个耳型相关 tag                | `hair米语 (blue archive)裤袜兔 ears`（fallback 拼接串，usage 0）0.8635；#2 `huan` 0.8627、#3 `huan455210` 0.8627、#4 `huannnnn` 0.8563、#5 `yorn` 0.8555…——**0 个规范耳型 tag**（animal_ears / rabbit_ears / animal_ear_fluff 均未出现）                                              | **未达标**                                                  |
 
 附加精度探针：gibberish `zzzzzzzzq` 在全量库上仍返回 10 hits ≥0.55（top `shitp zzz` 0.8824，全部 fallback）——阈值 0.55 对短文本 fallback 语料无区分力，与 Task 7 小样观察一致。
 
@@ -122,23 +122,23 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 
 ## 8. 风险
 
-| 风险 | 缓解 |
-|---|---|
-| multilingual-e5-small 语义天花板低于 bge-m3 | 中文跨语言够用；模型是可替换文件，架构不动 |
-| `node:sqlite` loadExtension 实验性 | §3.3 运行时探测 + hnswlib-node 退路，实现期定案 |
-| 建库期网络拉取数小时 | JSONL 断点续跑缓存 |
-| 向量库 ~0.5GB 落盘 | 独立文件不进 git；int8 量化控制体积 |
+| 风险                                        | 缓解                                            |
+| ------------------------------------------- | ----------------------------------------------- |
+| multilingual-e5-small 语义天花板低于 bge-m3 | 中文跨语言够用；模型是可替换文件，架构不动      |
+| `node:sqlite` loadExtension 实验性          | §3.3 运行时探测 + hnswlib-node 退路，实现期定案 |
+| 建库期网络拉取数小时                        | JSONL 断点续跑缓存                              |
+| 向量库 ~0.5GB 落盘                          | 独立文件不进 git；int8 量化控制体积             |
 
 **运行时探测结论（§3.3 定案）**：2026-09-15 探测（Node v24.14.0 / sqlite-vec 0.1.9 / @huggingface/transformers 4.2.0，`scripts/probe-sqlite-vec.mjs`）——`node:sqlite` `DatabaseSync(':memory:', { allowExtension: true })` + `loadExtension(getLoadablePath())` 成功加载 vec0 虚拟表，输出 `PROBE_OK`。**选定路径：sqlite-vec（唯一路径，无兼容层）**；hnswlib-node 退路弃用，未选中分支代码不留存。
 
 **验收探针已知限制（Task 8 收口定案，§6 实测依据）**：
 
-| 已知限制 | 依据与缓解方向 |
-|---|---|
+| 已知限制                                                                                           | 依据与缓解方向                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 中文跨语言映射不足（e5-small 天花板）：`水手服`→water 词形簇而非 serafuku，`兔耳朵`→0 规范耳型 tag | 模型是可替换文件（架构不动）；缓解候选：换更强多语模型（bge-m3）、semantic 命中后 usage_count 重排（Node 侧）、passage 构成 v2（name 复现/尾部放置）——均超出 v1 范围，v1 按 brief"不阻塞收口"记为已知限制 |
-| 阈值校准无效：0.50–0.60 全区间排名逐位不变（命中分挤 0.85–0.88 窄带） | 缺省 0.55 维持；gibberish `zzzzzzzzq` 10 hits ≥0.55 属实——阈值只能截尾不能排序，精度提升须靠重排/换模型 |
-| semantic 层缺 `@` 画师剔除（§3.2 契约缺口，探针暴露） | 修复归属后续任务（semantic 命中过滤 `display.startsWith('@')` 即可，改动面小）；t6 只记录，不改代码 |
-| 退化 fallback passage（usage 0 拼接串/带逗号 tag）与规范 tag 同分带竞争 | 85.5% 行无 wiki 是语料现实；候选缓解同上（usage 重排 / wiki 覆盖提升 / passage v2） |
+| 阈值校准无效：0.50–0.60 全区间排名逐位不变（命中分挤 0.85–0.88 窄带）                              | 缺省 0.55 维持；gibberish `zzzzzzzzq` 10 hits ≥0.55 属实——阈值只能截尾不能排序，精度提升须靠重排/换模型                                                                                                   |
+| semantic 层缺 `@` 画师剔除（§3.2 契约缺口，探针暴露）                                              | 修复归属后续任务（semantic 命中过滤 `display.startsWith('@')` 即可，改动面小）；t6 只记录，不改代码                                                                                                       |
+| 退化 fallback passage（usage 0 拼接串/带逗号 tag）与规范 tag 同分带竞争                            | 85.5% 行无 wiki 是语料现实；候选缓解同上（usage 重排 / wiki 覆盖提升 / passage v2）                                                                                                                       |
 
 ---
 
@@ -151,27 +151,29 @@ canonical → alias → artistRegistry填隙 → fuzzy(FTS5) → semantic(向量
 3. **英文匹配约束**：查询含 CJK（汉字/假名，正则 /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/）时在向量入口直接拒绝——不编码、不检索。实现于 nima-vector.ts 查询函数入口，单测覆盖（spy 断言 embedder 零调用）。
 4. **在线 API 嵌入通道（env 可插拔，默认不启用）**：PM_EMBED_PROVIDER=api + PM_EMBED_API_BASE/KEY/MODEL 走 OpenAI 兼容 /embeddings；Python 建库侧同通道（批次断点续跑）。用户实测 Ark doubao-embedding-vision（2048 维）单请求上限 10 条、持续限速 ~5.8 行/s（全量 4 天）后弃用在线路线，保留通道作为升级路径。此为对 §5「查询期零网络」底线的**可选扩展**——默认路径仍离线。
 5. **@ 画师剔除缺口**（§8 表第 3 行）已在合并后修复（91dc763，semantic JOIN 点过滤 + TDD + live-index 实测），不再列为已知限制。
+
 ### 附录 A1：bge-base-en-v1.5 探针结果（2026-09-15，768 维索引验证）
 
-| 探针 | 结果 | 说明 |
-|---|---|---|
-| 	wintail / unny ears / sailor uniform | ✅ 前四级命中（alias/canonical） | 精确/别名路径不受模型影响 |
-| 水手服（中文） | ✅ []——英文匹配约束生效 | CJK 拒绝在入口拦截，零 embed 调用（约束的正面验收） |
-| selafuku | ⚠️ semantic 触发，10 hits 全部 semantic，**canonical serafuku 仍不在 top-10** | #1 serfafuku(0.7742)、#6 serafuku,(0.7331)；query 与短 typo passage 相似度挤顶、canonical 的 wiki 长 passage 被稀释——与 T12-001 同根因（短 passage 挤压 + 长度稀释），**换 bge-base 未解决该排序类**。@ 剔除与 CJK 拒绝均正常工作 |
+| 探针                                 | 结果                                                                          | 说明                                                                                                                                                                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| wintail / unny ears / sailor uniform | ✅ 前四级命中（alias/canonical）                                              | 精确/别名路径不受模型影响                                                                                                                                                                                                         |
+| 水手服（中文）                       | ✅ []——英文匹配约束生效                                                       | CJK 拒绝在入口拦截，零 embed 调用（约束的正面验收）                                                                                                                                                                               |
+| selafuku                             | ⚠️ semantic 触发，10 hits 全部 semantic，**canonical serafuku 仍不在 top-10** | #1 serfafuku(0.7742)、#6 serafuku,(0.7331)；query 与短 typo passage 相似度挤顶、canonical 的 wiki 长 passage 被稀释——与 T12-001 同根因（短 passage 挤压 + 长度稀释），**换 bge-base 未解决该排序类**。@ 剔除与 CJK 拒绝均正常工作 |
 
 **遗留处置候选（T12-001/T13-002 合并）**：① 字符串相似度 tie-breaker（对 semantic 命中按与 query 的编辑距离/字符重合做确定性后排序——selafuku→serafuku 编辑距离 1，可直接把正确 tag 提到首位；零重建，直接命中拼写容错类）；② usage_count 重排；③ passage v2 / 更强模型。①+② 组合为推荐路径（确定性 + 零重建）。
 **处置落地（2026-09-15，commit 9fec064 + e9ee150）**：子串召回 + tie-breaker 组合已在 768 维生产索引上实测——selafuku → #1 serafuku（usage 375,254，fuzzy/子串召回形态），typo 家族（serfafuku/seiufuku/sreafuku 等）退居 #2-#4，中文查询照常在入口拒绝。拼写容错类缺口关闭；usage 重排与 passage v2 不再需要（本组合已覆盖其目标场景）。
 **T11-001 收口（2026-09-15，commit 3374ced）**：prompt_audit 工具边界已实现 catalog_miss → semantic_fallback 的 post-hoc 转换（reconcileSemanticFallback，异步边界调 async 级联重查，原位替换 gate、与 auditAnima in-band 同格式；不可解/故障保持原 gate）。dist 端到端实测：slots 含 selafuku 的审计 → semantic_fallback:selafuku→serafuku。D1 残余面清零；deferred 清单中唯一代码项关闭。
+
 ### 附录 A2：管线 LLM 调用架构终态（2026-09-15，用户定案「全部 LLM 调用一次性子代理」）
 
 会话初始化代理的表单注入问题由用户在其配置侧修复后，管线三角色 LLM 调用统一为**一次性 spawn 子代理**（此前短暂切直连的 2b9b2a4/6ba0f54 被 29edaad 再次反转）：
 
-| 角色 | 工厂 | provider | label 前缀 |
-|---|---|---|---|
-| 蓝图 intent | createDefaultIntentProvider → subagentIntent | spawn（opts.provider 可覆盖） | pm-author-<target>-* |
-| 扩写 enrich | SubagentTextRunner（共享工厂 createSubagentTextRunner） | spawn | pm-enrich-* |
-| 增量蓝图（blueprint_id 路径） | 同上（pm-blueprint） | spawn | pm-blueprint-* |
-| 评审 judge | createProductionCriticProvider → createSubagentCriticProvider | spawn | pm-critic-* |
+| 角色                          | 工厂                                                          | provider                      | label 前缀           |
+| ----------------------------- | ------------------------------------------------------------- | ----------------------------- | -------------------- |
+| 蓝图 intent                   | createDefaultIntentProvider → subagentIntent                  | spawn（opts.provider 可覆盖） | pm-author-<target>-* |
+| 扩写 enrich                   | SubagentTextRunner（共享工厂 createSubagentTextRunner）       | spawn                         | pm-enrich-*          |
+| 增量蓝图（blueprint_id 路径） | 同上（pm-blueprint）                                          | spawn                         | pm-blueprint-*       |
+| 评审 judge                    | createProductionCriticProvider → createSubagentCriticProvider | spawn                         | pm-critic-*          |
 
 - 调用方式四方一致：prompt 单 text 块、toolFilter {allow:[]}（架构级禁工具）、parent 线穿（exec.agent）、PM_SUBAGENT_TIMEOUT_MS 超时。唯一记录在案的有意差异：intent 将调用方 exec.signal 透传给 start（取消传播），judge/enrich 用自有超时 controller。
 - 调用顺序由 execute 内严格 await 链构造保证（无并行）：intent → enrich(×(1+修复轮)) → runStage[judge] →（judgeFeedback/critical 驱动修正环，≤2 轮）→ 终态。traceStages 已时间序化（f610009），每次运行的完整调用序列可审计。

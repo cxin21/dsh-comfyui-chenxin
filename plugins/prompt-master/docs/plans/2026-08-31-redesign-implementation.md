@@ -28,12 +28,14 @@
 ### Task 1: 资源层 `resolveKnowledgePath` + `setPresetRoot`
 
 **Files:**
+
 - Create: `src/pe-framework/resources/resolve.ts`
 - Modify: `src/plugin/config.ts`（加 `presetRoot?: string`）
 - Modify: `src/plugin/index.ts`（apply 内 `setPresetRoot(config.presetRoot)`）
 - Test: `tests/pe-framework/resources/resolve.test.ts`
 
 **Interfaces:**
+
 - Consumes: 无外部（纯 Node path/fs）
 - Produces:
   - `setPresetRoot(root: string | undefined): void`
@@ -44,28 +46,29 @@
 
 ```ts
 // tests/pe-framework/resources/resolve.test.ts
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { setPresetRoot, getPresetRoot, resolveKnowledgePath } from '../../../src/pe-framework/resources/resolve.js'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { setPresetRoot, getPresetRoot, resolveKnowledgePath } from '../../../src/pe-framework/resources/resolve.js';
 
 describe('resolveKnowledgePath', () => {
-  beforeEach(() => setPresetRoot('C:/fake-preset'))
-  afterEach(() => setPresetRoot(undefined))
+  beforeEach(() => setPresetRoot('C:/fake-preset'));
+  afterEach(() => setPresetRoot(undefined));
 
   it('joins presetRoot + skillDir + knowledge + asset', () => {
-    expect(resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' }))
-      .toBe('C:/fake-preset/skills/anima-prompt-v1/knowledge/tag-catalog.sqlite')
-  })
+    expect(resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' })).toBe(
+      'C:/fake-preset/skills/anima-prompt-v1/knowledge/tag-catalog.sqlite',
+    );
+  });
 
   it('normalizes trailing slash on presetRoot', () => {
-    setPresetRoot('C:/fake-preset/')
-    expect(resolveKnowledgePath({ skillDir: 'x', asset: 'y.json' })).toBe('C:/fake-preset/skills/x/knowledge/y.json')
-  })
+    setPresetRoot('C:/fake-preset/');
+    expect(resolveKnowledgePath({ skillDir: 'x', asset: 'y.json' })).toBe('C:/fake-preset/skills/x/knowledge/y.json');
+  });
 
   it('throws readable error when no presetRoot configured', () => {
-    setPresetRoot(undefined)
-    expect(() => resolveKnowledgePath({ skillDir: 'x', asset: 'y' })).toThrow(/presetRoot not configured|preset/i)
-  })
-})
+    setPresetRoot(undefined);
+    expect(() => resolveKnowledgePath({ skillDir: 'x', asset: 'y' })).toThrow(/presetRoot not configured|preset/i);
+  });
+});
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -77,29 +80,38 @@ Expected: FAIL / Cannot find module 'resolve.js'（文件不存在）
 
 ```ts
 // src/pe-framework/resources/resolve.ts
-import { join, resolve, sep } from 'node:path'
+import { join, resolve, sep } from 'node:path';
 
-let _presetRoot: string | undefined
+let _presetRoot: string | undefined;
 
-export function setPresetRoot(root: string | undefined): void { _presetRoot = root }
-export function getPresetRoot(): string | undefined { return _presetRoot }
+export function setPresetRoot(root: string | undefined): void {
+  _presetRoot = root;
+}
+export function getPresetRoot(): string | undefined {
+  return _presetRoot;
+}
 
 /** 插件 dist 位于 <preset>/plugins/prompt-master/dist/src/pe-framework/... → 上级 4 级到 preset 根 */
 function fallbackPresetRoot(): string | undefined {
-  const here = import.meta.url
+  const here = import.meta.url;
   try {
     // file:///C:/.../plugins/prompt-master/dist/src/pe-framework/resources/resolve.js
-    const parts = decodeURIComponent(here.replace(/^file:\/\//, '')).split(sep)
-    let idx = parts.findIndex((p) => p === 'plugins' && parts[parts.indexOf(p) + 1] === 'prompt-master')
-    if (idx === -1) return undefined
-    return parts.slice(0, idx).join(sep)  // 到 <preset>/plugins 之前
-  } catch { return undefined }
+    const parts = decodeURIComponent(here.replace(/^file:\/\//, '')).split(sep);
+    let idx = parts.findIndex((p) => p === 'plugins' && parts[parts.indexOf(p) + 1] === 'prompt-master');
+    if (idx === -1) return undefined;
+    return parts.slice(0, idx).join(sep); // 到 <preset>/plugins 之前
+  } catch {
+    return undefined;
+  }
 }
 
 export function resolveKnowledgePath(opts: { skillDir: string; asset: string }): string {
-  const root = _presetRoot?.replace(/[\\/]+$/, '') || fallbackPresetRoot()
-  if (!root) throw new Error('resolveKnowledgePath: presetRoot not configured (config.presetRoot / DSH_COMFYUI_PRESET_ROOT / preset layout); cannot resolve knowledge asset')
-  return join(root, 'skills', opts.skillDir, 'knowledge', opts.asset)
+  const root = _presetRoot?.replace(/[\\/]+$/, '') || fallbackPresetRoot();
+  if (!root)
+    throw new Error(
+      'resolveKnowledgePath: presetRoot not configured (config.presetRoot / DSH_COMFYUI_PRESET_ROOT / preset layout); cannot resolve knowledge asset',
+    );
+  return join(root, 'skills', opts.skillDir, 'knowledge', opts.asset);
 }
 ```
 
@@ -113,17 +125,20 @@ Expected: PASS 3 tests
 - [ ] **Step 5: 改 config + apply 接线**
 
 `src/plugin/config.ts` 加字段：
+
 ```ts
 export const Config = z.object({
   temperature: z.number().default(0.7),
   presetRoot: z.string().optional(),
-})
+});
 ```
+
 `src/plugin/index.ts` apply 开头加：
+
 ```ts
-import { setPresetRoot } from '../pe-framework/resources/resolve.js'
+import { setPresetRoot } from '../pe-framework/resources/resolve.js';
 // 在注册 tools 前：
-setPresetRoot(config.presetRoot)
+setPresetRoot(config.presetRoot);
 ```
 
 - [ ] **Step 6: 全量构建 + 提交**
@@ -131,6 +146,7 @@ setPresetRoot(config.presetRoot)
 Run: `Push-Location $P; npm run build`
 Expected: exit 0（config 类型新增字段不破坏现有注册）
 Commit:
+
 ```bash
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin add plugins/prompt-master/src/pe-framework/resources plugins/prompt-master/src/plugin/config.ts plugins/prompt-master/src/plugin/index.ts plugins/prompt-master/tests/pe-framework/resources
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt-master): add resource path resolution (resolveKnowledgePath/setPresetRoot)"
@@ -141,11 +157,13 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 ### Task 2: 替换 anima-catalog / tokenizer-h3 硬编码路径
 
 **Files:**
+
 - Modify: `src/pe-framework/dialect/anima-catalog.ts:25-26,157`
 - Modify: `src/pe-framework/audit/tokenizer-h3.ts:17`
 - Test: `tests/plugin/budget-tokenizer.test.ts`（现有，验证不回归）+ `tests/fidelity/harness.test.ts`（现有，验证 golden 路径仍解析）
 
 **Interfaces:**
+
 - Consumes: Task 1 的 `resolveKnowledgePath`
 - Produces: 无新接口；`anima-catalog.ts` 的 `catalogPath()`/`setCatalogPath()` 保持；`tokenizer-h3.ts` 的默认源目录改为 `resolveKnowledgePath({skillDir:'minimax-h3-prompt', asset:'tokenizer.json'})` 的上一级（`dirname`）
 
@@ -157,13 +175,13 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 // const OVERLAY_PATH = 'C:/Users/11245/...'
 // return join('C:/Users/11245/...')
 // 改为（顶部 import）：
-import { resolveKnowledgePath } from '../resources/resolve.js'
-import { dirname } from 'node:path'
+import { resolveKnowledgePath } from '../resources/resolve.js';
+import { dirname } from 'node:path';
 
-const _defaultCatalog = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' })
-const _defaultOverlay = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'relation-overlay.sqlite' })
+const _defaultCatalog = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' });
+const _defaultOverlay = () => resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'relation-overlay.sqlite' });
 
-let _dbPath = process.env.ANIMA_CATALOG_PATH ?? _defaultCatalog()
+let _dbPath = process.env.ANIMA_CATALOG_PATH ?? _defaultCatalog();
 // overlay 读取处：const overlay = process.env.ANIMA_OVERLAY_PATH ?? _defaultOverlay()
 ```
 
@@ -174,10 +192,10 @@ let _dbPath = process.env.ANIMA_CATALOG_PATH ?? _defaultCatalog()
 ```ts
 // 删除：const DEFAULT_SOURCE_DIR = 'C:/Users/11245/...'
 // 改为：
-import { resolveKnowledgePath } from '../resources/resolve.js'
-import { dirname } from 'node:path'
+import { resolveKnowledgePath } from '../resources/resolve.js';
+import { dirname } from 'node:path';
 export const defaultTokenizerSourceDir = () =>
-  dirname(resolveKnowledgePath({ skillDir: 'minimax-h3-prompt', asset: 'tokenizer.json' }))
+  dirname(resolveKnowledgePath({ skillDir: 'minimax-h3-prompt', asset: 'tokenizer.json' }));
 // 原使用 DEFAULT_SOURCE_DIR 处改：defaultTokenizerSourceDir()
 ```
 
@@ -195,6 +213,7 @@ Expected: PASS（budget 的 `tokenizerSourceDir` override 仍生效；harness go
 
 Run: `Push-Location $P; npm run build`
 Commit:
+
 ```bash
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin add plugins/prompt-master/src/pe-framework/dialect/anima-catalog.ts plugins/prompt-master/src/pe-framework/audit/tokenizer-h3.ts
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "fix(prompt-master): replace hardcoded knowledge paths with resolveKnowledgePath"
@@ -203,6 +222,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "fix(prompt-
 - [ ] **Step 6: 资产 manifest 对账（spec §4.2，Lazy 首用一次）**
 
 新建 `src/pe-framework/resources/manifest.ts`：
+
 ```ts
 // 实现 assertAssetPresent(skillDir, asset, expectedCheck): { ok:true } | { ok:false; reason }
 // anima：读 <preset>/skills/anima-prompt-v1/knowledge/manifest.json 的 output checksum → 与 tag-catalog.sqlite 实算 sha256 比较
@@ -232,9 +252,11 @@ export function assertH3Tokenizer(): AssetCheck {
   } catch (e) { return { ok: false, reason: `tokenizer manifest unreadable: ${e instanceof Error ? e.message : String(e)}` } }
 }
 ```
+
 接线：`anima-catalog.ts` 首次 `db()` 打开前调 `assertAnimaCatalog()`；`tokenizer-h3.ts` 首次加载前调 `assertH3Tokenizer()`。校验失败 → **不硬崩**：`console.warn('[prompt-master] ' + reason + '：资产与 golden 基线不同，请 re-run fidelity capture')`（资源层无 ctx.logger，用 console.warn 兜底；工具层调用方有 logger 时也可后续升级）。
 
 测试 `tests/pe-framework/resources/manifest.test.ts`：
+
 ```ts
 // assertAnimaCatalog 在巧设 presetRoot 指向 fixture 目录时校验通过/失败两分支
 // 例：setPresetRoot(tempDir) 内放最小 manifest + 空文件 → 失败分支；放真实 checksum → 通过分支
@@ -244,6 +266,7 @@ export function assertH3Tokenizer(): AssetCheck {
 
 Run: `Push-Location $P; npx vitest run tests/pe-framework/resources/manifest.test.ts; npm run build`
 Commit:
+
 ```bash
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin add plugins/prompt-master/src/pe-framework/resources/manifest.ts plugins/prompt-master/tests/pe-framework/resources/manifest.test.ts
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt-master): asset manifest verification (catalog checksum, tokenizer snapshot)"
@@ -254,12 +277,14 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 ### Task 3: 方言注册表 `registerDialect` / `getDialect` / `isDialectReady`
 
 **Files:**
+
 - Create: `src/pe-framework/dialect/contract.ts`
 - Create: `src/pe-framework/dialect/registry.ts`
 - Modify: `src/pe-framework/types.ts`（`Target` 已是联合类型，确认存在；如需导出放这里）
 - Test: `tests/pe-framework/dialect/registry.test.ts`
 
 **Interfaces:**
+
 - Consumes: `src/pe-framework/types.ts` 的 `AuditGate`；`src/pe-framework/schema/h3-shots.ts` 的 `Reference`；`../schema/h3-shots.js` 的 `H3ShotsInput`；`./anima.js` 的 `AnimaSlots`（仅类型）
 - Produces:
   - `export interface DialectContract<TSlots = unknown, TCompiled = unknown>`（按 spec §3.1：id/label/auditOnlyOk/normalize/compile/audit/budget?/targetSlotHint/intent?）
@@ -271,34 +296,45 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 
 ```ts
 // tests/pe-framework/dialect/registry.test.ts
-import { describe, expect, it, beforeEach } from 'vitest'
-import { registerDialect, getDialect, isDialectReady, type DialectContract } from '../../../src/pe-framework/dialect/registry.js'
+import { describe, expect, it, beforeEach } from 'vitest';
+import {
+  registerDialect,
+  getDialect,
+  isDialectReady,
+  type DialectContract,
+} from '../../../src/pe-framework/dialect/registry.js';
 
 const base: DialectContract = {
-  id: 'anima', label: 'Anima', auditOnlyOk: true,
-  normalize: () => ({ value: {} }), compile: () => ({}), audit: () => ({ gates: [] }),
+  id: 'anima',
+  label: 'Anima',
+  auditOnlyOk: true,
+  normalize: () => ({ value: {} }),
+  compile: () => ({}),
+  audit: () => ({ gates: [] }),
   targetSlotHint: 't2i.prompt',
-}
+};
 
 describe('dialect registry', () => {
-  beforeEach(() => { /* 清空注册表：通过 re-import 或暴露 resetForTests —— 见 Step 3 说明 */ })
+  beforeEach(() => {
+    /* 清空注册表：通过 re-import 或暴露 resetForTests —— 见 Step 3 说明 */
+  });
 
   it('registers and retrieves a dialect', () => {
-    registerDialect(base)
-    expect(getDialect('anima')).toBe(base)
-    expect(isDialectReady('anima')).toBe(true)
-  })
+    registerDialect(base);
+    expect(getDialect('anima')).toBe(base);
+    expect(isDialectReady('anima')).toBe(true);
+  });
 
   it('throws on duplicate registration (fail loud)', () => {
-    registerDialect(base)
-    expect(() => registerDialect({ ...base, label: 'dup' })).toThrow(/already registered/)
-  })
+    registerDialect(base);
+    expect(() => registerDialect({ ...base, label: 'dup' })).toThrow(/already registered/);
+  });
 
   it('returns undefined for unregistered target', () => {
-    expect(getDialect('sd')).toBeUndefined()
-    expect(isDialectReady('sd')).toBe(false)
-  })
-})
+    expect(getDialect('sd')).toBeUndefined();
+    expect(isDialectReady('sd')).toBe(false);
+  });
+});
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -310,57 +346,65 @@ Expected: FAIL（模块不存在）
 
 ```ts
 // src/pe-framework/dialect/contract.ts
-import type { AuditGate, Target } from '../types.js'
-import type { Reference } from '../schema/h3-shots.js'
+import type { AuditGate, Target } from '../types.js';
+import type { Reference } from '../schema/h3-shots.js';
 
 export interface PipelineInputLike {
-  target: Target
-  slots?: unknown
-  variant?: string
-  shots?: unknown
-  stage?: string
-  scenarioId?: string
-  formFields?: Record<string, unknown>
-  auditOnly?: boolean
+  target: Target;
+  slots?: unknown;
+  variant?: string;
+  shots?: unknown;
+  stage?: string;
+  scenarioId?: string;
+  formFields?: Record<string, unknown>;
+  auditOnly?: boolean;
 }
 
 export interface DialectContract<TSlots = unknown, TCompiled = unknown> {
-  id: Target
-  label: string
-  auditOnlyOk: boolean
-  normalize(input: PipelineInputLike, opts: { stage?: string; scenarioId?: string; formFields?: unknown }): {
-    error?: string
-    value?: TSlots
-    stage?: string
-    references?: Reference[]
-  }
-  compile(slots: TSlots, opts: { variant?: string; stage?: string }): TCompiled
-  audit(compiled: TCompiled, ctx: { stage?: string; references?: Reference[]; shots?: unknown; variant?: string }): { gates: AuditGate[]; assumptions?: string[] }
-  budget?(compiled: TCompiled, opts: { stage?: string; references?: Reference[] }): unknown
-  targetSlotHint: string
-  intent?: { persona: string; schema: string }
+  id: Target;
+  label: string;
+  auditOnlyOk: boolean;
+  normalize(
+    input: PipelineInputLike,
+    opts: { stage?: string; scenarioId?: string; formFields?: unknown },
+  ): {
+    error?: string;
+    value?: TSlots;
+    stage?: string;
+    references?: Reference[];
+  };
+  compile(slots: TSlots, opts: { variant?: string; stage?: string }): TCompiled;
+  audit(
+    compiled: TCompiled,
+    ctx: { stage?: string; references?: Reference[]; shots?: unknown; variant?: string },
+  ): { gates: AuditGate[]; assumptions?: string[] };
+  budget?(compiled: TCompiled, opts: { stage?: string; references?: Reference[] }): unknown;
+  targetSlotHint: string;
+  intent?: { persona: string; schema: string };
 }
 ```
 
 ```ts
 // src/pe-framework/dialect/registry.ts
-import type { DialectContract } from './contract.js'
-import type { Target } from '../types.js'
+import type { DialectContract } from './contract.js';
+import type { Target } from '../types.js';
 
-const dialects = new Map<Target, DialectContract>()
+const dialects = new Map<Target, DialectContract>();
 
 export function registerDialect(contract: DialectContract): void {
-  if (dialects.has(contract.id)) throw new Error(`dialect already registered: ${contract.id}`)
-  dialects.set(contract.id, contract)
+  if (dialects.has(contract.id)) throw new Error(`dialect already registered: ${contract.id}`);
+  dialects.set(contract.id, contract);
 }
 export function getDialect(target: Target): DialectContract | undefined {
-  return dialects.get(target)
+  return dialects.get(target);
 }
 export function isDialectReady(target: Target): boolean {
-  return dialects.has(target)
+  return dialects.has(target);
 }
 /** 仅测试用：清空注册表（vitest 模块级单例间隔离） */
-export function __resetDialectsForTests(): void { dialects.clear() }
+export function __resetDialectsForTests(): void {
+  dialects.clear();
+}
 ```
 
 > 测试 beforeEach 调用 `__resetDialectsForTests()`（从 registry.js 导入）；或测试文件顶部 `vi.resetModules()` + 动态 import。用 `__resetDialectsForTests`（显式、简单、避免 ESM 缓存复杂化）。
@@ -374,6 +418,7 @@ Expected: PASS 3 tests
 
 Run: `Push-Location $P; npm run build`
 Commit:
+
 ```bash
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin add plugins/prompt-master/src/pe-framework/dialect/contract.ts plugins/prompt-master/src/pe-framework/dialect/registry.ts plugins/prompt-master/tests/pe-framework/dialect/registry.test.ts
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt-master): add dialect registry (registerDialect/getDialect/isDialectReady)"
@@ -384,6 +429,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 ### Task 4: `runStage` 内核 + render/ 层（assembleEnvelope + targetSlotHint 单点）
 
 **Files:**
+
 - Create: `src/pe-framework/render/envelope.ts`
 - Create: `src/pe-framework/pipeline/runStage.ts`
 - Create: `src/pe-framework/pipeline/types.ts`
@@ -391,6 +437,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 - Test: `tests/pe-framework/pipeline/runStage.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getDialect`（Task 3）；`DialectContract`（Task 3）；`serializeReport`（`src/pe-framework/audit/report.ts`，现有）
 - Produces:
   - `src/pe-framework/pipeline/types.ts`：`PipelineInput`、`StageResult`、`PipelineTrace`（spec §2.1 形状）
@@ -401,54 +448,69 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 
 ```ts
 // tests/pe-framework/pipeline/runStage.test.ts
-import { describe, expect, it } from 'vitest'
-import { registerDialect, __resetDialectsForTests, type DialectContract } from '../../../src/pe-framework/dialect/registry.js'
-import { runStage } from '../../../src/pe-framework/pipeline/runStage.js'
-import { assembleEnvelope } from '../../../src/pe-framework/render/envelope.js'
+import { describe, expect, it } from 'vitest';
+import {
+  registerDialect,
+  __resetDialectsForTests,
+  type DialectContract,
+} from '../../../src/pe-framework/dialect/registry.js';
+import { runStage } from '../../../src/pe-framework/pipeline/runStage.js';
+import { assembleEnvelope } from '../../../src/pe-framework/render/envelope.js';
 
 const fakeDialect: DialectContract = {
-  id: 'anima', label: 'Fake', auditOnlyOk: true,
+  id: 'anima',
+  label: 'Fake',
+  auditOnlyOk: true,
   normalize: () => ({ value: { a: 1 }, stage: 'base' }),
   compile: (v) => ({ positive: 'p', negative: 'n' }),
   audit: () => ({ gates: [] }),
   targetSlotHint: 't2i.prompt',
-}
+};
 
 describe('runStage', () => {
   it('dispatches to registered dialect and returns StageResult', () => {
-    registerDialect(fakeDialect)
-    const r = runStage({ target: 'anima' } as any)
-    expect(r.ok).toBe(true)
-    expect(r.result).toEqual({ positive: 'p', negative: 'n' })
-    expect(r.targetSlotHint).toBe('t2i.prompt')
-    expect(r.trace?.stages.length).toBeGreaterThan(0)
-  })
+    registerDialect(fakeDialect);
+    const r = runStage({ target: 'anima' } as any);
+    expect(r.ok).toBe(true);
+    expect(r.result).toEqual({ positive: 'p', negative: 'n' });
+    expect(r.targetSlotHint).toBe('t2i.prompt');
+    expect(r.trace?.stages.length).toBeGreaterThan(0);
+  });
 
   it('returns DIALECT_NOT_AVAILABLE envelope for unregistered target', () => {
-    __resetDialectsForTests()
-    const r = runStage({ target: 'sd' } as any)
-    expect(r.ok).toBe(false)
-    expect(r.gates[0].severity).toBe('critical')
-    expect(r.gates[0].rule).toContain('dialect_not_available')
-  })
+    __resetDialectsForTests();
+    const r = runStage({ target: 'sd' } as any);
+    expect(r.ok).toBe(false);
+    expect(r.gates[0].severity).toBe('critical');
+    expect(r.gates[0].rule).toContain('dialect_not_available');
+  });
 
   it('throws with readable error when normalize reports error', () => {
-    registerDialect({ ...fakeDialect, normalize: () => ({ error: 'bad slots: unknown key x' }) })
-    expect(() => runStage({ target: 'anima' } as any)).toThrow(/bad slots/)
-  })
-})
+    registerDialect({ ...fakeDialect, normalize: () => ({ error: 'bad slots: unknown key x' }) });
+    expect(() => runStage({ target: 'anima' } as any)).toThrow(/bad slots/);
+  });
+});
 
 describe('assembleEnvelope', () => {
   it('emits P1 envelope with ok/result/audit/advisories/target_slot_hint', () => {
-    const s = JSON.parse(assembleEnvelope(
-      { ok: true, result: { x: 1 }, gates: [], advisories: ['a'], assumptions: [], targetSlotHint: 't2i.prompt' } as any,
-      ['trail'],
-    ))
-    expect(s.ok).toBe(true)
-    expect(s.target_slot_hint).toBe('t2i.prompt')
-    expect(s.advisories).toContain('trail')
-  })
-})
+    const s = JSON.parse(
+      assembleEnvelope(
+        {
+          ok: true,
+          result: { x: 1 },
+          gates: [],
+          advisories: ['a'],
+          assumptions: [],
+          targetSlotHint: 't2i.prompt',
+        } as any,
+        ['trail'],
+      ),
+    );
+    expect(s.ok).toBe(true);
+    expect(s.target_slot_hint).toBe('t2i.prompt');
+    expect(s.advisories).toContain('trail');
+  });
+});
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -460,46 +522,46 @@ Expected: FAIL（模块不存在）
 
 ```ts
 // src/pe-framework/pipeline/types.ts
-import type { AuditGate } from '../types.js'
-import type { Budget } from '../types.js'
+import type { AuditGate } from '../types.js';
+import type { Budget } from '../types.js';
 
 export interface PipelineInput {
-  target: 'anima' | 'h3' | 'sd' | 'generic'
-  slots?: Record<string, unknown>
-  variant?: string
-  shots?: unknown
-  stage?: string
-  scenarioId?: string
-  formFields?: Record<string, unknown>
-  auditOnly?: boolean
+  target: 'anima' | 'h3' | 'sd' | 'generic';
+  slots?: Record<string, unknown>;
+  variant?: string;
+  shots?: unknown;
+  stage?: string;
+  scenarioId?: string;
+  formFields?: Record<string, unknown>;
+  auditOnly?: boolean;
 }
 
 export interface PipelineTrace {
-  stages: Array<{ name: 'schema'|'dialect'|'audit'|'budget'|'render'; ms: number }>
-  catalogHits?: number
-  tokenCounter?: 'official-tokenizer' | 'estimate'
-  references?: number
+  stages: Array<{ name: 'schema' | 'dialect' | 'audit' | 'budget' | 'render'; ms: number }>;
+  catalogHits?: number;
+  tokenCounter?: 'official-tokenizer' | 'estimate';
+  references?: number;
 }
 
 export interface StageResult {
-  ok: boolean
-  result: Record<string, unknown>
-  gates: AuditGate[]
-  advisories: string[]
-  assumptions: string[]
-  budget?: Budget
-  targetSlotHint: string
-  trace?: PipelineTrace
+  ok: boolean;
+  result: Record<string, unknown>;
+  gates: AuditGate[];
+  advisories: string[];
+  assumptions: string[];
+  budget?: Budget;
+  targetSlotHint: string;
+  trace?: PipelineTrace;
 }
 ```
 
 ```ts
 // src/pe-framework/render/envelope.ts
-import { serializeReport } from '../audit/report.js'
-import type { StageResult } from '../pipeline/types.js'
+import { serializeReport } from '../audit/report.js';
+import type { StageResult } from '../pipeline/types.js';
 
 export function targetSlotHint(target: string): string {
-  return target === 'h3' ? 't2v.prompt' : target === 'anima' ? 't2i.prompt' : 'generic.prompt'
+  return target === 'h3' ? 't2v.prompt' : target === 'anima' ? 't2i.prompt' : 'generic.prompt';
 }
 
 export function assembleEnvelope(stage: StageResult, trail: string[] = []): string {
@@ -509,8 +571,8 @@ export function assembleEnvelope(stage: StageResult, trail: string[] = []): stri
     audit: { passed: stage.ok, gates: stage.gates, ...(stage.budget ? { budget: stage.budget } : {}) },
     advisories: [...stage.advisories, ...trail],
     target_slot_hint: stage.targetSlotHint,
-  }
-  return serializeReport(envelope as never)
+  };
+  return serializeReport(envelope as never);
 }
 ```
 
@@ -520,28 +582,38 @@ export function assembleEnvelope(stage: StageResult, trail: string[] = []): stri
 
 ```ts
 // src/pe-framework/pipeline/runStage.ts
-import { getDialect } from '../dialect/registry.js'
-import { assembleEnvelope } from '../render/envelope.js'
-import type { PipelineInput, StageResult } from './types.js'
-import type { AuditGate } from '../types.js'
+import { getDialect } from '../dialect/registry.js';
+import { assembleEnvelope } from '../render/envelope.js';
+import type { PipelineInput, StageResult } from './types.js';
+import type { AuditGate } from '../types.js';
 
 export function runStage(input: PipelineInput): StageResult {
-  const d = getDialect(input.target)
-  if (!d) return {
-    ok: false,
-    result: {},
-    gates: [{ rule: 'dialect_not_available', target: input.target, severity: 'critical', detail: `方言 ${input.target} 未注册（请以 registerDialect 装配）`, source: 'pipeline/runStage' }],
-    advisories: [],
-    assumptions: [],
-    targetSlotHint: targetSlotHintFrom(input.target),
-  }
-  if (input.auditOnly && !d.auditOnlyOk) throw new Error(`target ${input.target} 不支持 auditOnly（auditOnlyOk=false）`)
-  const t0 = performance.now()
-  const norm = d.normalize(input, { stage: input.stage, scenarioId: input.scenarioId, formFields: input.formFields })
-  if (norm.error) throw new Error(norm.error)
-  const compiled = d.compile(norm.value!, { variant: input.variant, stage: norm.stage })
-  const audit = d.audit(compiled, { stage: norm.stage, references: norm.references, shots: norm.value })
-  const budget = d.budget?.(compiled, { stage: norm.stage, references: norm.references })
+  const d = getDialect(input.target);
+  if (!d)
+    return {
+      ok: false,
+      result: {},
+      gates: [
+        {
+          rule: 'dialect_not_available',
+          target: input.target,
+          severity: 'critical',
+          detail: `方言 ${input.target} 未注册（请以 registerDialect 装配）`,
+          source: 'pipeline/runStage',
+        },
+      ],
+      advisories: [],
+      assumptions: [],
+      targetSlotHint: targetSlotHintFrom(input.target),
+    };
+  if (input.auditOnly && !d.auditOnlyOk)
+    throw new Error(`target ${input.target} 不支持 auditOnly（auditOnlyOk=false）`);
+  const t0 = performance.now();
+  const norm = d.normalize(input, { stage: input.stage, scenarioId: input.scenarioId, formFields: input.formFields });
+  if (norm.error) throw new Error(norm.error);
+  const compiled = d.compile(norm.value!, { variant: input.variant, stage: norm.stage });
+  const audit = d.audit(compiled, { stage: norm.stage, references: norm.references, shots: norm.value });
+  const budget = d.budget?.(compiled, { stage: norm.stage, references: norm.references });
   const result: StageResult = {
     ok: audit.gates.every((g) => g.severity !== 'critical'),
     result: input.auditOnly ? {} : (compiled as Record<string, unknown>),
@@ -550,12 +622,19 @@ export function runStage(input: PipelineInput): StageResult {
     assumptions: audit.assumptions ?? [],
     ...(budget !== undefined ? { budget: budget as never } : {}),
     targetSlotHint: d.targetSlotHint,
-  }
-  result.trace = { stages: [{ name: 'schema', ms: 0 }, { name: 'dialect', ms: performance.now() - t0 }, { name: 'audit', ms: 0 }, { name: 'render', ms: 0 }] }
-  return result
+  };
+  result.trace = {
+    stages: [
+      { name: 'schema', ms: 0 },
+      { name: 'dialect', ms: performance.now() - t0 },
+      { name: 'audit', ms: 0 },
+      { name: 'render', ms: 0 },
+    ],
+  };
+  return result;
 }
 function targetSlotHintFrom(target: string): string {
-  return target === 'h3' ? 't2v.prompt' : target === 'anima' ? 't2i.prompt' : 'generic.prompt'
+  return target === 'h3' ? 't2v.prompt' : target === 'anima' ? 't2i.prompt' : 'generic.prompt';
 }
 ```
 
@@ -570,6 +649,7 @@ Expected: PASS
 
 Run: `Push-Location $P; npm run build`
 Commit:
+
 ```bash
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin add plugins/prompt-master/src/pe-framework/pipeline plugins/prompt-master/src/pe-framework/render plugins/prompt-master/tests/pe-framework/pipeline
 git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt-master): add runStage pipeline kernel + render envelope layer"
@@ -580,6 +660,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 ### Task 5: anima / h3 注册为方言模块（normalize 收敛重复）
 
 **Files:**
+
 - Modify: `src/pe-framework/intent/subagent-provider.ts`（**先拆分 per-target persona/schema 常量**：`ANIMA_PERSONA`/`ANIMA_SCHEMA`/`H3_PERSONA`/`H3_SCHEMA` —— 从现有 DEFAULT_PERSONA/DEFAULT_SCHEMA 按 target 段拆出，DEFAULT_* 保留为兜底）
 - Modify: `src/pe-framework/dialect/anima.ts`（新增 `registerAnimaDialect()` 或模块内 `registerDialect(...)`）
 - Modify: `src/pe-framework/dialect/h3.ts`（新增 `normalizeH3Input`：stage 推断 + toRefs 从三工具收敛；`registerH3Dialect()`）
@@ -589,6 +670,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 - Step 3 前置子步骤（本任务内）：拆 `ANIMA_*`/`H3_*` 常量（若 H3_PERSONA/H3_SCHEMA 与 ANIMA 文本相同则统一为共享常量，但 schema 的 target 键不同，分开）
 
 **Interfaces:**
+
 - Consumes: `registerDialect`/`DialectContract`（Task 3）；`compileAnima`/`auditAnima`（现有 anima.ts 导出）；`compileH3`/`auditH3Full`/`contractGatesH3`（现有 h3.ts/rules-h3.ts）；`sceneToShotsChecked`（schema/scenes.ts）
 - Produces:
   - `anima.ts`：`registerAnimaDialect(): void`（或副作用注册）
@@ -599,50 +681,59 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 
 ```ts
 // tests/pe-framework/dialect/h3-register.test.ts
-import { describe, expect, it, beforeEach } from 'vitest'
-import { __resetDialectsForTests, registerDialect, getDialect } from '../../../src/pe-framework/dialect/registry.js'
-import { normalizeH3Input, registerH3Dialect } from '../../../src/pe-framework/dialect/h3.js'
+import { describe, expect, it, beforeEach } from 'vitest';
+import { __resetDialectsForTests, registerDialect, getDialect } from '../../../src/pe-framework/dialect/registry.js';
+import { normalizeH3Input, registerH3Dialect } from '../../../src/pe-framework/dialect/h3.js';
 
 describe('H3 dialect registration', () => {
-  beforeEach(() => { __resetDialectsForTests(); registerH3Dialect() })
+  beforeEach(() => {
+    __resetDialectsForTests();
+    registerH3Dialect();
+  });
 
   it('registers h3 dialect with targetSlotHint t2v.prompt', () => {
-    const d = getDialect('h3')
-    expect(d?.targetSlotHint).toBe('t2v.prompt')
-    expect(d?.auditOnlyOk).toBe(true)
-  })
+    const d = getDialect('h3');
+    expect(d?.targetSlotHint).toBe('t2v.prompt');
+    expect(d?.auditOnlyOk).toBe(true);
+  });
 
   it('normalizeH3Input infers ref2va when references present', () => {
-    const r = normalizeH3Input({}, { stage: undefined, scenarioId: undefined, formFields: { references: [{ who: 'a' }] } })
-    expect(r.stage).toBe('ref2va')
-  })
+    const r = normalizeH3Input(
+      {},
+      { stage: undefined, scenarioId: undefined, formFields: { references: [{ who: 'a' }] } },
+    );
+    expect(r.stage).toBe('ref2va');
+  });
 
   it('normalizeH3Input infers t2va when no references', () => {
-    const r = normalizeH3Input({}, { stage: undefined, scenarioId: undefined, formFields: {} })
-    expect(r.stage).toBe('t2va')
-  })
-})
+    const r = normalizeH3Input({}, { stage: undefined, scenarioId: undefined, formFields: {} });
+    expect(r.stage).toBe('t2va');
+  });
+});
 ```
 
 ```ts
 // tests/pe-framework/dialect/anima-register.test.ts
-import { describe, expect, it, beforeEach } from 'vitest'
-import { __resetDialectsForTests, getDialect } from '../../../src/pe-framework/dialect/registry.js'
-import { registerAnimaDialect } from '../../../src/pe-framework/dialect/anima.js'
+import { describe, expect, it, beforeEach } from 'vitest';
+import { __resetDialectsForTests, getDialect } from '../../../src/pe-framework/dialect/registry.js';
+import { registerAnimaDialect } from '../../../src/pe-framework/dialect/anima.js';
 
 describe('Anima dialect registration', () => {
-  beforeEach(() => { __resetDialectsForTests(); registerAnimaDialect() })
+  beforeEach(() => {
+    __resetDialectsForTests();
+    registerAnimaDialect();
+  });
 
   it('registers anima dialect with targetSlotHint t2i.prompt', () => {
-    expect(getDialect('anima')?.targetSlotHint).toBe('t2i.prompt')
-  })
+    expect(getDialect('anima')?.targetSlotHint).toBe('t2i.prompt');
+  });
 
   it('normalize validates slot keys (rejects unknown key)', () => {
-    const d = getDialect('anima')!
-    const r = d.normalize({ target: 'anima', slots: { bogus_key: ['x'] } } as any, {})
-    expect(r.error).toContain('bogus_key')
-  })
-})
+    const d = getDialect('anima')!;
+    const r = d.normalize({ target: 'anima', slots: { bogus_key: ['x'] } } as any, {});
+    expect(r.error).toContain('bogus_key');
+  });
+});
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -654,26 +745,29 @@ Expected: FAIL（registerAnimaDialect/registerH3Dialect/normalizeH3Input 不存�
 
 ```ts
 // src/pe-framework/dialect/h3.ts（文件内新增，复用现有 compile/audit 导出）
-import { registerDialect } from './registry.js'
-import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js'
-import { buildH3Budget } from '../audit/budget.js'
-import type { H3ShotsInput, Reference } from '../schema/h3-shots.js'
-import type { DialectContract } from './contract.js'
+import { registerDialect } from './registry.js';
+import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js';
+import { buildH3Budget } from '../audit/budget.js';
+import type { H3ShotsInput, Reference } from '../schema/h3-shots.js';
+import type { DialectContract } from './contract.js';
 
 export function normalizeH3Input(
   input: unknown,
   opts: { stage?: string; scenarioId?: string; formFields?: unknown },
 ): { error?: string; value?: H3ShotsInput; stage?: 't2va' | 'ref2va'; references?: Reference[] } {
-  const shots = (input as any)?.shots as H3ShotsInput
+  const shots = (input as any)?.shots as H3ShotsInput;
   if (!shots || !Array.isArray(shots.shots) || shots.shots.length === 0) {
-    return { error: 'H3 需要 shots{shots:[...]} 结构（intent 未产出镜头）' }
+    return { error: 'H3 需要 shots{shots:[...]} 结构（intent 未产出镜头）' };
   }
-  const formRefs = Array.isArray((opts.formFields as any)?.references) ? ((opts.formFields as any).references as unknown[]) : []
-  const refs = Array.isArray(shots.references) ? shots.references : []
-  const references = (refs.length ? refs : formRefs) as Reference[]
+  const formRefs = Array.isArray((opts.formFields as any)?.references)
+    ? ((opts.formFields as any).references as unknown[])
+    : [];
+  const refs = Array.isArray(shots.references) ? shots.references : [];
+  const references = (refs.length ? refs : formRefs) as Reference[];
   const stage: 't2va' | 'ref2va' =
-    (opts.stage as any) || (references.length > 0 ? 'ref2va' : opts.scenarioId === 'full_reference' ? 'ref2va' : 't2va')
-  return { value: shots, stage, references }
+    (opts.stage as any) ||
+    (references.length > 0 ? 'ref2va' : opts.scenarioId === 'full_reference' ? 'ref2va' : 't2va');
+  return { value: shots, stage, references };
 }
 
 export function registerH3Dialect(): void {
@@ -683,26 +777,33 @@ export function registerH3Dialect(): void {
     auditOnlyOk: true,
     normalize: normalizeH3Input as any,
     compile: (shots, opts) => {
-      const stage = (opts.stage as 't2va' | 'ref2va') ?? 't2va'
-      return compileH3(shots, { stage })
+      const stage = (opts.stage as 't2va' | 'ref2va') ?? 't2va';
+      return compileH3(shots, { stage });
     },
     audit: (compiled, ctx) => {
-      const stage = ctx.stage!
-      const shots = ctx.shots as H3ShotsInput
-      const gates = [...contractGatesH3(stage, shots, ctx.references ?? []), ...auditH3Full(compiled.text, { stage, duration: shots.duration_seconds, shotCount: shots.shots.length }, ctx.references)]
-      return { gates, assumptions: [] }
+      const stage = ctx.stage!;
+      const shots = ctx.shots as H3ShotsInput;
+      const gates = [
+        ...contractGatesH3(stage, shots, ctx.references ?? []),
+        ...auditH3Full(
+          compiled.text,
+          { stage, duration: shots.duration_seconds, shotCount: shots.shots.length },
+          ctx.references,
+        ),
+      ];
+      return { gates, assumptions: [] };
     },
     budget: (compiled, ctx) => {
-      const stage = ctx.stage!
-      return buildH3Budget(stage, compiled.text, ctx.references)
+      const stage = ctx.stage!;
+      return buildH3Budget(stage, compiled.text, ctx.references);
     },
     targetSlotHint: 't2v.prompt',
     // intent persona/schema：从 src/pe-framework/intent/subagent-provider.ts 提取——常量是单一 DEFAULT_PERSONA（含 anima+h3 两规则）与 DEFAULT_SCHEMA（anima+h3 两段）。
     // 重构方案：把常量拆为 per-target（导出 H3_PERSONA/H3_SCHEMA 与 ANIMA_PERSONA/ANIMA_SCHEMA），h3 用前者、anima 用后者；
     // subagentIntent 按 req.target 选择（见 Task 7 Step 3）。
     intent: { persona: H3_PERSONA, schema: H3_SCHEMA },
-  }
-  registerDialect(contract)
+  };
+  registerDialect(contract);
 }
 ```
 
@@ -712,19 +813,33 @@ export function registerH3Dialect(): void {
 
 ```ts
 // src/pe-framework/dialect/anima.ts（文件内新增）
-import { registerDialect } from './registry.js'
-import type { DialectContract } from './contract.js'
+import { registerDialect } from './registry.js';
+import type { DialectContract } from './contract.js';
 
-const ANIMA_SLOT_KEYS = new Set(['count_gender','character','appearance','clothing','pose_action','expression','camera','scene','detail_mood'])
+const ANIMA_SLOT_KEYS = new Set([
+  'count_gender',
+  'character',
+  'appearance',
+  'clothing',
+  'pose_action',
+  'expression',
+  'camera',
+  'scene',
+  'detail_mood',
+]);
 export function validateAnimaSlots(slots: unknown): string | undefined {
-  if (!slots || typeof slots !== 'object') return 'anima 需要 slots 对象'
+  if (!slots || typeof slots !== 'object') return 'anima 需要 slots 对象';
   for (const k of Object.keys(slots)) {
-    if (k === 'narrative') continue
-    if (!ANIMA_SLOT_KEYS.has(k)) return `未知槽位: ${k}`
-    if (k !== 'narrative' && (!Array.isArray((slots as any)[k]) || (slots as any)[k].some((x: unknown) => typeof x !== 'string'))) return `槽位 ${k} 需为 string[]`
+    if (k === 'narrative') continue;
+    if (!ANIMA_SLOT_KEYS.has(k)) return `未知槽位: ${k}`;
+    if (
+      k !== 'narrative' &&
+      (!Array.isArray((slots as any)[k]) || (slots as any)[k].some((x: unknown) => typeof x !== 'string'))
+    )
+      return `槽位 ${k} 需为 string[]`;
   }
-  if ('narrative' in slots && typeof (slots as any).narrative !== 'string') return 'narrative 需为 string'
-  return undefined
+  if ('narrative' in slots && typeof (slots as any).narrative !== 'string') return 'narrative 需为 string';
+  return undefined;
 }
 
 export function registerAnimaDialect(): void {
@@ -733,25 +848,25 @@ export function registerAnimaDialect(): void {
     label: 'Anima',
     auditOnlyOk: true,
     normalize: (input) => {
-      const slots = (input as any)?.slots as Record<string, unknown>
-      const err = validateAnimaSlots(slots)
-      if (err) return { error: err }
-      return { value: slots }
+      const slots = (input as any)?.slots as Record<string, unknown>;
+      const err = validateAnimaSlots(slots);
+      if (err) return { error: err };
+      return { value: slots };
     },
     compile: (slots, opts) => {
-      const variant = (opts.variant as 'base' | 'aesthetic' | 'turbo') ?? 'base'
-      return compileAnima(slots as never, { variant })
+      const variant = (opts.variant as 'base' | 'aesthetic' | 'turbo') ?? 'base';
+      return compileAnima(slots as never, { variant });
     },
     audit: (compiled, ctx) => {
-      const variant = ((ctx.shots as any)?.variant as 'base' | 'aesthetic' | 'turbo') ?? ((ctx as any).variant ?? 'base')
-      const slots = (ctx as any).slots as Record<string, unknown>
-      return { gates: auditAnima(compiled.positive, compiled.negative, { variant, slots: slots as never }) }
+      const variant = ((ctx.shots as any)?.variant as 'base' | 'aesthetic' | 'turbo') ?? (ctx as any).variant ?? 'base';
+      const slots = (ctx as any).slots as Record<string, unknown>;
+      return { gates: auditAnima(compiled.positive, compiled.negative, { variant, slots: slots as never }) };
     },
     targetSlotHint: 't2i.prompt',
     // intent persona/schema：从 subagent-provider.ts 拆分 per-target 常量（ANIMA_PERSONA/ANIMA_SCHEMA，见 Task 5 Step 3 说明）
     intent: { persona: ANIMA_PERSONA, schema: ANIMA_SCHEMA },
-  }
-  registerDialect(contract)
+  };
+  registerDialect(contract);
 }
 ```
 
@@ -761,9 +876,10 @@ export function registerAnimaDialect(): void {
 
 ```ts
 // src/plugin/index.ts（顶部，apply 之前）
-import '../pe-framework/dialect/anima.js'
-import '../pe-framework/dialect/h3.js'
+import '../pe-framework/dialect/anima.js';
+import '../pe-framework/dialect/h3.js';
 ```
+
 > 两个文件模块级调用 `registerAnimaDialect()`/`registerH3Dialect()`（在文件底部 `registerAnimaDialect()` 副作用执行）。
 
 - [ ] **Step 6: 运行确认通过**
@@ -788,12 +904,14 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 ### Task 6: 工具薄视图化（author/compile/audit 走 runStage，删重复）
 
 **Files:**
+
 - Modify: `src/tools/prompt-author.ts`（删 `runDraftStage`/`inferH3Stage`/`toRefs`/`renderEnvelope`；改走 `runStage`；闭环保留）
 - Modify: `src/tools/prompt-compile.ts`（删 `inferH3Stage`/`toReferences`/`compileH3Envelope`；薄视图 `runStage`）
 - Modify: `src/tools/prompt-audit.ts`（删 `toRefs`；薄视图 `runStage(auditOnly)`）
 - Test: 现有 `tests/plugin/{author-e2e,compile-anima,compile-h3,prompt-audit,h3-audit}.test.ts` 适配 + `tests/audit-loop/author-loop.test.ts`
 
 **Interfaces:**
+
 - Consumes: `runStage`/`StageResult`（Task 4）；`getDialect(...).intent`（Task 3/5）；`subagentIntent`（现有 intent）
 - Produces: 无新接口；三个工具的入口参数/返回**保持不变**（对外契约不动，重建内部调用 runStage）
 
@@ -848,6 +966,7 @@ async execute(args, exec) {
   return assembleEnvelope(stage)
 }
 ```
+
 > 入口参数（shots/slots/audit_only/output_lang）保持不变；`output_lang` 若现有 compile 有使用需在视图里保留传递（h3 的 text_zh 不依赖 lang，若现有使用则核对）。
 
 - [ ] **Step 3: prompt-audit.ts 重构（薄视图）**
@@ -893,6 +1012,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "refactor(pr
 ### Task 7: budget 帧底精确化 + intent persona/schema 从 dialect 读 + 日志贯穿
 
 **Files:**
+
 - Modify: `src/pe-framework/audit/budget.ts:76`（chat 帧底估算 → 精确）
 - Modify: `src/pe-framework/intent/subagent-provider.ts`（persona/schema 参数化；`createSubagentIntentProvider(ownerCtx, opts)` 的 `opts.persona/schema` 由 caller 传；保留 DEFAULT 兜底）
 - Modify: `src/tools/prompt-author.ts`（intent 调用前从 `getDialect(target).intent` 取 persona/schema）
@@ -900,6 +1020,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "refactor(pr
 - Test: `tests/pe-framework/audit/budget-frame.test.ts`（新增）+ 日志 spy 测试
 
 **Interfaces:**
+
 - Consumes: `countTokensH3(text, dir, refCount).tokens`（现有 tokenizer-h3）；`ctx.logger`（Cordis）；`getDialect(...).intent`
 - Produces: `budget.ts` 的 `chatTemplateTokens` 改为 `countTokensH3('', dir, references.length).tokens`；工具 logger 打点
 
@@ -907,24 +1028,24 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "refactor(pr
 
 ```ts
 // tests/pe-framework/audit/budget-frame.test.ts
-import { describe, expect, it } from 'vitest'
-import { buildH3Budget } from '../../../src/pe-framework/audit/budget.js'
+import { describe, expect, it } from 'vitest';
+import { buildH3Budget } from '../../../src/pe-framework/audit/budget.js';
 
 describe('H3 budget chat-frame precision', () => {
   it('uses exact tokenizer frame bottom when references present (not 5+2N estimate)', () => {
     const b = buildH3Budget('t2va', 'hello', [{ who: 'a', image: 'x', width: 1024, height: 1024 }], {
-      tokenizerSourceDir: 'C:/fake/nonexistent-tokenizer',  // 不可载 → 走 estimate 回退，验证语义
-    })
+      tokenizerSourceDir: 'C:/fake/nonexistent-tokenizer', // 不可载 → 走 estimate 回退，验证语义
+    });
     // 断言：counter 回退后仍报告 estimate（不挂）——帧底精确化仅在有 tokenizer 时生效；无 tokenizer 保持 estimate
-    expect(b.counter).toBe('estimate')
-  })
+    expect(b.counter).toBe('estimate');
+  });
 
   it('uses exact frame bottom with real tokenizer (fidelity golden path)', () => {
     // 需要真实 tokenizer 目录（preset 路径）；若可用断言 chatTemplateTokens == countContext('', N)
     // 实现见 Step 3：buildH3Budget 内部把 refs>0 时的 chatTemplateTokens 从 5+2N 改为 countTokensH3('', dir, N)
-    expect(true).toBe(true)  // 占位：真实断言在实现后补（golden fixture 驱动）
-  })
-})
+    expect(true).toBe(true); // 占位：真实断言在实现后补（golden fixture 驱动）
+  });
+});
 ```
 
 > 帧底精确化的核心改动在 buildH3Budget：`chatTemplateTokens` 从 `Math.ceil(5 + references.length * 2)` 改为 `countTokensH3('', tokenizerSourceDir, references.length).tokens`；tokenizer 不可载时保持 estimate 回退（现有 catch 语义）。第一个测试验证回退不挂；第二个测试在真实 tokenizer 可用时用 golden 值对齐（若 golden 有 framed 基线可直接断言）。
@@ -935,13 +1056,14 @@ describe('H3 budget chat-frame precision', () => {
 // src/pe-framework/audit/budget.ts（修改 buildH3Budget）
 // 原：const chatTemplateTokens = references.length === 0 ? 5 : Math.ceil(5 + references.length * 2)
 // 改：
-let chatTemplateTokens: number
+let chatTemplateTokens: number;
 try {
-  chatTemplateTokens = countTokensH3('', options?.tokenizerSourceDir, references.length).tokens
+  chatTemplateTokens = countTokensH3('', options?.tokenizerSourceDir, references.length).tokens;
 } catch {
-  chatTemplateTokens = references.length === 0 ? 5 : Math.ceil(5 + references.length * 2)  // estimate 回退（旧语义）
+  chatTemplateTokens = references.length === 0 ? 5 : Math.ceil(5 + references.length * 2); // estimate 回退（旧语义）
 }
 ```
+
 > `countTokensH3('', dir, refCount)` 匹配官方 `countContext('', N)`（调研 §6：帧内空文本 + vision pads）。tokenizer 不可载时回退旧估算，保持 estimate 语义。
 
 - [ ] **Step 3: intent persona/schema 参数化**
@@ -951,13 +1073,14 @@ try {
 // 确认 createSubagentIntentProvider 已接受 opts.persona/opts.schema（现状有）；只需 prompt-author 传参：
 
 // src/tools/prompt-author.ts
-import { getDialect } from '../pe-framework/dialect/registry.js'
-const d = getDialect(target)
-const intentCfg = d?.intent
+import { getDialect } from '../pe-framework/dialect/registry.js';
+const d = getDialect(target);
+const intentCfg = d?.intent;
 // 本文件 _intentProvider 由 plugin 注入的是 createDefaultIntentProvider(ctx) —— 它内部用 DEFAULT_PERSONA/DEFAULT_SCHEMA。
 // 重构：createDefaultIntentProvider 保持不变（DEFAULT 兜底），author 在调用 provider 前按 target 选择 persona：
 //   persona/schema 参数化 —— 方案：把 getDialect(target).intent 并入任务文本（req 增加 persona/schema 字段由 subagentIntent 使用）
 ```
+
 > **定稿方案**：`subagentIntent(req, exec)` 中，当 `req` 带 `persona`/`schema`（author 从 dialect 读取塞入）时优先于 `DEFAULT_PERSONA/DEFAULT_SCHEMA`；author 在 provider 调用处 `const intent = getDialect(target)?.intent` 并在 req 上带 `persona: intent?.persona, schema: intent?.schema`。subagent-provider 的 `subagentIntent` 读 `req.persona ?? opts.persona ?? DEFAULT_PERSONA`。测试 mock 的 AuthorIntentRequest 需兼容可选字段（加 `persona?`/`schema?`）。
 
 - [ ] **Step 4: 工具日志打点**
@@ -965,12 +1088,15 @@ const intentCfg = d?.intent
 ```ts
 // prompt-author.ts / prompt-compile.ts / prompt-audit.ts / prompt-expand.ts / prompt-reverse.ts
 // 每个 execute 开头：
-ctx.logger.info(`[prompt-master] ${toolName} target=${target}${variant ? ` variant=${variant}` : ''}`)
+ctx.logger.info(`[prompt-master] ${toolName} target=${target}${variant ? ` variant=${variant}` : ''}`);
 // 每个 catch：
-ctx.logger.error(`[prompt-master] ${toolName} failed: ${error.message}`, { error })
+ctx.logger.error(`[prompt-master] ${toolName} failed: ${error.message}`, { error });
 // runStage 后（author/compile/audit）：
-ctx.logger.info(`[prompt-master] ${toolName} → ok=${stage.ok} gates=${stage.gates.length} trace=${JSON.stringify(stage.trace ?? {})}`)
+ctx.logger.info(
+  `[prompt-master] ${toolName} → ok=${stage.ok} gates=${stage.gates.length} trace=${JSON.stringify(stage.trace ?? {})}`,
+);
 ```
+
 > ctx 是 Cordis Context，apply 内已有 `ctx.logger`（Cordis logger 服务；若未注入需加 `logger` 到 inject——**确认：Cordis Context 自带 logger**，`ctx.logger` 可直接用）。
 
 - [ ] **Step 5: 日志测试（spy）**
@@ -979,8 +1105,9 @@ ctx.logger.info(`[prompt-master] ${toolName} → ok=${stage.ok} gates=${stage.ga
 // tests/plugin/logger-spy.test.ts（新增）
 // 用 vi.spyOn(logger, 'info') 断言 prompt_compile 调用时打了 info 且不含 prompt 正文
 ```
+
 ```ts
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest';
 // 通过真实 plugin apply（stub ctx 注入真实 logger spy）或直接对 view 函数包一层
 // 断言：logger.info 被调 ≥1，消息含 'prompt_compile'，不含编译后 prompt 全文
 ```
@@ -1002,6 +1129,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 ### Task 8: 全量回归 + 端到端验证（R6 收尾）
 
 **Files:**
+
 - 无新增；验证既有
 - Test: `tests/fidelity/**`（golden 双跑保真须继续绿）+ 全量 `npm test`
 
@@ -1010,6 +1138,7 @@ git -C C:/Users/11245/.dsh/.agent-presets/comfyui-chenxin commit -m "feat(prompt
 - [ ] **Step 0: resolver × 提示词大师 3.1.0 diff 核对（spec §7）**
 
 对照 `temp/pm-promptmaster-src/unpacked/electron/config/` 与 `src/resolver/**`：
+
 - expand-rules.ts 8 ids ↔ promptExpandRules.js 8 ids（已验一致）
 - reverse/{descriptive,comfyui,danbooru,prose,anima3}.ts ↔ captionPromptEngineering.js 对应模块（重点：FIDELITY_CHECKLIST 9 类目、FORBIDDEN、COMFYUI_EXTRA_TEMPLATES 5 个、Anima3 §1-§5、互斥速查）
 - torii/{formats,prompts}.ts ↔ torii_prompts_data.js / toriiGateFormats.js（13 模板键 / 10 format）

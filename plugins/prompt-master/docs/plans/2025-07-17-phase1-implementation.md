@@ -5,6 +5,7 @@
 **Goal:** 将 Prompt Master MCP Server 从 24 个文件、简化版 reverse 补齐到与设计文档一致的 42 个文件、1:1 PromptMaster PE 引擎移植。
 
 **架构原则：**
+
 - 每个 PE 模块从 PromptMaster 原生 JS 源码移植为 TypeScript
 - 移植过程：去掉所有 Electron / ee-core 依赖，保留纯逻辑
 - 保持函数签名和导出名称与原版一致（方便追查差异）
@@ -91,12 +92,14 @@ src/
 ### Task 1.1：修复 `src/config/index.ts` 的 async bug
 
 **Files:**
+
 - Modify: `src/config/index.ts`
 - Create: `src/config/schema.ts`
 
 **问题：** `loadConfig` 是同步函数，但内有 `await import('yaml')`。
 
 **Interfaces:**
+
 - Consumes: `McpConfig` from `defaults.ts`
 - Produces: 可编译的 `loadConfig()`
 
@@ -110,9 +113,9 @@ src/
 // YAML 配置结构类型
 export interface YamlConfig {
   db_path?: string;
-  defaults?: { provider?: string; model?: string; temperature?: number; };
+  defaults?: { provider?: string; model?: string; temperature?: number };
   api_keys?: Record<string, string>;
-  logging?: { level?: string; history?: boolean; };
+  logging?: { level?: string; history?: boolean };
 }
 ```
 
@@ -140,8 +143,9 @@ grep -r "loadConfig" src/ --include "*.ts"
 ### Task 1.2：补齐 CLI 参数解析
 
 **Files:**
+
 - Modify: `src/index.ts`
- Called: `parseCliArgs()`
+  Called: `parseCliArgs()`
 
 - [ ] **Step 1：补全 switch 分支**
 
@@ -161,16 +165,17 @@ case '--help':        showHelp(); process.exit(0);
 ### Task 1.3：修复 provider/models.ts 导出
 
 **Files:**
+
 - Modify: `src/provider/models.ts`
 
 - [ ] **Step 1：确认末尾有 `export { BUILTIN_PROVIDERS }`（目前只有定义行，确认导出）**
 
 https://github.com/user-attachments/files/18558279/default.txt
 
-
 ### Task 1.4：在 provider/index.ts 中修复引用
 
 **Files:**
+
 - Modify: `src/provider/index.ts`
 
 - [ ] **Step 1：检查 `getAllProviders` 是否引用 `BUILTIN_PROVIDERS`**
@@ -193,6 +198,7 @@ import { BUILTIN_PROVIDERS } from './models.js';
 移植的 7 个 PM 模块都在 `electron/config/` 下已有 JS 源码。
 
 ### 反向 PE 模块说明
+
 - `reverse/router.ts`：caption type → 具体 PE 模块
 - `reverse/descriptive.ts`：五点结构自然语言反推
 - `reverse/comfyui.ts`：SD/ComfyUI 标签式反推（20000行，最大）
@@ -200,8 +206,8 @@ import { BUILTIN_PROVIDERS } from './models.js';
 - `reverse/anima3.ts`：Anima3 增强（system prompt + sanitize）
 - `reverse/prose.ts`：其他散文类反推
 
-
 各文件需输出：
+
 ```typescript
 export function buildSystemPrompt(cap: any, mediaTarget: string): string;
 export function buildSystemAddons(cap: any, mediaTarget: string): string;
@@ -215,6 +221,7 @@ export function sanitizeFinalCapton(text: string, cap: any): string;
 ### Task 2.1：`reverse/comfyui.ts` — SD/ComfyUI 反推模块
 
 **Files:**
+
 - Create: `src/resolver/profiles/reverse/comfyui.ts`
 - Source: `D:\Projects\temp\prompt-master-dump\electron\config\comfyuiPromptEngineering.js` (20.2K)
 
@@ -227,6 +234,7 @@ export function sanitizeFinalCapton(text: string, cap: any): string;
 ### Task 2.2：`reverse/descriptive.ts` — 五点结构反推模块
 
 **Files:**
+
 - Create: `src/resolver/profiles/reverse/desriptive.ts`
 - Source: `D:\Projects\temp\prompt-master-dump\electron\config\descriptivePromptEngineering.js` (11.4K)
 
@@ -235,12 +243,14 @@ export function sanitizeFinalCapton(text: string, cap: any): string;
 ### Task 2.3：`reverse/danbooru.ts`
 
 **Files:**
+
 - Creat: `src/resolver/profiles/reverse/danbooru.ts`
 - Source: `D:\Projets\temp\promt-master-dump\electron\config\danbooruPromptEngineering.js` (6.3K)
 
 ### Task 2.4：`reverse/anima3.ts`
 
 **Files:**
+
 - Create: `src/resolver/profiles/revers/anima3.ts`
 - Source: `D:\Projet\temp\prompt-mster-dump\electron\config` (13.5K)
 
@@ -251,10 +261,11 @@ export function sanitizeFinalCapton(text: string, cap: any): string;
 ### Task 2.6：`reverse/router.ts` — 路由引擎
 
 **Files:**
+
 - Crte: `src/resover/profiles/reverse/router.ts`
 - Source: `D:\Projets\temp\prompt-master-ump\electron\config\captionPromptEngineering.js` (11.0K)
 
-- [ ] *Step 1：复制，改为 import*
+- [ ] _Step 1：复制，改为 import_
 - [ ] **Step 2：删掉 Electron 依赖**
   - `sanitizeFinalCaption()` 中有一处设置 `window.x`，去掉
   - joyCaption 相关引用目前先注释掉（后续 phase 补充也
@@ -266,6 +277,7 @@ export function sanitizeFinalCapton(text: string, cap: any): string;
 ### Task 2.7：重写 `resolveer/index.ts` 中的 `resolveReverse`
 
 **Files:**
+
 - Modify: `src/resolver/index.ts`
 
 - [ ] **Step 1：删掉硬编码的3个 system prompt，改为路由到 reverse/router**
@@ -305,21 +317,24 @@ export function resolveReverse(profile: PEProfile, params: ReverseParams): Rever
 ### Task 3.1`resolver/minimax/catalog.ts` — 10 个场景定义
 
 **Files:**
+
 - Crate: `src/resolver/minimax/catalog.ts`
 - Source: `D:\Projets\temp\prompt-master-ump\electron\config\minimaxScenarios\catalog.js` (38.7K)
 
 移植要点：
+
 - 保留 `MINMAX_SCENARIOS` 数组全部内容（包含每个场景的 formFields、harConstraints、assembleHints）
 - 保留 `getScenarioById()`、`getScenarioByPeId()`、`listScenarios()`
 - 删除 `ASEPCT_COMMON` 等 UI 专用常量之前确认 Tools 层不用
 
 - [ ] **Step 1：复制全文件，改为 TypeScript**
-- [ ] *Step 2：确认 formFields 中的 showIf 逻辑不需要 Electron/UI 依赖*
+- [ ] _Step 2：确认 formFields 中的 showIf 逻辑不需要 Electron/UI 依赖_
 - [ ] **Step 3：导出 `listScenarios(), getSceanrioById(), getScenarioByPeId()**
 
 ### Task 3.2：`resolver/minimax/assemble.ts` — 场景组装
 
 **Files:**
+
 - Create: `src/resolver/minimax/assemble.ts`
 - Source: `D:\Projects\temp\prompt-master-dump\electron\config\minimaxScenarios\assemble.js` (27.4K)
 
@@ -334,6 +349,7 @@ export function resolveReverse(profile: PEProfile, params: ReverseParams): Rever
 ### Task 3.3：`resolver/minimax/templates/h3-reference.*.ts` — H3 模板
 
 **Files:**
+
 - Create: 3 files
 - Sources: pmt-master-ump\electron\config\prompts\ (总共 60K)
 
@@ -354,6 +370,7 @@ export const FULL_REFERENCE_ZH = `...原文件全部内容...`;
 ### Task 3.4：`resolver/minimax/index.ts` — 入口
 
 **Files:**
+
 - Create: `src/resolver/minimax/index.ts`
 
 ```typescript
@@ -365,6 +382,7 @@ export { FULL_REFERENCE_EN, FULL_REFERENCE_ZH, FULL_REFERENCE_JA } from './templ
 ### Task 3.5：重写 `tools/minimax-scenario.ts`
 
 **Files:**
+
 - Modify: `src/tools/minimax-scenario.ts`
 
 - [ ] **Step 1：用 `getScenarioById` 替代硬编码场景列表**
@@ -430,7 +448,7 @@ export function countChars(text: string): number { return text.length; }
 Phase 1（编译通过）
   ├─ 供 Phase 2–5 的基础
   └─ 阻塞一切 ts 验证
-  
+
 Phase 2（Reverse PE）
   ├─ router.ts 依赖：descriptive.ts, comfyui.ts, danbooru.ts, anima3.ts, prose.ts
   ├─ resolver/index.ts 的 resolveReverse 依赖 router.ts
@@ -457,6 +475,7 @@ Phase 5（工具 + 测试）
 **推荐执行顺序：Phase 1 → Phase 2（Task 2.1-2.5 可并行） → Task 2.6-2.7 → Phase 3（Task 3.1-3.4 可并行） → Task 3.5 → Phase 4 → Phase 5**
 
 **总预估：6–8 小时**
+
 - Phase 1：30 分钟
 - Phase 2：2 小时
 - Phase 3：2 小时

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vitest/config';
 
 /**
  * testTimeout: anima catalog 的 manifest 校验（~783 MiB sha256）在首次 db() 打开时
@@ -10,4 +10,4 @@ export default defineConfig({
   test: {
     testTimeout: 30_000,
   },
-})
+});

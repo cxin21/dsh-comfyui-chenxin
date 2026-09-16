@@ -39,20 +39,20 @@
 
 ### 4.2 重放清单（12 案例 sheet；payload 参数 = `tests/fixtures/blueprint-migration/cases.json` 各案例 `args` 字段）
 
-| 案例 | args 增量（均 `target:'anima'`） | 断言面（真实 envelope） |
-|---|---|---|
-| c01 | judge_mode:'off' | ok；`observability.blueprint.form==='blueprint'` 且 `media==='image'`；`enrichment` 字段不存在；traceStages 含 `blueprint_enrich` 无 `enrich` |
-| c02 | 同 c01 | 同 c01 + 2girls 两角色分离语义 |
-| c03 | 同 c01 | 同 c01（无人物场景） |
-| c04 | 同 c01 | 同 c01 + artist 槽（@形 grounding） |
-| c05 | + style_id:'figure_model', conformity:0 | c01 断言 + advisory 含 `art_direction_ignored_*` 缺席；detail_mood 含预设片段 |
-| c06 | 同 c05 conformity:1 | c05 断言（fragments 不注入，theme 仍并入） |
-| c07 | + rating:'explicit' | c01 断言 + positive 含 `rating_explicit` 不含 `rating_sensitive`；negative 六词逐字；`rating.resolved==='explicit'` 且 `source==='input'`；assumptions 含 `rating_active:explicit` |
-| c08 | judge_mode:'off'（无 rating 声明） | c01 断言 + `rating.resolved==='sensitive'`（bikini 升档） |
-| c09 | 同 c01 | c01 断言 + character 槽 `Subject 1 from <Picture 1>` 语义 |
-| c10 | 同 c01 | c01 断言（CJK 长叙事） |
-| c11 | + art_direction:{lighting:'golden_hour',motion:'flowing_hair'} | c01 断言 + advisories 含 `art_direction_applied:lighting:golden_hour` 与 `art_direction_applied:motion:flowing_hair`（R4） |
-| c12 | 同 c01 | c01 断言 + soft 负向 → exclusions 通道 |
+| 案例 | args 增量（均 `target:'anima'`）                               | 断言面（真实 envelope）                                                                                                                                                            |
+| ---- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| c01  | judge_mode:'off'                                               | ok；`observability.blueprint.form==='blueprint'` 且 `media==='image'`；`enrichment` 字段不存在；traceStages 含 `blueprint_enrich` 无 `enrich`                                      |
+| c02  | 同 c01                                                         | 同 c01 + 2girls 两角色分离语义                                                                                                                                                     |
+| c03  | 同 c01                                                         | 同 c01（无人物场景）                                                                                                                                                               |
+| c04  | 同 c01                                                         | 同 c01 + artist 槽（@形 grounding）                                                                                                                                                |
+| c05  | + style_id:'figure_model', conformity:0                        | c01 断言 + advisory 含 `art_direction_ignored_*` 缺席；detail_mood 含预设片段                                                                                                      |
+| c06  | 同 c05 conformity:1                                            | c05 断言（fragments 不注入，theme 仍并入）                                                                                                                                         |
+| c07  | + rating:'explicit'                                            | c01 断言 + positive 含 `rating_explicit` 不含 `rating_sensitive`；negative 六词逐字；`rating.resolved==='explicit'` 且 `source==='input'`；assumptions 含 `rating_active:explicit` |
+| c08  | judge_mode:'off'（无 rating 声明）                             | c01 断言 + `rating.resolved==='sensitive'`（bikini 升档）                                                                                                                          |
+| c09  | 同 c01                                                         | c01 断言 + character 槽 `Subject 1 from <Picture 1>` 语义                                                                                                                          |
+| c10  | 同 c01                                                         | c01 断言（CJK 长叙事）                                                                                                                                                             |
+| c11  | + art_direction:{lighting:'golden_hour',motion:'flowing_hair'} | c01 断言 + advisories 含 `art_direction_applied:lighting:golden_hour` 与 `art_direction_applied:motion:flowing_hair`（R4）                                                         |
+| c12  | 同 c01                                                         | c01 断言 + soft 负向 → exclusions 通道                                                                                                                                             |
 
 统一回滚指标采集：每案例记录 `rating.resolved`（与声明/关键词预期一致性）、失败与否、LLM 耗时（traceStages intent/blueprint_enrich ms）、catalog_miss gate 数、`corrections`/`loop_exhausted`。
 
@@ -62,29 +62,29 @@
 
 **前置：重放期间四轮真实会话缺陷修复**（全链见 `docs/enrich-channel-diagnosis.md` DIAG2 节）：
 
-| # | 缺陷 | 根因（事实链） | 修复 |
-|---|---|---|---|
-| 1 | enrich 100% fallback（12/12，三轮 dists） | 直连路由跟随会话模型（reasoning 类），思考 token 计入 maxTokens 且不产出 text 块——1024/4096/1400 三档预算恒打满、文本头恒空 | `aecb720` 用户裁定：直连通道全面省略 maxTokens（宿主 defaultMaxTokens 语义）|
-| 2 | 裸 `undefined.trim` 崩溃（text 流首次到达暴露）| 适配器流首块 text 块 text 字段 undefined | `a43616e` complete() 空串合并防御 |
-| 3 | enrich 中文回流 → `cjk_in_positive` critical → loop_exhausted（c04 探针实录）| intent/enrich persona 零语言纪律 + few-shot 样板自身教中文值；修复轮被 enrich 每轮再污染 | `b703304` 双 persona 硬性英文纪律 + 样板去 CJK（掐断污染源，保留 CJK gate 修复闭环设计）|
-| 4 | prompt 全量重写后 c07 确定性崩溃 | enrich 产出缺 target 的 soft 负向 → `validateBlueprint` 零 negative 校验 → 投影器 exclusions 链 `undefined.trim`；随后 c12 又实证 LLM 越权声明 `severity:'hard'` 触发 §8.1 档 3 拒绝 | `33e2bce` negative 形状 fail-closed 校验 + preflightRepair 确定性丢弃 + 投影防御；`987f804` LLM 负向 hard→soft 确定性降格（hard 为安全通道专属域，与 core.rating strip 同哲学）|
+| #   | 缺陷                                                                          | 根因（事实链）                                                                                                                                                                       | 修复                                                                                                                                                                            |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | enrich 100% fallback（12/12，三轮 dists）                                     | 直连路由跟随会话模型（reasoning 类），思考 token 计入 maxTokens 且不产出 text 块——1024/4096/1400 三档预算恒打满、文本头恒空                                                          | `aecb720` 用户裁定：直连通道全面省略 maxTokens（宿主 defaultMaxTokens 语义）                                                                                                    |
+| 2   | 裸 `undefined.trim` 崩溃（text 流首次到达暴露）                               | 适配器流首块 text 块 text 字段 undefined                                                                                                                                             | `a43616e` complete() 空串合并防御                                                                                                                                               |
+| 3   | enrich 中文回流 → `cjk_in_positive` critical → loop_exhausted（c04 探针实录） | intent/enrich persona 零语言纪律 + few-shot 样板自身教中文值；修复轮被 enrich 每轮再污染                                                                                             | `b703304` 双 persona 硬性英文纪律 + 样板去 CJK（掐断污染源，保留 CJK gate 修复闭环设计）                                                                                        |
+| 4   | prompt 全量重写后 c07 确定性崩溃                                              | enrich 产出缺 target 的 soft 负向 → `validateBlueprint` 零 negative 校验 → 投影器 exclusions 链 `undefined.trim`；随后 c12 又实证 LLM 越权声明 `severity:'hard'` 触发 §8.1 档 3 拒绝 | `33e2bce` negative 形状 fail-closed 校验 + preflightRepair 确定性丢弃 + 投影防御；`987f804` LLM 负向 hard→soft 确定性降格（hard 为安全通道专属域，与 core.rating strip 同哲学） |
 
 **12 案例终版结果：12/12 `ok:true`，0 超时，0 loop_exhausted**（generation_id 实录）：
 
-| 案例 | generation_id | 关键断言证据（真实 envelope） |
-|---|---|---|
-| c01 | gen_1789349260656_3x04k7zt | form=blueprint/media=image；7 段 canonical 锚定 |
-| c02 | gen_1789349370271_g8ay8pba | 2girls 双角色双姿态双表情分离 |
-| c03 | gen_1789349485537_g5mvg0wf | 无 count_gender；people→negative（软负向推断）|
-| c04 | gen_1789349073099_cs9w2sv7 | @wlop artist 槽（citation 1299120）；exclusions 语言纪律生效（全英文）|
-| c05 | （style 面同 c04 会话） | figure_model 四片段全量注入 + negativeAdded 2d lineart/flat paper illustration |
-| c06 | gen_1789349731855_ibov4aik | conformity:1 零片段注入、theme 语义并入、negativeAdded 保留 |
-| c07 | gen_1789351405812_71lgxxyn | `rating_explicit` 种子 + 六词未成年排除组逐字 + resolved=explicit/source=input + `rating_active:explicit` |
-| c08 | gen_1789350474237_391oi0rx | ⚠️ **P1 缺陷确认**：bikini 未升档（resolved=safe）——升档语料面缺陷（见 §4.4 台账）|
-| c09 | gen_1789351594505_uch80mbt | `Subject 1 from <Picture 1>` character 槽 priority 250 |
-| c10 | gen_1789351733001_yy6aiueb | ⚠️ P2：`duplicate_segment: bamboo forest`（替换发生在去重后，见 §4.4）|
-| c11 | gen_1789352080010_qm7ctnga | `art_direction_applied:lighting:golden_hour` + `art_direction_applied:motion:flowing_hair` 双 advisory |
-| c12 | gen_1789353134105_v00nwee1 | 排除项 modern buildings/power lines/vehicles → exclusions 通道（origin:exclusion priority 900）|
+| 案例 | generation_id              | 关键断言证据（真实 envelope）                                                                             |
+| ---- | -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| c01  | gen_1789349260656_3x04k7zt | form=blueprint/media=image；7 段 canonical 锚定                                                           |
+| c02  | gen_1789349370271_g8ay8pba | 2girls 双角色双姿态双表情分离                                                                             |
+| c03  | gen_1789349485537_g5mvg0wf | 无 count_gender；people→negative（软负向推断）                                                            |
+| c04  | gen_1789349073099_cs9w2sv7 | @wlop artist 槽（citation 1299120）；exclusions 语言纪律生效（全英文）                                    |
+| c05  | （style 面同 c04 会话）    | figure_model 四片段全量注入 + negativeAdded 2d lineart/flat paper illustration                            |
+| c06  | gen_1789349731855_ibov4aik | conformity:1 零片段注入、theme 语义并入、negativeAdded 保留                                               |
+| c07  | gen_1789351405812_71lgxxyn | `rating_explicit` 种子 + 六词未成年排除组逐字 + resolved=explicit/source=input + `rating_active:explicit` |
+| c08  | gen_1789350474237_391oi0rx | ⚠️ **P1 缺陷确认**：bikini 未升档（resolved=safe）——升档语料面缺陷（见 §4.4 台账）                        |
+| c09  | gen_1789351594505_uch80mbt | `Subject 1 from <Picture 1>` character 槽 priority 250                                                    |
+| c10  | gen_1789351733001_yy6aiueb | ⚠️ P2：`duplicate_segment: bamboo forest`（替换发生在去重后，见 §4.4）                                    |
+| c11  | gen_1789352080010_qm7ctnga | `art_direction_applied:lighting:golden_hour` + `art_direction_applied:motion:flowing_hair` 双 advisory    |
+| c12  | gen_1789353134105_v00nwee1 | 排除项 modern buildings/power lines/vehicles → exclusions 通道（origin:exclusion priority 900）           |
 
 **h3 真实探针（同会话补充，用户指令：双方言全量）**：`gen_1789351912496_o58n8bdo`（雨夜双剑客）——ok、audit 0 gates、官方分词 990/1200、4 镜 [Shot N] + 切点结构、h3 brief enrich 42s（source 可追溯 + nameAnchors 锚定）、legacy envelope 形状正确（无 blueprint 字段）。
 
@@ -92,12 +92,12 @@
 
 ### 4.4 重放期间登记缺陷台账（不随 M5 收口，转里程碑账本）
 
-| 级别 | 缺陷 | 实录 | 修复方向 |
-|---|---|---|---|
-| P1 | 关键词升档语料面失效（c08 预期 sensitive 实测 safe）| D4 移除 brief 层后升档扫描语料变化，ASCII 词表对中文输入/蓝图面未命中 | 升档语料扩至蓝图字段（enrich 产物回扫）|
-| P2 | 复合 target 原子性（D3 族）| c12 前轮「6 项负向粘连单条目」、c10 `duplicate_segment`（canonical 替换发生在槽内去重之后）| 投影层按逗号拆分原子化 + 去重后置 |
-| P2 | post-enrich 保真复检缺失 | c09「银发」在 enrich patch 中从 appearance_anchors 丢失（checkFidelity 仅 intent 期运行）| patch 应用后复跑保真检查入 expansions |
-| 债 | 共享基座双文件逐字复制 | subagent-provider/analyzer 不互 import 防 ESM 环（设计承袭），前缀断言钉死 | 抽零依赖叶子模块双方 import |
+| 级别 | 缺陷                                                 | 实录                                                                                        | 修复方向                                |
+| ---- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------- |
+| P1   | 关键词升档语料面失效（c08 预期 sensitive 实测 safe） | D4 移除 brief 层后升档扫描语料变化，ASCII 词表对中文输入/蓝图面未命中                       | 升档语料扩至蓝图字段（enrich 产物回扫） |
+| P2   | 复合 target 原子性（D3 族）                          | c12 前轮「6 项负向粘连单条目」、c10 `duplicate_segment`（canonical 替换发生在槽内去重之后） | 投影层按逗号拆分原子化 + 去重后置       |
+| P2   | post-enrich 保真复检缺失                             | c09「银发」在 enrich patch 中从 appearance_anchors 丢失（checkFidelity 仅 intent 期运行）   | patch 应用后复跑保真检查入 expansions   |
+| 债   | 共享基座双文件逐字复制                               | subagent-provider/analyzer 不互 import 防 ESM 环（设计承袭），前缀断言钉死                  | 抽零依赖叶子模块双方 import             |
 
 ## 5. 清单⑤ blueprint_id 链路（mock 层，migration-golden.test.ts「replay item 5」）
 
@@ -114,20 +114,20 @@ h3 legacy（shots 直译）路径：intent persona === H3_PERSONA 原样、无 `
 
 ## 8. 回滚判据五项指标（mock 层实测 + 2026-09-14 真实终版补录，§4.3）
 
-| # | 指标 | mock 实测 | 真实终版（13 run：12 案例 + h3 探针）| 结论 |
-|---|---|---|---|---|
-| ① | explicit 档产物种子 vs `rating.resolved` 一致率 | c07 双路径一致 1/1 | 声明档 1/1（c07 resolved=explicit/source=input + 种子 + 六词负向全对齐）；关键词档 1/2（c08 升档失效 = P1 已登记，其余 safe 预期全符）| 声明链一致；关键词升档缺陷已台账化 |
-| ② | golden 失败 | **0/12**（L1–L4 + 清单5/6 全绿）| **0/12 + h3 探针 0 失败** | 通过 |
-| ③ | 超时率 | mock 层 0 | **0/13**（intent 33.8–114.4s、enrich 30.3–75.4s，全部 < 300s 子代理上限）| 通过 |
-| ④ | catalog_miss 均值 | 12 基线 compile 0.0 miss/run | 全部 minor 级（0/13 critical/important CJK 或预算门；composite/别名 miss 属召回质量面非阻断）| 低 |
-| ⑤ | loop_exhausted 率 | golden 全程 0 | **0/13**（语言纪律修复后修复轮 0 次触发：repairs_count 全 0）| 低 |
+| #   | 指标                                            | mock 实测                        | 真实终版（13 run：12 案例 + h3 探针）                                                                                                  | 结论                               |
+| --- | ----------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| ①   | explicit 档产物种子 vs `rating.resolved` 一致率 | c07 双路径一致 1/1               | 声明档 1/1（c07 resolved=explicit/source=input + 种子 + 六词负向全对齐）；关键词档 1/2（c08 升档失效 = P1 已登记，其余 safe 预期全符） | 声明链一致；关键词升档缺陷已台账化 |
+| ②   | golden 失败                                     | **0/12**（L1–L4 + 清单5/6 全绿） | **0/12 + h3 探针 0 失败**                                                                                                              | 通过                               |
+| ③   | 超时率                                          | mock 层 0                        | **0/13**（intent 33.8–114.4s、enrich 30.3–75.4s，全部 < 300s 子代理上限）                                                              | 通过                               |
+| ④   | catalog_miss 均值                               | 12 基线 compile 0.0 miss/run     | 全部 minor 级（0/13 critical/important CJK 或预算门；composite/别名 miss 属召回质量面非阻断）                                          | 低                                 |
+| ⑤   | loop_exhausted 率                               | golden 全程 0                    | **0/13**（语言纪律修复后修复轮 0 次触发：repairs_count 全 0）                                                                          | 低                                 |
 
 ## 9. R1 token 画像（实测，bytes= UTF-8）
 
-| 面 | 旧（slots 直译） | 新（蓝图形态） | Δ |
-|---|---|---|---|
-| intent 输入面（persona+schema） | 7054 B（ANIMA_PERSONA 6,210 + ANIMA_SCHEMA 844） | 3936 B（ANIMA_BLUEPRINT_PERSONA 2,436 + ANIMA_BLUEPRINT_SCHEMA 1,500） | **−44.2%** |
-| intent 输出面（12 案例 provider 产物） | 3134 B（均值 261 B） | 5468 B（均值 456 B） | **+74.5%** |
+| 面                                     | 旧（slots 直译）                                 | 新（蓝图形态）                                                         | Δ          |
+| -------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------- | ---------- |
+| intent 输入面（persona+schema）        | 7054 B（ANIMA_PERSONA 6,210 + ANIMA_SCHEMA 844） | 3936 B（ANIMA_BLUEPRINT_PERSONA 2,436 + ANIMA_BLUEPRINT_SCHEMA 1,500） | **−44.2%** |
+| intent 输出面（12 案例 provider 产物） | 3134 B（均值 261 B）                             | 5468 B（均值 456 B）                                                   | **+74.5%** |
 
 判定：方向与设计稿 R1 预测一致（输入净减、输出净增——蓝图 schema 结构开销换 schema 外置 persona 瘦身）。输入减幅 >30% → **立案留痕**：减幅主要来自 ANIMA_BLUEPRINT_PERSONA 逐字复用 BLUEPRINT_SUBAGENT_SYSTEM 基座（schema 不再内嵌 persona），属预期收益面、非异常偏差；净增输出为结构性 JSON 开销（schema_version/media_layer 包装），T4R 可评估是否需要在 persona 层加「最小 JSON 纪律」约束（现有裸 JSON 规则已覆盖大半）。
 

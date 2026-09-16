@@ -6,12 +6,12 @@
 
 ## 实验设计
 
-| 探针 | 路径 | 目的 |
-|---|---|---|
-| A1/A2 | `catalog_search mode=auto`（DSH host 进程 = 真实运行时） | 观测 auto 级联能否到达 semantic 层 |
-| B1 | node 进程内直调 `dist/.../anima-vector.js` `createVectorSearch`（默认 embedder，无 PM_EMBED_MODEL） | 复现查询侧完整路径，暴露被吞的降级 warn |
-| B2 | sqlite-vec 扩展加载后 `SELECT length(embedding) FROM vec_items` | 终审索引维度 |
-| B3 | 反查命中 record_id → tag-catalog records | 评估语义命中质量 |
+| 探针  | 路径                                                                                                | 目的                                    |
+| ----- | --------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| A1/A2 | `catalog_search mode=auto`（DSH host 进程 = 真实运行时）                                            | 观测 auto 级联能否到达 semantic 层      |
+| B1    | node 进程内直调 `dist/.../anima-vector.js` `createVectorSearch`（默认 embedder，无 PM_EMBED_MODEL） | 复现查询侧完整路径，暴露被吞的降级 warn |
+| B2    | sqlite-vec 扩展加载后 `SELECT length(embedding) FROM vec_items`                                     | 终审索引维度                            |
+| B3    | 反查命中 record_id → tag-catalog records                                                            | 评估语义命中质量                        |
 
 ## 实测结果
 
@@ -44,10 +44,12 @@
 ## 裁决更新（2026-09-15 深夜，建议 1 落地 + 疑点 2 结案）
 
 **疑点 2（bge-m3 产物去向）由 git 证据结案**：L2 记忆"bge-m3 1024d 重建落盘"已过时。时间线：
+
 - `aa64512`（09-14 21:29）bge-m3 切默认 → **`73198be`（09-14 23:37）spec 修正案：模型换轨回 bge-base-en-v1.5（768d），跨语言按 probe 证据放弃** → `ce901f5`（09-15 13:44）查询侧默认对齐 merged bge-base index（索引 mtime 13:40，commit 仅晚 4 分钟）。
 - 现库即终态：bge-base 768d，两侧本就对齐；本报告"附带发现"中的"矛盾"实为记忆未同步，bge-m3 无产物留存属预期。
 
 **建议 1 已落地**（commit 待本轮回归确认）：
+
 - 建库侧：`build_tag_vector.py` 新增 meta 表（model/provider/dim/count/quant/distance/text_sources/built_at）+ 首批实测维度守卫（embedder 输出 ≠ PM_EMBED_DIM 时显式退出，防 768 模型灌进 1024 表）。
 - 查询侧：`anima-vector.ts` 新增 `readMeta` 对账——维度错配抛 `VectorDimensionMismatchError`（console.error 每次留痕 + 类型化穿透 catch-all，`searchCatalog` 降级语义不变）；无 meta 的旧库按 legacy 一次性提示，向后兼容。
 - 测试：`anima-vector.test.ts` fixture 支持 meta，新增 legacy 兼容 / meta 匹配 / 错配 fail-fast 三用例。

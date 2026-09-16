@@ -10,16 +10,16 @@
 
 ## 0. 决策表
 
-| # | 决策 | 内容 | 理由 |
-|---|---|---|---|
-| A1 | **去掉检索层** | S2.5 检索包整层退出管线；writer 不再吃 evidence pack；`buildRetrievalPack` 不再被管线消费（模块暂留供回退与测试，标注 deprecated） | 检索包是本会话坏稿的污染源：确定性切分器无法判断"证据质量与充足性"，饥饿证据直灌成文层 |
-| A2 | **成文/审计/修复 = 三个不同 LLM，均可查 tag 字典** | `pm-writer` / `pm-auditor` / `pm-repairer` 三个独立子代理，`toolFilter: { allow: ['catalog_search'] }` | tag 合法性判定从"证据包唯一事实来源"改为"LLM 用工具现场查字典验证"——把词表判断还给最了解上下文的环节，消除证据中转损耗 |
-| A3 | **审计 LLM 每轮必跑** | 废除 D5「critical 跳审」；机器门（零 LLM）∥ 审计 LLM 双轨恒跑，auditor 故障才降级 | 本会话 judge 0 次运行直接根因；语义质检缺位让修复反馈只剩机审文本 |
-| A4 | **修复 = 独立 `pm-repairer`** | 不再重入 writer；输入 = 蓝图 + 当前产物 + 机审 gates + 审计 findings，工具查字典后产出修复版完整产物 | 修复者需要"对着违规清单改稿"的专一角色，与从零成文的 writer 职责分离 |
-| A5 | **fabricated_tag 改为 catalog 直查** | 机审对每个成文 tag 用 `searchCatalogSync` 验证 canonical/alias/artist 命中（同步、毫秒级），不再依赖 evidence 集合 | 无检索包后 tag 合法性的确定性兜底 |
-| A6 | **fallback 直查字典** | `deterministicCompose(bp, search)`：蓝图概念逐个同步查 catalog 取 canonical/alias 作 tag；**unresolved 碎片倾泻 NL 的 N1 语义随检索层一并废除** | 本会话坏稿的最终形态（`"tall mature woman in, tight bodysuit stands in, the, …"`）不允许再出现 |
-| A7 | **enrich patch 值类型校验** | additions/set 目标字段类型必须与原字段类型一致（字符串字段禁对象/数组），违规确定性丢弃 + `enrich_type_violation` advisory | run1 硬崩直接根因 |
-| A8 | **LLM 槽位** | S1 author(1) + S2 enrich(1) + S3 writer(1) + S4 auditor(1) + S5 repairer(≤2/请求) = 干净轮次 4 次、修复满载 ≤6 次 | judge_mode=off 时 auditor 跳过（语义沿袭） |
+| #   | 决策                                               | 内容                                                                                                                                            | 理由                                                                                                                   |
+| --- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| A1  | **去掉检索层**                                     | S2.5 检索包整层退出管线；writer 不再吃 evidence pack；`buildRetrievalPack` 不再被管线消费（模块暂留供回退与测试，标注 deprecated）              | 检索包是本会话坏稿的污染源：确定性切分器无法判断"证据质量与充足性"，饥饿证据直灌成文层                                 |
+| A2  | **成文/审计/修复 = 三个不同 LLM，均可查 tag 字典** | `pm-writer` / `pm-auditor` / `pm-repairer` 三个独立子代理，`toolFilter: { allow: ['catalog_search'] }`                                          | tag 合法性判定从"证据包唯一事实来源"改为"LLM 用工具现场查字典验证"——把词表判断还给最了解上下文的环节，消除证据中转损耗 |
+| A3  | **审计 LLM 每轮必跑**                              | 废除 D5「critical 跳审」；机器门（零 LLM）∥ 审计 LLM 双轨恒跑，auditor 故障才降级                                                               | 本会话 judge 0 次运行直接根因；语义质检缺位让修复反馈只剩机审文本                                                      |
+| A4  | **修复 = 独立 `pm-repairer`**                      | 不再重入 writer；输入 = 蓝图 + 当前产物 + 机审 gates + 审计 findings，工具查字典后产出修复版完整产物                                            | 修复者需要"对着违规清单改稿"的专一角色，与从零成文的 writer 职责分离                                                   |
+| A5  | **fabricated_tag 改为 catalog 直查**               | 机审对每个成文 tag 用 `searchCatalogSync` 验证 canonical/alias/artist 命中（同步、毫秒级），不再依赖 evidence 集合                              | 无检索包后 tag 合法性的确定性兜底                                                                                      |
+| A6  | **fallback 直查字典**                              | `deterministicCompose(bp, search)`：蓝图概念逐个同步查 catalog 取 canonical/alias 作 tag；**unresolved 碎片倾泻 NL 的 N1 语义随检索层一并废除** | 本会话坏稿的最终形态（`"tall mature woman in, tight bodysuit stands in, the, …"`）不允许再出现                         |
+| A7  | **enrich patch 值类型校验**                        | additions/set 目标字段类型必须与原字段类型一致（字符串字段禁对象/数组），违规确定性丢弃 + `enrich_type_violation` advisory                      | run1 硬崩直接根因                                                                                                      |
+| A8  | **LLM 槽位**                                       | S1 author(1) + S2 enrich(1) + S3 writer(1) + S4 auditor(1) + S5 repairer(≤2/请求) = 干净轮次 4 次、修复满载 ≤6 次                               | judge_mode=off 时 auditor 跳过（语义沿袭）                                                                             |
 
 ## 1. 管线
 
@@ -148,11 +148,11 @@ R5. 违规清单无法在不违反 R3 的前提下满足时，如实输出当前
 
 ## 6. 机器门变更（audit.ts）
 
-| 门 | 变更 |
-|---|---|
-| fabricated_tag | 依赖从 `pack.evidence` 改为注入 `verifyTag(tag): boolean`（生产 = searchCatalogSync canonical/alias/artist 命中） |
-| unresolved_dropped | **删除**（随检索层） |
-| tag_order / duplicate_tag / tag_budget / mutual_exclusion / framing_consistency / lighting_term_banned / cjk_in_positive / rating_seed / artist_whitelist / nl_tag_overlap(词面+可选向量) | 保留，签名从 pack 改为 bp + verifyTag |
+| 门                                                                                                                                                                                        | 变更                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| fabricated_tag                                                                                                                                                                            | 依赖从 `pack.evidence` 改为注入 `verifyTag(tag): boolean`（生产 = searchCatalogSync canonical/alias/artist 命中） |
+| unresolved_dropped                                                                                                                                                                        | **删除**（随检索层）                                                                                              |
+| tag_order / duplicate_tag / tag_budget / mutual_exclusion / framing_consistency / lighting_term_banned / cjk_in_positive / rating_seed / artist_whitelist / nl_tag_overlap(词面+可选向量) | 保留，签名从 pack 改为 bp + verifyTag                                                                             |
 
 ## 7. 回退（deterministicCompose, A6）
 

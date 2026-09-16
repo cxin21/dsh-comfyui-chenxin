@@ -15,14 +15,14 @@
 
 核心机制：
 
-| 机制 | 细节 | 对我们的意义 |
-|---|---|---|
-| Agent 模式（v1.2.9） | LLM 生成中调用 DanbooruSearchOnline MCP 实时搜 Danbooru 标签库验证/补充标签；沿标签共现图谱扩展；4 级努力（Close/Low/Medium/High，Low=单轮批量搜索，Medium=≤8 轮循环，High=宽召回+wiki 释义 ≤10 轮）；MCP 不可用自动降级；重复工具调用 >3 次强制退出 | 与我们 catalog_search / dialect/catalog-recall 同构。它证明了「LLM+实时词表验证」是防 hallucination 的正确路线；我们已有同等能力，差距不在此 |
-| Anima 模式输出格式 | `## Prompt`（tag 块 + 2-3 句英文 NL）+ `## 中文解释`（分点设计说明）；正例顺序：质量锚点（masterpiece, best quality, score_7, safe）→ 画师（@kantoku, @tiv, @mika pikazo, @anmi）→ 主体 → 特征 → 服装 → 装备 → 构图（upper body, close-up）→ 姿势表情 → 背景，再接英文 NL 段 | 与我们 dialect/anima.ts 的 SLOT_ORDER 装配完全同构（质量行→@画师→槽位→narrative NL）。说明我们的方言方向与社区实战一致 |
-| 风格预设 | LPF_config.json 的 `styles` 对象：数十个预设，每个可标记适用模式（[NewBie]/[Anima]/[Both]）；XML Style Injector 节点注入；Style Preset Saver 节点把当前「画师+风格」组合存回配置 | **预设 = 扁平的 artist 列表 + style 串**（如 nb01：rella/tidsean/wlop/ciloranko/atdan + anime_style/realistic_shading）。没有构图/光影/配色的结构化拆解，没有负向，没有评级 |
-| 画师注入清洗 | 删括号/`artist:` 前缀/权重冒号/孤立数字；名称内空格转下划线；加 @ 前缀（`rella → @rella`）；注入位置=质量词行之后整行替换 | 我们的 prompt_form 升级（裸名→@形）已等价；它多出的「artist_max 截断」语义值得吸收（本仓库 nb*.json 已带 `artist_max: 3` 字段但引擎未消费） |
-| NSFW | 「深度思考与破限支持：内置 NSFW 提示词破限框架」；`gemini_jailbreaker` 字段；推荐模型表带「NSFW 效果」列（grok-4.1-fast 最好，dolphin-mistral 官方宣称无审查） | **它的 NSFW = LLM 侧破限**（对 API 供应商绕审查）。Anima 是本地模型无需破限；我们需要的是模型侧 rating 标签分层（见 §7），两者解决的是不同问题 |
-| 增量修订 | 相同输入直接复用缓存；相似度 ≥0.55 走最小化修订；连续修改防累积偏移 | 我们 continue/ 模块已有同类机制 |
+| 机制                 | 细节                                                                                                                                                                                                                                                                         | 对我们的意义                                                                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent 模式（v1.2.9） | LLM 生成中调用 DanbooruSearchOnline MCP 实时搜 Danbooru 标签库验证/补充标签；沿标签共现图谱扩展；4 级努力（Close/Low/Medium/High，Low=单轮批量搜索，Medium=≤8 轮循环，High=宽召回+wiki 释义 ≤10 轮）；MCP 不可用自动降级；重复工具调用 >3 次强制退出                         | 与我们 catalog_search / dialect/catalog-recall 同构。它证明了「LLM+实时词表验证」是防 hallucination 的正确路线；我们已有同等能力，差距不在此                                |
+| Anima 模式输出格式   | `## Prompt`（tag 块 + 2-3 句英文 NL）+ `## 中文解释`（分点设计说明）；正例顺序：质量锚点（masterpiece, best quality, score_7, safe）→ 画师（@kantoku, @tiv, @mika pikazo, @anmi）→ 主体 → 特征 → 服装 → 装备 → 构图（upper body, close-up）→ 姿势表情 → 背景，再接英文 NL 段 | 与我们 dialect/anima.ts 的 SLOT_ORDER 装配完全同构（质量行→@画师→槽位→narrative NL）。说明我们的方言方向与社区实战一致                                                      |
+| 风格预设             | LPF_config.json 的 `styles` 对象：数十个预设，每个可标记适用模式（[NewBie]/[Anima]/[Both]）；XML Style Injector 节点注入；Style Preset Saver 节点把当前「画师+风格」组合存回配置                                                                                             | **预设 = 扁平的 artist 列表 + style 串**（如 nb01：rella/tidsean/wlop/ciloranko/atdan + anime_style/realistic_shading）。没有构图/光影/配色的结构化拆解，没有负向，没有评级 |
+| 画师注入清洗         | 删括号/`artist:` 前缀/权重冒号/孤立数字；名称内空格转下划线；加 @ 前缀（`rella → @rella`）；注入位置=质量词行之后整行替换                                                                                                                                                    | 我们的 prompt_form 升级（裸名→@形）已等价；它多出的「artist_max 截断」语义值得吸收（本仓库 nb*.json 已带 `artist_max: 3` 字段但引擎未消费）                                 |
+| NSFW                 | 「深度思考与破限支持：内置 NSFW 提示词破限框架」；`gemini_jailbreaker` 字段；推荐模型表带「NSFW 效果」列（grok-4.1-fast 最好，dolphin-mistral 官方宣称无审查）                                                                                                               | **它的 NSFW = LLM 侧破限**（对 API 供应商绕审查）。Anima 是本地模型无需破限；我们需要的是模型侧 rating 标签分层（见 §7），两者解决的是不同问题                              |
+| 增量修订             | 相同输入直接复用缓存；相似度 ≥0.55 走最小化修订；连续修改防累积偏移                                                                                                                                                                                                          | 我们 continue/ 模块已有同类机制                                                                                                                                             |
 
 局限：无美学分析层；预设无结构化美学拆解；无确定性审计闸门（只有 XML 语法修复）；无输出侧质量闭环。
 
@@ -44,9 +44,11 @@
 ```json
 [
   { "name": "base", "prompt": "{prompt}", "negative_prompt": "" },
-  { "name": "sai-enhance",
+  {
+    "name": "sai-enhance",
     "prompt": "breathtaking {prompt}. award-winning, professional, highly detailed",
-    "negative_prompt": "ugly, deformed, noisy, blurry, distorted, grainy" }
+    "negative_prompt": "ugly, deformed, noisy, blurry, distorted, grainy"
+  }
 ]
 ```
 
@@ -81,36 +83,37 @@
 
 网络限制：civitai（Pony V6 XL）、huggingface（NoobAI-X）连接超时，未取到一手页面。以**本地 Anima tag-catalog 实测**为准（2026-09-12，catalog_search）：
 
-| tag | catalog 状态 | 备注 |
-|---|---|---|
-| `rating_explicit` | **canonical**（record 964555，prompt_form "rating explicit"） | 露骨档，可用 |
-| `rating_sensitive` | **canonical**（record 964556，prompt_form "@rating sensitive"） | 敏感档（性暗示/泳装等），可用 |
-| `rating:questionable` | fuzzy 候选（record 964548，usage_count=0） | 存疑档，弱 |
-| `rating_general` | **无 canonical**（仅 fuzzy `ratings:general` usage=0） | 全年龄档缺失 |
-| `safety` | canonical（record 1014547，usage_count=4） | 现行安全种子 tag |
-| `score_7` / `score_1..3` | 方言 POLICIES 内建（anima.ts） | Pony 系质量梯度已被 Anima 内化：正向 score_7，负向 score_1..3 |
+| tag                      | catalog 状态                                                    | 备注                                                          |
+| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| `rating_explicit`        | **canonical**（record 964555，prompt_form "rating explicit"）   | 露骨档，可用                                                  |
+| `rating_sensitive`       | **canonical**（record 964556，prompt_form "@rating sensitive"） | 敏感档（性暗示/泳装等），可用                                 |
+| `rating:questionable`    | fuzzy 候选（record 964548，usage_count=0）                      | 存疑档，弱                                                    |
+| `rating_general`         | **无 canonical**（仅 fuzzy `ratings:general` usage=0）          | 全年龄档缺失                                                  |
+| `safety`                 | canonical（record 1014547，usage_count=4）                      | 现行安全种子 tag                                              |
+| `score_7` / `score_1..3` | 方言 POLICIES 内建（anima.ts）                                  | Pony 系质量梯度已被 Anima 内化：正向 score_7，负向 score_1..3 |
 
 结论：Anima 的 rating 词表**部分存在**（explicit/sensitive 扎实，questionable/general 弱）。NSFW 设计应以 `rating_sensitive` / `rating_explicit` 为主轴 + `safety` 为安全种子，不依赖 rating_general/questionable（可用 overlay/catalog_relations 逐步补全，cooccurrence 类关系按规则拒收）。
 
 当前插件对 NSFW 的全部处理（anima.ts 实测）：
+
 - `AnimaSlots.explicit` 槽 + `EXPLICIT_SAFETY_MARKERS` 关键词扫描（nude/nsfw/乳头/裸露/色情…）→ `isExplicitRequest()`；
 - 非 explicit 请求：正向注入 `safety` 种子（priority 99）；explicit 请求：**只是不注入 'safe'**，无分层、无策略差异、无边界闸门。
 - 即现状 = 一个布尔开关，不是「支持 NSFW」。
 
 ## 8. 对照矩阵（机制 → 来源 → 采纳方式）
 
-| # | 机制 | 成熟来源 | 我们怎么用 |
-|---|---|---|---|
-| 1 | 统一模板 schema + 正负成对 + 目录式加载/重名消解 | twri, Fooocus | 风格预设 v2 schema 的骨架 |
-| 2 | 画师混搭为核心杠杆 + artist_max 截断 + @清洗 | NewBie | 保留 artistHints，消费 nb*.json 的 artist_max；catalog 验证已有 |
-| 3 | 预设按模式分档（NewBie/Anima/Both → 我们的 anima/h3/sd） | NewBie | `applies_to` 字段已有，全部预设必须带 |
-| 4 | 质量锚点行（masterpiece/best quality/score_7/safe） | NewBie 正例 ≈ 我们 POLICIES | 已有；NSFW 分级时按 rating 替换/追加锚点 |
-| 5 | 模型侧 rating 分层（sensitive/explicit 主轴） | NoobAI/Pony（间接） + Anima catalog 实测 | NSFW 三档分级的词表基础 |
-| 6 | LLM 侧破限框架 | NewBie | 不采纳：Anima 本地模型，走 rating 标签而非破限 |
-| 7 | 美学结构化拆解（构图/光影/配色/动势成卡） | 我们已有的 art-direction 36 卡（外部项目均没有这层） | **领先项**：把「选卡」变成美学分析系统的输出 |
-| 8 | 输出侧打分闭环（打分→过滤→排名→记录） | ImageReward, LAION | 第二期可选：camera-* 产物 → RM/CLIP 分 → 回写 feedback |
-| 9 | 从成功产物反存预设（preset 一等公民） | InvokeAI | 预设 CRUD 工具面（list/get/save）+ feedback 数据回流 |
-| 10 | 短 prompt 自动增补（GPT-2 引擎思想） | Fooocus | 已由 enrich 七维度扩写覆盖，不重复建设 |
+| #   | 机制                                                     | 成熟来源                                             | 我们怎么用                                                      |
+| --- | -------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| 1   | 统一模板 schema + 正负成对 + 目录式加载/重名消解         | twri, Fooocus                                        | 风格预设 v2 schema 的骨架                                       |
+| 2   | 画师混搭为核心杠杆 + artist_max 截断 + @清洗             | NewBie                                               | 保留 artistHints，消费 nb*.json 的 artist_max；catalog 验证已有 |
+| 3   | 预设按模式分档（NewBie/Anima/Both → 我们的 anima/h3/sd） | NewBie                                               | `applies_to` 字段已有，全部预设必须带                           |
+| 4   | 质量锚点行（masterpiece/best quality/score_7/safe）      | NewBie 正例 ≈ 我们 POLICIES                          | 已有；NSFW 分级时按 rating 替换/追加锚点                        |
+| 5   | 模型侧 rating 分层（sensitive/explicit 主轴）            | NoobAI/Pony（间接） + Anima catalog 实测             | NSFW 三档分级的词表基础                                         |
+| 6   | LLM 侧破限框架                                           | NewBie                                               | 不采纳：Anima 本地模型，走 rating 标签而非破限                  |
+| 7   | 美学结构化拆解（构图/光影/配色/动势成卡）                | 我们已有的 art-direction 36 卡（外部项目均没有这层） | **领先项**：把「选卡」变成美学分析系统的输出                    |
+| 8   | 输出侧打分闭环（打分→过滤→排名→记录）                    | ImageReward, LAION                                   | 第二期可选：camera-* 产物 → RM/CLIP 分 → 回写 feedback          |
+| 9   | 从成功产物反存预设（preset 一等公民）                    | InvokeAI                                             | 预设 CRUD 工具面（list/get/save）+ feedback 数据回流            |
+| 10  | 短 prompt 自动增补（GPT-2 引擎思想）                     | Fooocus                                              | 已由 enrich 七维度扩写覆盖，不重复建设                          |
 
 ## 9. 本地现状盘点（设计输入）
 

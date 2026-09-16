@@ -9,28 +9,28 @@
 
 ## 0. 结论摘要（决策表）
 
-| # | 决策 | 内容 | 理由 |
-|---|---|---|---|
-| D1 | 成文层引入 LLM | 新增 `pm-writer` 成文子代理，把蓝图+检索包翻译为最终 prompt；**推翻 M5 D4**（确定性成文） | 用户定案五段流程「蓝图→扩写→成文→审核→修复」；结构层与词表层解耦 |
-| D2 | catalog 消费点唯一化 | 意图蓝图/扩写**禁止**任何词表交互；全管线只有 S2.5 检索（确定性）与 S3 成文（读证据块）消费 catalog | 懂画面与懂词表分离；消除蓝图 LLM 写 tag 的 grounding 失效根源（本会话 gen_1789485485442 实证） |
-| D3 | 零词表契约机检 | S1/S2 输出出现 tag 形态词 → 确定性 gate `tag_in_blueprint` 拦截 | 契约不靠自觉，靠谓词 |
-| D4 | 窄修复 | 修复轮只重入成文+审核；蓝图/扩写产物冻结（hash 校验） | 修复成本 3→2 次 LLM/轮；杜绝无效修复重烧上游（实测 2 轮白烧 6 次） |
-| D5 | 双轨审核 | 确定性审计（critical 直进修复，不烧 judge）∥ judge（6 维新 rubric） | 机器契约零 LLM 判定；LLM 只审语义 |
-| D6 | NL-tag 零重叠 | 词面检查 + bge-base-en-v1.5 余弦 ≥0.85 → critical `nl_tag_overlap` | 消除双重加权；向量层首个管线内消费点 |
-| D7 | 回退通道 | 现有 compileAnima 降级为确定性回退 writer（fail-open）：成文失败/修复耗尽时出稿 | 任何情况下不空手出稿 |
-| D8 | 回滚面 | env `PM_PIPELINE_FORM=compositing|legacy`（非法值 fail-fast + advisory） | 模式对齐 `PM_AUTHOR_INTENT_FORM`；legacy = 今日行为 |
-| D9 | judge rubric 替换 | 7 维 → 6 维（新增 blueprint-fidelity / nl-quality，删对确定性编译有意义的维度） | 审核对象从编译产物变为成文产物 |
+| #   | 决策                 | 内容                                                                                                | 理由                                                                                           |
+| --- | -------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| D1  | 成文层引入 LLM       | 新增 `pm-writer` 成文子代理，把蓝图+检索包翻译为最终 prompt；**推翻 M5 D4**（确定性成文）           | 用户定案五段流程「蓝图→扩写→成文→审核→修复」；结构层与词表层解耦                               |
+| D2  | catalog 消费点唯一化 | 意图蓝图/扩写**禁止**任何词表交互；全管线只有 S2.5 检索（确定性）与 S3 成文（读证据块）消费 catalog | 懂画面与懂词表分离；消除蓝图 LLM 写 tag 的 grounding 失效根源（本会话 gen_1789485485442 实证） |
+| D3  | 零词表契约机检       | S1/S2 输出出现 tag 形态词 → 确定性 gate `tag_in_blueprint` 拦截                                     | 契约不靠自觉，靠谓词                                                                           |
+| D4  | 窄修复               | 修复轮只重入成文+审核；蓝图/扩写产物冻结（hash 校验）                                               | 修复成本 3→2 次 LLM/轮；杜绝无效修复重烧上游（实测 2 轮白烧 6 次）                             |
+| D5  | 双轨审核             | 确定性审计（critical 直进修复，不烧 judge）∥ judge（6 维新 rubric）                                 | 机器契约零 LLM 判定；LLM 只审语义                                                              |
+| D6  | NL-tag 零重叠        | 词面检查 + bge-base-en-v1.5 余弦 ≥0.85 → critical `nl_tag_overlap`                                  | 消除双重加权；向量层首个管线内消费点                                                           |
+| D7  | 回退通道             | 现有 compileAnima 降级为确定性回退 writer（fail-open）：成文失败/修复耗尽时出稿                     | 任何情况下不空手出稿                                                                           |
+| D8  | 回滚面               | env `PM_PIPELINE_FORM=compositing                                                                   | legacy`（非法值 fail-fast + advisory）                                                         | 模式对齐 `PM_AUTHOR_INTENT_FORM`；legacy = 今日行为 |
+| D9  | judge rubric 替换    | 7 维 → 6 维（新增 blueprint-fidelity / nl-quality，删对确定性编译有意义的维度）                     | 审核对象从编译产物变为成文产物                                                                 |
 
 ## 1. 现状验尸（本会话实证，gen_1789485485442）
 
-| # | 事实 | 出处 |
-|---|---|---|
-| V1 | 蓝图 LLM 输出的多 tag 段串整段提交 grounding → 10 个 segment match_type=miss → judge tag-evidence blocker | envelope judge f1 |
-| V2 | 修复轮 2 轮全部无效（缺陷在编译层分段，LLM 不可达），烧 6 次子代理后静默出稿 | traceStages + observability.corrections=2 |
-| V3 | round 0 有 critical gate → judge 被 rule_critical 跳过，审核证据缺失 | pm-author-trace.log 15:14:55 `stage_done {ok:false,critical:1}` |
-| V4 | B7 catalog 召回注入在 intent **之前**（persona 候选块），词表证据先于画面语义——与「先懂画面再查词」的直觉相反 | prompt-author.ts:1021 |
-| V5 | 扩写子代理 label 为 pm-enrich 但自述含「创作蓝图」，GUI 归因混淆 | 子会话日志首块 |
-| V6 | audit `catalog_miss` 恒 minor 不聚合，judge 按计数判 blocker——两把标尺 | anima.ts:732 / author-judge e2e |
+| #   | 事实                                                                                                          | 出处                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| V1  | 蓝图 LLM 输出的多 tag 段串整段提交 grounding → 10 个 segment match_type=miss → judge tag-evidence blocker     | envelope judge f1                                               |
+| V2  | 修复轮 2 轮全部无效（缺陷在编译层分段，LLM 不可达），烧 6 次子代理后静默出稿                                  | traceStages + observability.corrections=2                       |
+| V3  | round 0 有 critical gate → judge 被 rule_critical 跳过，审核证据缺失                                          | pm-author-trace.log 15:14:55 `stage_done {ok:false,critical:1}` |
+| V4  | B7 catalog 召回注入在 intent **之前**（persona 候选块），词表证据先于画面语义——与「先懂画面再查词」的直觉相反 | prompt-author.ts:1021                                           |
+| V5  | 扩写子代理 label 为 pm-enrich 但自述含「创作蓝图」，GUI 归因混淆                                              | 子会话日志首块                                                  |
+| V6  | audit `catalog_miss` 恒 minor 不聚合，judge 按计数判 blocker——两把标尺                                        | anima.ts:732 / author-judge e2e                                 |
 
 ## 2. 总编排与数据契约
 
@@ -45,14 +45,14 @@ input+rating+style_id
   → 耗尽/失败 → 确定性回退 compileAnima(V1) → Envelope
 ```
 
-| 阶段 | LLM | 失败语义 |
-|---|---|---|
-| S1 | `pm-author` 子代理（fail-fast；无 subagents 时 defaultIntent 直连） | 单次 feedback 重试（D5c 语义）→ 再失败透传 |
-| S2 | `pm-enrich` 子代理 | 永不抛出；skipped → V0 原样进 S2.5 + `enrich_skipped` |
-| S2.5 | 无 | 检索故障 → evidence 空块 + unresolved 全量 → advisory `evidence_partial` |
-| S3 | `pm-writer` 子代理（新） | 失败/超时/解析失败 → **确定性回退出稿** + `writer_fallback_used`（不阻塞出稿） |
-| S4 | judge = `pm-critic`；确定性审计恒跑 | judge 故障 skipped；critical 语义见 §6 |
-| S5 | 仅 S3+S4 | 耗尽 → 回退通道 + `loop_exhausted:true` + `fallback_compile_used` |
+| 阶段 | LLM                                                                 | 失败语义                                                                       |
+| ---- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| S1   | `pm-author` 子代理（fail-fast；无 subagents 时 defaultIntent 直连） | 单次 feedback 重试（D5c 语义）→ 再失败透传                                     |
+| S2   | `pm-enrich` 子代理                                                  | 永不抛出；skipped → V0 原样进 S2.5 + `enrich_skipped`                          |
+| S2.5 | 无                                                                  | 检索故障 → evidence 空块 + unresolved 全量 → advisory `evidence_partial`       |
+| S3   | `pm-writer` 子代理（新）                                            | 失败/超时/解析失败 → **确定性回退出稿** + `writer_fallback_used`（不阻塞出稿） |
+| S4   | judge = `pm-critic`；确定性审计恒跑                                 | judge 故障 skipped；critical 语义见 §6                                         |
+| S5   | 仅 S3+S4                                                            | 耗尽 → 回退通道 + `loop_exhausted:true` + `fallback_compile_used`              |
 
 成本模型：无修复 4 次 LLM（现状 3）；1 次修复 6（现状 6）；2 次修复 8（现状 9）。修复率预期随 grounding 前移下降（V1 缺陷根源消除）。
 
@@ -130,13 +130,20 @@ Schema（机器校验）：`{schema_version:1, media:"image", core, subjects, co
 **查询级联**：canonical/alias → **bge-base-en-v1.5 向量语义（ONNX 查询侧）**（`searchCatalog` async 语义层，dim 校验与降级语义按 tag-vector-semantic-search spec）→ fuzzy。`usage_count` 仅作模型裁决参考，编译层不自动替换（原文原则延续）。
 
 ```json
-{ "evidence": [
-    { "concept": "S1.appearance.hair", "query": "long black hair",
-      "hits": [ {"prompt_form":"long hair","match_type":"canonical","usage_count":891234},
-                {"prompt_form":"black hair","match_type":"canonical","usage_count":456789} ] } ],
-  "unresolved": [ {"concept":"…","query":"…"} ],
-  "artists": [ {"prompt_form":"@as109","match_type":"canonical"} ],
-  "mutual_exclusion_pairs": [["close-up","full body"]]
+{
+  "evidence": [
+    {
+      "concept": "S1.appearance.hair",
+      "query": "long black hair",
+      "hits": [
+        { "prompt_form": "long hair", "match_type": "canonical", "usage_count": 891234 },
+        { "prompt_form": "black hair", "match_type": "canonical", "usage_count": 456789 }
+      ]
+    }
+  ],
+  "unresolved": [{ "concept": "…", "query": "…" }],
+  "artists": [{ "prompt_form": "@as109", "match_type": "canonical" }],
+  "mutual_exclusion_pairs": [["close-up", "full body"]]
 }
 ```
 
@@ -194,18 +201,19 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 
 **确定性审计（零 LLM，critical → 直进修复，不烧 judge）**：
 
-| 规则 | 判定谓词 |
-|---|---|
-| `tag_in_blueprint` | V0/V1 任一文本字段命中 tag 形态模式（snake_case / `^\d+girl` / `^@` / `^score_`） |
-| `fabricated_tag` | tag.text 回查三层全 miss |
-| `nl_tag_overlap` | NL 分句 × tag：词面包含命中，或 bge-base-en-v1.5 余弦 ≥ 0.85（向量层不可用时仅词面 + advisory `overlap_vector_unavailable`） |
-| `unresolved_dropped` | unresolved 概念既不在 NL 也不在 dropped_concepts |
-| `tag_budget` | tag 数 ∉ [20,40] 或 positive 总字符 > 1200 |
-| `mutual_exclusion` / `framing_consistency` / `lighting_term_banned` / `cjk_in_positive` / `rating_seed` / `artist_whitelist` | 沿现行语义，判定对象改为成文产物 |
+| 规则                                                                                                                         | 判定谓词                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `tag_in_blueprint`                                                                                                           | V0/V1 任一文本字段命中 tag 形态模式（snake_case / `^\d+girl` / `^@` / `^score_`）                                            |
+| `fabricated_tag`                                                                                                             | tag.text 回查三层全 miss                                                                                                     |
+| `nl_tag_overlap`                                                                                                             | NL 分句 × tag：词面包含命中，或 bge-base-en-v1.5 余弦 ≥ 0.85（向量层不可用时仅词面 + advisory `overlap_vector_unavailable`） |
+| `unresolved_dropped`                                                                                                         | unresolved 概念既不在 NL 也不在 dropped_concepts                                                                             |
+| `tag_budget`                                                                                                                 | tag 数 ∉ [20,40] 或 positive 总字符 > 1200                                                                                   |
+| `mutual_exclusion` / `framing_consistency` / `lighting_term_banned` / `cjk_in_positive` / `rating_seed` / `artist_whitelist` | 沿现行语义，判定对象改为成文产物                                                                                             |
 
 **judge rubric（6 维，替换现行 7 维）**：`blueprint-fidelity`（tag+NL 忠实 V1，漏译/加戏）、`nl-quality`（四类职责之外信息为零、单一瞬间）、`tag-selection`（同概念多命中的取舍）、`negative-template`、`composition-coherence`、`aesthetic-vocabulary`。verdict/debate/judgeFeedback 投影语义不变；`rule_critical` 跳审语义不变。
 
 **judge 提示词操作化纪律**（官方评测方法论落地）：
+
 1. **每维附可判定判据句**（Specific/Measurable 原则：禁用形容词性标准如"画面好"，一律写成可核对谓词——例：`blueprint-fidelity` 判据 = "V1 每个 subjects 字段的语义要素在 tags∪nl 中均有对应表达；tags 中不存在 V1 未包含的语义要素（光源/氛围场景化改写除外）"）。
 2. **被审对象包裹隔离**：成文产物以 `<response>…</response>` 包裹后进 user 段，与指令物理分离（防注入；现"待评审数据"条款升级为标签包裹）。
 3. **单一量纲**：每维 1-5 整数分 + 违规 findings 列表，不要求 judge 产出散文性总评（输出纪律压到最小，survey 例 6）。
@@ -214,8 +222,17 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 ## 8. S5 窄修复 — feedback 契约
 
 ```json
-{ "violations": [ {"rule":"fabricated_tag","evidence":"tag 'neon glow' not in evidence","required_fix":"use 'neon signboards' or move to NL"} ],
-  "judge_feedback": ["[major] …"], "frozen": {"blueprint_v1_hash": "…"} }
+{
+  "violations": [
+    {
+      "rule": "fabricated_tag",
+      "evidence": "tag 'neon glow' not in evidence",
+      "required_fix": "use 'neon signboards' or move to NL"
+    }
+  ],
+  "judge_feedback": ["[major] …"],
+  "frozen": { "blueprint_v1_hash": "…" }
+}
 ```
 
 - 只重入 S3+S4；`frozen.blueprint_v1_hash` 在成文请求中回传，修复产物若试图改蓝图结构 → `frozen_stage_violation` 直接 fail 该轮。
@@ -230,15 +247,15 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 
 ## 10. 风险清单
 
-| # | 风险 | 缓解 |
-|---|---|---|
-| R1 | 成文 LLM tag 漂移（自造/格式错） | T1+T2+回查 fabricated_tag；golden L5① |
-| R2 | token 画像变化（成文 prompt ≈ 蓝图+检索包） | 重放实测字节，偏差 >30% 立案（沿 M5 R1 判据） |
-| R3 | 检索包膨胀（概念多 → 上下文爆） | 每概念 hits ≤5、检索包字符上限（4096，超限截断 + advisory `evidence_truncated`） |
-| R4 | 向量层不可用 | 级联跳 semantic 层 + `overlap_vector_unavailable` advisory；词面规则独立成立 |
-| R5 | NL 尾质量失控（复述 tag） | N3 谓词 + `nl_tag_overlap` 机器判定；judge nl-quality 维度 |
-| R6 | h3 未来迁移成本 | DialectContract 面向成文产物扩展（compile 保留为回退通道，h3 零感知） |
-| R7 | 修复轮越权改蓝图 | frozen hash + frozen_stage_violation |
+| #   | 风险                                        | 缓解                                                                             |
+| --- | ------------------------------------------- | -------------------------------------------------------------------------------- |
+| R1  | 成文 LLM tag 漂移（自造/格式错）            | T1+T2+回查 fabricated_tag；golden L5①                                            |
+| R2  | token 画像变化（成文 prompt ≈ 蓝图+检索包） | 重放实测字节，偏差 >30% 立案（沿 M5 R1 判据）                                    |
+| R3  | 检索包膨胀（概念多 → 上下文爆）             | 每概念 hits ≤5、检索包字符上限（4096，超限截断 + advisory `evidence_truncated`） |
+| R4  | 向量层不可用                                | 级联跳 semantic 层 + `overlap_vector_unavailable` advisory；词面规则独立成立     |
+| R5  | NL 尾质量失控（复述 tag）                   | N3 谓词 + `nl_tag_overlap` 机器判定；judge nl-quality 维度                       |
+| R6  | h3 未来迁移成本                             | DialectContract 面向成文产物扩展（compile 保留为回退通道，h3 零感知）            |
+| R7  | 修复轮越权改蓝图                            | frozen hash + frozen_stage_violation                                             |
 
 ## 11. 不做（防蔓延）
 
@@ -262,10 +279,10 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 
 ## 13. 提示词工程纪律来源（2026-09-15 调研）
 
-| 来源 | 采纳落点 |
-|---|---|
+| 来源                                                                              | 采纳落点                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 仓内 `docs/2026-09-12-llm-prompt-writing-survey.md`（10 例拆解，12 条可移植规则） | 规则 4（few-shot 同构）→ §6 S3 双示例；规则 5（反注入收尾）→ §2.1 模板末块；规则 8（契约独立成块+排版加权）→ §2.1；规则 3（禁令配程序化出口）→ §6 N1/T1 出口声明；规则 10（训练分布依据写进 persona）→ S3 T3 顺序条款注明"顺序即权重序（训练分布事实）" |
-| Anthropic 官方 Prompting best practices（platform.claude.com，2026-09 抓取） | XML 分区标签 + 长数据前置/指令收尾 → §2.1 taskText 模板；"说做什么优于说别做什么"→ 各禁令逐条核对出口；给规则附动机（"输出被程序解析"类理由已有，保留） |
-| Anthropic 官方 Define success criteria & build evaluations（同上） | judge rubric 操作化（§7 四条纪律）；golden 集边缘案例要求（c10 CJK、c12 软负向之外补：超长输入、无主体场景）；成功判据量化 → §9 回滚判据（已有） |
+| Anthropic 官方 Prompting best practices（platform.claude.com，2026-09 抓取）      | XML 分区标签 + 长数据前置/指令收尾 → §2.1 taskText 模板；"说做什么优于说别做什么"→ 各禁令逐条核对出口；给规则附动机（"输出被程序解析"类理由已有，保留）                                                                                                 |
+| Anthropic 官方 Define success criteria & build evaluations（同上）                | judge rubric 操作化（§7 四条纪律）；golden 集边缘案例要求（c10 CJK、c12 软负向之外补：超长输入、无主体场景）；成功判据量化 → §9 回滚判据（已有）                                                                                                        |
 
 落地纪律：persona 改动一律过 golden L4 前缀测试 + L1 主干判据；few-shot 增删属于 persona 变更，须双跑重放。

@@ -18,15 +18,15 @@
 
 ## 2. 已拍板决策
 
-| # | 决策 | 结论 |
-|---|---|---|
-| D1 | NSFW 机制 | 三档 rating 分级（safe / sensitive / explicit），grounded 在 catalog canonical 标签；硬闸门拒绝未成年性化与非自愿内容 |
-| D2 | 美学分析范围 | prompt 侧为主（确定性 gates + 卡推荐，零 GPU）；输出侧评分（CLIP/偏好 RM）只预留接口不做 |
-| D3 | 风格库 | 统一 v2 schema，44 nb + 11 builtin 全部迁移接线，新增预设填全分类；negative_hints / artist_max 全部生效 |
-| D4 | NSFW 提示词路线 | 不采纳 NewBie 的 LLM 破限（Anima 是本地模型），走模型侧 rating 标签分层 |
-| D5 | LLM 参与强度 | 不强制扩 LLM 步骤；现有 LLM 编排保持 ①→②→③，新系统全部以确定性节点插入缝隙 |
-| D6 | 蓝图意图分析 | **恒跑无旁路**：`blueprint_id` 重定义为「带旧蓝图锚定的增量意图分析」；prompt_author 移除 `audit_only`（纯审计归 prompt_audit 工具）；intent 失败 fail-fast 可重试，不静默降级 |
-| D7 | 成本逃生门 | `enrich=false` / `judge_mode=off` 保留为显式逃生门；默认永远是完整流程 |
+| #   | 决策            | 结论                                                                                                                                                                           |
+| --- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | NSFW 机制       | 三档 rating 分级（safe / sensitive / explicit），grounded 在 catalog canonical 标签；硬闸门拒绝未成年性化与非自愿内容                                                          |
+| D2  | 美学分析范围    | prompt 侧为主（确定性 gates + 卡推荐，零 GPU）；输出侧评分（CLIP/偏好 RM）只预留接口不做                                                                                       |
+| D3  | 风格库          | 统一 v2 schema，44 nb + 11 builtin 全部迁移接线，新增预设填全分类；negative_hints / artist_max 全部生效                                                                        |
+| D4  | NSFW 提示词路线 | 不采纳 NewBie 的 LLM 破限（Anima 是本地模型），走模型侧 rating 标签分层                                                                                                        |
+| D5  | LLM 参与强度    | 不强制扩 LLM 步骤；现有 LLM 编排保持 ①→②→③，新系统全部以确定性节点插入缝隙                                                                                                     |
+| D6  | 蓝图意图分析    | **恒跑无旁路**：`blueprint_id` 重定义为「带旧蓝图锚定的增量意图分析」；prompt_author 移除 `audit_only`（纯审计归 prompt_audit 工具）；intent 失败 fail-fast 可重试，不静默降级 |
+| D7  | 成本逃生门      | `enrich=false` / `judge_mode=off` 保留为显式逃生门；默认永远是完整流程                                                                                                         |
 
 ## 3. 架构总览
 
@@ -53,26 +53,34 @@ src/pe-framework/
 
 ```ts
 type StyleCategory =
-  | 'photography' | 'anime' | 'illustration' | 'cg_3d' | 'oriental'
-  | 'dark_supernatural' | 'scifi_fantasy' | 'retro' | 'graphic' | 'glamour_intimate'
-type Rating = 'safe' | 'sensitive' | 'explicit'
+  | 'photography'
+  | 'anime'
+  | 'illustration'
+  | 'cg_3d'
+  | 'oriental'
+  | 'dark_supernatural'
+  | 'scifi_fantasy'
+  | 'retro'
+  | 'graphic'
+  | 'glamour_intimate';
+type Rating = 'safe' | 'sensitive' | 'explicit';
 
 interface StylePresetV2 {
-  id: string                    // 全局唯一；迁移 nb 保留原 id（含 CJK）
-  name: string                  // 中文显示名
-  category: StyleCategory       // 必填，十类之一
-  rating: Rating                // 该预设最高适用档；nsfw 预设一律 applies_to: ['anima']
-  base?: string                 // 画风基底
-  theme?: string                // 主题
-  palette?: string              // 情绪配色
-  fragments: { image: string; video: string }   // 必填；danbooru 英文短语，逗号分短语（conformity 按短语比例注入）
-  negative_hints: string[]      // 必填 ≥1；软负向，接线进 negative（与策略负向、exclusions 去重合并）
-  artist_hints: string[]        // 画师候选（裸名，catalog 验证存在；可为空，explicit 预设允许为空）
-  artist_max: number            // 画师注入截断（默认 3；消费 nb 数据字段）
-  applies_to: ('anima' | 'h3' | 'sd')[]   // 模式分档（对齐 NewBie [Anima]/[Both]）
-  art_direction_hints?: Partial<Record<'perspective'|'composition'|'lighting'|'color'|'motion', string>>
-                                // 可选：该风格建议的艺术指导卡（推荐器的附加先验信号）
-  source: string                // 'builtin-migrated' | 'newbie-migrated' | 'hand-authored'
+  id: string; // 全局唯一；迁移 nb 保留原 id（含 CJK）
+  name: string; // 中文显示名
+  category: StyleCategory; // 必填，十类之一
+  rating: Rating; // 该预设最高适用档；nsfw 预设一律 applies_to: ['anima']
+  base?: string; // 画风基底
+  theme?: string; // 主题
+  palette?: string; // 情绪配色
+  fragments: { image: string; video: string }; // 必填；danbooru 英文短语，逗号分短语（conformity 按短语比例注入）
+  negative_hints: string[]; // 必填 ≥1；软负向，接线进 negative（与策略负向、exclusions 去重合并）
+  artist_hints: string[]; // 画师候选（裸名，catalog 验证存在；可为空，explicit 预设允许为空）
+  artist_max: number; // 画师注入截断（默认 3；消费 nb 数据字段）
+  applies_to: ('anima' | 'h3' | 'sd')[]; // 模式分档（对齐 NewBie [Anima]/[Both]）
+  art_direction_hints?: Partial<Record<'perspective' | 'composition' | 'lighting' | 'color' | 'motion', string>>;
+  // 可选：该风格建议的艺术指导卡（推荐器的附加先验信号）
+  source: string; // 'builtin-migrated' | 'newbie-migrated' | 'hand-authored'
 }
 ```
 
@@ -97,51 +105,51 @@ interface StylePresetV2 {
 
 十类分类学与归属。**迁移 55 条**（内容不重写，按 §10 映射规则转换 schema）：
 
-| 类别 | 迁移来源 |
-|---|---|
-| photography（1） | cinematic_real |
-| anime（25） | cel_shading + nb01/02/08/09/10/11/13/16/21/23/25/27/28/34/36/38/39/40/53/56/57/58/64/65 |
-| illustration（17） | thick_paint, watercolor, concept_art, fairy_tale + nb03/04/06/07/12/14/17/18/24/47/48/51/52 |
-| cg_3d（2） | game_cg + nb15, nb19 |
-| oriental（2） | wafuu + nb05 |
-| dark_supernatural（1） | dark_epic |
-| scifi_fantasy（2） | cyberpunk, wasteland |
-| retro（1） | nb26 |
-| graphic（3） | nb20, nb35, nb43 |
+| 类别                   | 迁移来源                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| photography（1）       | cinematic_real                                                                              |
+| anime（25）            | cel_shading + nb01/02/08/09/10/11/13/16/21/23/25/27/28/34/36/38/39/40/53/56/57/58/64/65     |
+| illustration（17）     | thick_paint, watercolor, concept_art, fairy_tale + nb03/04/06/07/12/14/17/18/24/47/48/51/52 |
+| cg_3d（2）             | game_cg + nb15, nb19                                                                        |
+| oriental（2）          | wafuu + nb05                                                                                |
+| dark_supernatural（1） | dark_epic                                                                                   |
+| scifi_fantasy（2）     | cyberpunk, wasteland                                                                        |
+| retro（1）             | nb26                                                                                        |
+| graphic（3）           | nb20, nb35, nb43                                                                            |
 
 （归属在迁移时逐条确认，允许个别 nb 按 style_tags 微调 category，但不改内容语义。）
 
 **新增 27 条**（M2 数据里程碑；画师候选在 authoring 时经 catalog_search 逐一验证，验证失败则留空）：
 
-| id | 名称 | category | rating | 锚点 tag 方向 | 负向方向 |
-|---|---|---|---|---|---|
-| film_photography | 胶片摄影 | photography | safe | film grain, kodak portra tones, halation, 35mm | digital clarity, oversharpened |
-| studio_portrait | 棚拍人像 | photography | safe | seamless backdrop, softbox key, catchlight（光源物件写法） | cluttered background |
-| documentary_photo | 纪实抓拍 | photography | safe | candid moment, available light source object, photojournalism | staged pose |
-| fashion_editorial | 时尚大片 | photography | safe | editorial pose, haute couture, glossy magazine layout | casual snapshot |
-| night_street | 夜景街拍 | photography | safe | neon signage reflections, wet asphalt, handheld framing | daylight |
-| sports_action | 体育动感 | photography | safe | motion blur limbs, panning shot, sweat droplets | static pose |
-| wildlife_nature | 生态自然 | photography | safe | telephoto compression, natural habitat, golden hour ambience | studio backdrop |
-| unreal_render | UE 渲染感 | cg_3d | safe | lumen global illumination, nanite detail, cinematic engine render | flat shading |
-| figure_model | 手办质感 | cg_3d | safe | pvc figure, glossy coat, display base | 2d lineart |
-| claymation_clay | 黏土定格 | cg_3d | safe | clay texture, fingerprint marks, stop motion feel | smooth render |
-| ink_wash | 水墨写意 | oriental | safe | ink wash painting, brush splashes, negative space rice paper | heavy saturation |
-| hanfu_xianxia | 古风仙侠 | oriental | safe | flowing hanfu, ribbon sleeves, immortal mist peaks | modern clothing |
-| gothic_vampire | 哥特暗夜 | dark_supernatural | safe | gothic architecture, candlelit chandelier object, pale skin, victorian lace | bright daylight |
-| eldritch_horror | 克苏鲁诡秘 | dark_supernatural | safe | non-euclidean geometry, tentacular silhouettes, abyssal palette | cheerful tones |
-| showa_retro | 昭和复古 | retro | safe | showa era cityscape, retro anime color dot tone | modern digital look |
-| vintage_photo | 老照片 | retro | safe | sepia tone, faded edges, analog damage | hdr clarity |
-| poster_constructivist | 构成海报 | graphic | safe | constructivist poster, bold geometric blocks, propaganda print style | photorealism |
-| boudoir | 私房写真 | glamour_intimate | sensitive | boudoir posing, silk sheets, intimate interior | explicit nudity |
-| lingerie_fashion | 内衣时尚 | glamour_intimate | sensitive | lingerie set, fashion catalogue posing | explicit nudity |
-| beach_swimwear | 泳装盛夏 | glamour_intimate | sensitive | one-piece swimsuit, beach sunlight, sunscreen sheen | explicit nudity |
-| pinup_retro | 经典海报女郎 | glamour_intimate | sensitive | retro pin-up pose, victory rolls, winking gesture | explicit nudity |
-| glamour_portrait | 魅惑人像 | glamour_intimate | sensitive | smoky eyes, red lips, off-shoulder dress, sultry gaze | explicit nudity |
-| after_dark | 夜店魅影 | glamour_intimate | sensitive | club lighting object, cocktail glass, party dress | explicit nudity |
-| artistic_nude | 人体艺术 | glamour_intimate | explicit | artistic nude, classical sculpture pose, draped fabric | minors traits, grotesque |
-| explicit_solo | 成人独角 | glamour_intimate | explicit | solo female, adult body type, explicit pose vocabulary（词表在实现期按 catalog 验证填全） | minors traits |
-| explicit_couple | 成人双人 | glamour_intimate | explicit | heterosexual couple, consensual adult intimacy vocabulary | minors traits |
-| explicit_fantasy | 奇幻情欲 | glamour_intimate | explicit | fantasy race adult (elf etc.), explicit vocabulary | minors traits |
+| id                    | 名称         | category          | rating    | 锚点 tag 方向                                                                             | 负向方向                       |
+| --------------------- | ------------ | ----------------- | --------- | ----------------------------------------------------------------------------------------- | ------------------------------ |
+| film_photography      | 胶片摄影     | photography       | safe      | film grain, kodak portra tones, halation, 35mm                                            | digital clarity, oversharpened |
+| studio_portrait       | 棚拍人像     | photography       | safe      | seamless backdrop, softbox key, catchlight（光源物件写法）                                | cluttered background           |
+| documentary_photo     | 纪实抓拍     | photography       | safe      | candid moment, available light source object, photojournalism                             | staged pose                    |
+| fashion_editorial     | 时尚大片     | photography       | safe      | editorial pose, haute couture, glossy magazine layout                                     | casual snapshot                |
+| night_street          | 夜景街拍     | photography       | safe      | neon signage reflections, wet asphalt, handheld framing                                   | daylight                       |
+| sports_action         | 体育动感     | photography       | safe      | motion blur limbs, panning shot, sweat droplets                                           | static pose                    |
+| wildlife_nature       | 生态自然     | photography       | safe      | telephoto compression, natural habitat, golden hour ambience                              | studio backdrop                |
+| unreal_render         | UE 渲染感    | cg_3d             | safe      | lumen global illumination, nanite detail, cinematic engine render                         | flat shading                   |
+| figure_model          | 手办质感     | cg_3d             | safe      | pvc figure, glossy coat, display base                                                     | 2d lineart                     |
+| claymation_clay       | 黏土定格     | cg_3d             | safe      | clay texture, fingerprint marks, stop motion feel                                         | smooth render                  |
+| ink_wash              | 水墨写意     | oriental          | safe      | ink wash painting, brush splashes, negative space rice paper                              | heavy saturation               |
+| hanfu_xianxia         | 古风仙侠     | oriental          | safe      | flowing hanfu, ribbon sleeves, immortal mist peaks                                        | modern clothing                |
+| gothic_vampire        | 哥特暗夜     | dark_supernatural | safe      | gothic architecture, candlelit chandelier object, pale skin, victorian lace               | bright daylight                |
+| eldritch_horror       | 克苏鲁诡秘   | dark_supernatural | safe      | non-euclidean geometry, tentacular silhouettes, abyssal palette                           | cheerful tones                 |
+| showa_retro           | 昭和复古     | retro             | safe      | showa era cityscape, retro anime color dot tone                                           | modern digital look            |
+| vintage_photo         | 老照片       | retro             | safe      | sepia tone, faded edges, analog damage                                                    | hdr clarity                    |
+| poster_constructivist | 构成海报     | graphic           | safe      | constructivist poster, bold geometric blocks, propaganda print style                      | photorealism                   |
+| boudoir               | 私房写真     | glamour_intimate  | sensitive | boudoir posing, silk sheets, intimate interior                                            | explicit nudity                |
+| lingerie_fashion      | 内衣时尚     | glamour_intimate  | sensitive | lingerie set, fashion catalogue posing                                                    | explicit nudity                |
+| beach_swimwear        | 泳装盛夏     | glamour_intimate  | sensitive | one-piece swimsuit, beach sunlight, sunscreen sheen                                       | explicit nudity                |
+| pinup_retro           | 经典海报女郎 | glamour_intimate  | sensitive | retro pin-up pose, victory rolls, winking gesture                                         | explicit nudity                |
+| glamour_portrait      | 魅惑人像     | glamour_intimate  | sensitive | smoky eyes, red lips, off-shoulder dress, sultry gaze                                     | explicit nudity                |
+| after_dark            | 夜店魅影     | glamour_intimate  | sensitive | club lighting object, cocktail glass, party dress                                         | explicit nudity                |
+| artistic_nude         | 人体艺术     | glamour_intimate  | explicit  | artistic nude, classical sculpture pose, draped fabric                                    | minors traits, grotesque       |
+| explicit_solo         | 成人独角     | glamour_intimate  | explicit  | solo female, adult body type, explicit pose vocabulary（词表在实现期按 catalog 验证填全） | minors traits                  |
+| explicit_couple       | 成人双人     | glamour_intimate  | explicit  | heterosexual couple, consensual adult intimacy vocabulary                                 | minors traits                  |
+| explicit_fantasy      | 奇幻情欲     | glamour_intimate  | explicit  | fantasy race adult (elf etc.), explicit vocabulary                                        | minors traits                  |
 
 NSFW 新增 10 条（sensitive 6 + explicit 4）+ 非 NSFW 新增 17 条 = 27。显式档预设 `artist_hints` 允许为空，质量由 tag 组合承担。类别总账：photography 8 / anime 25 / illustration 17 / cg_3d 6 / oriental 4 / dark_supernatural 3 / scifi_fantasy 2 / retro 3 / graphic 4 / glamour_intimate 10 = **82**。
 
@@ -159,22 +167,22 @@ NSFW 新增 10 条（sensitive 6 + explicit 4）+ 非 NSFW 新增 17 条 = 27。
 
 ### 5.3 策略表（variant × rating，数据非提示词）
 
-| rating | safetySeed（正向） | 负向追加 |
-|---|---|---|
-| safe | `['safe']`（现状） | — |
-| sensitive | `['rating_sensitive']` | explicit 阻断：nude, nudity, genitals, rating_explicit |
-| explicit | `['rating_explicit']` | 未成年人硬排除：child, loli, shota, toddler, kid, preteen |
+| rating    | safetySeed（正向）     | 负向追加                                                  |
+| --------- | ---------------------- | --------------------------------------------------------- |
+| safe      | `['safe']`（现状）     | —                                                         |
+| sensitive | `['rating_sensitive']` | explicit 阻断：nude, nudity, genitals, rating_explicit    |
+| explicit  | `['rating_explicit']`  | 未成年人硬排除：child, loli, shota, toddler, kid, preteen |
 
 - 质量锚点**不降档**：三档都保留 masterpiece / best quality / score_7（Pony 系共识：NSFW 也要质量词）。
 - base/aesthetic/turbo 三个 variant 各自套用上表（aesthetic/turbo 维持其现有轻量负向基底，rating 行为一致追加）。
 
 ### 5.4 硬边界闸门（boundaries.ts，任何档位、任何 LLM 配置下都执行）
 
-| 闸门 | 触发 | 行为 |
-|---|---|---|
-| `minor_content_conflict` | rating ≥ sensitive 且语料命中未成年特征词（loli/shota/child/toddler/kid/preteen/幼女/萝莉/正太/小学生/儿童/婴儿…；**不含** flat_chest 等成人身材特征词） | 硬拒绝，blocker error envelope，fail-fast |
-| `nonconsensual_content_rejected` | 语料命中非自愿/性暴力词（rape/forced/non-consensual/强奸…） | 任何 rating 硬拒绝 |
-| `bestiality_content_rejected` | 语料命中兽奸类词 | 任何 rating 硬拒绝 |
+| 闸门                             | 触发                                                                                                                                                     | 行为                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `minor_content_conflict`         | rating ≥ sensitive 且语料命中未成年特征词（loli/shota/child/toddler/kid/preteen/幼女/萝莉/正太/小学生/儿童/婴儿…；**不含** flat_chest 等成人身材特征词） | 硬拒绝，blocker error envelope，fail-fast |
+| `nonconsensual_content_rejected` | 语料命中非自愿/性暴力词（rape/forced/non-consensual/强奸…）                                                                                              | 任何 rating 硬拒绝                        |
+| `bestiality_content_rejected`    | 语料命中兽奸类词                                                                                                                                         | 任何 rating 硬拒绝                        |
 
 - 执行位置两道：**预检**（LLM① 之前，违规请求 0 token 拒绝）+ **终检**（装配后审计，兜底 LLM 扩写引入的升级词）。
 - safe 档含儿童特征词**正常放行**（画家庭/儿童插画合法）——闸门是「档位×特征」交叉判定，不是一刀切词黑名单。测试必须覆盖这一正反例。
@@ -188,12 +196,12 @@ H3（MiniMax 官方内容政策）只支持 safe：`target=h3` 且 rating ≠ sa
 
 ### 6.1 确定性美学 gates（aesthetics/audit.ts，advisory 级，本期 anima 方言）
 
-| gate id | 判定 | repair hint |
-|---|---|---|
+| gate id                         | 判定                                                                      | repair hint                 |
+| ------------------------------- | ------------------------------------------------------------------------- | --------------------------- |
 | `aesthetic_composition_missing` | 成稿 positive 无任一构图锚点（lexicon.composition ∪ composition 卡 tags） | 推荐 composition 卡 id 列表 |
-| `aesthetic_lighting_missing` | 无光方向/造型表达（光源物件+明暗+色调写法；LIGHTING_BAN 兼容检查复用） | lighting 卡 |
-| `aesthetic_palette_missing` | 无色彩方向词（调色/主色/色板） | color 卡 |
-| `aesthetic_focal_missing` | 无焦点表达（景别/景深/主体强调） | perspective 卡 |
+| `aesthetic_lighting_missing`    | 无光方向/造型表达（光源物件+明暗+色调写法；LIGHTING_BAN 兼容检查复用）    | lighting 卡                 |
+| `aesthetic_palette_missing`     | 无色彩方向词（调色/主色/色板）                                            | color 卡                    |
+| `aesthetic_focal_missing`       | 无焦点表达（景别/景深/主体强调）                                          | perspective 卡              |
 
 - 输出并入现有 `inspectAnima` AuditGate 列表（advisory，不阻塞出稿）；envelope 的 `aesthetics.gates` 可见。
 - h3 不加确定性美学 gates（其美学覆盖由评委 atmosphere-coupling / camera-motivation 等维度承担），spec 明示此为有意分工。
@@ -210,13 +218,13 @@ ANIMA_RUBRIC 的 composition / lighting-color / aesthetic-vocabulary 三维（D1
 
 ## 7. LLM 提示词改动面（5 处，段落级）
 
-| # | 文件 | 改动 |
-|---|---|---|
-| P1 | `blueprint/analyzer.ts` BLUEPRINT_PERSONA + `intent/subagent-provider.ts` BLUEPRINT_SUBAGENT_SYSTEM | +「内容分级识别」段：识别 rating 档、敏感词命中升档并显式写 core.rating（不静默不清洗）；BLUEPRINT_SCHEMA 加 core.rating |
-| P2 | `enrich/personas.ts` buildEnrichPersona(anima) | +【内容分级】块（explicit=按 danbooru 成人 tag 词表直接扩写、禁委婉语；sensitive=性感不露骨；声明评级由管线强制）；+【推荐先验】块（推荐器输出） |
-| P3 | `eval/critic.ts` buildPersona / buildRevisionPersona + `eval/rubrics/anima.ts` boundary | +评级中立条款：产物声明 rating 档时，该档合法词汇不得作为 finding（防止 explicit 档产生修复层无法执行的安全死信——与 negative-template 口径修订同类问题） |
-| P4 | `continue/engine.ts` 注入点模板 | +「当前 rating=档位：修订不得降档、不得清洗或委婉化已声明内容、不得触碰硬边界负向」 |
-| P5 | `optimize/mutate.ts` MUTATION_PERSONA | +变异候选不得触碰 rating 语义与硬边界规则（人审闸门不变） |
+| #   | 文件                                                                                                | 改动                                                                                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | `blueprint/analyzer.ts` BLUEPRINT_PERSONA + `intent/subagent-provider.ts` BLUEPRINT_SUBAGENT_SYSTEM | +「内容分级识别」段：识别 rating 档、敏感词命中升档并显式写 core.rating（不静默不清洗）；BLUEPRINT_SCHEMA 加 core.rating                                 |
+| P2  | `enrich/personas.ts` buildEnrichPersona(anima)                                                      | +【内容分级】块（explicit=按 danbooru 成人 tag 词表直接扩写、禁委婉语；sensitive=性感不露骨；声明评级由管线强制）；+【推荐先验】块（推荐器输出）         |
+| P3  | `eval/critic.ts` buildPersona / buildRevisionPersona + `eval/rubrics/anima.ts` boundary             | +评级中立条款：产物声明 rating 档时，该档合法词汇不得作为 finding（防止 explicit 档产生修复层无法执行的安全死信——与 negative-template 口径修订同类问题） |
+| P4  | `continue/engine.ts` 注入点模板                                                                     | +「当前 rating=档位：修订不得降档、不得清洗或委婉化已声明内容、不得触碰硬边界负向」                                                                      |
+| P5  | `optimize/mutate.ts` MUTATION_PERSONA                                                               | +变异候选不得触碰 rating 语义与硬边界规则（人审闸门不变）                                                                                                |
 
 不改：H3_PERSONA / rubrics-h3（h3 仅 safe）、rubric 维度与权重、DEFAULT_PERSONA（可选跟一句）。
 

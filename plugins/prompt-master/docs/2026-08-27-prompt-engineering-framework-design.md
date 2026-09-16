@@ -11,13 +11,13 @@
 
 把「提示词大师」PE 引擎、Anima 标签证据库/质量策略、MiniMax H3 官方方言/tokenizer 三套资产，融合为**一个完整的提示词工程**（统一 TS 插件 + 五层管线）：
 
-| 原则 | 含义 |
-|---|---|
-| 方法论优先 | 领域抽象为一条普适管线，三套执行体是它的三个实例；代码只是落地 |
-| 生成优秀提示词 | 词汇可查证 + 官方合规可核算 + 生成可审计可迭代 + 内容可跨目标复用 |
-| 融合不封装 | 知识资产归位到对应层级（方言层/审计层/结构层），而非三套并列 |
-| 质量可证明 | 每个从 Python 归化到 TS 的模块过「双跑保真闸门」（新旧输出逐字节/逐 token 一致） |
-| 保留兼容 | 既有 `pe_*` profile、4 工具语义、53 测试保持可用/绿 |
+| 原则           | 含义                                                                             |
+| -------------- | -------------------------------------------------------------------------------- |
+| 方法论优先     | 领域抽象为一条普适管线，三套执行体是它的三个实例；代码只是落地                   |
+| 生成优秀提示词 | 词汇可查证 + 官方合规可核算 + 生成可审计可迭代 + 内容可跨目标复用                |
+| 融合不封装     | 知识资产归位到对应层级（方言层/审计层/结构层），而非三套并列                     |
+| 质量可证明     | 每个从 Python 归化到 TS 的模块过「双跑保真闸门」（新旧输出逐字节/逐 token 一致） |
+| 保留兼容       | 既有 `pe_*` profile、4 工具语义、53 测试保持可用/绿                              |
 
 ### 1.2 非目标 / 范围外（本期）
 
@@ -28,13 +28,13 @@
 
 ### 1.3 已定决策（D1-D5）
 
-| # | 决策 | 定案 |
-|---|---|---|
-| D1 | 产品形态 | 流水线主入口 `prompt_author` + 底层工具可独立调用/被编排 |
-| D2 | 融合深度 | 管线层融合 + 分层归化：架构一次到位，知识按保真风险从低到高逐模块 TS 化 |
-| D3 | 方法论 | 五层框架（Intent→Schema→Dialect→Audit→Render）+ 配方×方言正交解耦 + 统一审计报告 |
-| D4 | 保真策略 | 双跑对比闸门（旧 Python CLI 输出 vs 新 TS 输出逐字节一致）为归化唯一通行证 |
-| D5 | 范围 | 执行端不动；训练打标专属工具与 JoyCaption 后议 |
+| #   | 决策     | 定案                                                                             |
+| --- | -------- | -------------------------------------------------------------------------------- |
+| D1  | 产品形态 | 流水线主入口 `prompt_author` + 底层工具可独立调用/被编排                         |
+| D2  | 融合深度 | 管线层融合 + 分层归化：架构一次到位，知识按保真风险从低到高逐模块 TS 化          |
+| D3  | 方法论   | 五层框架（Intent→Schema→Dialect→Audit→Render）+ 配方×方言正交解耦 + 统一审计报告 |
+| D4  | 保真策略 | 双跑对比闸门（旧 Python CLI 输出 vs 新 TS 输出逐字节一致）为归化唯一通行证       |
+| D5  | 范围     | 执行端不动；训练打标专属工具与 JoyCaption 后议                                   |
 
 ## 2. 领域抽象：普适管线（方法论核心）
 
@@ -55,6 +55,7 @@
 **归位结论**：PM 引擎强项在「内容创作 + 通用结构 + 输出格式」；Anima skill 强项在「方言编译（catalog 证据）+ 审计规则」；H3 skill 强项在「方言编译（官方 dialect）+ 硬闸门 + 官方 tokenizer」——三者是管线的互补切片。
 
 **重构要解决的三个架构问题**：
+
 1. profile 把「配方」与「方言」耦合 → 解耦为正交两维（§5）
 2. 三套审计各自为政 → 统一审计报告结构（§7）
 3. token 计数不统一（PM 估算 vs H3 官方） → 精确计数归位为方言层知识（§3）
@@ -73,32 +74,32 @@ src/pe-framework/
   └─ render/    渲染层：P1 Envelope 组装 + target_slot_hint（对接 camera-*）
 ```
 
-| 知识资产 | 来源 | 归位层 | 新形态 |
-|---|---|---|---|
-| Profile 配方（style/length/lang/outputFormat） | PM 44 个 | 意图+结构层 | **配方×方言解耦**（§5） |
-| taxonomy / QTAG | PM | 结构层 | TS 保留 |
-| Anima tag-catalog（sqlite 大库） | anima skill | 方言层 | 数据资源（sqlite 只读或 TS 数据，P2 归化时定） |
-| Anima 质量策略/互斥对/检查规则 | anima skill | 审计层 | TS 规则 |
-| H3 官方 dialect 模板/预算表/硬闸门 | h3 skill | 方言+审计层 | TS（P1 归化，双跑保真） |
-| H3 官方 tokenizer | h3 skill | 审计层（精确计数） | TS 移植（P3 归化，双跑最严） |
-| H3 中文骨架/多语输出 | h3 skill | 渲染层 | TS |
-| PM 10 场景模板 + h3-reference 三语 | PM | 结构层 | TS（并入 H3 结构） |
-| 12 训练打标（SD/MJ/Danbooru/e621…） | PM | 方言层（输出变体） | 配方/方言切换输出 |
+| 知识资产                                       | 来源        | 归位层             | 新形态                                         |
+| ---------------------------------------------- | ----------- | ------------------ | ---------------------------------------------- |
+| Profile 配方（style/length/lang/outputFormat） | PM 44 个    | 意图+结构层        | **配方×方言解耦**（§5）                        |
+| taxonomy / QTAG                                | PM          | 结构层             | TS 保留                                        |
+| Anima tag-catalog（sqlite 大库）               | anima skill | 方言层             | 数据资源（sqlite 只读或 TS 数据，P2 归化时定） |
+| Anima 质量策略/互斥对/检查规则                 | anima skill | 审计层             | TS 规则                                        |
+| H3 官方 dialect 模板/预算表/硬闸门             | h3 skill    | 方言+审计层        | TS（P1 归化，双跑保真）                        |
+| H3 官方 tokenizer                              | h3 skill    | 审计层（精确计数） | TS 移植（P3 归化，双跑最严）                   |
+| H3 中文骨架/多语输出                           | h3 skill    | 渲染层             | TS                                             |
+| PM 10 场景模板 + h3-reference 三语             | PM          | 结构层             | TS（并入 H3 结构）                             |
+| 12 训练打标（SD/MJ/Danbooru/e621…）            | PM          | 方言层（输出变体） | 配方/方言切换输出                              |
 
 ## 4. 模块职责（做什么 / 怎么用 / 依赖什么）
 
-| 单元 | 做什么 | 依赖 |
-|---|---|---|
-| `src/pe-framework/intent/*` | 内容创作纯函数（复用 resolver 的 resolveExpand/resolveReverse 组装） | resolver（不改） |
-| `src/pe-framework/schema/*` | 目标媒介结构规范与校验（slots/shots/模板） | TS 数据 + 校验纯函数 |
-| `src/pe-framework/dialect/*` | 按 target 编译词汇/官方语言；catalog 证据落词 / H3 官方渲染 / tag 规范 | 知识数据（catalog、dialect 模板） |
-| `src/pe-framework/audit/*` | 统一审计器：规则表 + tokenizer 精确计数 → 审计报告 | dialect（规则来源）、tokenizer |
-| `src/pe-framework/render/*` | P1 Envelope 组装 + target_slot_hint | — |
-| `src/tools/prompt-author.ts` | 主入口编排：intent→schema→dialect→audit→render + 修正闭环 | 五层 + ctx.llm（内容层） |
-| `src/tools/prompt-compile.ts` | 结构内容 + target → 方言编译 + 审计（author 内部同函数，独立可调） | dialect + audit |
-| `src/tools/prompt-audit.ts` | 给定提示词 + target → 审计报告（修正闭环闸门） | audit |
-| `src/tools/{prompt-expand,prompt-reverse,profile-list}.ts` | 意图层/配方层工具（保留语义，接入框架） | resolver、settings |
-| `src/llm/complete.ts`、`src/llm/route.ts` | 保留（第一版产物，不动） | — |
+| 单元                                                       | 做什么                                                                 | 依赖                              |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------- |
+| `src/pe-framework/intent/*`                                | 内容创作纯函数（复用 resolver 的 resolveExpand/resolveReverse 组装）   | resolver（不改）                  |
+| `src/pe-framework/schema/*`                                | 目标媒介结构规范与校验（slots/shots/模板）                             | TS 数据 + 校验纯函数              |
+| `src/pe-framework/dialect/*`                               | 按 target 编译词汇/官方语言；catalog 证据落词 / H3 官方渲染 / tag 规范 | 知识数据（catalog、dialect 模板） |
+| `src/pe-framework/audit/*`                                 | 统一审计器：规则表 + tokenizer 精确计数 → 审计报告                     | dialect（规则来源）、tokenizer    |
+| `src/pe-framework/render/*`                                | P1 Envelope 组装 + target_slot_hint                                    | —                                 |
+| `src/tools/prompt-author.ts`                               | 主入口编排：intent→schema→dialect→audit→render + 修正闭环              | 五层 + ctx.llm（内容层）          |
+| `src/tools/prompt-compile.ts`                              | 结构内容 + target → 方言编译 + 审计（author 内部同函数，独立可调）     | dialect + audit                   |
+| `src/tools/prompt-audit.ts`                                | 给定提示词 + target → 审计报告（修正闭环闸门）                         | audit                             |
+| `src/tools/{prompt-expand,prompt-reverse,profile-list}.ts` | 意图层/配方层工具（保留语义，接入框架）                                | resolver、settings                |
+| `src/llm/complete.ts`、`src/llm/route.ts`                  | 保留（第一版产物，不动）                                               | —                                 |
 
 ## 5. 配方 × 方言 正交解耦
 
@@ -111,14 +112,14 @@ src/pe-framework/
 
 ### 6.1 工具面
 
-| 工具 | 角色 |
-|---|---|
-| `prompt_author` | 主入口：target + 创作输入 → 全管线产出（可执行提示词 + 审计报告） |
-| `prompt_expand` / `prompt_reverse` | 意图层（保留；reverse 的 media_target 扩为 anima/h3 感知） |
-| `prompt_compile` | 方言+审计层（author 内部即调，独立可用） |
-| `prompt_audit` | 审计层（独立闸门） |
-| `profile_list` | 配方层（保留五动作 + 按 target 过滤） |
-| `catalog_search` | （Anima 方言证据）可选独立暴露 |
+| 工具                               | 角色                                                              |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `prompt_author`                    | 主入口：target + 创作输入 → 全管线产出（可执行提示词 + 审计报告） |
+| `prompt_expand` / `prompt_reverse` | 意图层（保留；reverse 的 media_target 扩为 anima/h3 感知）        |
+| `prompt_compile`                   | 方言+审计层（author 内部即调，独立可用）                          |
+| `prompt_audit`                     | 审计层（独立闸门）                                                |
+| `profile_list`                     | 配方层（保留五动作 + 按 target 过滤）                             |
+| `catalog_search`                   | （Anima 方言证据）可选独立暴露                                    |
 
 ### 6.2 编排数据流
 
@@ -140,21 +141,21 @@ src/pe-framework/
   "gates": [
     { "rule": "catalog_miss", "target": "anima", "severity": "critical", "detail": "silver hair → 应改 silvery hair" },
     { "rule": "cut_timestamps", "target": "h3", "severity": "critical", "detail": "Shot 2 时间戳早于 Shot 1 结束" },
-    { "rule": "soundscape_dialogue", "target": "h3", "severity": "important", "detail": "…" }
+    { "rule": "soundscape_dialogue", "target": "h3", "severity": "important", "detail": "…" },
   ],
   "budget": { "tokens": 2148, "max": 2400, "over": false, "counter": "official-tokenizer" },
   "assumptions": ["catalog_miss:silver hair"],
-  "advisories": ["LoRA 拥有光照，勿写 lighting term"]
+  "advisories": ["LoRA 拥有光照，勿写 lighting term"],
 }
 ```
 
 ## 8. 归化顺序与双跑保真闸门
 
-| 序 | 归化模块 | 来源 | 保真风险 |
-|---|---|---|---|
-| P1 | H3 官方 dialect 模板 / 预算表 / 闸门 + PM 场景/三语模板合并 | h3 skill + PM | 低（纯文本/数值表） |
-| P2 | Anima catalog 数据层 + 质量策略/互斥对/检查规则 | anima skill | 中（数据+规则枚举） |
-| P3 | H3 官方 tokenizer（BPE） | h3 skill | 高（逐 token 精确） |
+| 序  | 归化模块                                                    | 来源          | 保真风险            |
+| --- | ----------------------------------------------------------- | ------------- | ------------------- |
+| P1  | H3 官方 dialect 模板 / 预算表 / 闸门 + PM 场景/三语模板合并 | h3 skill + PM | 低（纯文本/数值表） |
+| P2  | Anima catalog 数据层 + 质量策略/互斥对/检查规则             | anima skill   | 中（数据+规则枚举） |
+| P3  | H3 官方 tokenizer（BPE）                                    | h3 skill      | 高（逐 token 精确） |
 
 **双跑闸门**：同一批 fixture → 旧 Python CLI 输出 vs 新 TS 输出 → 逐字节/逐 token/记录集一致断言；**fixture 用真实调用历史**（`~/.dsh/.agent-presets/comfyui-chenxin/` 的 brief.json / story 样本 / camera-video 历史）；不过闸门不并入主线。
 
@@ -166,13 +167,13 @@ src/pe-framework/
 
 ## 10. 实施批次（P0→P4）
 
-| 期 | 内容 | 验收 |
-|---|---|---|
-| P0 框架 | 五层目录 + `prompt_author` 路由壳 + 统一审计结构 + 现有 4 工具接入框架（行为不变） | 53 测试绿 + 新结构 tsc 干净 |
-| P1 H3 归化① | dialect/预算/闸门 + 场景模板合并 → TS 双跑 | h3 fixture 保真全过 |
-| P2 Anima 归化 | catalog 数据层 + 质量策略/互斥/检查 → TS 双跑 | anima fixture 保真全过；`prompt_compile(target=anima)` 可用 |
-| P3 tokenizer | 官方 tokenizer → TS（双跑最严） | token 序列逐 token 一致 |
-| P4 闭环 | `prompt_author` 全链路 + `prompt_audit` + 文档分工标注 | 端到端产出 + 收敛测试 |
+| 期            | 内容                                                                               | 验收                                                        |
+| ------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| P0 框架       | 五层目录 + `prompt_author` 路由壳 + 统一审计结构 + 现有 4 工具接入框架（行为不变） | 53 测试绿 + 新结构 tsc 干净                                 |
+| P1 H3 归化①   | dialect/预算/闸门 + 场景模板合并 → TS 双跑                                         | h3 fixture 保真全过                                         |
+| P2 Anima 归化 | catalog 数据层 + 质量策略/互斥/检查 → TS 双跑                                      | anima fixture 保真全过；`prompt_compile(target=anima)` 可用 |
+| P3 tokenizer  | 官方 tokenizer → TS（双跑最严）                                                    | token 序列逐 token 一致                                     |
+| P4 闭环       | `prompt_author` 全链路 + `prompt_audit` + 文档分工标注                             | 端到端产出 + 收敛测试                                       |
 
 ## 11. 风险与缓解
 

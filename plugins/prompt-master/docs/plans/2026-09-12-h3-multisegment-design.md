@@ -18,18 +18,18 @@
     {
       "index": 1,
       "duration_seconds": 10,
-      "stage": "t2va",              // 段级路由：refs→ref2va，首尾帧→i2va，否则 t2va
+      "stage": "t2va", // 段级路由：refs→ref2va，首尾帧→i2va，否则 t2va
       "text": "…官方六段式或三字段正文…",
       "entry_anchor": "white chip falls onto black felt",
       "exit_anchor": "card flips to face camera",
-      "shots": 3
-    }
+      "shots": 3,
+    },
   ],
   "meta": {
     "world_anchors": { "palette": "red/white/black high-contrast", "medium": "pure 2D cel" },
     "audiovisual_signature": { "music": "132BPM electro rock", "transition_library": ["flat mask", "card flip"] },
-    "sound_events": { "1": "chip clacks + low pulse", "2": "drums enter at 8s" }
-  }
+    "sound_events": { "1": "chip clacks + low pulse", "2": "drums enter at 8s" },
+  },
 }
 ```
 

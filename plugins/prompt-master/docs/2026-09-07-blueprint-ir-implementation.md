@@ -25,10 +25,12 @@
 ### Task 1: 修 CJK 语义闸门误报（事故根因 #1）
 
 **Files:**
+
 - Modify: `src/pe-framework/audit/rules-h3.ts`（`semanticShot` + `auditTimeline` 的 shot_execution 判定）
 - Test: `tests/pe-framework/audit/cjk-shots.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: 现有 `auditH3Full(text, meta, refs)`（规则注册点，见 `rules-h3.ts`），`H3Shot`/`Reference` 类型来自 `schema/h3-shots.ts`。
 - Produces: 无新导出；`shot_execution` 闸门从 `severity: 'critical'` 改为 `'important'`，且对 CJK 文本不再误报「no new information」。
 
@@ -36,19 +38,19 @@
 
 ```ts
 // tests/pe-framework/audit/cjk-shots.test.ts
-import { describe, expect, it } from 'vitest'
-import { auditH3Full } from '../../../src/pe-framework/audit/rules-h3.js'
+import { describe, expect, it } from 'vitest';
+import { auditH3Full } from '../../../src/pe-framework/audit/rules-h3.js';
 
 const zhShots =
-  'integrated_multimodal_description: [Shot 1] 黄昏荒原，两名持刀武者相隔十步相向而立，镜头缓慢推近，风吹起衣摆与沙尘，剑拔弩张. [Shot 2] At 00:02.500, the camera cuts to 两人同时爆发冲刺，双刀猛烈碰撞溅出火花，写实的刀身震颤与受击反馈. [Shot 3] At 00:05.000, the camera cuts to 决定性一击：青年武者一刀崩开对手的刀，刀锋停在对方颈侧，胜负已分.\n\noverall_soundscape: 荒原风卷沙尘，写实光影\n\nnon_diegetic_music: 低沉鼓点渐强'
+  'integrated_multimodal_description: [Shot 1] 黄昏荒原，两名持刀武者相隔十步相向而立，镜头缓慢推近，风吹起衣摆与沙尘，剑拔弩张. [Shot 2] At 00:02.500, the camera cuts to 两人同时爆发冲刺，双刀猛烈碰撞溅出火花，写实的刀身震颤与受击反馈. [Shot 3] At 00:05.000, the camera cuts to 决定性一击：青年武者一刀崩开对手的刀，刀锋停在对方颈侧，胜负已分.\n\noverall_soundscape: 荒原风卷沙尘，写实光影\n\nnon_diegetic_music: 低沉鼓点渐强';
 
 describe('H3 audit: CJK multi-shot should NOT false-positive', () => {
   it('three distinct Chinese shots produce no shot_execution gate', () => {
-    const gates = auditH3Full(zhShots, { stage: 't2va', duration: 7.5, shotCount: 3 }, [])
-    const se = gates.filter((g) => g.rule === 'shot_execution')
-    expect(se).toHaveLength(0)
-  })
-})
+    const gates = auditH3Full(zhShots, { stage: 't2va', duration: 7.5, shotCount: 3 }, []);
+    const se = gates.filter((g) => g.rule === 'shot_execution');
+    expect(se).toHaveLength(0);
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -64,12 +66,12 @@ Expected: FAIL——`shot_execution` gate 被触发（当前 CJK 语义判空导
 // 替换原 semanticShot（ASCII-only）
 function semanticShot(text: string): string {
   // CJK 感知：抽中文二元组 + ASCII 词，中文正文不再判空
-  const norm = text.toLowerCase()
-  const ascii = (norm.match(/[a-z0-9]+/g) ?? []).join(' ')
-  const cjkChars = norm.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) ?? []
-  const bigrams: string[] = []
-  for (let i = 0; i + 1 < cjkChars.length; i++) bigrams.push(cjkChars[i] + cjkChars[i + 1])
-  return [ascii, ...bigrams].filter(Boolean).join(' ')
+  const norm = text.toLowerCase();
+  const ascii = (norm.match(/[a-z0-9]+/g) ?? []).join(' ');
+  const cjkChars = norm.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) ?? [];
+  const bigrams: string[] = [];
+  for (let i = 0; i + 1 < cjkChars.length; i++) bigrams.push(cjkChars[i] + cjkChars[i + 1]);
+  return [ascii, ...bigrams].filter(Boolean).join(' ');
 }
 ```
 
@@ -92,10 +94,12 @@ git commit -m "fix(prompt-master): CJK-aware semanticShot + demote shot_executio
 ### Task 2: 蓝图 IR schema + 校验（纯类型 + 纯函数）
 
 **Files:**
+
 - Create: `src/pe-framework/blueprint/schema.ts`
 - Test: `tests/pe-framework/blueprint/schema.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: 无（独立纯模块；`Reference` 类型从 `schema/h3-shots.js` 导入可选的引用标注）。
 - Produces:
   - `interface BlueprintV1`（字段见 spec §5.1，含 `media` / `core.aspect_ratio` / `core.negative: NegativeConstraint[]` / `core.characters: Character[]` / `media_layer.video.total_duration_seconds` / `media_layer.video.shots: Shot[]`）
@@ -109,36 +113,38 @@ git commit -m "fix(prompt-master): CJK-aware semanticShot + demote shot_executio
 
 ```ts
 // tests/pe-framework/blueprint/schema.test.ts
-import { describe, expect, it } from 'vitest'
-import { validateBlueprint } from '../../../src/pe-framework/blueprint/schema.js'
+import { describe, expect, it } from 'vitest';
+import { validateBlueprint } from '../../../src/pe-framework/blueprint/schema.js';
 
 describe('validateBlueprint', () => {
   it('accepts a minimal valid image blueprint', () => {
     const r = validateBlueprint({
-      schema_version: 1, media: 'image',
+      schema_version: 1,
+      media: 'image',
       core: { concept: '黄昏荒原的剑客', aspect_ratio: '16:9', negative: [] },
       media_layer: { image: { lighting_detail: '黄金时刻' } },
-    })
-    expect(r.ok).toBe(true)
-  })
+    });
+    expect(r.ok).toBe(true);
+  });
   it('rejects missing concept', () => {
-    const r = validateBlueprint({ schema_version: 1, media: 'video', core: {} })
-    expect(r.ok).toBe(false)
-    expect((r as { errors: string[] }).errors.join()).toContain('concept')
-  })
+    const r = validateBlueprint({ schema_version: 1, media: 'video', core: {} });
+    expect(r.ok).toBe(false);
+    expect((r as { errors: string[] }).errors.join()).toContain('concept');
+  });
   it('rejects bad aspect_ratio', () => {
-    const r = validateBlueprint({ schema_version: 1, media: 'image', core: { concept: 'x', aspect_ratio: '5:7' } })
-    expect(r.ok).toBe(false)
-  })
+    const r = validateBlueprint({ schema_version: 1, media: 'image', core: { concept: 'x', aspect_ratio: '5:7' } });
+    expect(r.ok).toBe(false);
+  });
   it('rejects video total_duration outside 4-15', () => {
     const r = validateBlueprint({
-      schema_version: 1, media: 'video',
+      schema_version: 1,
+      media: 'video',
       core: { concept: 'x' },
       media_layer: { video: { total_duration_seconds: 30, shots: [{ beat: 'a' }] } },
-    })
-    expect(r.ok).toBe(false)
-  })
-})
+    });
+    expect(r.ok).toBe(false);
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -167,15 +173,18 @@ git commit -m "feat(prompt-master): blueprint IR schema + validateBlueprint (spe
 ### Task 3: Envelope 加 `next_action` + `repair_hints`（失败语义）
 
 **Files:**
+
 - Modify: `src/pe-framework/render/envelope.ts`
 - Modify: `src/tools/prompt-compile.ts`（merge extraGates 后重算 `next_action`）
 - Test: `tests/plugin/envelope-next-action.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `StageResult`（`pipeline/types.js`）、`AuditGate`（`types.js`）。
 - Produces: `function computeNextAction(stage: StageResult, opts?: { repairHints?: Array<{ field: string; fix: string }>; repaired?: boolean }): 'retry_input' | 'auto_repair' | 'manual' | 'advisory_only' | 'ok'`；Envelope 顶层加 `next_action` 与可选 `repair_hints`。
 
 **判定规则（修正版，消除死分支）**：
+
 - `stage.ok` 为 true 且无 advisories → `'ok'`
 - `stage.ok` 为 true 但有 advisories → `'advisory_only'`
 - 非 ok 且 `opts.repaired === true`（引擎 Level 1/2 已实际修复过）→ `'auto_repair'`
@@ -187,33 +196,35 @@ git commit -m "feat(prompt-master): blueprint IR schema + validateBlueprint (spe
 
 ```ts
 // tests/plugin/envelope-next-action.test.ts
-import { describe, expect, it } from 'vitest'
-import { computeNextAction } from '../../src/pe-framework/render/envelope.js'
+import { describe, expect, it } from 'vitest';
+import { computeNextAction } from '../../src/pe-framework/render/envelope.js';
 
 function stage(ok: boolean, gates: Array<{ rule: string; severity: string }>, advisories: string[]) {
-  return { ok, gates, advisories, assumptions: [], result: {}, targetSlotHint: 't2v.prompt' } as any
+  return { ok, gates, advisories, assumptions: [], result: {}, targetSlotHint: 't2v.prompt' } as any;
 }
 
 describe('computeNextAction', () => {
   it('ok + no advisories → ok', () => {
-    expect(computeNextAction(stage(true, [], []))).toBe('ok')
-  })
+    expect(computeNextAction(stage(true, [], []))).toBe('ok');
+  });
   it('ok + advisories → advisory_only', () => {
-    expect(computeNextAction(stage(true, [], ['joy_extra_filtered']))).toBe('advisory_only')
-  })
+    expect(computeNextAction(stage(true, [], ['joy_extra_filtered']))).toBe('advisory_only');
+  });
   it('critical contract gate (max_shots) → retry_input with repair hint', () => {
-    const s = stage(false, [{ rule: 'max_shots', severity: 'critical' }], [])
-    expect(computeNextAction(s, { repairHints: [{ field: 'duration_seconds', fix: '改为 15（总时长）' }] })).toBe('retry_input')
-  })
+    const s = stage(false, [{ rule: 'max_shots', severity: 'critical' }], []);
+    expect(computeNextAction(s, { repairHints: [{ field: 'duration_seconds', fix: '改为 15（总时长）' }] })).toBe(
+      'retry_input',
+    );
+  });
   it('non-ok but repaired=true → auto_repair', () => {
-    const s = stage(false, [{ rule: 'parse_request', severity: 'critical' }], [])
-    expect(computeNextAction(s, { repaired: true })).toBe('auto_repair')
-  })
+    const s = stage(false, [{ rule: 'parse_request', severity: 'critical' }], []);
+    expect(computeNextAction(s, { repaired: true })).toBe('auto_repair');
+  });
   it('loop_exhausted advisory + non-ok → manual', () => {
-    const s = stage(false, [{ rule: 'shot_execution', severity: 'important' }], ['loop_exhausted:true'])
-    expect(computeNextAction(s)).toBe('manual')
-  })
-})
+    const s = stage(false, [{ rule: 'shot_execution', severity: 'important' }], ['loop_exhausted:true']);
+    expect(computeNextAction(s)).toBe('manual');
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -242,12 +253,14 @@ git commit -m "feat(prompt-master): Envelope next_action + repair_hints (spec §
 ### Task 4: 方言包能力声明 + preflight 约束表（约束前置）
 
 **Files:**
+
 - Create: `src/pe-framework/dialect/package.ts`（方言包类型 + h3/anima 实例）
 - Modify: `src/pe-framework/dialect/h3.ts`（`registerH3Dialect` 挂能力声明）
 - Modify: `src/pe-framework/dialect/anima.ts`（`registerAnimaDialect` 挂能力声明）
 - Test: `tests/pe-framework/dialect/package.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `getDialect`（`registry.js`）。
 - Produces:
   - `interface DialectPackage`（`capabilities: { native_negative, supports_audio, supports_dialogue, camera_axes, media_targets, aspect_ratios, duration_range, max_shots_formula?, max_prompt_chars, budget_quality_cap }` + `constraints: { validate(input: unknown): string[] }` + `aesthetics: { forbidden_words, few_shot_examples, style_hints }` + `license?: { id, url, territory_restrictions? }`）
@@ -257,28 +270,28 @@ git commit -m "feat(prompt-master): Envelope next_action + repair_hints (spec §
 
 ```ts
 // tests/pe-framework/dialect/package.test.ts
-import { describe, expect, it } from 'vitest'
-import { getDialectPackage } from '../../../src/pe-framework/dialect/package.js'
-import '../../../src/pe-framework/dialect/h3.js'
-import '../../../src/pe-framework/dialect/anima.js'
+import { describe, expect, it } from 'vitest';
+import { getDialectPackage } from '../../../src/pe-framework/dialect/package.js';
+import '../../../src/pe-framework/dialect/h3.js';
+import '../../../src/pe-framework/dialect/anima.js';
 
 describe('dialect package declarations', () => {
   it('h3 declares capabilities from official constants', () => {
-    const p = getDialectPackage('h3')!
-    expect(p.capabilities.native_negative).toBe(false)
-    expect(p.capabilities.duration_range).toEqual([4, 15])
-    expect(p.capabilities.max_prompt_chars).toBe(7000)
-    expect(p.capabilities.max_shots_formula).toBe('1 + floor((duration - 1) / 3)')
-    expect(p.license?.id).toContain('MiniMax-H3')
-  })
+    const p = getDialectPackage('h3')!;
+    expect(p.capabilities.native_negative).toBe(false);
+    expect(p.capabilities.duration_range).toEqual([4, 15]);
+    expect(p.capabilities.max_prompt_chars).toBe(7000);
+    expect(p.capabilities.max_shots_formula).toBe('1 + floor((duration - 1) / 3)');
+    expect(p.license?.id).toContain('MiniMax-H3');
+  });
   it('anima declares native_negative true', () => {
-    const p = getDialectPackage('anima')!
-    expect(p.capabilities.native_negative).toBe(true)
-  })
+    const p = getDialectPackage('anima')!;
+    expect(p.capabilities.native_negative).toBe(true);
+  });
   it('unknown dialect → undefined', () => {
-    expect(getDialectPackage('flux')).toBeUndefined()
-  })
-})
+    expect(getDialectPackage('flux')).toBeUndefined();
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -308,10 +321,12 @@ git commit -m "feat(prompt-master): dialect package capabilities + constraints +
 ### Task 5: `prompt_compile` 增加 `preflight_only`（先验约束零 LLM）
 
 **Files:**
+
 - Modify: `src/tools/prompt-compile.ts`
 - Test: `tests/plugin/compile-preflight.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `getDialectPackage`（Task 4）、`normalizeH3Input`（`dialect/h3.js`，已存在）。
 - Produces: `prompt_compile` 新参数 `preflight_only?: boolean`——为 true 时不调 runStage 编译，仅对输入（shots/scenario form）跑 `constraints.validate`，返回 `{ ok, audit: { passed, gates } }`（无 result），Envelope 带 `next_action`。
 
@@ -319,31 +334,41 @@ git commit -m "feat(prompt-master): dialect package capabilities + constraints +
 
 ```ts
 // tests/plugin/compile-preflight.test.ts
-import { describe, expect, it } from 'vitest'
-import { registerCompileTool } from '../../src/tools/prompt-compile.js'
-import { stubCtx, runTool } from './helpers.js'
+import { describe, expect, it } from 'vitest';
+import { registerCompileTool } from '../../src/tools/prompt-compile.js';
+import { stubCtx, runTool } from './helpers.js';
 
-const def = () => registerCompileTool(stubCtx() as any)
+const def = () => registerCompileTool(stubCtx() as any);
 
 describe('prompt_compile preflight_only', () => {
   it('catches max_shots violation without compiling', async () => {
-    const v = JSON.parse(String(await runTool(stubCtx(), def(), {
-      target: 'h3', preflight_only: true,
-      shots: { duration_seconds: 5, shots: [{ what: 'a' }, { what: 'b' }, { what: 'c' }] },
-    })))
-    expect(v.ok).toBe(false)
-    expect(v.audit.gates.some((g: any) => g.rule === 'max_shots')).toBe(true)
-    expect(v.next_action).toBe('retry_input')
-  })
+    const v = JSON.parse(
+      String(
+        await runTool(stubCtx(), def(), {
+          target: 'h3',
+          preflight_only: true,
+          shots: { duration_seconds: 5, shots: [{ what: 'a' }, { what: 'b' }, { what: 'c' }] },
+        }),
+      ),
+    );
+    expect(v.ok).toBe(false);
+    expect(v.audit.gates.some((g: any) => g.rule === 'max_shots')).toBe(true);
+    expect(v.next_action).toBe('retry_input');
+  });
   it('passes preflight for valid input with no result body', async () => {
-    const v = JSON.parse(String(await runTool(stubCtx(), def(), {
-      target: 'h3', preflight_only: true,
-      shots: { duration_seconds: 10, shots: [{ what: 'a' }, { what: 'b' }, { what: 'c' }] },
-    })))
-    expect(v.ok).toBe(true)
-    expect(v.result).toBeUndefined()
-  })
-})
+    const v = JSON.parse(
+      String(
+        await runTool(stubCtx(), def(), {
+          target: 'h3',
+          preflight_only: true,
+          shots: { duration_seconds: 10, shots: [{ what: 'a' }, { what: 'b' }, { what: 'c' }] },
+        }),
+      ),
+    );
+    expect(v.ok).toBe(true);
+    expect(v.result).toBeUndefined();
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -372,11 +397,13 @@ git commit -m "feat(prompt-master): prompt_compile preflight_only — zero-LLM c
 ### Task 6: 最小风格库 v0（8 风格 + conformity）+ 蓝图存储
 
 **Files:**
+
 - Create: `src/pe-framework/enrichment/style.ts`
 - Create: `src/pe-framework/blueprint/repo.ts`
 - Test: `tests/pe-framework/enrichment/style.test.ts` + `tests/pe-framework/blueprint/repo.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: 无（style 纯数据）；`repo` 消费 `settings` namespace（经 `ctx` 注入，测试用 `stubCtx({ settings })`）。
 - Produces:
   - `interface StyleTemplate { id: string; name: string; base?: string; theme?: string; palette?: string; prompt_fragments: { image: string; video: string }; applies_to: string[]; negative_hints: string[] }`
@@ -388,70 +415,86 @@ git commit -m "feat(prompt-master): prompt_compile preflight_only — zero-LLM c
 
 ```ts
 // tests/pe-framework/enrichment/style.test.ts
-import { describe, expect, it } from 'vitest'
-import { MINIMAL_STYLES, applyStyle } from '../../../src/pe-framework/enrichment/style.js'
-import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js'
+import { describe, expect, it } from 'vitest';
+import { MINIMAL_STYLES, applyStyle } from '../../../src/pe-framework/enrichment/style.js';
+import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js';
 
-const bp: BlueprintV1 = { schema_version: 1, media: 'video', core: { concept: '剑客决斗', negative: [] }, media_layer: { video: { total_duration_seconds: 10, shots: [{ beat: '对峙' }] } } }
+const bp: BlueprintV1 = {
+  schema_version: 1,
+  media: 'video',
+  core: { concept: '剑客决斗', negative: [] },
+  media_layer: { video: { total_duration_seconds: 10, shots: [{ beat: '对峙' }] } },
+};
 
 describe('minimal style library', () => {
   it('has exactly 8 styles with non-empty fragments', () => {
-    expect(MINIMAL_STYLES).toHaveLength(8)
+    expect(MINIMAL_STYLES).toHaveLength(8);
     for (const s of MINIMAL_STYLES) {
-      expect(s.prompt_fragments.image.length).toBeGreaterThan(0)
-      expect(s.prompt_fragments.video.length).toBeGreaterThan(0)
+      expect(s.prompt_fragments.image.length).toBeGreaterThan(0);
+      expect(s.prompt_fragments.video.length).toBeGreaterThan(0);
     }
-  })
+  });
   it('applyStyle at conformity 0 injects base style', () => {
-    const out = applyStyle(bp, 'cinematic_real', 0)
-    expect(out.core.style?.base).toContain('写实')
-  })
+    const out = applyStyle(bp, 'cinematic_real', 0);
+    expect(out.core.style?.base).toContain('写实');
+  });
   it('applyStyle unknown id returns unchanged', () => {
-    const out = applyStyle(bp, 'nope', 0.6)
-    expect(out).toBe(bp)
-  })
-})
+    const out = applyStyle(bp, 'nope', 0.6);
+    expect(out).toBe(bp);
+  });
+});
 ```
 
 ```ts
 // tests/pe-framework/blueprint/repo.test.ts
-import { describe, expect, it } from 'vitest'
-import { createBlueprintRepo } from '../../../src/pe-framework/blueprint/repo.js'
+import { describe, expect, it } from 'vitest';
+import { createBlueprintRepo } from '../../../src/pe-framework/blueprint/repo.js';
 
 function stubSettings() {
-  let data: Record<string, string> = {}
+  let data: Record<string, string> = {};
   return {
     get: () => ({ ...data }),
-    update: async (p: object) => { data = { ...data, ...(p as any) } },
-    replace: async (s: object) => { data = { ...(s as any) } },
-  } as any
+    update: async (p: object) => {
+      data = { ...data, ...(p as any) };
+    },
+    replace: async (s: object) => {
+      data = { ...(s as any) };
+    },
+  } as any;
 }
 
 describe('blueprint repo', () => {
   it('round-trips save/load', () => {
-    const repo = createBlueprintRepo({ settings: stubSettings() } as any)
-    const bp = { schema_version: 1, media: 'image', core: { concept: 'x', negative: [] } }
-    repo.save('b1', bp as any)
-    expect(repo.load('b1')?.core.concept).toBe('x')
-    expect(repo.list()).toContain('b1')
-  })
+    const repo = createBlueprintRepo({ settings: stubSettings() } as any);
+    const bp = { schema_version: 1, media: 'image', core: { concept: 'x', negative: [] } };
+    repo.save('b1', bp as any);
+    expect(repo.load('b1')?.core.concept).toBe('x');
+    expect(repo.list()).toContain('b1');
+  });
   it('load missing → undefined', () => {
-    const repo = createBlueprintRepo({ settings: stubSettings() } as any)
-    expect(repo.load('missing')).toBeUndefined()
-  })
+    const repo = createBlueprintRepo({ settings: stubSettings() } as any);
+    expect(repo.load('missing')).toBeUndefined();
+  });
   it('incremental edit: load → change one field → save (spec §5.3 增量修改前提)', () => {
-    const repo = createBlueprintRepo({ settings: stubSettings() } as any)
-    const bp = { schema_version: 1, media: 'video', core: { concept: '剑客决斗', aspect_ratio: '16:9', negative: [] }, media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } } }
-    repo.save('fight', bp as any)
-    const loaded = repo.load('fight')!
-    loaded.core.aspect_ratio = '9:16'          // 只改一个字段
-    loaded.media_layer.video!.shots = loaded.media_layer.video!.shots.slice(0, 2)  // 删一镜
-    repo.save('fight', loaded)
-    const after = repo.load('fight')!
-    expect(after.core.aspect_ratio).toBe('9:16')
-    expect(after.media_layer.video!.shots).toHaveLength(2)
-  })
-})
+    const repo = createBlueprintRepo({ settings: stubSettings() } as any);
+    const bp = {
+      schema_version: 1,
+      media: 'video',
+      core: { concept: '剑客决斗', aspect_ratio: '16:9', negative: [] },
+      media_layer: {
+        video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] },
+      },
+    };
+    repo.save('fight', bp as any);
+    const loaded = repo.load('fight')!;
+    loaded.core.aspect_ratio = '9:16'; // 只改一个字段
+    loaded.media_layer.video!.shots = loaded.media_layer.video!.shots.slice(0, 2); // 删一镜
+    repo.save('fight', loaded);
+    const after = repo.load('fight')!;
+    expect(after.core.aspect_ratio).toBe('9:16');
+    expect(after.media_layer.video!.shots).toHaveLength(2);
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -481,12 +524,14 @@ git commit -m "feat(prompt-master): minimal style library v0 (8 styles + conform
 ### Task 7: 美学扩展引擎（v0→v1 基础美学规则 + 具体性自检 + 电影摄影词库）
 
 **Files:**
+
 - Create: `src/pe-framework/enrichment/engine.ts`
 - Create: `src/pe-framework/aesthetics/check.ts`
 - Create: `src/pe-framework/aesthetics/lexicon.ts`（电影摄影词库，spec §7.3）
 - Test: `tests/pe-framework/enrichment/engine.test.ts` + `tests/pe-framework/aesthetics/check.test.ts` + `tests/pe-framework/aesthetics/lexicon.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `BlueprintV1`（Task 2）、`MINIMAL_STYLES`/`applyStyle`（Task 6）、`complete`（`llm/complete.js`，已存在：`complete(ctx, {provider, model, system, user, maxTokens, temperature, signal}) → {text}`）。
 - Produces:
   - `function enrichBlueprint(ctx, route: { provider: string; model: string }, v0: BlueprintV1, opts: { styleId?: string; conformity?: number; missing?: string[] }): Promise<{ blueprint: BlueprintV1; expansions: string[] }>` —— LLM 扩展（具体名词化 + ROI 补全 + 负向补全），返回改写记录 `expansions[]`（spec §5.2-6 可审计）。
@@ -498,73 +543,101 @@ git commit -m "feat(prompt-master): minimal style library v0 (8 styles + conform
 
 ```ts
 // tests/pe-framework/aesthetics/check.test.ts
-import { describe, expect, it } from 'vitest'
-import { checkConcreteness } from '../../../src/pe-framework/aesthetics/check.js'
+import { describe, expect, it } from 'vitest';
+import { checkConcreteness } from '../../../src/pe-framework/aesthetics/check.js';
 
 describe('checkConcreteness', () => {
   it('flags empty vague words', () => {
-    const r = checkConcreteness({ schema_version: 1, media: 'image', core: { concept: 'beautiful amazing 高级感', negative: [] } } as any)
-    expect(r.pass).toBe(false)
-    expect(r.issues.length).toBeGreaterThan(0)
-  })
+    const r = checkConcreteness({
+      schema_version: 1,
+      media: 'image',
+      core: { concept: 'beautiful amazing 高级感', negative: [] },
+    } as any);
+    expect(r.pass).toBe(false);
+    expect(r.issues.length).toBeGreaterThan(0);
+  });
   it('passes concrete nouns', () => {
-    const r = checkConcreteness({ schema_version: 1, media: 'image', core: { concept: '黄昏荒原上的银发剑客，Panavision 35mm，伦勃朗光', negative: [] } } as any)
-    expect(r.pass).toBe(true)
-  })
-})
+    const r = checkConcreteness({
+      schema_version: 1,
+      media: 'image',
+      core: { concept: '黄昏荒原上的银发剑客，Panavision 35mm，伦勃朗光', negative: [] },
+    } as any);
+    expect(r.pass).toBe(true);
+  });
+});
 ```
 
 ```ts
 // tests/pe-framework/enrichment/engine.test.ts
-import { describe, expect, it } from 'vitest'
-import { enrichBlueprint } from '../../../src/pe-framework/enrichment/engine.js'
-import { textStream } from '../../plugin/helpers.js'
+import { describe, expect, it } from 'vitest';
+import { enrichBlueprint } from '../../../src/pe-framework/enrichment/engine.js';
+import { textStream } from '../../plugin/helpers.js';
 
 const ctx = {
-  llm: { async *stream() { for (const c of textStream('{"core":{"concept":"黄昏荒原上的剑客","negative":[{"target":"现代元素"}]}}')) yield c } },
-} as any
+  llm: {
+    async *stream() {
+      for (const c of textStream('{"core":{"concept":"黄昏荒原上的剑客","negative":[{"target":"现代元素"}]}}')) yield c;
+    },
+  },
+} as any;
 
 describe('enrichBlueprint', () => {
   it('returns expanded blueprint + expansions audit trail', async () => {
-    const v0 = { schema_version: 1, media: 'video', core: { concept: '剑客决斗', negative: [] }, media_layer: { video: { total_duration_seconds: 10, shots: [{ beat: '对峙' }] } } } as any
-    const out = await enrichBlueprint(ctx, { provider: 'p', model: 'm' }, v0, { styleId: 'cinematic_real', conformity: 0.6 })
-    expect(out.blueprint.core.concept.length).toBeGreaterThan(0)
-    expect(Array.isArray(out.expansions)).toBe(true)
-  })
-})
+    const v0 = {
+      schema_version: 1,
+      media: 'video',
+      core: { concept: '剑客决斗', negative: [] },
+      media_layer: { video: { total_duration_seconds: 10, shots: [{ beat: '对峙' }] } },
+    } as any;
+    const out = await enrichBlueprint(ctx, { provider: 'p', model: 'm' }, v0, {
+      styleId: 'cinematic_real',
+      conformity: 0.6,
+    });
+    expect(out.blueprint.core.concept.length).toBeGreaterThan(0);
+    expect(Array.isArray(out.expansions)).toBe(true);
+  });
+});
 ```
 
 ```ts
 // tests/pe-framework/aesthetics/lexicon.test.ts
-import { describe, expect, it } from 'vitest'
-import { CINEMA_LEXICON } from '../../../src/pe-framework/aesthetics/lexicon.js'
+import { describe, expect, it } from 'vitest';
+import { CINEMA_LEXICON } from '../../../src/pe-framework/aesthetics/lexicon.js';
 
 describe('cinema lexicon', () => {
   it('has non-empty structured categories with concrete terms', () => {
     for (const key of ['shots', 'lenses', 'camera_moves', 'lighting', 'grading', 'composition'] as const) {
-      expect(CINEMA_LEXICON[key].length).toBeGreaterThan(3)
-      for (const term of CINEMA_LEXICON[key]) expect(term.length).toBeGreaterThan(1)
+      expect(CINEMA_LEXICON[key].length).toBeGreaterThan(3);
+      for (const term of CINEMA_LEXICON[key]) expect(term.length).toBeGreaterThan(1);
     }
-  })
-})
+  });
+});
 ```
 
 ```ts
 // tests/pe-framework/aesthetics/fidelity.test.ts
-import { describe, expect, it } from 'vitest'
-import { checkFidelity } from '../../../src/pe-framework/aesthetics/check.js'
+import { describe, expect, it } from 'vitest';
+import { checkFidelity } from '../../../src/pe-framework/aesthetics/check.js';
 
 describe('checkFidelity (保真守卫)', () => {
   it('passes when user entities survive into blueprint', () => {
-    const r = checkFidelity('银发剑客在黄昏荒原决斗', { schema_version: 1, media: 'video', core: { concept: '银发剑客黄昏荒原决斗', negative: [] } } as any)
-    expect(r.pass).toBe(true)
-  })
+    const r = checkFidelity('银发剑客在黄昏荒原决斗', {
+      schema_version: 1,
+      media: 'video',
+      core: { concept: '银发剑客黄昏荒原决斗', negative: [] },
+    } as any);
+    expect(r.pass).toBe(true);
+  });
   it('flags when a user entity is dropped', () => {
-    const r = checkFidelity('银发剑客在黄昏荒原决斗', { schema_version: 1, media: 'video', core: { concept: '两个武士打斗', negative: [] } } as any)
-    expect(r.pass).toBe(false)
-    expect(r.missingEntities.join()).toContain('银发剑客')
-  })
-})
+    const r = checkFidelity('银发剑客在黄昏荒原决斗', {
+      schema_version: 1,
+      media: 'video',
+      core: { concept: '两个武士打斗', negative: [] },
+    } as any);
+    expect(r.pass).toBe(false);
+    expect(r.missingEntities.join()).toContain('银发剑客');
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -595,10 +668,12 @@ git commit -m "feat(prompt-master): aesthetics enrichment engine + concreteness/
 ### Task 8: 方言投影器（IR → slots/shots，deterministic）
 
 **Files:**
+
 - Create: `src/pe-framework/blueprint/project.ts`
 - Test: `tests/pe-framework/blueprint/project.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `BlueprintV1`/`Character`/`Shot`/`NegativeConstraint`（Task 2）、`H3ShotsInput`（`schema/h3-shots.js`）、`AnimaSlots`（`dialect/anima.js`）。
 - Produces:
   - `function projectToH3(bp: BlueprintV1): H3ShotsInput` —— **无 lang 参数**：蓝图语言由分析器/扩展器按方言 output_lang 产出（spec §5.2-4 语言策略），投影器不做翻译；H3 蓝图即中文。
@@ -610,17 +685,26 @@ git commit -m "feat(prompt-master): aesthetics enrichment engine + concreteness/
 
 ```ts
 // tests/pe-framework/blueprint/project.test.ts
-import { describe, expect, it } from 'vitest'
-import { projectToH3, projectToAnima, projectAdvisories } from '../../../src/pe-framework/blueprint/project.js'
-import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js'
+import { describe, expect, it } from 'vitest';
+import { projectToH3, projectToAnima, projectAdvisories } from '../../../src/pe-framework/blueprint/project.js';
+import type { BlueprintV1 } from '../../../src/pe-framework/blueprint/schema.js';
 
 const h3Bp: BlueprintV1 = {
-  schema_version: 1, media: 'video',
+  schema_version: 1,
+  media: 'video',
   core: {
-    concept: '剑客决斗', aspect_ratio: '16:9',
-    characters: [{ id: 'c1', name: '银发剑客', appearance_anchors: ['银白长发', '灰色披风', '反手持刀'], continuity_lock: true }],
-    scene: { environment: '黄昏荒原' }, emotion: '紧张', composition: ['三分法'],
-    negative: [{ target: '字幕', severity: 'soft' }, { target: '血腥', severity: 'hard' }],
+    concept: '剑客决斗',
+    aspect_ratio: '16:9',
+    characters: [
+      { id: 'c1', name: '银发剑客', appearance_anchors: ['银白长发', '灰色披风', '反手持刀'], continuity_lock: true },
+    ],
+    scene: { environment: '黄昏荒原' },
+    emotion: '紧张',
+    composition: ['三分法'],
+    negative: [
+      { target: '字幕', severity: 'soft' },
+      { target: '血腥', severity: 'hard' },
+    ],
   },
   media_layer: {
     video: {
@@ -632,30 +716,30 @@ const h3Bp: BlueprintV1 = {
       ],
     },
   },
-}
+};
 
 describe('projectToH3', () => {
   it('maps duration to total and preserves 3 shots', () => {
-    const s = projectToH3(h3Bp)
-    expect(s.duration_seconds).toBe(15)
-    expect(s.shots).toHaveLength(3)
-  })
+    const s = projectToH3(h3Bp);
+    expect(s.duration_seconds).toBe(15);
+    expect(s.shots).toHaveLength(3);
+  });
   it('injects continuity-locked anchors into every shot what', () => {
-    const s = projectToH3(h3Bp)
-    for (const shot of s.shots) expect(shot.what).toContain('银白长发')
-  })
+    const s = projectToH3(h3Bp);
+    for (const shot of s.shots) expect(shot.what).toContain('银白长发');
+  });
   it('soft negative → positive rewrite + advisory; hard → throws', () => {
-    expect(() => projectToH3(h3Bp)).toThrow(/hard negative/)
-  })
-})
+    expect(() => projectToH3(h3Bp)).toThrow(/hard negative/);
+  });
+});
 
 describe('projectToAnima', () => {
   it('maps anchors to appearance + negative to exclusions', () => {
-    const s = projectToAnima({ ...h3Bp, media: 'image', negative: [{ target: '字幕', severity: 'soft' }] } as any)
-    expect(s.appearance).toContain('银白长发')
-    expect(s.exclusions).toContain('字幕')
-  })
-})
+    const s = projectToAnima({ ...h3Bp, media: 'image', negative: [{ target: '字幕', severity: 'soft' }] } as any);
+    expect(s.appearance).toContain('银白长发');
+    expect(s.exclusions).toContain('字幕');
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -685,11 +769,13 @@ git commit -m "feat(prompt-master): blueprint → dialect projector with negativ
 ### Task 9: 意图分析器升级（意图 → 蓝图 v0 + missing + 澄清接口）
 
 **Files:**
+
 - Create: `src/pe-framework/blueprint/analyzer.ts`
 - Modify: `src/pe-framework/intent/subagent-provider.ts`（蓝图 persona/schema）
 - Test: `tests/pe-framework/blueprint/analyzer.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `createSubagentIntentProvider`（`intent/subagent-provider.js`）、`BlueprintV1`/`validateBlueprint`（Task 2）。
 - Produces:
   - `const BLUEPRINT_PERSONA: string`（spec §6 规则文本：产出蓝图 v0、保留事实、标记 missing、多模态标签稳定）
@@ -700,31 +786,44 @@ git commit -m "feat(prompt-master): blueprint → dialect projector with negativ
 
 ```ts
 // tests/pe-framework/blueprint/analyzer.test.ts
-import { describe, expect, it } from 'vitest'
-import { analyzeIntent } from '../../../src/pe-framework/blueprint/analyzer.js'
-import { textStream } from '../../plugin/helpers.js'
+import { describe, expect, it } from 'vitest';
+import { analyzeIntent } from '../../../src/pe-framework/blueprint/analyzer.js';
+import { textStream } from '../../plugin/helpers.js';
 
 const v0Json = JSON.stringify({
-  schema_version: 1, media: 'video',
+  schema_version: 1,
+  media: 'video',
   core: { concept: '打斗 CG 动画', negative: [] },
   media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } },
-})
+});
 
 describe('analyzeIntent', () => {
   it('returns validated blueprint + missing list', async () => {
-    const ctx = { llm: { async *stream() { for (const c of textStream(v0Json)) yield c } } } as any
-    const r = await analyzeIntent(ctx, { provider: 'p', model: 'm' }, '三镜头打斗CG', { clarify: 'auto' })
-    expect(r.blueprint.media).toBe('video')
-    expect(Array.isArray(r.missing)).toBe(true)
-    expect(r.clarify_questions).toBeUndefined()
-  })
+    const ctx = {
+      llm: {
+        async *stream() {
+          for (const c of textStream(v0Json)) yield c;
+        },
+      },
+    } as any;
+    const r = await analyzeIntent(ctx, { provider: 'p', model: 'm' }, '三镜头打斗CG', { clarify: 'auto' });
+    expect(r.blueprint.media).toBe('video');
+    expect(Array.isArray(r.missing)).toBe(true);
+    expect(r.clarify_questions).toBeUndefined();
+  });
   it('clarify=ask with missing key dims returns clarify_questions', async () => {
-    const ctx = { llm: { async *stream() { for (const c of textStream(v0Json)) yield c } } } as any
-    const r = await analyzeIntent(ctx, { provider: 'p', model: 'm' }, '一个场景', { clarify: 'ask' })
+    const ctx = {
+      llm: {
+        async *stream() {
+          for (const c of textStream(v0Json)) yield c;
+        },
+      },
+    } as any;
+    const r = await analyzeIntent(ctx, { provider: 'p', model: 'm' }, '一个场景', { clarify: 'ask' });
     // v0Json 无 style → 关键缺失 → 产出澄清问题
-    expect(r.clarify_questions?.length).toBeGreaterThan(0)
-  })
-})
+    expect(r.clarify_questions?.length).toBeGreaterThan(0);
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -753,11 +852,13 @@ git commit -m "feat(prompt-master): intent analyzer → blueprint v0 with missin
 ### Task 10: `prompt_author` 接入蓝图管线 + 三级增量修正
 
 **Files:**
+
 - Modify: `src/tools/prompt-author.ts`
 - Modify: `src/pe-framework/blueprint/project.ts`（导出增量修正辅助）
 - Test: `tests/plugin/author-blueprint.e2e.test.ts`（新建）
 
 **Interfaces:**
+
 - Consumes: `analyzeIntent`（Task 9）、`enrichBlueprint`（Task 7）、`projectToH3`/`projectToAnima`（Task 8）、`computeNextAction`（Task 3）、现有 `runDraftThroughStage`。
 - Produces: `prompt_author` 新参数 `style_id?: string`、`conformity?: number`、`clarify?: 'ask'|'auto'`、`blueprint_id?: string`（**增量修改入口**：传蓝图 id 时跳过 analyzeIntent，从 repo load 蓝图直接走扩展→投影，实现「取回旧蓝图改一字段重投影」）；execute 流程改为：`(analyzeIntent 或 repo.load) → enrichBlueprint → project → runStage → 三级修正`：
   - **Level 1 确定性预修**（零 LLM）：`projectToH3` 前用 `getDialectPackage('h3').constraints` 对 `total_duration_seconds`/shots 数做合法化（duration 越界→取最近合法值并记 `repair_hints`；shots 超 `max_shots`→建议合并/加时长）。纯函数 `preflightRepair(bp): { bp: BlueprintV1; repairs: string[] }`（放 `project.ts`）。Level 1 触发修复 → `repaired = true`。
@@ -770,36 +871,43 @@ git commit -m "feat(prompt-master): intent analyzer → blueprint v0 with missin
 
 ```ts
 // tests/plugin/author-blueprint.e2e.test.ts
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js'
-import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js'
-import { stubCtx, runTool, textStream } from './helpers.js'
-import type { AuthorIntentFn } from '../../src/tools/prompt-author.js'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js';
+import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js';
+import { stubCtx, runTool, textStream } from './helpers.js';
+import type { AuthorIntentFn } from '../../src/tools/prompt-author.js';
 
 // 注入蓝图 provider：第一轮产出 v0，后续轮只补 duration
 const fakeProvider: AuthorIntentFn = async (req: any) => {
-  if (req.round === 0) return {
-    blueprint: {
-      schema_version: 1, media: 'video',
-      core: { concept: '三镜头打斗CG', negative: [] },
-      media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } },
-    } as any, missing: ['style'],
-  }
-  return {} as any
-}
+  if (req.round === 0)
+    return {
+      blueprint: {
+        schema_version: 1,
+        media: 'video',
+        core: { concept: '三镜头打斗CG', negative: [] },
+        media_layer: {
+          video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] },
+        },
+      } as any,
+      missing: ['style'],
+    };
+  return {} as any;
+};
 
 describe('prompt_author blueprint pipeline', () => {
-  beforeEach(() => setAuthorIntentProvider(fakeProvider as any))
-  afterEach(() => setAuthorIntentProvider(null))
+  beforeEach(() => setAuthorIntentProvider(fakeProvider as any));
+  afterEach(() => setAuthorIntentProvider(null));
 
   it('runs analyze→enrich→project→stage and returns ok envelope with next_action', async () => {
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
-    const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '三镜头打斗CG', style_id: 'cinematic_real' })))
-    expect(v.next_action).toBeDefined()
-    expect(v.audit).toBeDefined()
-  })
-})
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') });
+    const def = registerAuthorTool(ctx as any, { temperature: 0.7 });
+    const v = JSON.parse(
+      String(await runTool(ctx, def, { target: 'h3', input: '三镜头打斗CG', style_id: 'cinematic_real' })),
+    );
+    expect(v.next_action).toBeDefined();
+    expect(v.audit).toBeDefined();
+  });
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -817,43 +925,54 @@ Run: `npx vitest run tests/plugin/author-blueprint.e2e.test.ts tests/plugin/auth
 Expected: 新用例 PASS；现有 author e2e/shell 全绿（旧 `slots`/`shots` 直传路径保留向后兼容——`AuthorDraft.blueprint` 缺省时走原逻辑）。
 
 在 `author-blueprint.e2e.test.ts` 增加**增量修改用例**（spec §5.3 交付标准 6）：
+
 ```ts
 // 预存蓝图到 repo（stub settings 作为 repo 后端），再传 blueprint_id 走增量路径
 function settingsRepo() {
-  const store: Record<string, string> = {}
+  const store: Record<string, string> = {};
   return {
     settings: {
       get: () => ({ ...store }),
-      async update(p: Record<string, string>) { Object.assign(store, p) },
-      async replace(s: Record<string, string>) { Object.assign(store, s) },
+      async update(p: Record<string, string>) {
+        Object.assign(store, p);
+      },
+      async replace(s: Record<string, string>) {
+        Object.assign(store, s);
+      },
     },
-  }
+  };
 }
 
 describe('prompt_author blueprint_id incremental path', () => {
   it('reload by blueprint_id skips analyzeIntent (provider not called)', async () => {
-    const { settings } = settingsRepo()
-    const repo = createBlueprintRepo({ settings } as any)
+    const { settings } = settingsRepo();
+    const repo = createBlueprintRepo({ settings } as any);
     repo.save('fight-15s', {
-      schema_version: 1, media: 'video',
+      schema_version: 1,
+      media: 'video',
       core: { concept: '三镜头打斗CG', aspect_ratio: '9:16', negative: [] },
-      media_layer: { video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] } },
-    } as any)
+      media_layer: {
+        video: { total_duration_seconds: 15, shots: [{ beat: '对峙' }, { beat: '交锋' }, { beat: '决胜' }] },
+      },
+    } as any);
 
-    let providerCalls = 0
-    const countingProvider: AuthorIntentFn = async (req: any) => { providerCalls++; return {} as any }
-    setAuthorIntentProvider(countingProvider as any)
+    let providerCalls = 0;
+    const countingProvider: AuthorIntentFn = async (req: any) => {
+      providerCalls++;
+      return {} as any;
+    };
+    setAuthorIntentProvider(countingProvider as any);
 
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any
-    ctx.settings = settings
-    const def = registerAuthorTool(ctx, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s' })))
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') }) as any;
+    ctx.settings = settings;
+    const def = registerAuthorTool(ctx, { temperature: 0.7 });
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', blueprint_id: 'fight-15s' })));
 
-    expect(providerCalls).toBe(0)              // 跳过 analyzeIntent
-    expect(v.next_action).toBeDefined()
-    setAuthorIntentProvider(null)
-  })
-})
+    expect(providerCalls).toBe(0); // 跳过 analyzeIntent
+    expect(v.next_action).toBeDefined();
+    setAuthorIntentProvider(null);
+  });
+});
 ```
 
 - [ ] **Step 5: Commit**
@@ -868,10 +987,12 @@ git commit -m "feat(prompt-master): prompt_author blueprint pipeline + 3-tier in
 ### Task 11: 契约级 eval 回归集（事故案例 + 中文多分镜）
 
 **Files:**
+
 - Create: `tests/eval/blueprint-eval.test.ts`
 - Create: `tests/eval/fixtures/fight-cg-intent.json`
 
 **Interfaces:**
+
 - Consumes: 全链（analyze→enrich→project→runStage），`setAuthorIntentProvider` 注入。
 - Produces: eval 集成测试——用上次会话同款用户输入「3 个分镜×5 秒打斗 CG」，断言：
   1. 无 CJK `shot_execution` 误报（gates 里该 rule 缺席或非 critical）
@@ -883,33 +1004,42 @@ git commit -m "feat(prompt-master): prompt_author blueprint pipeline + 3-tier in
 
 ```ts
 // tests/eval/blueprint-eval.test.ts
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js'
-import { stubCtx, runTool } from '../plugin/helpers.js'
-import type { AuthorIntentFn } from '../../src/tools/prompt-author.js'
-import fightIntent from './fixtures/fight-cg-intent.json'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js';
+import { stubCtx, runTool } from '../plugin/helpers.js';
+import type { AuthorIntentFn } from '../../src/tools/prompt-author.js';
+import fightIntent from './fixtures/fight-cg-intent.json';
 
-let calls = 0
+let calls = 0;
 const fakeProvider: AuthorIntentFn = async (req: any) => {
-  calls++
-  if (req.round === 0) return { blueprint: (fightIntent as any).v0, missing: ['style'] }
-  return { blueprint: (fightIntent as any).v0, missing: [] }
-}
+  calls++;
+  if (req.round === 0) return { blueprint: (fightIntent as any).v0, missing: ['style'] };
+  return { blueprint: (fightIntent as any).v0, missing: [] };
+};
 
 describe('eval: fight CG case (session-34706f38 regression)', () => {
-  beforeEach(() => { calls = 0; setAuthorIntentProvider(fakeProvider as any) })
-  afterEach(() => { setAuthorIntentProvider(null) })
+  beforeEach(() => {
+    calls = 0;
+    setAuthorIntentProvider(fakeProvider as any);
+  });
+  afterEach(() => {
+    setAuthorIntentProvider(null);
+  });
 
   it('completes with no CJK false positive, correct duration, non-manual next_action, ≤3 LLM calls', async () => {
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') })
-    const def = registerAuthorTool(ctx as any, { temperature: 0.7 })
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '3个分镜每个5秒的打斗CG动画', style_id: 'cinematic_real' })))
-    const shotExec = v.audit.gates.filter((g: any) => g.rule === 'shot_execution')
-    expect(shotExec.every((g: any) => g.severity !== 'critical')).toBe(true)
-    expect(v.next_action).not.toBe('manual')
-    expect(calls).toBeLessThanOrEqual(3)
-  })
-})
+    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') });
+    const def = registerAuthorTool(ctx as any, { temperature: 0.7 });
+    const v = JSON.parse(
+      String(
+        await runTool(ctx, def, { target: 'h3', input: '3个分镜每个5秒的打斗CG动画', style_id: 'cinematic_real' }),
+      ),
+    );
+    const shotExec = v.audit.gates.filter((g: any) => g.rule === 'shot_execution');
+    expect(shotExec.every((g: any) => g.severity !== 'critical')).toBe(true);
+    expect(v.next_action).not.toBe('manual');
+    expect(calls).toBeLessThanOrEqual(3);
+  });
+});
 ```
 
 `tests/eval/fixtures/fight-cg-intent.json`：`{"v0": {"schema_version":1,"media":"video","core":{"concept":"电影写实级 CG 打斗动画：冷兵器刀剑对决","aspect_ratio":"16:9","negative":[],"characters":[{"id":"c1","name":"青年武者","appearance_anchors":["黑发","深色布衣","长刀"]},{"id":"c2","name":"银发剑客","appearance_anchors":["银白长发","灰色披风","反手持刀"]}]},"media_layer":{"video":{"total_duration_seconds":15,"shots":[{"beat":"对峙","who":["c1","c2"]},{"beat":"交锋","who":["c1","c2"]},{"beat":"决胜","who":["c1"]}]}}}`
@@ -935,6 +1065,7 @@ git commit -m "test(prompt-master): blueprint eval regression — fight CG case,
 ### Task 12: 工具路由收敛 + persona/duration 显式化 + AGENTS.md 联动
 
 **Files:**
+
 - Modify: `src/tools/prompt-author.ts`（description 更新：全链入口 + 新参数说明）
 - Modify: `src/pe-framework/blueprint/analyzer.ts`（persona 文本补 duration 语义）
 - Modify: `src/tools/prompt-compile.ts`（description 注明 preflight_only 用法）
@@ -942,6 +1073,7 @@ git commit -m "test(prompt-master): blueprint eval regression — fight CG case,
 - Test: `tests/plugin/author-shell.test.ts`（补充 description 断言，防漂移）
 
 **Interfaces:**
+
 - Consumes: 无新模块。
 - Produces: 工具描述与 persona 中的 duration 语义显式化（spec §5.2-1「三处显式化」）、AGENTS.md 错误恢复快速表新增 `next_action` 列。
 
@@ -974,6 +1106,7 @@ git commit -m "test(prompt-master): blueprint eval regression — fight CG case,
 Run: `npx vitest run`
 Expected: 全部 PASS（含 12 个任务新增测试 + 既有 golden/parity 全绿）。
 Commit:
+
 ```bash
 git add src/tools/prompt-author.ts src/pe-framework/blueprint/analyzer.ts src/tools/prompt-compile.ts src/pe-framework/intent/subagent-provider.ts AGENTS.md tests/plugin/author-shell.test.ts tests/pe-framework/intent/slim-system.test.ts
 git commit -m "docs(prompt-master): tool routing + duration semantics explicit + intent subagent slim system + AGENTS.md next_action linkage (spec §14 §5.2)"
@@ -984,6 +1117,7 @@ git commit -m "docs(prompt-master): tool routing + duration semantics explicit +
 ## Self-Review（计划 vs spec）
 
 **Spec 覆盖检查**：
+
 - §5 蓝图 schema/校验 → Task 2 ✅
 - §5.2-1 duration 显式化 → Task 12 ✅；§5.2-3 负向三档 → Task 8 ✅；§5.2-5 角色引用解析 → Task 8 ✅；§5.2-6 保真-扩展边界 → Task 7（expansions 审计）+ Task 9（保真守卫在 analyzeIntent 内）✅
 - §6 意图分析器/澄清 → Task 9 ✅
@@ -1003,6 +1137,7 @@ git commit -m "docs(prompt-master): tool routing + duration semantics explicit +
 **类型一致性**：`BlueprintV1`/`Character`/`Shot`/`NegativeConstraint`/`H3ShotsInput`/`AnimaSlots` 在各任务间签名一致；`computeNextAction`、`getDialectPackage`、`analyzeIntent`、`enrichBlueprint`、`projectToH3`、`preflightRepair` 均有定义任务与消费任务匹配。✅
 
 **二轮自审修复记录**（对照用户「是否有遗漏和不明确」逐项补齐）：
+
 - 保真守卫 `checkFidelity` → Task 7（新测试 fidelity.test.ts）+ Task 9（analyzeIntent 调用）✅
 - 电影摄影词库 `CINEMA_LEXICON` → Task 7（新文件 lexicon.ts + 测试）✅
 - 增量修改工作流 `blueprint_id` 路径 → Task 6 repo 用例 + Task 10 e2e 用例 ✅
@@ -1017,21 +1152,21 @@ git commit -m "docs(prompt-master): tool routing + duration semantics explicit +
 
 > 本节仅记录执行期发现，**不改变已批准的任务语义**；每项在 Phase 1 收尾时评估。
 
-| # | 观察项 | 来源 | 处置建议 |
-|---|---|---|---|
-| O1 | 计划 Task 1 将整条 `shot_execution` rule 降级 important，使确定性的「空镜内容」判定（空 what）也变非阻断——spec §10 语义/确定性分层的粒度取舍 | reviewer t13 | 后续计划修订时评估：把「空镜内容」确定性子类拆回 critical（独立 gate），语义「无新信息」子类保持 important |
-| O2 | 全量 vitest 有 3 个既有失败（anima-catalog / anima-compile / catalog-search 的 overlay-status 断言，期望 'unavailable' 得 'available'），**双重独立证实与本次实现无关**（engineer stash 对照 + reviewer 导入图分析：3 测试均不 import 本次改动文件） | engineer t1 + reviewer t13 | 属既有测试基建/路径注入残留问题，Phase 1 收尾后单独排查（不在本计划范围） |
-| O3 | Task 1 测试示例 `zhShots` 字符串闭合引号笔误（反引号），engineer 按唯一可行解读修正为单引号，计划文档已同步修正 | engineer t1 | 已修复（commit 7f13393），后续任务引用示例时以修正后为准 |
-| O4 | 计划 Task 3 Files 的「Modify prompt-compile.ts（merge extraGates 后重算 next_action）」接线在 t3 契约中被排除（避免与 t5 in-scope 冲突），且 t5 原契约仅覆盖 preflight 分支、t10 仅覆盖 author → normal 编译路径 Envelope 一度无 next_action（assembleEnvelope L96 仅在 nextAction 传入时输出该字段） | engineer t3 范围问题 | 已指派 t5 顺带完成：stageToEnvelope 内调 computeNextAction(stage) 传第 5 参（anima/h3 双路径），compile-preflight.test.ts 加 normal 路径用例 |
-| O5 | 计划 Task 2 自带 4 用例未覆盖 validateBlueprint 的 media 非法值、video.shots 空数组两条校验规则（计划级测试缺口） | reviewer t14 | Phase 1 收尾时补这两条测试（非阻断，校验逻辑本身已实现且正确） |
-| O6 | contractGatesH3 将「shots 超 max_shots」标为 rule='parse_request'（contracts.py parseRequest 族名），与计划 Task 5 验收期望的 rule='max_shots' 不一致；engineer 在 preflight 分支做最小归一化（detail 含 'exceed the maximum' 的 parse_request → max_shots），不改 contractGatesH3（其被 dialect/h3.ts + prompt-audit.ts 消费，改动会触发计划外连锁变更） | engineer t5 + captain 裁决 | **captain 已裁决接受**：归一化满足计划验收、对齐 ruleForMessage 命名、匹配条件精确（仅 shots 超限类）、最小可逆；记入观察项供 Phase 1 收尾评估是否统一 contractGatesH3 标签 |
-| O7 | t6（commit b3bc533）跨 in-scope 修改 t2 的 schema.ts：core.characters/scene/style/emotion/composition 改可选（negative 保持必填）。**captain 已裁决接受**：spec §6「蓝图字段可空+缺失标记」与 §5.1 注释「可空」支持，且计划 Task 6 fixture 只给 {concept, negative} 与严格接口冲突（TS2740）属计划内部不一致，放宽是最小忠实修正、宽松方向 t7-t10 零破坏。注意：t14 已审查 schema 的必填版，本变更后 schema 最终形态需 t18 顺带复核 | engineer t6 + captain 裁决 | t18 审查时顺带复核可选化与 spec §6 一致（negative 仍必填）；t7-t10 fixture 需与可选化兼容 |
-| O8 | spec §8.1 映射表要求 emotion 表达（core.emotion）进 H3 输出，但投影器 what 组装（计划 Step 3）不含 emotion → emotion 无 H3 投影路径（spec/计划映射空白） | reviewer t19 | **已修复**（commit e1a15dc，captain 验收审计发现 A）：projectToH3 的 what 组装按 spec §8.1 ROI 顺序补入 scene.lighting（高 ROI）+ emotion（低 ROI），新增测试 + 快照更新；同时补了 scene.lighting 在 H3 侧此前同样丢失的问题 |
-| O9 | spec §8.1 映射表 `media_layer.video.audio → overall_soundscape`：投影器仅映射 audio_focus→ambient，未处理 video.audio 全局声景（投影层丢弃；compileH3 的 soundscapeOf 只从 shots[].ambient 派生） | reviewer t19 | 指派 t10：把 media_layer.video.audio 并入首镜 ambient（无首镜时丢弃并记 advisory），使全局声景经 compileH3 派生进入 overall_soundscape，满足 spec §8.1 |
-| O10 | enrichBlueprint 内 checkFidelity 以 v0.core.concept 为原文参照（计划签名无用户原文参数所致）——原文代理弱于用户原始描述 | reviewer t20 | Phase 1 收尾评估：t10 若可传用户原文给 fidelity 可强化保真检查（当前 v0.concept 已含用户原词压缩，代理可接受） |
-| O11 | 计划 Task 7 词库示例 grading 每类仅 3 词，而计划自带测试要求每类 ≥4——engineer 按 spec §7.3 词表补齐至 ≥4（ECU/ELS/50mm/侧逆光/色温/高光暖调/阴影冷调/画中画均可溯源 spec）；禁词表扩展（电影感/氛围感/唯美）在 spec §7.1「等」+ persona 例意图内。**reviewer 已裁决接受**，两处均为计划自冲突的最小忠实解法 | reviewer t20 | 已接受，无需动作（t20 PASS） |
-| O12 | 计划 Task 9 Step 3 要求 analyzeIntent 经 createSubagentIntentProvider 子代理 seam 调 provider 并 Modify subagent-provider.ts（蓝图 persona/schema），但测试（Step 1）用无 subagents 的 {llm:{stream}} stub ctx——测试与实现指示自相矛盾。engineer 实现走 complete(ctx.llm.stream)（BLUEPRINT_* 在 analyzer.ts 导出），**captain 已裁决接受**（忠实测试形态、功能目标达成）。但 subagent-provider.ts 蓝图分支存在真实缺口（parseIntentJson 仅认 anima/h3，blueprint target 会 throw「未知 target」），已并入 Task 12 Step 3b 补充职责：蓝图模式走 BLUEPRINT_SUBAGENT_SYSTEM + 产出 blueprint + 新旧请求兼容测试 | engineer t9 + captain 裁决 | t12 落实蓝图分支；t21 审查基准需知（engineer 的 complete 路径非偏离） |
-| O13 | t22 F2（clarify 参数）修复后：AuthorIntentRequest.clarify + intentBase 透传已接通（参数抵达 intent 层、analyzer 消费逻辑就绪），但生产 provider（subagent 蓝图模式 / defaultIntent）均未读 req.clarify 产出 clarify_questions（grep 证实）——属计划 Task 9/12 未明示的延伸，**captain 裁决选 A**（接受 Phase 1 管道接通） | reviewer t26 | Phase 1 收尾评估：Phase 2 在 subagent 蓝图模式接 req.clarify → analyzeIntent opts.clarify 产出 clarify_questions 端到端闭环 |
+| #   | 观察项                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 来源                       | 处置建议                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | 计划 Task 1 将整条 `shot_execution` rule 降级 important，使确定性的「空镜内容」判定（空 what）也变非阻断——spec §10 语义/确定性分层的粒度取舍                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | reviewer t13               | 后续计划修订时评估：把「空镜内容」确定性子类拆回 critical（独立 gate），语义「无新信息」子类保持 important                                                                                                                   |
+| O2  | 全量 vitest 有 3 个既有失败（anima-catalog / anima-compile / catalog-search 的 overlay-status 断言，期望 'unavailable' 得 'available'），**双重独立证实与本次实现无关**（engineer stash 对照 + reviewer 导入图分析：3 测试均不 import 本次改动文件）                                                                                                                                                                                                                                                                                                                                                          | engineer t1 + reviewer t13 | 属既有测试基建/路径注入残留问题，Phase 1 收尾后单独排查（不在本计划范围）                                                                                                                                                    |
+| O3  | Task 1 测试示例 `zhShots` 字符串闭合引号笔误（反引号），engineer 按唯一可行解读修正为单引号，计划文档已同步修正                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | engineer t1                | 已修复（commit 7f13393），后续任务引用示例时以修正后为准                                                                                                                                                                     |
+| O4  | 计划 Task 3 Files 的「Modify prompt-compile.ts（merge extraGates 后重算 next_action）」接线在 t3 契约中被排除（避免与 t5 in-scope 冲突），且 t5 原契约仅覆盖 preflight 分支、t10 仅覆盖 author → normal 编译路径 Envelope 一度无 next_action（assembleEnvelope L96 仅在 nextAction 传入时输出该字段）                                                                                                                                                                                                                                                                                                         | engineer t3 范围问题       | 已指派 t5 顺带完成：stageToEnvelope 内调 computeNextAction(stage) 传第 5 参（anima/h3 双路径），compile-preflight.test.ts 加 normal 路径用例                                                                                 |
+| O5  | 计划 Task 2 自带 4 用例未覆盖 validateBlueprint 的 media 非法值、video.shots 空数组两条校验规则（计划级测试缺口）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | reviewer t14               | Phase 1 收尾时补这两条测试（非阻断，校验逻辑本身已实现且正确）                                                                                                                                                               |
+| O6  | contractGatesH3 将「shots 超 max_shots」标为 rule='parse_request'（contracts.py parseRequest 族名），与计划 Task 5 验收期望的 rule='max_shots' 不一致；engineer 在 preflight 分支做最小归一化（detail 含 'exceed the maximum' 的 parse_request → max_shots），不改 contractGatesH3（其被 dialect/h3.ts + prompt-audit.ts 消费，改动会触发计划外连锁变更）                                                                                                                                                                                                                                                     | engineer t5 + captain 裁决 | **captain 已裁决接受**：归一化满足计划验收、对齐 ruleForMessage 命名、匹配条件精确（仅 shots 超限类）、最小可逆；记入观察项供 Phase 1 收尾评估是否统一 contractGatesH3 标签                                                  |
+| O7  | t6（commit b3bc533）跨 in-scope 修改 t2 的 schema.ts：core.characters/scene/style/emotion/composition 改可选（negative 保持必填）。**captain 已裁决接受**：spec §6「蓝图字段可空+缺失标记」与 §5.1 注释「可空」支持，且计划 Task 6 fixture 只给 {concept, negative} 与严格接口冲突（TS2740）属计划内部不一致，放宽是最小忠实修正、宽松方向 t7-t10 零破坏。注意：t14 已审查 schema 的必填版，本变更后 schema 最终形态需 t18 顺带复核                                                                                                                                                                           | engineer t6 + captain 裁决 | t18 审查时顺带复核可选化与 spec §6 一致（negative 仍必填）；t7-t10 fixture 需与可选化兼容                                                                                                                                    |
+| O8  | spec §8.1 映射表要求 emotion 表达（core.emotion）进 H3 输出，但投影器 what 组装（计划 Step 3）不含 emotion → emotion 无 H3 投影路径（spec/计划映射空白）                                                                                                                                                                                                                                                                                                                                                                                                                                                      | reviewer t19               | **已修复**（commit e1a15dc，captain 验收审计发现 A）：projectToH3 的 what 组装按 spec §8.1 ROI 顺序补入 scene.lighting（高 ROI）+ emotion（低 ROI），新增测试 + 快照更新；同时补了 scene.lighting 在 H3 侧此前同样丢失的问题 |
+| O9  | spec §8.1 映射表 `media_layer.video.audio → overall_soundscape`：投影器仅映射 audio_focus→ambient，未处理 video.audio 全局声景（投影层丢弃；compileH3 的 soundscapeOf 只从 shots[].ambient 派生）                                                                                                                                                                                                                                                                                                                                                                                                             | reviewer t19               | 指派 t10：把 media_layer.video.audio 并入首镜 ambient（无首镜时丢弃并记 advisory），使全局声景经 compileH3 派生进入 overall_soundscape，满足 spec §8.1                                                                       |
+| O10 | enrichBlueprint 内 checkFidelity 以 v0.core.concept 为原文参照（计划签名无用户原文参数所致）——原文代理弱于用户原始描述                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | reviewer t20               | Phase 1 收尾评估：t10 若可传用户原文给 fidelity 可强化保真检查（当前 v0.concept 已含用户原词压缩，代理可接受）                                                                                                               |
+| O11 | 计划 Task 7 词库示例 grading 每类仅 3 词，而计划自带测试要求每类 ≥4——engineer 按 spec §7.3 词表补齐至 ≥4（ECU/ELS/50mm/侧逆光/色温/高光暖调/阴影冷调/画中画均可溯源 spec）；禁词表扩展（电影感/氛围感/唯美）在 spec §7.1「等」+ persona 例意图内。**reviewer 已裁决接受**，两处均为计划自冲突的最小忠实解法                                                                                                                                                                                                                                                                                                   | reviewer t20               | 已接受，无需动作（t20 PASS）                                                                                                                                                                                                 |
+| O12 | 计划 Task 9 Step 3 要求 analyzeIntent 经 createSubagentIntentProvider 子代理 seam 调 provider 并 Modify subagent-provider.ts（蓝图 persona/schema），但测试（Step 1）用无 subagents 的 {llm:{stream}} stub ctx——测试与实现指示自相矛盾。engineer 实现走 complete(ctx.llm.stream)（BLUEPRINT_* 在 analyzer.ts 导出），**captain 已裁决接受**（忠实测试形态、功能目标达成）。但 subagent-provider.ts 蓝图分支存在真实缺口（parseIntentJson 仅认 anima/h3，blueprint target 会 throw「未知 target」），已并入 Task 12 Step 3b 补充职责：蓝图模式走 BLUEPRINT_SUBAGENT_SYSTEM + 产出 blueprint + 新旧请求兼容测试 | engineer t9 + captain 裁决 | t12 落实蓝图分支；t21 审查基准需知（engineer 的 complete 路径非偏离）                                                                                                                                                        |
+| O13 | t22 F2（clarify 参数）修复后：AuthorIntentRequest.clarify + intentBase 透传已接通（参数抵达 intent 层、analyzer 消费逻辑就绪），但生产 provider（subagent 蓝图模式 / defaultIntent）均未读 req.clarify 产出 clarify_questions（grep 证实）——属计划 Task 9/12 未明示的延伸，**captain 裁决选 A**（接受 Phase 1 管道接通）                                                                                                                                                                                                                                                                                      | reviewer t26               | Phase 1 收尾评估：Phase 2 在 subagent 蓝图模式接 req.clarify → analyzeIntent opts.clarify 产出 clarify_questions 端到端闭环                                                                                                  |
 
 ## 执行交接
 

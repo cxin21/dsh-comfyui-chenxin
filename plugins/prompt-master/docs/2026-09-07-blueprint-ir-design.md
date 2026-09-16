@@ -21,19 +21,19 @@
 
 ### 1.2 现状（已读源码确认）
 
-| 模块 | 现状 | 判定 |
-|---|---|---|
-| 方言注册表 `DialectContract{normalize,compile,audit,budget,intent}` | 多模型适配骨架 | ✅ 保留，升级为「方言包」 |
-| `runStage` 管线内核（normalize→compile→audit→budget→Envelope） | 正确内核 | ✅ 不动 |
-| Envelope（ok/audit.gates/budget/advisories/target_slot_hint/observability） | 统一输出 | ⚠️ 加 `next_action` |
-| Profile 体系（56+：expand/reverse/train/minimax 场景/torii） | 风格库种子 | ⚠️ 升级为分层风格库 |
-| 知识资产（anima tags.sqlite 213MB + tag-catalog 816MB、H3 官方 tokenizer） | 知识底座 | ✅ 复用 |
-| intent 子代理（persona+schema 方言化，继承父路由，60s 超时） | 意图分析种子 | ⚠️ 升级为「蓝图分析器+扩展引擎」 |
-| `continue/engine.ts`（保留已写文本、只补缺失） | 增量续写 | ⚠️ 复用模式到增量修正 |
-| `model-capabilities`（temperature/truncation/mediaTargets） | 模型能力表 | ⚠️ 扩展进方言包 |
-| 审计体系（contract gates + text gates + official-tokenizer budget） | 确定性校验 | ⚠️ 语义闸门分层 + CJK 修复 |
-| Anima `exclusions?: string[]` 字段 | 负向意图种子 | ✅ 直接利用 |
-| golden fidelity + parity 测试 | 回归基线 | ✅ 保留 |
+| 模块                                                                        | 现状           | 判定                             |
+| --------------------------------------------------------------------------- | -------------- | -------------------------------- |
+| 方言注册表 `DialectContract{normalize,compile,audit,budget,intent}`         | 多模型适配骨架 | ✅ 保留，升级为「方言包」        |
+| `runStage` 管线内核（normalize→compile→audit→budget→Envelope）              | 正确内核       | ✅ 不动                          |
+| Envelope（ok/audit.gates/budget/advisories/target_slot_hint/observability） | 统一输出       | ⚠️ 加 `next_action`              |
+| Profile 体系（56+：expand/reverse/train/minimax 场景/torii）                | 风格库种子     | ⚠️ 升级为分层风格库              |
+| 知识资产（anima tags.sqlite 213MB + tag-catalog 816MB、H3 官方 tokenizer）  | 知识底座       | ✅ 复用                          |
+| intent 子代理（persona+schema 方言化，继承父路由，60s 超时）                | 意图分析种子   | ⚠️ 升级为「蓝图分析器+扩展引擎」 |
+| `continue/engine.ts`（保留已写文本、只补缺失）                              | 增量续写       | ⚠️ 复用模式到增量修正            |
+| `model-capabilities`（temperature/truncation/mediaTargets）                 | 模型能力表     | ⚠️ 扩展进方言包                  |
+| 审计体系（contract gates + text gates + official-tokenizer budget）         | 确定性校验     | ⚠️ 语义闸门分层 + CJK 修复       |
+| Anima `exclusions?: string[]` 字段                                          | 负向意图种子   | ✅ 直接利用                      |
+| golden fidelity + parity 测试                                               | 回归基线       | ✅ 保留                          |
 
 ### 1.3 会话事故复盘（session-34706f38，实证）
 
@@ -53,42 +53,42 @@ prompt_compile(duration=5, 3 shots) → ❌ max_shots 契约违例（duration �
 
 提示词生成本质 = **意图→方言翻译**，5 个正交要求：保真、可编译、可接受、可执行、可演进。落在**确定性轴**（可判定）与**语义轴**（不可判定）两轨；核心错误是把语义轴启发式当确定性硬闸门。
 
-| # | 问题/缺陷 | 来源 | 对策 | 模块 |
-|---|---|---|---|---|
-| 1 | CJK 语义误报（`semanticShot` ASCII-only，中文全判空） | 会话实证+源码 | 语义闸门降级 advisory；确定性闸门才 critical | audit 分层 |
-| 2 | `duration_seconds` 语义二义（总时长 vs 每镜） | 会话实证 | schema/persona/工具描述三处显式化 | 蓝图 schema + 方言包 |
-| 3 | 约束靠试错、无 preflight | 会话实证 | 方言包能力约束表 + preflight | 方言包 |
-| 4 | 失败语义不可操作 | 会话实证 | Envelope 加 `next_action` | Envelope |
-| 5 | 修正回环无状态重来 | 源码 | 蓝图结构化反馈→只修失败字段 | 增量修正引擎 |
-| 6 | 工具面 10 个、路由负担 | 源码 | 收敛：author=全链入口，compile/audit 辅助 | 工具面 |
-| 7 | 意图只拆不扩展 | 用户要求 | 分析→v0，扩展引擎→v1 | 扩展引擎 |
-| 8 | 无负向意图入口 | 反思盲区 | `negative[]` 进蓝图；投影映射 | 蓝图+投影器 |
-| 9 | 无角色一致性 | 反思盲区 | 角色卡：外观锚点/服装/道具/标志物 | 蓝图 characters[] |
-| 10 | 无多模态意图提取 | 反思盲区 | 参考图/视频美学特征提取（Phase 2） | 意图分析器 |
-| 11 | 风格库平铺 | 反思盲区 | 风格库分层：基底/主题/情绪 | 风格库 |
-| 12 | 风格一致性与创新无调节 | 反思盲区 | `conformity` 参数 | 扩展引擎 |
-| 13 | 评估无闭环 | 反思盲区 | 契约审计+具体性自检+LLM 评委 | 评估层 |
-| 14 | 无 LLM 调用预算 | 反思盲区 | 每任务 LLM 上限 + 纯规则路径 | 管线 |
-| 15 | 蓝图 schema 版本化 | 反思盲区 | IR schema 版本号+迁移 | 蓝图 |
-| 16 | 方言许可证 | 本地 manifest | 方言包携带 license 声明 | 方言包 |
-| 17 | 测试金字塔错位 | 反思盲区 | 意图→蓝图契约级测试（非字节级） | 测试层 |
-| 18 | duration/分镜数可算约束 | 第一性原理 | 确定性预修（算出来直接改，不花 LLM） | 增量修正引擎 |
+| #   | 问题/缺陷                                             | 来源          | 对策                                         | 模块                 |
+| --- | ----------------------------------------------------- | ------------- | -------------------------------------------- | -------------------- |
+| 1   | CJK 语义误报（`semanticShot` ASCII-only，中文全判空） | 会话实证+源码 | 语义闸门降级 advisory；确定性闸门才 critical | audit 分层           |
+| 2   | `duration_seconds` 语义二义（总时长 vs 每镜）         | 会话实证      | schema/persona/工具描述三处显式化            | 蓝图 schema + 方言包 |
+| 3   | 约束靠试错、无 preflight                              | 会话实证      | 方言包能力约束表 + preflight                 | 方言包               |
+| 4   | 失败语义不可操作                                      | 会话实证      | Envelope 加 `next_action`                    | Envelope             |
+| 5   | 修正回环无状态重来                                    | 源码          | 蓝图结构化反馈→只修失败字段                  | 增量修正引擎         |
+| 6   | 工具面 10 个、路由负担                                | 源码          | 收敛：author=全链入口，compile/audit 辅助    | 工具面               |
+| 7   | 意图只拆不扩展                                        | 用户要求      | 分析→v0，扩展引擎→v1                         | 扩展引擎             |
+| 8   | 无负向意图入口                                        | 反思盲区      | `negative[]` 进蓝图；投影映射                | 蓝图+投影器          |
+| 9   | 无角色一致性                                          | 反思盲区      | 角色卡：外观锚点/服装/道具/标志物            | 蓝图 characters[]    |
+| 10  | 无多模态意图提取                                      | 反思盲区      | 参考图/视频美学特征提取（Phase 2）           | 意图分析器           |
+| 11  | 风格库平铺                                            | 反思盲区      | 风格库分层：基底/主题/情绪                   | 风格库               |
+| 12  | 风格一致性与创新无调节                                | 反思盲区      | `conformity` 参数                            | 扩展引擎             |
+| 13  | 评估无闭环                                            | 反思盲区      | 契约审计+具体性自检+LLM 评委                 | 评估层               |
+| 14  | 无 LLM 调用预算                                       | 反思盲区      | 每任务 LLM 上限 + 纯规则路径                 | 管线                 |
+| 15  | 蓝图 schema 版本化                                    | 反思盲区      | IR schema 版本号+迁移                        | 蓝图                 |
+| 16  | 方言许可证                                            | 本地 manifest | 方言包携带 license 声明                      | 方言包               |
+| 17  | 测试金字塔错位                                        | 反思盲区      | 意图→蓝图契约级测试（非字节级）              | 测试层               |
+| 18  | duration/分镜数可算约束                               | 第一性原理    | 确定性预修（算出来直接改，不花 LLM）         | 增量修正引擎         |
 
 ---
 
 ## 3. 设计原则（全部有事实依据）
 
-| 原则 | 依据 |
-|---|---|
-| 分层 IR：公共创作核 + 媒介维度层 | 调研二：各模型意图字段是层层包含关系（MJ 七要素 ⊂ 可灵八层 ⊃ H3 三字段） |
-| 字段顺序 = 优先级 | 调研二：可灵「越靠前权重越高」 |
-| 美学 = 具体名词 + 禁空泛词 + ROI（光影>主体特征>运镜） | 调研二：ai-shortfilm-prompts 强制「摄影机型号+镜头型号」；可灵指南 ROI 排序 |
-| 方言编译器 = 模板+约束表+预算+禁忌+few-shot | 调研二 B6 方言包封装清单 |
-| 结构化输出作 IR（JSON Schema），再按模型渲染 | 调研一：LangGPT / DSPy signature 共识 |
-| 审计失败带 code+位置+修复建议回喂重试 | 调研一：instructor reask 模式 |
-| eval = 契约审计 + 具体性自检 + LLM 评委（+可选 CLIP/aesthetic） | 调研二 A3：LAION aesthetic-predictor / Gemini 指标模板 |
-| 意图→蓝图用契约级测试而非字节级 | 反思 17：LLM 环节不可字节断言 |
-| 可学习方言层（可选进阶） | 调研二：Promptist/TIPO 证明「方言偏好可学习」 |
+| 原则                                                            | 依据                                                                        |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 分层 IR：公共创作核 + 媒介维度层                                | 调研二：各模型意图字段是层层包含关系（MJ 七要素 ⊂ 可灵八层 ⊃ H3 三字段）    |
+| 字段顺序 = 优先级                                               | 调研二：可灵「越靠前权重越高」                                              |
+| 美学 = 具体名词 + 禁空泛词 + ROI（光影>主体特征>运镜）          | 调研二：ai-shortfilm-prompts 强制「摄影机型号+镜头型号」；可灵指南 ROI 排序 |
+| 方言编译器 = 模板+约束表+预算+禁忌+few-shot                     | 调研二 B6 方言包封装清单                                                    |
+| 结构化输出作 IR（JSON Schema），再按模型渲染                    | 调研一：LangGPT / DSPy signature 共识                                       |
+| 审计失败带 code+位置+修复建议回喂重试                           | 调研一：instructor reask 模式                                               |
+| eval = 契约审计 + 具体性自检 + LLM 评委（+可选 CLIP/aesthetic） | 调研二 A3：LAION aesthetic-predictor / Gemini 指标模板                      |
+| 意图→蓝图用契约级测试而非字节级                                 | 反思 17：LLM 环节不可字节断言                                               |
+| 可学习方言层（可选进阶）                                        | 调研二：Promptist/TIPO 证明「方言偏好可学习」                               |
 
 ---
 
@@ -107,6 +107,7 @@ prompt_compile(duration=5, 3 shots) → ❌ max_shots 契约违例（duration �
 ```
 
 **架构边界（严格）**：
+
 - **新增**：`pe-framework/blueprint/`（schema+投影器+增量修正）、`pe-framework/enrichment/`（扩展引擎+风格库接口）、`pe-framework/aesthetics/`（词库+具体性自检）、`pe-framework/eval/`（自检+评委）
 - **升级**：`pe-framework/dialect/`（方言包规范）、`pe-framework/audit/`（语义分层+CJK 修复）、`render/envelope.ts`（next_action）、`tools/`（路由收敛）
 - **不动**：`runStage` 内核、现有方言编译逻辑（`dialect/anima.ts`、`dialect/h3.ts` 的 compile/audit/budget 主体）、golden 测试基线
@@ -119,78 +120,78 @@ prompt_compile(duration=5, 3 shots) → ❌ max_shots 契约违例（duration �
 
 ```ts
 interface BlueprintV1 {
-  schema_version: 1
-  media: 'image' | 'video' | 'mixed'
+  schema_version: 1;
+  media: 'image' | 'video' | 'mixed';
   core: {
-    concept: string          // 一句话主题（必填，用户原意压缩）
-    aspect_ratio?: string    // 画面比例（16:9/9:16/1:1/4:3/3:4；复用现有 ASPECT_COMMON）
-    characters: Character[]  // 角色卡（可空；支撑跨镜头/跨次一致性）
-    scene: Scene             // 场景（环境/时间/光线/氛围）
-    style: StyleRef          // 风格引用（基底/主题/情绪/配色）
-    emotion: string          // 情绪基调（冷峻/温暖/压抑…）
-    composition: string[]    // 构图语言（三分法/对称/负空间/前景引导）
-    negative: NegativeConstraint[]  // 负向意图（结构化约束：对象+属性）
-    narrative?: string       // 自由叙事文本（保留用户原话）
-  }
+    concept: string; // 一句话主题（必填，用户原意压缩）
+    aspect_ratio?: string; // 画面比例（16:9/9:16/1:1/4:3/3:4；复用现有 ASPECT_COMMON）
+    characters: Character[]; // 角色卡（可空；支撑跨镜头/跨次一致性）
+    scene: Scene; // 场景（环境/时间/光线/氛围）
+    style: StyleRef; // 风格引用（基底/主题/情绪/配色）
+    emotion: string; // 情绪基调（冷峻/温暖/压抑…）
+    composition: string[]; // 构图语言（三分法/对称/负空间/前景引导）
+    negative: NegativeConstraint[]; // 负向意图（结构化约束：对象+属性）
+    narrative?: string; // 自由叙事文本（保留用户原话）
+  };
   media_layer: {
     video?: {
-      total_duration_seconds?: number  // 视频总时长（H3 官方契约 4–15s，唯一权威值）
-      shots: Shot[]          // 分镜序列（结构对齐影视 shot list 标准列，见 Shot）
-      pacing?: string        // 节奏（渐强/平缓/骤停）
-      audio?: string         // 全局声景（非 diegetic 音乐基调）
-    }
+      total_duration_seconds?: number; // 视频总时长（H3 官方契约 4–15s，唯一权威值）
+      shots: Shot[]; // 分镜序列（结构对齐影视 shot list 标准列，见 Shot）
+      pacing?: string; // 节奏（渐强/平缓/骤停）
+      audio?: string; // 全局声景（非 diegetic 音乐基调）
+    };
     image?: {
-      lighting_detail?: string  // 光照细节（伦勃朗光/黄金时刻/体积光）
-      focal_length?: string     // 焦段（24/35/85mm）
-      depth_of_field?: string   // 景深
-      camera_angle?: string     // 机位角度
-    }
-  }
+      lighting_detail?: string; // 光照细节（伦勃朗光/黄金时刻/体积光）
+      focal_length?: string; // 焦段（24/35/85mm）
+      depth_of_field?: string; // 景深
+      camera_angle?: string; // 机位角度
+    };
+  };
 }
 
 interface Character {
-  id: string
-  name?: string
-  appearance_anchors: string[]  // 识别锚点（脸型/发型/瞳色/体型/肤色）— 必须"可见、可生成、可比较"
-  outfit?: string
-  props?: string[]
-  distinctive?: string          // 标志物（胎记/伤疤/纹身/特征配饰）
-  reference_slots?: string[]    // 参考图槽位（正脸/全身/表情 → <Picture N> 绑定）
-  variant?: string              // 变体状态（服装换装/伤势/时段变化）
-  continuity_lock?: boolean     // 连续性锁（该角色跨镜头必须严格一致，禁止漂移）
+  id: string;
+  name?: string;
+  appearance_anchors: string[]; // 识别锚点（脸型/发型/瞳色/体型/肤色）— 必须"可见、可生成、可比较"
+  outfit?: string;
+  props?: string[];
+  distinctive?: string; // 标志物（胎记/伤疤/纹身/特征配饰）
+  reference_slots?: string[]; // 参考图槽位（正脸/全身/表情 → <Picture N> 绑定）
+  variant?: string; // 变体状态（服装换装/伤势/时段变化）
+  continuity_lock?: boolean; // 连续性锁（该角色跨镜头必须严格一致，禁止漂移）
 }
 
 interface Scene {
-  environment: string           // 环境（具体名词）
-  time?: string                 // 时间（黄昏/夜晚/正午）
-  lighting?: string             // 光线基调
-  atmosphere?: string           // 氛围
+  environment: string; // 环境（具体名词）
+  time?: string; // 时间（黄昏/夜晚/正午）
+  lighting?: string; // 光线基调
+  atmosphere?: string; // 氛围
 }
 
 interface StyleRef {
-  base?: string                 // 基底风格：媒介/画风（写实电影/赛璐璐/厚涂）
-  theme?: string                // 主题风格：赛博朋克/和风/废土（影响场景+配色）
-  palette?: string              // 情绪配色：青橙对比/低饱和/高饱和
+  base?: string; // 基底风格：媒介/画风（写实电影/赛璐璐/厚涂）
+  theme?: string; // 主题风格：赛博朋克/和风/废土（影响场景+配色）
+  palette?: string; // 情绪配色：青橙对比/低饱和/高饱和
 }
 
 interface Shot {
-  beat: string                  // 情节节拍（这镜在干什么）
-  shot_size?: string            // 景别（CU/MCU/MS/FS/WS，对齐影视 shot list 标准）
-  camera_angle?: string         // 机位角度（高/低/平/过肩/俯拍）
-  camera?: string               // 运镜（dolly/pan/tracking/orbit/crane/handheld）
-  action?: string               // 动作细节（具体名词，识别锚点须可生成可比较）
-  dialogue?: string             // 对白（可空）
-  audio_focus?: string          // 音效焦点
-  music?: string                // 音乐情绪
-  duration_seconds?: number     // 分镜时长（视频总时长 = Σ shots 或显式 total）
-  who?: string[]                // 涉及角色 id（→ <Subject N> 稳定标签，见 §5.2-5）
-  remark?: string               // 备注（连续性要求/特效/特殊说明，对齐影视 shot list 备注列）
+  beat: string; // 情节节拍（这镜在干什么）
+  shot_size?: string; // 景别（CU/MCU/MS/FS/WS，对齐影视 shot list 标准）
+  camera_angle?: string; // 机位角度（高/低/平/过肩/俯拍）
+  camera?: string; // 运镜（dolly/pan/tracking/orbit/crane/handheld）
+  action?: string; // 动作细节（具体名词，识别锚点须可生成可比较）
+  dialogue?: string; // 对白（可空）
+  audio_focus?: string; // 音效焦点
+  music?: string; // 音乐情绪
+  duration_seconds?: number; // 分镜时长（视频总时长 = Σ shots 或显式 total）
+  who?: string[]; // 涉及角色 id（→ <Subject N> 稳定标签，见 §5.2-5）
+  remark?: string; // 备注（连续性要求/特效/特殊说明，对齐影视 shot list 备注列）
 }
 
 interface NegativeConstraint {
-  target: string                // 负向对象（"文字"/"现代元素"/"血腥"）
-  attribute?: string            // 属性限定（如 "文字：字幕/水印/LOGO"）
-  severity?: 'soft' | 'hard'    // hard=内容安全类（直接过滤/拒绝）；soft=美学类（折进正向或映射 negative）
+  target: string; // 负向对象（"文字"/"现代元素"/"血腥"）
+  attribute?: string; // 属性限定（如 "文字：字幕/水印/LOGO"）
+  severity?: 'soft' | 'hard'; // hard=内容安全类（直接过滤/拒绝）；soft=美学类（折进正向或映射 negative）
 }
 ```
 
@@ -237,15 +238,15 @@ interface NegativeConstraint {
 
 ### 7.1 扩展规则（确定性规则 + LLM 协作）
 
-| 规则 | 类型 | 做法 |
-|---|---|---|
-| 具体名词化 | LLM | 空泛形容词→可感知名词（「电影感」→「IMAX 胶片机 + Panavision C 系 35mm f4」） |
-| 禁空泛词 | 确定性 | 禁词表（cinematic/beautiful/amazing 等）扫描，命中→退回扩展 |
-| ROI 补全 | LLM | 按优先级补缺失：光影 > 主体特征 > 运镜 > 环境细节 > 风格 |
-| 风格注入 | 确定性+LLM | 用户选风格→风格模板片段注入对应字段 |
-| 负向补全 | LLM | 从用户语境推断合理负向（如「无现代元素」）→ `negative[]` |
-| 角色卡锚点补全 | LLM | 同一角色跨镜头时补齐锚点字段 |
-| 质量自检 | 确定性 | 输出前过「具体性检查」（含可感知名词比例、禁词、字段完整度） |
+| 规则           | 类型       | 做法                                                                          |
+| -------------- | ---------- | ----------------------------------------------------------------------------- |
+| 具体名词化     | LLM        | 空泛形容词→可感知名词（「电影感」→「IMAX 胶片机 + Panavision C 系 35mm f4」） |
+| 禁空泛词       | 确定性     | 禁词表（cinematic/beautiful/amazing 等）扫描，命中→退回扩展                   |
+| ROI 补全       | LLM        | 按优先级补缺失：光影 > 主体特征 > 运镜 > 环境细节 > 风格                      |
+| 风格注入       | 确定性+LLM | 用户选风格→风格模板片段注入对应字段                                           |
+| 负向补全       | LLM        | 从用户语境推断合理负向（如「无现代元素」）→ `negative[]`                      |
+| 角色卡锚点补全 | LLM        | 同一角色跨镜头时补齐锚点字段                                                  |
+| 质量自检       | 确定性     | 输出前过「具体性检查」（含可感知名词比例、禁词、字段完整度）                  |
 
 ### 7.2 风格库（分层；Phase 1 最小可用 → Phase 2 内容深化）
 
@@ -273,34 +274,34 @@ interface NegativeConstraint {
 
 ### 8.1 IR → H3 映射表
 
-| 蓝图字段 | H3 输入 |
-|---|---|
-| `media_layer.video.total_duration_seconds` | `shots.duration_seconds` |
-| `media_layer.video.shots[].beat+action+shot_size+camera` | `shots[].what`（镜头语言合并进描述，保留时间戳结构） |
-| `shots[].who` → character 锚点 | `shots[].who`（`<Subject N>` 稳定标签） |
-| `shots[].audio_focus` | `shots[].ambient` |
-| `shots[].music` / `media_layer.video.audio` | `shots[].music` / `overall_soundscape` |
-| `shots[].dialogue` | `shots[].dialogue`（`<d>[语言] 文本</d>`） |
-| `core.negative`（NegativeConstraint[]） | 三档适配：档 1 映射 negative 字段；档 2 正向改写进 `what` 末句 + advisory；档 3 语义正负短语 |
-| `core.style`+`emotion`+`scene.lighting` | 并入各 shot 的 `what`（按 ROI 排序） |
-| references | `shots.references`（原样传递） |
+| 蓝图字段                                                 | H3 输入                                                                                      |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `media_layer.video.total_duration_seconds`               | `shots.duration_seconds`                                                                     |
+| `media_layer.video.shots[].beat+action+shot_size+camera` | `shots[].what`（镜头语言合并进描述，保留时间戳结构）                                         |
+| `shots[].who` → character 锚点                           | `shots[].who`（`<Subject N>` 稳定标签）                                                      |
+| `shots[].audio_focus`                                    | `shots[].ambient`                                                                            |
+| `shots[].music` / `media_layer.video.audio`              | `shots[].music` / `overall_soundscape`                                                       |
+| `shots[].dialogue`                                       | `shots[].dialogue`（`<d>[语言] 文本</d>`）                                                   |
+| `core.negative`（NegativeConstraint[]）                  | 三档适配：档 1 映射 negative 字段；档 2 正向改写进 `what` 末句 + advisory；档 3 语义正负短语 |
+| `core.style`+`emotion`+`scene.lighting`                  | 并入各 shot 的 `what`（按 ROI 排序）                                                         |
+| references                                               | `shots.references`（原样传递）                                                               |
 
 > **参考图澄清（§8.1）**：蓝图**不承载** references 持久字段——参考图是**对话输入**的一部分：用户/agent 直接把图发给 LLM 并说明用途（「图 1 是主角参考」「图 2 是风格参考」），LLM 提取 `<Picture N>` 稳定标签并在提示词中占位；投影层不把 references 写入蓝图结构。运行期 references 由调用方在 `form_fields.references` 提供（H3 ref2va 模式消费），非蓝图投影职责。Phase 1 实现与本澄清一致（`projectToH3` 不接收 references，链路经 form_fields 走通）。
 
 ### 8.2 IR → Anima 映射表
 
-| 蓝图字段 | Anima 输入 |
-|---|---|
-| `characters[].appearance_anchors` | `appearance[]` |
-| `characters[].outfit` | `clothing[]` |
-| `characters[].reference` | `character[]`（`Subject N from <Picture N>`） |
-| `scene.environment` | `scene[]` |
-| `scene.lighting` + `media_layer.image.lighting_detail` | `detail_mood[]` |
-| `media_layer.image.focal_length/depth_of_field/camera_angle` | `camera[]` |
-| `composition[]` | `detail_mood[]` |
-| `core.negative`（NegativeConstraint[]） | `exclusions[]`（soft 类映射；hard 类已提前过滤） |
-| `core.narrative` | `narrative` |
-| `core.style.base/theme` | `detail_mood[]`（风格 tag） |
+| 蓝图字段                                                     | Anima 输入                                       |
+| ------------------------------------------------------------ | ------------------------------------------------ |
+| `characters[].appearance_anchors`                            | `appearance[]`                                   |
+| `characters[].outfit`                                        | `clothing[]`                                     |
+| `characters[].reference`                                     | `character[]`（`Subject N from <Picture N>`）    |
+| `scene.environment`                                          | `scene[]`                                        |
+| `scene.lighting` + `media_layer.image.lighting_detail`       | `detail_mood[]`                                  |
+| `media_layer.image.focal_length/depth_of_field/camera_angle` | `camera[]`                                       |
+| `composition[]`                                              | `detail_mood[]`                                  |
+| `core.negative`（NegativeConstraint[]）                      | `exclusions[]`（soft 类映射；hard 类已提前过滤） |
+| `core.narrative`                                             | `narrative`                                      |
+| `core.style.base/theme`                                      | `detail_mood[]`（风格 tag）                      |
 
 ### 8.3 投影一致性测试
 
@@ -316,26 +317,27 @@ interface NegativeConstraint {
 ```ts
 interface DialectPackage extends DialectContract {
   capabilities: {
-    native_negative: boolean       // 有无独立负向框
-    supports_audio: boolean        // 音频/台词语法
-    supports_dialogue: boolean
-    camera_axes: number            // 运镜轴数
-    media_targets: ['image'|'video'|'mixed']
-    aspect_ratios: string[]
-    duration_range: [number, number]  // 秒
-    max_shots_formula?: string     // 如 '1+floor((d-1)/3)'
-    max_prompt_chars: number
-    budget_quality_cap: number     // 每 stage token 上限
-  }
-  constraints: {                   // preflight 用的确定性约束表
-    validate(input): AuditGate[]   // 现有 contractGatesH3 移入
-  }
+    native_negative: boolean; // 有无独立负向框
+    supports_audio: boolean; // 音频/台词语法
+    supports_dialogue: boolean;
+    camera_axes: number; // 运镜轴数
+    media_targets: ['image' | 'video' | 'mixed'];
+    aspect_ratios: string[];
+    duration_range: [number, number]; // 秒
+    max_shots_formula?: string; // 如 '1+floor((d-1)/3)'
+    max_prompt_chars: number;
+    budget_quality_cap: number; // 每 stage token 上限
+  };
+  constraints: {
+    // preflight 用的确定性约束表
+    validate(input): AuditGate[]; // 现有 contractGatesH3 移入
+  };
   aesthetics: {
-    forbidden_words: string[]      // 禁词（Flux 禁 tag、可灵忌 fast…）
-    few_shot_examples: Array<{input, output}>
-    style_hints: string[]
-  }
-  license: { id, url, territory_restrictions? }
+    forbidden_words: string[]; // 禁词（Flux 禁 tag、可灵忌 fast…）
+    few_shot_examples: Array<{ input; output }>;
+    style_hints: string[];
+  };
+  license: { id; url; territory_restrictions? };
 }
 ```
 
@@ -408,13 +410,13 @@ Level 3 advisory 降级：
 
 ## 13. 评估闭环（eval/）
 
-| 层级 | 工具 | 触发 |
-|---|---|---|
-| 契约审计 | 现有 audit（critical 闸门） | 每次编译 |
-| 具体性自检 | 确定性：禁词扫描 + 具体名词比例 + 字段完整度 | 每次扩展后 |
-| LLM 评委（可选） | 按 rubric（coherence/fidelity/美学）打分 | 用户要求或 eval 模式 |
-| 生成级（可选，Phase 3） | LAION aesthetic-predictor / CLIP-Score（对生成结果） | 接 camera-* 后 |
-| 用户 A/B（可选） | 两个版本蓝图并排选优 | 用户要求 |
+| 层级                    | 工具                                                 | 触发                 |
+| ----------------------- | ---------------------------------------------------- | -------------------- |
+| 契约审计                | 现有 audit（critical 闸门）                          | 每次编译             |
+| 具体性自检              | 确定性：禁词扫描 + 具体名词比例 + 字段完整度         | 每次扩展后           |
+| LLM 评委（可选）        | 按 rubric（coherence/fidelity/美学）打分             | 用户要求或 eval 模式 |
+| 生成级（可选，Phase 3） | LAION aesthetic-predictor / CLIP-Score（对生成结果） | 接 camera-* 后       |
+| 用户 A/B（可选）        | 两个版本蓝图并排选优                                 | 用户要求             |
 
 - 回归集：把本次事故案例（中文 3 镜打斗）作为固定 eval 用例——「分析→扩展→投影→审计」全链必须在 eval 模式下通过。
 
@@ -422,13 +424,13 @@ Level 3 advisory 降级：
 
 ## 14. 工具面收敛
 
-| 工具 | 定位（重构后） |
-|---|---|
-| `prompt_author` | **唯一全链入口**：意图→蓝图→扩展→投影→编译→Envelope(+next_action) |
-| `prompt_compile` | 确定性编译 + preflight（无 LLM） |
-| `prompt_audit` | 裸文本审计（保留，detail 加引导） |
-| `prompt_expand` / `prompt_reverse` / `minimax_scenario` / `profile_list` | resolver 族保留（扩写/反推/场景，与蓝图无关的独立能力） |
-| `catalog_*` | 保留（知识资产管理） |
+| 工具                                                                     | 定位（重构后）                                                    |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `prompt_author`                                                          | **唯一全链入口**：意图→蓝图→扩展→投影→编译→Envelope(+next_action) |
+| `prompt_compile`                                                         | 确定性编译 + preflight（无 LLM）                                  |
+| `prompt_audit`                                                           | 裸文本审计（保留，detail 加引导）                                 |
+| `prompt_expand` / `prompt_reverse` / `minimax_scenario` / `profile_list` | resolver 族保留（扩写/反推/场景，与蓝图无关的独立能力）           |
+| `catalog_*`                                                              | 保留（知识资产管理）                                              |
 
 - intent 子代理瘦身：prompt 去掉技能目录噪音（子代理 trace 显示它曾纠结「要不要调 skill」）——子代理任务纯 JSON 产出，注入最小 system。
 
@@ -436,13 +438,13 @@ Level 3 advisory 降级：
 
 ## 15. LLM 调用预算
 
-| 任务 | 预算 |
-|---|---|
-| 分析（意图→蓝图 v0） | 1 次子代理 |
-| 扩展（v0→v1） | 1 次子代理 |
-| 修正 Level 2 | ≤1 次（重投影后仍 fail 才触发） |
-| 总 LLM 子代理 | **≤3 次/任务**（超出 → next_action='manual'） |
-| 纯规则路径 | preflight/确定性预修/投影/审计全程零 LLM |
+| 任务                 | 预算                                          |
+| -------------------- | --------------------------------------------- |
+| 分析（意图→蓝图 v0） | 1 次子代理                                    |
+| 扩展（v0→v1）        | 1 次子代理                                    |
+| 修正 Level 2         | ≤1 次（重投影后仍 fail 才触发）               |
+| 总 LLM 子代理        | **≤3 次/任务**（超出 → next_action='manual'） |
+| 纯规则路径           | preflight/确定性预修/投影/审计全程零 LLM      |
 
 - 超时沿用 60s/子代理；`signal` 贯通（现有 `AbortController` 机制复用）。
 
@@ -450,12 +452,12 @@ Level 3 advisory 降级：
 
 ## 16. 测试策略
 
-| 层 | 内容 | 类型 |
-|---|---|---|
+| 层             | 内容                                                 | 类型           |
+| -------------- | ---------------------------------------------------- | -------------- |
 | 契约级（新增） | 蓝图 schema 校验、投影器映射、负向三态、CJK 差异度量 | 确定性单元测试 |
-| 引擎级（新增） | 扩展规则（具体名词化/禁词/ROI 补全）用 fixture 断言 | LLM 注入 mock |
-| 回归（保留） | golden fidelity（方言编译逐字节）、parity、tokenizer | 现有 |
-| eval（新增） | 事故案例全链 + 中文多分镜 | 集成 |
+| 引擎级（新增） | 扩展规则（具体名词化/禁词/ROI 补全）用 fixture 断言  | LLM 注入 mock  |
+| 回归（保留）   | golden fidelity（方言编译逐字节）、parity、tokenizer | 现有           |
+| eval（新增）   | 事故案例全链 + 中文多分镜                            | 集成           |
 
 ---
 
@@ -464,6 +466,7 @@ Level 3 advisory 降级：
 ### Phase 1 — 意图蓝图核（核心能力 + 修复上次会话全部痛点）
 
 **范围**：
+
 - 蓝图 IR schema v1 + 意图分析器 + 美学化扩展引擎（基础美学规则）
 - **蓝图存储/版本化**（复用 settings/custom_profiles 机制；增量修改的前提）
 - **最小风格库 v0**（8 个常用风格 + conformity 参数）——满足「按需选择」
@@ -473,6 +476,7 @@ Level 3 advisory 降级：
 - 契约级测试 + 事故案例 eval
 
 **交付标准**：
+
 1. `prompt_author` 全链跑通：「分析→扩展→投影→审计」一次成功
 2. 上次会话案例（中文 3 镜打斗）通过审计，无 CJK 误报，duration 语义正确
 3. 现有 golden 测试全绿（方言编译零回归）
@@ -498,13 +502,13 @@ Level 3 advisory 降级：
 
 ## 18. 风险与缓解
 
-| 风险 | 缓解 |
-|---|---|
-| 蓝图 schema v1 设计不当 → 返工 | 只做字段新增式演进；Phase 1 先用最小 schema，Phase 2 再扩 |
+| 风险                             | 缓解                                                            |
+| -------------------------------- | --------------------------------------------------------------- |
+| 蓝图 schema v1 设计不当 → 返工   | 只做字段新增式演进；Phase 1 先用最小 schema，Phase 2 再扩       |
 | 扩展引擎「过度发挥」偏离用户原意 | 保真守卫（用户关键词覆盖检查）+ 原字面保留（narrative/concept） |
-| LLM 成本上升 | 调用预算 ≤3 次；确定性路径零 LLM |
-| 投影器 bug 影响现有方言输出 | 投影器输出形状 = 现有输入形状，golden 测试锁死 |
-| 风格库内容工作量大 | Phase 2 才做；先用现有 profile system prompt 作种子 |
+| LLM 成本上升                     | 调用预算 ≤3 次；确定性路径零 LLM                                |
+| 投影器 bug 影响现有方言输出      | 投影器输出形状 = 现有输入形状，golden 测试锁死                  |
+| 风格库内容工作量大               | Phase 2 才做；先用现有 profile system prompt 作种子             |
 
 ---
 

@@ -28,45 +28,45 @@
 
 ```ts
 interface DialectCapabilities {
-  native_negative: boolean       // 有无独立负向框
-  supports_audio: boolean        // 音频/台词语法
-  supports_dialogue: boolean
-  camera_axes: number            // 运镜轴数
-  media_targets: Array<'image' | 'video' | 'mixed'>
-  aspect_ratios: string[]
-  duration_range: [number, number]  // 秒
-  max_shots_formula?: string     // 如 '1 + floor((duration - 1) / 3)'
-  max_prompt_chars: number
-  budget_quality_cap: number     // 每 stage token 上限
+  native_negative: boolean; // 有无独立负向框
+  supports_audio: boolean; // 音频/台词语法
+  supports_dialogue: boolean;
+  camera_axes: number; // 运镜轴数
+  media_targets: Array<'image' | 'video' | 'mixed'>;
+  aspect_ratios: string[];
+  duration_range: [number, number]; // 秒
+  max_shots_formula?: string; // 如 '1 + floor((duration - 1) / 3)'
+  max_prompt_chars: number;
+  budget_quality_cap: number; // 每 stage token 上限
 }
 
 interface DialectConstraintInput {
-  stage: string
-  shots: { duration_seconds: number; shots: unknown[] }
-  refs?: unknown[]
+  stage: string;
+  shots: { duration_seconds: number; shots: unknown[] };
+  refs?: unknown[];
 }
 
 interface DialectConstraints {
-  validate(input: DialectConstraintInput): AuditGate[]   // preflight 用确定性约束表
+  validate(input: DialectConstraintInput): AuditGate[]; // preflight 用确定性约束表
 }
 
 interface DialectAesthetics {
-  forbidden_words: string[]      // 禁词（Flux 禁 tag、可灵忌 fast…）
-  few_shot_examples: Array<{ input: string; output: string }>
-  style_hints: string[]
+  forbidden_words: string[]; // 禁词（Flux 禁 tag、可灵忌 fast…）
+  few_shot_examples: Array<{ input: string; output: string }>;
+  style_hints: string[];
 }
 
 interface DialectLicense {
-  id: string
-  url: string
-  territory_restrictions?: string
+  id: string;
+  url: string;
+  territory_restrictions?: string;
 }
 
 interface DialectPackage extends DialectContract {
-  capabilities: DialectCapabilities
-  constraints: DialectConstraints
-  aesthetics: DialectAesthetics
-  license?: DialectLicense        // 可选；未声明 = 无官方资产声明（Anima）
+  capabilities: DialectCapabilities;
+  constraints: DialectConstraints;
+  aesthetics: DialectAesthetics;
+  license?: DialectLicense; // 可选；未声明 = 无官方资产声明（Anima）
 }
 ```
 
@@ -89,49 +89,49 @@ interface DialectPackage extends DialectContract {
 
 ### 3.1 MiniMax-H3（`target: 'h3'`）
 
-| 维度 | 字段 | 值 | 代码来源 |
-|---|---|---|---|
-| capabilities | `native_negative` | `false`（无独立负向框 → 负向档 2 正向改写） | `h3.ts` |
-| | `supports_audio` | `true`（`overall_soundscape` / `shot.ambient`） | `h3.ts` |
-| | `supports_dialogue` | `true`（`<d>[语言] 文本</d>`） | `h3.ts` |
-| | `camera_axes` | `3`（dolly/pan/tracking/orbit/crane/handheld 三维描述） | `h3.ts` |
-| | `media_targets` | `['video']` | `h3.ts` |
-| | `aspect_ratios` | `['16:9','9:16','1:1','4:3','3:4']` | `h3.ts`（与 blueprint `ASPECT_RATIOS` 一致） |
-| | `duration_range` | `[4, 15]`（`MIN_DURATION_SECONDS`=4 / `MAX_DURATION_SECONDS`=15） | `schema/h3-shots.ts` |
-| | `max_shots_formula` | `'1 + floor((duration - 1) / 3)'` | `schema/h3-shots.ts` `MAX_SHOT_FORMULA` |
-| | `max_prompt_chars` | `7000` | `schema/h3-shots.ts` `MAX_PROMPT_CHARS` |
-| | `budget_quality_cap` | `2400`（= `Math.max(...STAGE_QUALITY_CAPS)`，ref2va 上界） | `audit/budget.ts`（t2va 1200/i2va 1500/fl2va 1700/l2va 1700/ref2va 2400） |
-| constraints | `validate` | `contractGatesH3` 薄封装（stage/shots/refs → `AuditGate[]`） | `h3.ts` → `audit/rules-h3.ts` |
-| aesthetics | `forbidden_words` | `[]`（Phase 2 内容化治理） | `h3.ts` |
-| | `few_shot_examples` | `[]` | `h3.ts` |
-| | `style_hints` | `[]`（风格库 Phase 2） | `h3.ts` |
-| license | 声明状态 | **已声明**（运行时读 manifest） | `assets/knowledge/minimax-h3-prompt/manifest.json` |
-| | `id` | `MiniMax-H3-Community-License-2026-08-02` | manifest `license.id` |
-| | `url` | `https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/939557dc319dd91227e30195a763f272ba7f8765/LICENSE` | manifest `license.url` |
-| | `territory_restrictions` | `Redistribution and use are limited to the Applicable Territory defined by the license; LICENSE and NOTICE must accompany the files.` | manifest `license.conditions`（→ `territory_restrictions`） |
+| 维度         | 字段                     | 值                                                                                                                                    | 代码来源                                                                  |
+| ------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| capabilities | `native_negative`        | `false`（无独立负向框 → 负向档 2 正向改写）                                                                                           | `h3.ts`                                                                   |
+|              | `supports_audio`         | `true`（`overall_soundscape` / `shot.ambient`）                                                                                       | `h3.ts`                                                                   |
+|              | `supports_dialogue`      | `true`（`<d>[语言] 文本</d>`）                                                                                                        | `h3.ts`                                                                   |
+|              | `camera_axes`            | `3`（dolly/pan/tracking/orbit/crane/handheld 三维描述）                                                                               | `h3.ts`                                                                   |
+|              | `media_targets`          | `['video']`                                                                                                                           | `h3.ts`                                                                   |
+|              | `aspect_ratios`          | `['16:9','9:16','1:1','4:3','3:4']`                                                                                                   | `h3.ts`（与 blueprint `ASPECT_RATIOS` 一致）                              |
+|              | `duration_range`         | `[4, 15]`（`MIN_DURATION_SECONDS`=4 / `MAX_DURATION_SECONDS`=15）                                                                     | `schema/h3-shots.ts`                                                      |
+|              | `max_shots_formula`      | `'1 + floor((duration - 1) / 3)'`                                                                                                     | `schema/h3-shots.ts` `MAX_SHOT_FORMULA`                                   |
+|              | `max_prompt_chars`       | `7000`                                                                                                                                | `schema/h3-shots.ts` `MAX_PROMPT_CHARS`                                   |
+|              | `budget_quality_cap`     | `2400`（= `Math.max(...STAGE_QUALITY_CAPS)`，ref2va 上界）                                                                            | `audit/budget.ts`（t2va 1200/i2va 1500/fl2va 1700/l2va 1700/ref2va 2400） |
+| constraints  | `validate`               | `contractGatesH3` 薄封装（stage/shots/refs → `AuditGate[]`）                                                                          | `h3.ts` → `audit/rules-h3.ts`                                             |
+| aesthetics   | `forbidden_words`        | `[]`（Phase 2 内容化治理）                                                                                                            | `h3.ts`                                                                   |
+|              | `few_shot_examples`      | `[]`                                                                                                                                  | `h3.ts`                                                                   |
+|              | `style_hints`            | `[]`（风格库 Phase 2）                                                                                                                | `h3.ts`                                                                   |
+| license      | 声明状态                 | **已声明**（运行时读 manifest）                                                                                                       | `assets/knowledge/minimax-h3-prompt/manifest.json`                        |
+|              | `id`                     | `MiniMax-H3-Community-License-2026-08-02`                                                                                             | manifest `license.id`                                                     |
+|              | `url`                    | `https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/939557dc319dd91227e30195a763f272ba7f8765/LICENSE`                                   | manifest `license.url`                                                    |
+|              | `territory_restrictions` | `Redistribution and use are limited to the Applicable Territory defined by the license; LICENSE and NOTICE must accompany the files.` | manifest `license.conditions`（→ `territory_restrictions`）               |
 
 > H3 license 由 `h3License()`（`dialect/h3.ts`）在注册时读取 `manifest.json`；读取失败 → `undefined`（不阻断注册）。
 
 ### 3.2 Anima（`target: 'anima'`）
 
-| 维度 | 字段 | 值 | 代码来源 |
-|---|---|---|---|
-| capabilities | `native_negative` | `true`（有独立 negative 通道 → 负向档 1） | `anima.ts` |
-| | `supports_audio` | `false` | `anima.ts` |
-| | `supports_dialogue` | `false` | `anima.ts` |
-| | `camera_axes` | `0`（camera 为离散角度标签 `camera[]` 槽，非轴运镜） | `anima.ts` |
-| | `media_targets` | `['image']` | `anima.ts` |
-| | `aspect_ratios` | `['16:9','9:16','1:1','4:3','3:4']` | `anima.ts`（与 `ASPECT_COMMON` 一致） |
-| | `duration_range` | `[0, 0]`（image 方言无时长约束，0 = 不适用） | `anima.ts` |
-| | `max_shots_formula` | 未声明（可选字段；image 方言无分镜概念） | `anima.ts` |
-| | `max_prompt_chars` | `0`（无官方字符上限，0 = 不适用） | `anima.ts` |
-| | `budget_quality_cap` | `0`（无 budget 子系统，0 = 不适用） | `anima.ts` |
-| constraints | `validate` | `() => []`（无契约闸门表；输入校验走 `validateAnimaSlots` → error 字符串，非 AuditGate[]） | `anima.ts` |
-| aesthetics | `forbidden_words` | `[]`（Phase 2 内容化治理；现有 `LIGHTING_BAN` 为审计内部私有列表，不在此字段） | `anima.ts` |
-| | `few_shot_examples` | `[]` | `anima.ts` |
-| | `style_hints` | `[]`（风格库 Phase 2） | `anima.ts` |
-| license | 声明状态 | **未声明（无官方资产声明）** | `anima.ts`（注释「license 无官方资产声明」） |
-| | 原因 | `assets/knowledge/anima-prompt-v1/manifest.json` 仅含 `content_filters/output/source` 字段，**无 license 字段** → 无官方许可声明可提取 | `anima-prompt-v1/manifest.json` |
+| 维度         | 字段                 | 值                                                                                                                                     | 代码来源                                     |
+| ------------ | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| capabilities | `native_negative`    | `true`（有独立 negative 通道 → 负向档 1）                                                                                              | `anima.ts`                                   |
+|              | `supports_audio`     | `false`                                                                                                                                | `anima.ts`                                   |
+|              | `supports_dialogue`  | `false`                                                                                                                                | `anima.ts`                                   |
+|              | `camera_axes`        | `0`（camera 为离散角度标签 `camera[]` 槽，非轴运镜）                                                                                   | `anima.ts`                                   |
+|              | `media_targets`      | `['image']`                                                                                                                            | `anima.ts`                                   |
+|              | `aspect_ratios`      | `['16:9','9:16','1:1','4:3','3:4']`                                                                                                    | `anima.ts`（与 `ASPECT_COMMON` 一致）        |
+|              | `duration_range`     | `[0, 0]`（image 方言无时长约束，0 = 不适用）                                                                                           | `anima.ts`                                   |
+|              | `max_shots_formula`  | 未声明（可选字段；image 方言无分镜概念）                                                                                               | `anima.ts`                                   |
+|              | `max_prompt_chars`   | `0`（无官方字符上限，0 = 不适用）                                                                                                      | `anima.ts`                                   |
+|              | `budget_quality_cap` | `0`（无 budget 子系统，0 = 不适用）                                                                                                    | `anima.ts`                                   |
+| constraints  | `validate`           | `() => []`（无契约闸门表；输入校验走 `validateAnimaSlots` → error 字符串，非 AuditGate[]）                                             | `anima.ts`                                   |
+| aesthetics   | `forbidden_words`    | `[]`（Phase 2 内容化治理；现有 `LIGHTING_BAN` 为审计内部私有列表，不在此字段）                                                         | `anima.ts`                                   |
+|              | `few_shot_examples`  | `[]`                                                                                                                                   | `anima.ts`                                   |
+|              | `style_hints`        | `[]`（风格库 Phase 2）                                                                                                                 | `anima.ts`                                   |
+| license      | 声明状态             | **未声明（无官方资产声明）**                                                                                                           | `anima.ts`（注释「license 无官方资产声明」） |
+|              | 原因                 | `assets/knowledge/anima-prompt-v1/manifest.json` 仅含 `content_filters/output/source` 字段，**无 license 字段** → 无官方许可声明可提取 | `anima-prompt-v1/manifest.json`              |
 
 > **⚠️ Anima 许可证标注（团队目标 ③）**：Anima 知识资产（`assets/knowledge/anima-prompt-v1/`）
 > **没有官方资产声明**，方言包 `license` 字段因此**保持未声明**（`undefined`）。任何分发 / 再使用该
@@ -143,20 +143,20 @@ interface DialectPackage extends DialectContract {
 
 > 接入一个第 3 模型（Phase 3 以 **Flux 图像**为验证目标，spec §17 L493）只需 **三步**：
 
-| 步骤 | 做什么 | 落点文件 | 参考现有实现 |
-|---|---|---|---|
-| **① 写方言包** | `registerXxxDialect()`：声明 DialectContract（normalize/compile/audit/budget/targetSlotHint/intent）+ **四字段** `capabilities` / `constraints` / `aesthetics` / `license`（license 无官方声明可省略）；模块级副作用注册 `registerXxxDialect()` | `src/pe-framework/dialect/<model>.ts`（新建）；`src/pe-framework/dialect/registry.ts` 的 `registerDialect` 自动装配 | `dialect/h3.ts`（`registerH3Dialect`）、`dialect/anima.ts`（`registerAnimaDialect`） |
-| **② 写投影器** | `projectToXxx(bp: BlueprintV1)`：蓝图 v1 → 该方言输入形状，确定性纯函数；含负向档位适配（见 §4.1）、角色卡 `<Subject N>` 锚点、duration 双字段语义 | `src/pe-framework/blueprint/project.ts`（追加导出） | `projectToH3`（§8.1 映射）、`projectToAnima`（§8.2 映射）、`preflightRepair`（§11 Level 1 确定性预修） |
-| **③ 写测试** | 契约级测试：给定蓝图 fixture → 断言输出形状/关键字段/负向档位正确；**防漂移快照**：同蓝图 → 输出快照 diff | `tests/pe-framework/dialect/<model>-register.test.ts`（新建，能力断言）；`tests/pe-framework/blueprint/project.test.ts`（追加投影契约 + `toMatchSnapshot()`） | `tests/pe-framework/dialect/h3-register.test.ts`、`tests/pe-framework/dialect/package.test.ts`、`tests/pe-framework/blueprint/project.test.ts`（含 `__snapshots__/project.test.ts.snap`） |
+| 步骤           | 做什么                                                                                                                                                                                                                                          | 落点文件                                                                                                                                                      | 参考现有实现                                                                                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **① 写方言包** | `registerXxxDialect()`：声明 DialectContract（normalize/compile/audit/budget/targetSlotHint/intent）+ **四字段** `capabilities` / `constraints` / `aesthetics` / `license`（license 无官方声明可省略）；模块级副作用注册 `registerXxxDialect()` | `src/pe-framework/dialect/<model>.ts`（新建）；`src/pe-framework/dialect/registry.ts` 的 `registerDialect` 自动装配                                           | `dialect/h3.ts`（`registerH3Dialect`）、`dialect/anima.ts`（`registerAnimaDialect`）                                                                                                      |
+| **② 写投影器** | `projectToXxx(bp: BlueprintV1)`：蓝图 v1 → 该方言输入形状，确定性纯函数；含负向档位适配（见 §4.1）、角色卡 `<Subject N>` 锚点、duration 双字段语义                                                                                              | `src/pe-framework/blueprint/project.ts`（追加导出）                                                                                                           | `projectToH3`（§8.1 映射）、`projectToAnima`（§8.2 映射）、`preflightRepair`（§11 Level 1 确定性预修）                                                                                    |
+| **③ 写测试**   | 契约级测试：给定蓝图 fixture → 断言输出形状/关键字段/负向档位正确；**防漂移快照**：同蓝图 → 输出快照 diff                                                                                                                                       | `tests/pe-framework/dialect/<model>-register.test.ts`（新建，能力断言）；`tests/pe-framework/blueprint/project.test.ts`（追加投影契约 + `toMatchSnapshot()`） | `tests/pe-framework/dialect/h3-register.test.ts`、`tests/pe-framework/dialect/package.test.ts`、`tests/pe-framework/blueprint/project.test.ts`（含 `__snapshots__/project.test.ts.snap`） |
 
 ### 4.1 负向档位适配（spec §5.2-3，投影器内做、不依赖 LLM）
 
-| 档位 | 适用 | 做法 | 现有实现 |
-|---|---|---|---|
-| 档 1 有 native negative | SD/SDXL `negative_prompt`、可灵、MJ `--no` | 直接映射方言 negative 字段/参数 | Anima `projectToAnima` → `exclusions[]`（soft 类） |
-| 档 2 无 native | **Flux**、H3、即梦 | **正向改写**（「无字幕」→「纯净画面无文字界面」）+ advisory 提示，不堆负向词 | H3 `projectToH3` → soft 改写进 `what` 末句 + `projectAdvisories`（`soft_negative_rewritten:...`） |
-| 档 3 LLM-encoder | Z-Image/Anima/Krea2 | 语义正负短语，**只用符号不用权重**（NegPiP 实测） | — |
-| 内容安全类 | `severity='hard'` | 直接过滤/拒绝 | `projectToH3` / `projectToAnima` → `BlueprintHardNegativeError`（hard 提前 throw） |
+| 档位                    | 适用                                       | 做法                                                                         | 现有实现                                                                                          |
+| ----------------------- | ------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 档 1 有 native negative | SD/SDXL `negative_prompt`、可灵、MJ `--no` | 直接映射方言 negative 字段/参数                                              | Anima `projectToAnima` → `exclusions[]`（soft 类）                                                |
+| 档 2 无 native          | **Flux**、H3、即梦                         | **正向改写**（「无字幕」→「纯净画面无文字界面」）+ advisory 提示，不堆负向词 | H3 `projectToH3` → soft 改写进 `what` 末句 + `projectAdvisories`（`soft_negative_rewritten:...`） |
+| 档 3 LLM-encoder        | Z-Image/Anima/Krea2                        | 语义正负短语，**只用符号不用权重**（NegPiP 实测）                            | —                                                                                                 |
+| 内容安全类              | `severity='hard'`                          | 直接过滤/拒绝                                                                | `projectToH3` / `projectToAnima` → `BlueprintHardNegativeError`（hard 提前 throw）                |
 
 > 投影器输出形状必须与现有方言输入形状完全兼容（spec §8 L272「runStage 与方言编译零改动」），
 > golden fidelity 测试逐字节把关（`tests/fidelity/*`）。

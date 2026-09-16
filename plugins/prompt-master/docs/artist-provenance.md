@@ -8,15 +8,15 @@
 
 ## 批 A — photography 7（T4，commit 4c4867f，impl-1）
 
-| 预设 | artist_hints（落库顺序） |
-| --- | --- |
-| film_photography | loundraw, ross tran, wlop |
-| studio_portrait | wlop, artgerm, guweiz |
-| documentary_photo | loundraw, ross tran, loish |
-| fashion_editorial | artgerm, mika pikazo, ross tran |
-| night_street | guweiz, mika pikazo, loundraw |
-| sports_action | loish, ross tran, guweiz |
-| wildlife_nature | greg rutkowski, loish, ross tran |
+| 预设              | artist_hints（落库顺序）         |
+| ----------------- | -------------------------------- |
+| film_photography  | loundraw, ross tran, wlop        |
+| studio_portrait   | wlop, artgerm, guweiz            |
+| documentary_photo | loundraw, ross tran, loish       |
+| fashion_editorial | artgerm, mika pikazo, ross tran  |
+| night_street      | guweiz, mika pikazo, loundraw    |
+| sports_action     | loish, ross tran, guweiz         |
+| wildlife_nature   | greg rutkowski, loish, ross tran |
 
 采纳（9 名，rec 号 = catalog record_id）：wlop→@wlop(1299120)、guweiz→@guweiz(397364)、
 artgerm→artgerm(94714)、greg rutkowski→@greg rutkowski(389496)、loundraw→@loundraw(665973)、
@@ -29,13 +29,13 @@ brook shaden（fuzzy→brooklyn）——均 fuzzy_below_threshold（usage_count 
 
 ## 批 B — cg_3d 3 + oriental 2（T5，commit ad76da5，impl-2）
 
-| 预设 | artist_hints |
-| --- | --- |
-| unreal_render | wlop, greg rutkowski, simon stalenhag |
-| figure_model | （留空——无 canonical 手办画师，spec L114 规则） |
-| claymation_clay | aardman, hokusai, ask (askzy) |
-| ink_wash | hokusai, greg rutkowski, ask (askzy) |
-| hanfu_xianxia | anmi, wlop, ask (askzy) |
+| 预设            | artist_hints                                    |
+| --------------- | ----------------------------------------------- |
+| unreal_render   | wlop, greg rutkowski, simon stalenhag           |
+| figure_model    | （留空——无 canonical 手办画师，spec L114 规则） |
+| claymation_clay | aardman, hokusai, ask (askzy)                   |
+| ink_wash        | hokusai, greg rutkowski, ask (askzy)            |
+| hanfu_xianxia   | anmi, wlop, ask (askzy)                         |
 
 采纳（新 4 名 + 复用 3 名）：simon stalenhag→@simon stalenhag(1093412)、aardman→aardman(28036)、
 hokusai→@hokusai(452301)、anmi→@anmi(75427)；复用 wlop(1299120)/greg rutkowski(389496)/ask (askzy)(102263)。
@@ -44,13 +44,13 @@ hokusai→@hokusai(452301)、anmi→@anmi(75427)；复用 wlop(1299120)/greg rut
 
 ## 批 C — dark_supernatural 2 + retro 2 + graphic 1（T6，commit 3529a47，impl-1）
 
-| 预设 | artist_hints |
-| --- | --- |
-| gothic_vampire | abigail larson, gustave dore, edward gorey |
-| eldritch_horror | greg rutkowski, abigail larson, loish |
-| showa_retro | terada katsuya, ross tran, mika pikazo |
-| vintage_photo | loundraw, ross tran, wlop |
-| poster_constructivist | alphonse mucha, loish, ross tran |
+| 预设                  | artist_hints                               |
+| --------------------- | ------------------------------------------ |
+| gothic_vampire        | abigail larson, gustave dore, edward gorey |
+| eldritch_horror       | greg rutkowski, abigail larson, loish      |
+| showa_retro           | terada katsuya, ross tran, mika pikazo     |
+| vintage_photo         | loundraw, ross tran, wlop                  |
+| poster_constructivist | alphonse mucha, loish, ross tran           |
 
 采纳（新 5 名 + 复用 6 名）：abigail larson→@abigail larson(29397)、alphonse mucha→@alphonse mucha(58901)、
 gustave dore→@gustave dore(397092)、edward gorey→edward gorey(288947)、terada katsuya→@terada katsuya(1183599)；

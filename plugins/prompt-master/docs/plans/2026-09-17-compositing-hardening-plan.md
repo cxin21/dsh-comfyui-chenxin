@@ -20,84 +20,86 @@
 
 ## 缺口 → 任务映射
 
-| 缺口 | 审计证据 | 任务 |
-|---|---|---|
-| P1 vectorSim 未接线 | `prompt-author.ts:1120` 只注入 `search`；昨晚 envelope `overlap_vector_unavailable` | Task 1 |
-| P2 回退产物超预算 | `compose.ts:83` 返回未截断变量（L79 截断结果是死代码）；gen_1789535180257 positive 2803 字符 | Task 2 |
-| P3 质量语义不可见 | `ok=true` 掩盖 fallback / 耗尽三态；调用方需翻 advisories | Task 3 |
-| P4a judge 跨轮重复评审 | orchestrate 每轮重跑 judge 无 findings 去重 | Task 4 |
-| P4b 检索嵌入延迟（retrieval_pack 99s） | bge ONNX 单次 ~4s，并行化已做，批处理需跨模块接口变更 | Task 5（仅文档，显式 defer） |
+| 缺口                                   | 审计证据                                                                                     | 任务                         |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------- |
+| P1 vectorSim 未接线                    | `prompt-author.ts:1120` 只注入 `search`；昨晚 envelope `overlap_vector_unavailable`          | Task 1                       |
+| P2 回退产物超预算                      | `compose.ts:83` 返回未截断变量（L79 截断结果是死代码）；gen_1789535180257 positive 2803 字符 | Task 2                       |
+| P3 质量语义不可见                      | `ok=true` 掩盖 fallback / 耗尽三态；调用方需翻 advisories                                    | Task 3                       |
+| P4a judge 跨轮重复评审                 | orchestrate 每轮重跑 judge 无 findings 去重                                                  | Task 4                       |
+| P4b 检索嵌入延迟（retrieval_pack 99s） | bge ONNX 单次 ~4s，并行化已做，批处理需跨模块接口变更                                        | Task 5（仅文档，显式 defer） |
 
 ---
 
 ### Task 1: vectorSim 生产接线（P1 — D6 闭合）
 
 **Files:**
+
 - Create: `src/pe-framework/compositing/vector-sim.ts`
 - Modify: `src/tools/prompt-author.ts`（compositing deps 装配处，L1116 附近）
 - Test: `tests/pe-framework/compositing/vector-sim.test.ts`
 
 **Interfaces:**
+
 - Consumes: `EmbedFn`（`anima-vector.ts:15`，`(texts: string[], kind: 'query'|'passage') => Promise<Float32Array[]>`）
 - Produces（实施修订）：`createBgeOverlapSim(opts?: { embed?: EmbedFn }): BgeOverlapSim`，其中 `BgeOverlapSim = { prewarm(nl, tags): Promise<void>; sim(a, b): number | undefined }`——嵌入异步而 `auditCompositing` 同步（13 处既有测试依赖同步返回），接缝拆两半：审计前 `prewarm` 进程内缓存，审计中同步 `sim` 查缓存；`getSharedBgeOverlapSim()`（进程级单例 + `PM_VECTOR_OVERLAP=off` no-op，prompt-author 装配用）；`audit.ts` 导出 `splitNlSentences` 供 prewarm 共用（防切分漂移）
 
 - [x] **Step 1: 写失败测试**（stub EmbedFn：平行→~1，正交→~0，非归一化→真余弦，故障→undefined，CJK/空串→undefined，缓存只嵌一次，off 开关 no-op；8 用例见 `tests/pe-framework/compositing/vector-sim.test.ts`）
 
 ```typescript
-import { describe, expect, it } from 'vitest'
-import { createBgeVectorSim } from '../../../src/pe-framework/compositing/vector-sim.js'
+import { describe, expect, it } from 'vitest';
+import { createBgeVectorSim } from '../../../src/pe-framework/compositing/vector-sim.js';
 
 function stubEmbed(vectors: Record<string, Float32Array>, fail = false) {
-  const calls: string[] = []
+  const calls: string[] = [];
   return {
     calls,
     embed: async (texts: string[]) => {
-      if (fail) throw new Error('embed boom')
-      calls.push(...texts)
-      return texts.map((t) => vectors[t] ?? new Float32Array([0, 1]))
+      if (fail) throw new Error('embed boom');
+      calls.push(...texts);
+      return texts.map((t) => vectors[t] ?? new Float32Array([0, 1]));
     },
-  }
+  };
 }
 
-const PAR_A = new Float32Array([1, 0])
-const PAR_B = new Float32Array([2, 0])   // 与 A 平行（归一化后同向）
-const ORTH = new Float32Array([0, 3])    // 与 A 正交
+const PAR_A = new Float32Array([1, 0]);
+const PAR_B = new Float32Array([2, 0]); // 与 A 平行（归一化后同向）
+const ORTH = new Float32Array([0, 3]); // 与 A 正交
 
 describe('createBgeVectorSim', () => {
   it('parallel normalized vectors → cos ≈ 1', async () => {
-    const { embed } = stubEmbed({ a: PAR_A, b: PAR_B })
-    const sim = createBgeVectorSim({ embed })
-    expect(await sim('a', 'b')).toBeCloseTo(1, 5)
-  })
+    const { embed } = stubEmbed({ a: PAR_A, b: PAR_B });
+    const sim = createBgeVectorSim({ embed });
+    expect(await sim('a', 'b')).toBeCloseTo(1, 5);
+  });
   it('orthogonal vectors → cos ≈ 0', async () => {
-    const { embed } = stubEmbed({ a: PAR_A, b: ORTH })
-    const sim = createBgeVectorSim({ embed })
-    expect(await sim('a', 'b')).toBeCloseTo(0, 5)
-  })
+    const { embed } = stubEmbed({ a: PAR_A, b: ORTH });
+    const sim = createBgeVectorSim({ embed });
+    expect(await sim('a', 'b')).toBeCloseTo(0, 5);
+  });
   it('embed failure → undefined（audit 降级 overlap_vector_unavailable）', async () => {
-    const { embed } = stubEmbed({}, true)
-    const sim = createBgeVectorSim({ embed })
-    expect(await sim('a', 'b')).toBeUndefined()
-  })
+    const { embed } = stubEmbed({}, true);
+    const sim = createBgeVectorSim({ embed });
+    expect(await sim('a', 'b')).toBeUndefined();
+  });
   it('CJK text → undefined（英文单语域，对齐 vector search 拒收语义）', async () => {
-    const { embed } = stubEmbed({ a: PAR_A })
-    const sim = createBgeVectorSim({ embed })
-    expect(await sim('夜景', 'b')).toBeUndefined()
-    expect(embed('夜景', 'passage')).rejects // 未被调用——直接短路
-  })
+    const { embed } = stubEmbed({ a: PAR_A });
+    const sim = createBgeVectorSim({ embed });
+    expect(await sim('夜景', 'b')).toBeUndefined();
+    expect(embed('夜景', 'passage')).rejects; // 未被调用——直接短路
+  });
   it('same text embedded once（进程内缓存）', async () => {
-    const stub = stubEmbed({ a: PAR_A, b: PAR_B })
-    const sim = createBgeVectorSim({ embed: stub.embed })
-    await sim('a', 'b')
-    await sim('a', 'c') // 'a' 第二次出现
-    expect(stub.calls.filter((t) => t === 'a')).toHaveLength(1)
-  })
+    const stub = stubEmbed({ a: PAR_A, b: PAR_B });
+    const sim = createBgeVectorSim({ embed: stub.embed });
+    await sim('a', 'b');
+    await sim('a', 'c'); // 'a' 第二次出现
+    expect(stub.calls.filter((t) => t === 'a')).toHaveLength(1);
+  });
   it('dimension mismatch → undefined（索引/查询错配防御）', async () => {
-    const { embed } = stubEmbed({ a: PAR_A, b: new Float32Array([1, 0, 0]) })
-    const sim = createBgeVectorSim({ embed })
-    expect(await sim('a', 'b')).toBeUndefined()
-  })
-})
+    const { embed } = stubEmbed({ a: PAR_A, b: new Float32Array([1, 0, 0]) });
+    const sim = createBgeVectorSim({ embed });
+    expect(await sim('a', 'b')).toBeUndefined();
+  });
+});
 ```
 
 - [x] **Step 2: 跑测试确认失败** — FAIL（模块不存在）确认。（实施注记：初次类型检查暴露接缝矛盾——嵌入异步 vs 审计同步，按「预热 + 同步查询」重设计，见上方 Interfaces 修订）
@@ -113,10 +115,12 @@ describe('createBgeVectorSim', () => {
 ### Task 2: 回退通道确定性合规（P2 — 死变量 bug + 总预算）
 
 **Files:**
+
 - Modify: `src/pe-framework/compositing/compose.ts`（修 L83 返回 bug；新增 tag 字符预算）
 - Test: `tests/pe-framework/compositing/writer-compose.test.ts`（追加用例）
 
 **Interfaces:**
+
 - Produces: `export const TAG_CHAR_BUDGET = 560`；`deterministicCompose` 返回契约强化——`assemblePositive(其产物, rating)` 恒 ≤ 1200 字符。
 
 - [x] **Step 1: 写失败测试**（追加到 writer-compose.test.ts：压力 fixture = 长 lighting/mood + 40 长词形证据 + 6 unresolved；4 用例见 `writer-compose.test.ts` describe 'deterministicCompose 预算合规'）
@@ -132,11 +136,13 @@ describe('createBgeVectorSim', () => {
 ### Task 3: envelope 顶层质量三态（P3 — 可观测性）
 
 **Files:**
+
 - Modify: `src/pe-framework/compositing/orchestrate.ts`（CompositingOutcome 增 `quality` 字段）
 - Modify: `src/tools/prompt-author.ts`（compositing 分支 envelope 顶层投影 `quality`）
 - Test: `tests/pe-framework/compositing/orchestrate-quality.test.ts`（mock deps）
 
 **Interfaces:**
+
 - Produces: `export type CompositingQuality = 'passed' | 'degraded' | 'fallback'`；`CompositingOutcome.quality`；envelope 顶层 `quality` 键（仅 compositing 分支，条件键风格对齐 `blueprint_id`）。
 
 - [x] **Step 1: 写失败测试**（三态判定语义；3 用例见 `orchestrate-quality.test.ts`，fixtures 与 orchestrate.test.ts 同款）
@@ -150,11 +156,13 @@ describe('createBgeVectorSim', () => {
 ### Task 4: judge findings 跨轮去重（P4a — 成本）
 
 **Files:**
+
 - Modify: `src/pe-framework/eval/rubrics/compositing.ts`（`buildCompositingJudgePrompt` 增可选 `opts.previousFindings`）
 - Modify: `src/pe-framework/compositing/orchestrate.ts`（跨轮传递上轮 findings）
 - Test: `tests/pe-framework/eval/compositing-judge-prompt.test.ts`（追加）+ orchestrate 测试（捕获 critic 调用断言）
 
 **Interfaces:**
+
 - Produces: `buildCompositingJudgePrompt(out, v1, pack, opts?: { previousFindings?: string[] })`；非空时 prompt 末尾追加 `<previous_findings>` 块 + 指令「上轮已标记且已修复的问题不再报告，只报告新增/残留问题」。
 
 - [x] **Step 1: 写失败测试**（prompt 块 2 用例见 `tests/pe-framework/eval/compositing-judge-prompt.test.ts`；orchestrate 跨轮断言追加于 `orchestrate.test.ts`——第二轮 critic prompt 须含 `<previous_findings>` 与首轮 requiredFix）
@@ -171,6 +179,7 @@ describe('createBgeVectorSim', () => {
 **状态：已完成**（原 DEFER 理由「跨模块接口变更波及面大」被更小的接缝设计化解——**未改 `CatalogSearchFn` 签名**，改为向量闭包缓存 + 预热缝，消费方零破坏）
 
 **Files:**
+
 - Modify: `src/pe-framework/dialect/anima-vector.ts`（查询向量缓存 + `prewarm` 批量嵌入，`VectorSearchFn` 类型）
 - Modify: `src/pe-framework/dialect/anima-catalog.ts`（`prewarmSemanticQueries`：同步级联命中过滤后转发；seam 类型放宽为可选 prewarm，旧形态注入兼容）
 - Modify: `src/pe-framework/dialect/retrieval-pack.ts`（`buildRetrievalPack` 可选第 4 参 prewarm，检索前批量预热）
@@ -180,6 +189,7 @@ describe('createBgeVectorSim', () => {
 **设计（对原验收草案的修正）**：原草案的 `BatchCatalogSearchFn` 需要改 `searchCatalog` 接口、波及三个消费方——实测发现预热路径可以完全绕开它：嵌入发生在 `createVectorSearch` 闭包内，给闭包挂**查询向量缓存 + prewarm**（N query → 一次 extractor 调用）即可，`searchCatalog`/`CatalogSearchFn`/审计缝全部不动。catalog 层过滤「同步级联已命中」的 query（它们永远不会进 semantic 层，预热纯属浪费 batch 槽位）。
 
 **验收对照：**
+
 - [x] RED→GREEN：9 条 RED（vector 4 + pack 3 + catalog 4 中 9 失败）→ 全绿
 - [x] 同一 pack 产出**字节级一致**（有/无 prewarm 的 `JSON.stringify` 全等断言）
 - [x] dim 对账不因缓存被绕过（prewarm 后查询仍 fail-fast `VectorDimensionMismatchError`）
@@ -204,4 +214,4 @@ describe('createBgeVectorSim', () => {
 - Task 1: 完成，commit ff1eb6c。新增 `compositing/vector-sim.ts`（prewarm+同步 sim 双半接缝）+ `audit.ts` 导出 `splitNlSentences` + `orchestrate.ts` 三处审计前预热 + `prompt-author.ts` 装配单例。测试：vector-sim 8/8，compositing 全量 40/40，TSC OK，dist 已同步。遗留终验：下次真实 prompt_author envelope 应无 `overlap_vector_unavailable`。
 - Task 5: DEFERRED → **已实施**（见完成记录；全量回归更新为 1291 passed）。
 - **收尾门结论**：5 项全部 TDD 落地（每项 RED→GREEN 证据在案）；全量回归 1291 passed 0 failed；commit 链 ff1eb6c → 0a1759c → d644162 → 144a7c9 → 86e5887。遗留一条人工终验：宿主重启加载新 dist 后跑一次真实 prompt_author，确认①无 `overlap_vector_unavailable`、②envelope 顶层有 `quality`、③retrieval_pack 耗时对比留痕（P4b 验收最后一条）。
-（后续任务完成即回填一行：日期、改动文件、测试结果、commit 号。）
+  （后续任务完成即回填一行：日期、改动文件、测试结果、commit 号。）

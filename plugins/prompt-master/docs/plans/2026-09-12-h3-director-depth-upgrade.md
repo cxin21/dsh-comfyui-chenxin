@@ -15,16 +15,16 @@
 
 ## 1. 阶段总览与依赖
 
-| Phase | 内容 | 优先级 | 依赖 | 主要文件 |
-|---|---|---|---|---|
-| 1 | H3 persona / schema 导演化 | P0 | 无 | `intent/subagent-provider.ts` |
-| 2 | per-shot duration（反均匀切分） | P0 | 无 | `schema/h3-shots.ts`、`dialect/h3.ts`、`audit/rules-h3.ts` |
-| 3 | retention_analysis / subject_definitions 实化 | P0 | 无 | `schema/h3-shots.ts`、`dialect/h3.ts` |
-| 4 | `constraints:` 风格/负向约束块 | P0 | 无 | 同上 + `audit/rules-h3.ts` |
-| 5 | 导演级 shot 字段 + MultishotPlan 接活 | P1 | Phase 2 | `schema/h3-shots.ts`、`dialect/h3.ts`、`audit/rules-h3.ts`、`tools/prompt-compile.ts` |
-| 6 | H3_RUBRIC 扩维 + judge 逐镜覆盖 | P1 | 无 | `eval/rubrics/h3.ts` |
-| 7 | 预算分档（quick / director） | P1 | 无 | `audit/budget.ts`、`pipeline/runStage.ts` |
-| 8 | 多段工程 / cut 表述放宽 | P2 | 独立设计 | blueprint 层（另行设计） |
+| Phase | 内容                                          | 优先级 | 依赖     | 主要文件                                                                              |
+| ----- | --------------------------------------------- | ------ | -------- | ------------------------------------------------------------------------------------- |
+| 1     | H3 persona / schema 导演化                    | P0     | 无       | `intent/subagent-provider.ts`                                                         |
+| 2     | per-shot duration（反均匀切分）               | P0     | 无       | `schema/h3-shots.ts`、`dialect/h3.ts`、`audit/rules-h3.ts`                            |
+| 3     | retention_analysis / subject_definitions 实化 | P0     | 无       | `schema/h3-shots.ts`、`dialect/h3.ts`                                                 |
+| 4     | `constraints:` 风格/负向约束块                | P0     | 无       | 同上 + `audit/rules-h3.ts`                                                            |
+| 5     | 导演级 shot 字段 + MultishotPlan 接活         | P1     | Phase 2  | `schema/h3-shots.ts`、`dialect/h3.ts`、`audit/rules-h3.ts`、`tools/prompt-compile.ts` |
+| 6     | H3_RUBRIC 扩维 + judge 逐镜覆盖               | P1     | 无       | `eval/rubrics/h3.ts`                                                                  |
+| 7     | 预算分档（quick / director）                  | P1     | 无       | `audit/budget.ts`、`pipeline/runStage.ts`                                             |
+| 8     | 多段工程 / cut 表述放宽                       | P2     | 独立设计 | blueprint 层（另行设计）                                                              |
 
 ---
 
@@ -141,17 +141,17 @@
 
 **改动**（`eval/rubrics/h3.ts`，纯配置）：9 维重配权重（和=1）：
 
-| 维度 | 权重 | 要点 |
-|---|---|---|
-| shot-structure | 0.15 | （现有）句序/字段完整 |
-| shot-increment | 0.10 | （现有）相邻镜语义增量 |
-| cross-shot-consistency | 0.20 | （现有，保留最高权重）身份/ref 引用一致 |
-| duration-fit | 0.05 | （现有）内容量与时长匹配 |
-| pacing | 0.10 | （现有）节奏曲线 |
-| atmosphere-coupling | 0.10 | （现有）氛围锚点 |
+| 维度                      | 权重 | 要点                                                               |
+| ------------------------- | ---- | ------------------------------------------------------------------ |
+| shot-structure            | 0.15 | （现有）句序/字段完整                                              |
+| shot-increment            | 0.10 | （现有）相邻镜语义增量                                             |
+| cross-shot-consistency    | 0.20 | （现有，保留最高权重）身份/ref 引用一致                            |
+| duration-fit              | 0.05 | （现有）内容量与时长匹配                                           |
+| pacing                    | 0.10 | （现有）节奏曲线                                                   |
+| atmosphere-coupling       | 0.10 | （现有）氛围锚点                                                   |
 | **performance-causality** | 0.15 | 新：动作因果链完整；表演是刺激→压住→泄露→选择→余波，而非情绪形容词 |
-| **continuity-exit-entry** | 0.10 | 新：相邻镜出口/入口状态可核对，锚点交接 |
-| **camera-motivation** | 0.05 | 新：运镜有观看动机与可见结果，非术语展示 |
+| **continuity-exit-entry** | 0.10 | 新：相邻镜出口/入口状态可核对，锚点交接                            |
+| **camera-motivation**     | 0.05 | 新：运镜有观看动机与可见结果，非术语展示                           |
 
 每个维度 instruction 末尾追加逐镜覆盖要求：**逐镜检查；无问题的镜头也要显式标注通过**，禁止只挑问题镜、禁止整段概评替代逐镜检查。`passThreshold: 75` 保持。
 
@@ -187,10 +187,10 @@
 
 ## 3. 风险与缓解
 
-| 风险 | 缓解 |
-|---|---|
-| persona 变长推高 intent 成本 | few-shot 压缩至 3–4 行；规则块用短句；总增幅控制在 ~900 token |
+| 风险                               | 缓解                                                               |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| persona 变长推高 intent 成本       | few-shot 压缩至 3–4 行；规则块用短句；总增幅控制在 ~900 token      |
 | shot 白名单扩大后 LLM 填充噪声字段 | 字段全部可选；投影模板克制（存在才投影）；persona 明确「宁缺勿滥」 |
-| constraints 块与官方未来版本冲突 | 可选特性，缺省不输出；gate 仅在显式使用时生效 |
-| 非均匀切分被误用（总和不符） | 编译前 critical gate 硬校验 + 混合模式拒绝 |
-| 正则放宽偏离官方合同（Phase 8） | 放 P2，要求文档证据后再执行 |
+| constraints 块与官方未来版本冲突   | 可选特性，缺省不输出；gate 仅在显式使用时生效                      |
+| 非均匀切分被误用（总和不符）       | 编译前 critical gate 硬校验 + 混合模式拒绝                         |
+| 正则放宽偏离官方合同（Phase 8）    | 放 P2，要求文档证据后再执行                                        |

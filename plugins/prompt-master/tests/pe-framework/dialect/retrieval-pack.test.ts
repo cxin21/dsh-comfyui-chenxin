@@ -54,7 +54,7 @@ describe('buildRetrievalPack (spec §5)', () => {
   })
   it('hits capped at MAX_HITS per concept', async () => {
     const search = async (q: string) =>
-      q.includes('hair') ? Array.from({ length: 7 }, (_, i) => ({ prompt_form: `hit${i}`, match_type: 'fuzzy', usage_count: 500 })) : []
+      q.includes('hair') ? Array.from({ length: 7 }, (_, i) => ({ prompt_form: `hit${i}`, match_type: 'canonical', usage_count: 500 })) : []
     const pack = await buildRetrievalPack(BP, search)
     expect(pack.evidence.find((e) => e.concept === 'S1.appearance')?.hits.length).toBe(5)
   })
@@ -109,7 +109,7 @@ describe('向量命中质量门（spec §5 修订 2026-09-16；冒烟噪声形�
     // 同一概念：合格命中留下、低分命中被拒
     expect(pack.evidence[0].hits.map((h) => h.prompt_form)).toEqual(['paper lantern'])
   })
-  it('Q4 频次：非 canonical 且 usage_count < 100 拒绝；canonical 免频次门', async () => {
+  it('Q0+Q4：fuzzy 未验证形式一律拒；canonical 免频次门', async () => {
     const pack = await gatedPack([
       { prompt_form: 'rare obi', match_type: 'fuzzy', usage_count: 42 },
       { prompt_form: 'kimono', match_type: 'canonical', usage_count: 1 },

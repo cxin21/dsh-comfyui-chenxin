@@ -91,11 +91,15 @@ function normalizeHits(raw: CatalogHitLike[], query: string): EvidenceHit[] {
  *  'nishino - the boy at the bottom…' / 'general:handlebar deepthroat' / 'standing upskirt' 等
  *  字面碰瓷的向量命中）──
  * 规则（全部可判定谓词）：
+ * Q0 形式白名单：证据 = 已验证形式——仅 canonical / alias / semantic 入证据主表；
+ *    fuzzy / unknown 一律拒（fuzzy = 词面相近但未经验证，'fingering from behind' 类
+ *    真 tag 碰瓷通道就此堵死；其概念走 unresolved 出口由 NL 承载）
  * Q1 原子性：prompt_form 词数 > MAX_FORM_WORDS(6) → 拒（全部 match_type；canonical 也不例外）
  * Q2 标点：含 ':' / '：' / ' - ' 连接结构 → 拒（全部 match_type；danbooru 规范 tag 无冒号）
- * Q3 语义分：semantic 命中 score < MIN_SEMANTIC_SCORE(0.85) → 拒（T1R §12.3 阈值，重放可调）
- * Q4 频次：非 canonical 命中 usage_count < MIN_USAGE_COUNT(100) → 拒（低频怪 tag 走 unresolved 出口）
- * canonical/alias 免 Q3/Q4（人工策展形式），但 Q1/Q2 照查。 */
+ * Q3 语义分：semantic 命中 score < MIN_SEMANTIC_SCORE(0.85) → 拒（T1R §12.3 阈值，
+ *    env PM_VECTOR_MIN_SCORE 可标定覆盖）
+ * Q4 频次：非 canonical 命中 usage_count < MIN_USAGE_COUNT(100) → 拒
+ *    （env PM_VECTOR_MIN_USAGE 可标定覆盖）；canonical/alias 免 Q3/Q4（人工策展形式），Q1/Q2 照查。 */
 
 export const MIN_SEMANTIC_SCORE = 0.85
 export const MIN_USAGE_COUNT = 100
@@ -109,20 +113,31 @@ export interface RetrievalGateOpts {
 
 const QUALITY_RANK: Record<string, number> = { canonical: 0, alias: 1, fuzzy: 2, semantic: 3, unknown: 4 }
 
-/** 单命中质量裁决（导出供测试）；返回 'accept' 或拒因 */
+function envNumber(name: string): number | undefined {
+  const raw = process.env[name]
+  if (raw === undefined || raw.trim() === '') return undefined
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : undefined
+}
+
+/** 单命中质量裁决（导出供测试）；返回 'accept' 或拒因。
+ *  阈值优先级：opts 显式 > env（PM_VECTOR_MIN_SCORE/PM_VECTOR_MIN_USAGE，§12.3 标定面）> 常量。 */
 export function judgeHitQuality(h: EvidenceHit, opts: RetrievalGateOpts = {}): 'accept' | string {
   const maxWords = opts.maxFormWords ?? MAX_FORM_WORDS
-  const minScore = opts.minSemanticScore ?? MIN_SEMANTIC_SCORE
-  const minUsage = opts.minUsageCount ?? MIN_USAGE_COUNT
+  const minScore = opts.minSemanticScore ?? envNumber('PM_VECTOR_MIN_SCORE') ?? MIN_SEMANTIC_SCORE
+  const minUsage = opts.minUsageCount ?? envNumber('PM_VECTOR_MIN_USAGE') ?? MIN_USAGE_COUNT
   const form = h.prompt_form
   const words = form.trim().split(/\s+/).length
   if (words > maxWords) return `Q1 原子性：${words} 词超上限 ${maxWords}`
   if (/[:：]| - /.test(form)) return 'Q2 标点：含冒号或连接结构'
   const mt = h.match_type
+  if (mt !== 'canonical' && mt !== 'alias' && mt !== 'semantic') {
+    return `Q0 未验证形式（${mt}）不进证据`
+  }
   if (mt === 'semantic') {
     if (h.score !== undefined && h.score < minScore) return `Q3 语义分 ${h.score?.toFixed(2)} < ${minScore}`
     if ((h.usage_count ?? 0) < minUsage) return `Q4 频次 ${h.usage_count ?? 0} < ${minUsage}`
-  } else if (mt !== 'canonical' && mt !== 'alias') {
+  } else if (mt !== 'canonical') {
     if ((h.usage_count ?? 0) < minUsage) return `Q4 频次 ${h.usage_count ?? 0} < ${minUsage}`
   }
   return 'accept'
@@ -150,13 +165,18 @@ export async function buildRetrievalPack(
   let evidenceAdvisory: string | undefined
   // 2026-09-16 活跑实证（retrieval_pack 56.7s）：概念间独立，并行查询——bge-m3 单次嵌入 ~4s，
   // 串行 14+ 概念是管线延迟大头。降级语义不变：单查询故障 → 该概念进 unresolved。
+  // 相同 query 去重：只查一次，多概念共享命中（extractConcepts 可能产出重复短语）。
+  const queryCache = new Map<string, EvidenceHit[]>()
   const results = await Promise.all(
     extractConcepts(bp).map(async ({ concept, query }) => {
-      let hits: EvidenceHit[] = []
-      try {
-        hits = normalizeHits(await search(query), query)
-      } catch {
-        hits = []
+      let hits = queryCache.get(query)
+      if (hits === undefined) {
+        try {
+          hits = normalizeHits(await search(query), query)
+        } catch {
+          hits = []
+        }
+        queryCache.set(query, hits)
       }
       return { concept, query, hits }
     }),

@@ -1,7 +1,7 @@
 # Agentic 管线重设计：去检索层 + 成文/审计/修复三独立 LLM（设计稿）
 
 - 日期：2026-09-17
-- 状态：用户定案，本文为实施依据
+- 状态：**已实施**（commit 91560ff spec + 79acced 实现，2026-09-17）
 - 取代：`docs/specs/2026-09-15-prompt-pipeline-redesign-design.md` 中 §5（S2.5 检索包）、§6（S3 证据契约）、§7 D4/D5 的部分语义
 - 触发证据：会话压缩包 158642b0 验尸（2026-09-17）——三次 prompt_author 全败：
   ①enrich `additions.core.mood` 对象污染字符串 → `bp.mood.trim()` TypeError 硬崩；
@@ -144,6 +144,13 @@ R5. 违规清单无法在不违反 R3 的前提下满足时，如实输出当前
 
 ## 9. 验收标准
 
-1. `npx vitest run` 全量绿（重写 orchestrate/audit/writer/golden 测试至新契约）。
-2. RED→GREEN 证据：auditor/repair persona 装配、工具 runner 工厂、A7 类型校验、A5 verifyTag 直查、A6 fallback 直查、A3 每轮必跑语义。
-3. 活体终验（宿主重载后）：真实 prompt_author envelope 出现 `auditor` 字段；无 `overlap_vector_unavailable`；失败场景不再出现 unresolved 碎片倾泻。
+1. ✅ `npx vitest run` 全量绿：**154 files / 1317 passed / 1 skipped / 0 failed**（2026-09-17，HEAD 79acced）。
+2. ✅ RED→GREEN 证据：auditor/repair persona 装配（auditor-repair.test.ts）、工具 runner 工厂（subagent-tool-runner.test.ts，toolFilter.allow=['catalog_search']）、A7 类型守卫（enrich-type-guard.test.ts——run1 崩溃场景根级 additions.mood 对象被确定性丢弃）、A5 verifyTag 直查（audit.test.ts）、A6 fallback 直查（writer-compose.test.ts + golden c15）、A3 每轮必跑（orchestrate.test.ts auditor 每轮断言）。
+3. ⏳ 活体终验（宿主重载 dist 后）：真实 prompt_author envelope 顶层出现 `auditor` 字段 + `compositing.auditor` 痕迹；确认插件 MCP 工具对子代理可见（toolFilter allow 生效）；失败场景不再出现 unresolved 碎片倾泻。
+
+## 10. 实施记录
+
+- 新增：`llm/subagent-tool-runner.ts`（A2 工具缝）、`compositing/auditor.ts`（§4 persona+parse）、`compositing/repair.ts`（§5 persona+parse）、4 个新测试文件。
+- 重写：`compositing/writer.ts`（§3 persona，去 evidence）、`compositing/audit.ts`（§6 机器门签名 bp+verifyTag）、`compositing/compose.ts`（A6 直查回退）、`compositing/orchestrate.ts`（新四段循环）、`compositing/enrich.ts`（A7 deepMergeChecked/mergeAdditionsChecked）、`tools/prompt-author.ts`（三工具 runner + verifyTag/fallbackSearch 装配 + envelope auditor 顶层键）、`render/envelope.ts`（compositing 痕迹形状）。
+- 保留未拆除（回归审慎，独立清单待裁决）：`dialect/retrieval-pack.ts`（extractConcepts 被 A6 回退复用）、`eval/rubrics/compositing.ts` + `pipeline/judge-assembly.ts`（compositing 分支不再消费，模块级测试继续有效）、P4b `prewarmSemanticQueries`（管线外 catalog_search 工具仍消费语义层）。
+- 实测发现：`buildWriterPrompt` 的 rating_seed 机审门为结构恒真（assemblePositive 恒前置档位种子）——保留为防御性谓词，已在 audit.test.ts 文档化。

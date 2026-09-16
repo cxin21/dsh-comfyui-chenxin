@@ -99,3 +99,54 @@ describe('deterministicCompose (spec §7 D7)', () => {
     expect(r.nl.length).toBeGreaterThan(0)
   })
 })
+
+describe('deterministicCompose 预算合规（audit P2）', () => {
+  // 压力 fixture：enrich 扩写后的长 lighting/mood + 40 个长词形证据 + 6 条 unresolved
+  const STRESS_BP: SemanticBlueprint = {
+    ...BP,
+    core: {
+      ...BP.core,
+      scene: { ...BP.core.scene, lighting_idea: 'twin facing storefront neon signs in electric cyan and hot magenta serve as the scene light sources with their glow bouncing off the mirror wet asphalt becoming a second dimmer source lighting her legs from below while a soft cool overhead signage spill keeps her face clearly exposed' },
+    },
+    mood: 'glacial confidence with cinematic nightlife allure and a sense of lonely grandeur under the endless city hum',
+  }
+  const STRESS_PACK: RetrievalPack = {
+    evidence: Array.from({ length: 40 }, (_, i) => ({
+      concept: `c${i}`,
+      query: `q${i}`,
+      hits: [{ prompt_form: `very long tag form number ${i} with many words here`, match_type: 'canonical', usage_count: 1000 + i }],
+    })),
+    unresolved: Array.from({ length: 6 }, (_, i) => ({ concept: `u${i}`, query: `unresolved concept phrase number ${i}` })),
+    artists: [],
+    mutual_exclusion_pairs: [],
+    truncated: [],
+  }
+
+  it('positive 总长 ≤ 1200（长词形 tags + 长 NL 压力）', () => {
+    const p = assemblePositive(deterministicCompose(STRESS_BP, STRESS_PACK), 'explicit')
+    expect(p.length).toBeLessThanOrEqual(1200)
+  })
+
+  it('nl 返回截断版本（修 L83 死变量 bug：截断结果必须真正进入产物）', () => {
+    const r = deterministicCompose(STRESS_BP, STRESS_PACK)
+    expect(r.nl.length).toBeLessThanOrEqual(600)
+  })
+
+  it('tags 大小写去重（重复词形只保留一个）', () => {
+    const dupPack: RetrievalPack = {
+      evidence: [
+        { concept: 'c1', query: 'q1', hits: [{ prompt_form: 'Long Hair', match_type: 'canonical', usage_count: 10 }] },
+        { concept: 'c2', query: 'q2', hits: [{ prompt_form: 'long hair', match_type: 'canonical', usage_count: 20 }] },
+      ],
+      unresolved: [], artists: [], mutual_exclusion_pairs: [], truncated: [],
+    }
+    const r = deterministicCompose(BP, dupPack)
+    expect(r.tags).toHaveLength(1)
+  })
+
+  it('预算内短产物原样通过（不误伤正常 case）', () => {
+    const r = deterministicCompose(BP, PACK)
+    expect(r.tags).toEqual([{ text: 'long hair', source_concept: 'S1.appearance' }])
+    expect(r.nl).toContain('right third')
+  })
+})

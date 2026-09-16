@@ -30,13 +30,32 @@
 
 ## 任务清单
 
-- [ ] Task 1（P0 安全）：F1 占位符 + F2/F6 .gitignore 补 config.yaml、preset-report.json
-- [ ] Task 2（P0 格式）：prettier + eslint 配置落地 + .gitattributes + 全仓格式化（独立 commit，不混逻辑）+ tsc/回归验证
-- [ ] Task 3（P1 配置）：.env.example 重写（删死变量、补 15 活跃变量带注释）
-- [ ] Task 4（P1 TDD）：F7 enrich quirk 修复 + 回归测试
-- [ ] Task 5（P1 门面）：CHANGELOG.md + README.md（LICENSE 待用户定协议）
-- [ ] Task 6（P2 部分）：host 接缝 ownerCtx 最小接口类型（SubagentHostCtx），resolver 全面类型化标注 deferred
+- [x] Task 1（P0 安全）：F1 占位符 + F2/F6 .gitignore 补 config.yaml、*.report.json — commit fcfa7bc
+- [x] Task 2（P0 格式）：prettier 3 + eslint 9（flat config）+ .gitattributes + 全仓格式化 — commit ee34e1b + 格式化收尾批；eslint error 63→0（死 import/var 清除、未用参数 `_` 前缀、prefer-const）
+- [x] Task 3（P1 配置）：.env.example 重写 — commit d262faa（删 4 死变量、补 18 活跃变量带注释；含 PM_E5_MODEL/PM_VECTOR_MIN_SCORE/MIN_USAGE 间接读取项）
+- [x] Task 4（P1 TDD）：F7 enrich quirk 修复 — commit 4868ca3（additions-only patch 不再误计 path violation；RED→GREEN）
+- [x] Task 5（P1 门面）：README 四段 + CHANGELOG — commit 58e8da4（LICENSE 待用户定协议）
+- [x] Task 6（P2 部分）：`llm/host-ctx.ts` SubagentHostCtx 最小接口，4 处 ownerCtx any 收口（method 双变签名 + 闭包窄化捕获）— commit 5102129
+- [x] 文档同步（规范六 P0）：AGENTS.md 管线描述更新为 agentic 形态 — commit 60953cd
+
+## 收尾验证（2026-09-17，全部任务后）
+
+- `npx tsc --noEmit`：0 errors
+- `npx eslint src tests`：0 errors（510 warnings = deferred 的 resolver any，F9 全面类型化另立计划）
+- `npx vitest run`：154 files / 1321 passed / 1 skipped / 0 failed
+- `npm run build`：dist 已同步
+
+## 用户待办
+
+1. **轮换泄露的 DeepSeek Key**（config.yaml.example 曾载 sk-1a05…，commit ee78de5 起在库；历史不改写，轮换才是有效处置）
+2. LICENSE 协议选择（MIT/Apache-2.0/专有——确定后补 LICENSE 文件）
+
+## 显式不修（已标注）
+
+- F9 resolver 全面类型化（~120 处 any）：大工程，另立计划
+- F11 大文件拆分（prompt-author 1360 等 6 个）：结构性重构，另立计划
+- F10 pe-framework/index.ts 桶导出：有意便利层，接受偏差
 
 ## 完成记录
 
-（每任务完成即回填：改动、验证、commit 号）
+- 全部任务完成于 2026-09-17；提交链 f712bd9 → fcfa7bc → ee34e1b → d262faa → 4868ca3 → 58e8da4 → 5102129 → 60953cd → 格式化收尾批。

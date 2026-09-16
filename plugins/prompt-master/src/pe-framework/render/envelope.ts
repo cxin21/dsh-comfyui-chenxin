@@ -90,12 +90,13 @@ export interface EnvelopeObservability {
     repairs_count?: number
     anchor_rounds?: number
   }
-  /** 2026-09-15 管线重设计（spec §9）：compositing 形态痕迹 */
+  /** 2026-09-17 agentic 管线（spec）：compositing 形态痕迹（A1 检索层已废除） */
   compositing?: {
     form: 'semantic'
-    unresolved_count: number
     writer_retries: number
     fallback_used: boolean
+    /** 审计 LLM 本轮裁决（pass/needs_revision/skipped） */
+    auditor: string
   }
 }
 

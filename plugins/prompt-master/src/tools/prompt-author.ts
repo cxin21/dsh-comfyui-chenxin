@@ -11,10 +11,11 @@ import { buildTextZh } from '../pe-framework/dialect/h3.js'
 import { runStage } from '../pe-framework/pipeline/runStage.js'
 import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
 import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js'
+import { createSubagentToolRunner } from '../pe-framework/llm/subagent-tool-runner.js'
 import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js'
 // audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
 import { getSharedBgeOverlapSim } from '../pe-framework/compositing/vector-sim.js'
-import { searchCatalog, prewarmSemanticQueries } from '../pe-framework/dialect/anima-catalog.js'
+import { searchCatalogSync } from '../pe-framework/dialect/anima-catalog.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
@@ -1104,26 +1105,37 @@ export function registerAuthorTool(ctx: Context, config: Config) {
       traceExtra.push({ name: 'intent', ms: performance.now() - tIntent0 }) // F5：始终存在
       trace('intent_done', { form: draft.blueprint ? 'blueprint' : (draft.shots ? 'shots' : (draft.semantic ? 'semantic' : 'slots')), retried: blueprintRepairRetried, missing: draft.missing?.length ?? null })
 
-      // ── compositing 分支（2026-09-15 管线重设计 spec §2/§8）：S2 扩写 → S2.5 检索包 →
-      // S3 成文 → S4 双轨审核 → S5 窄修复（编排细节在 compositing/orchestrate.ts，此处薄接线）
+      // ── compositing 分支（spec 2026-09-17 agentic-pipeline-redesign）：S2 扩写 →
+      // S3 成文(pm-writer 工具查字典) → S4 双轨审核(机器门 ∥ pm-auditor 每轮必跑) →
+      // S5 修复(pm-repairer)；检索层已废除（A1）。编排细节在 compositing/orchestrate.ts。
       if (target === 'anima' && draft.semantic) {
         const enrichRunner = subagentsReady
           ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent })
           : undefined
+        // A2：成文/审计/修复三个 LLM 均开放 catalog_search 工具（toolFilter allow）
         const writerRunner = subagentsReady
-          ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
+          ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
           : undefined
-        const critic = judgeOpts?.criticProvider
+        const auditorRunner = subagentsReady && judgeMode !== 'off'
+          ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-auditor', parent: criticParent })
+          : undefined
+        const repairRunner = subagentsReady
+          ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-repairer', parent: criticParent })
+          : undefined
+        // A5：机审 fabricated_tag 直查 catalog（canonical/alias/artist 同步级联，毫秒级）
+        const verifyTag = (tag: string): boolean => searchCatalogSync(tag, { mode: 'auto', limit: 5 }).length > 0
+        // A6：回退直查缝
+        const fallbackSearch = (q: string) => searchCatalogSync(q, { mode: 'auto', limit: 5 })
         // audit P1：bge 余弦注入 nl_tag_overlap（嵌入在审计前经 vectorPrewarm 预热进进程缓存）
         const overlapSim = getSharedBgeOverlapSim()
         const tOrch0 = performance.now()
         const outcome = await orchestrateCompositing(draft.semantic, resolved.rating, {
           ...(enrichRunner ? { enrichRunner } : {}),
           ...(writerRunner ? { writerRunner } : {}),
-          ...(critic ? { critic } : {}),
-          search: async (q: string) => searchCatalog(q),
-          // audit P4b：检索包批量预热（bge ONNX 14+ 概念逐条嵌入 → 1 次批量调用）
-          retrievalPrewarm: prewarmSemanticQueries,
+          ...(auditorRunner ? { auditorRunner } : {}),
+          ...(repairRunner ? { repairRunner } : {}),
+          verifyTag,
+          search: fallbackSearch,
           vectorSim: overlapSim.sim,
           vectorPrewarm: overlapSim.prewarm,
         }, { maxCorrections: MAX_CORRECTIONS })
@@ -1136,24 +1148,13 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           advisories: outcome.advisories,
           assumptions: [],
           targetSlotHint: 't2i.prompt',
-          ...(outcome.judge !== undefined
-            ? {
-                judge: {
-                  verdict: outcome.judge.verdict,
-                  score: outcome.judge.score,
-                  findings: outcome.judge.findings.map((f, i) => ({ id: `f${i + 1}`, severity: f.severity as 'blocker' | 'major' | 'minor', dimension: f.dimension, problem: f.problem, requiredFix: f.requiredFix })),
-                  praise: [],
-                },
-                debate: outcome.judge.debate as StageResult['debate'],
-              }
-            : {}),
-          judgeFeedback: outcome.judgeFeedback,
+          judgeFeedback: outcome.auditorFeedback,
           trace: { stages: outcome.trace },
         }
         const generationId = makeGenerationId()
         const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...outcome.advisories]
         recordGenerationSafe({ id: generationId, target, variant: a.variant, judgeMode, input, stage, repairRounds: outcome.corrections, advisories: finalAdvisories, enrich: 0, rating: resolved.rating })
-        ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(compositing) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} corrections=${outcome.corrections} fallback=${outcome.fallbackUsed}`)
+        ;(ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(`[prompt-master] prompt_author(compositing) → ok=${stage.ok} quality=${outcome.quality} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} auditor=${outcome.auditor?.verdict ?? 'skipped'} corrections=${outcome.corrections} fallback=${outcome.fallbackUsed}`)
         return assembleEnvelope(stage, finalAdvisories, {
           corrections: outcome.corrections,
           loopExhausted: outcome.advisories.includes('loop_exhausted:true'),
@@ -1163,7 +1164,7 @@ export function registerAuthorTool(ctx: Context, config: Config) {
             ...(stage.trace?.stages ?? []),
             ...traceExtra.filter((e) => e.name === 'catalog'),
           ],
-          compositing: { form: 'semantic', unresolved_count: outcome.unresolvedCount, writer_retries: outcome.corrections, fallback_used: outcome.fallbackUsed },
+          compositing: { form: 'semantic', writer_retries: outcome.corrections, fallback_used: outcome.fallbackUsed, auditor: outcome.auditor?.verdict ?? 'skipped' },
           designNotes: [
             ...outcome.v1.subjects.map((s) => `主体（${s.count}）: ${s.identity}`),
             `场景: ${outcome.v1.core.scene.environment} / ${outcome.v1.core.scene.lighting_idea}`,
@@ -1172,6 +1173,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           generation_id: generationId,
           // audit P3：compositing 分支顶层质量三态（passed/degraded/fallback），条件键风格对齐 blueprint_id
           quality: outcome.quality,
+          // agentic 管线（A3）：审计 LLM 裁决顶层投影（verdict + findings，无 score/rebuttal 面向）
+          ...(outcome.auditor !== undefined ? { auditor: outcome.auditor } : {}),
           ...judgeTopLevel(stage),
           rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
           aesthetics: { recommendedCards },

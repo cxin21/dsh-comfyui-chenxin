@@ -37,14 +37,75 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-function deepMerge(target: Record<string, unknown>, patch: Record<string, unknown>): void {
+/** A7 类型守卫：写入值与目标字段类型一致才放行（目标未定义视为新字段，放行） */
+function typeOk(tv: unknown, v: unknown): boolean {
+  if (tv === undefined) return true
+  if (Array.isArray(v)) return Array.isArray(tv)
+  if (Array.isArray(tv)) return false
+  if (isPlainObject(v) !== isPlainObject(tv)) return false
+  return typeof v === typeof tv
+}
+
+function deepMergeChecked(target: Record<string, unknown>, patch: Record<string, unknown>): number {
+  let violations = 0
   for (const [k, v] of Object.entries(patch)) {
-    if (isPlainObject(v) && isPlainObject(target[k])) {
-      deepMerge(target[k] as Record<string, unknown>, v)
+    const tv = target[k]
+    if (isPlainObject(v) && isPlainObject(tv)) {
+      violations += deepMergeChecked(tv as Record<string, unknown>, v)
+    } else if (!typeOk(tv, v)) {
+      violations++ // A7：类型不匹配确定性丢弃（run1 崩溃根因：对象覆写字符串 mood）
     } else {
       target[k] = v
     }
   }
+  return violations
+}
+
+/**
+ * A7（spec 2026-09-17 agentic-pipeline-redesign）：patch 值类型校验——目标字段类型必须与
+ * 写入值类型一致。活跑实证（会话 158642b0 run1）：enrich 输出 additions.core.mood = 对象
+ * {palette,texture,particles}，旧 mergeAdditions 的 else 分支让对象直接覆写字符串 mood →
+ * S2.5 `bp.mood.trim()` TypeError → 整个 prompt_author 硬崩。现：字符串字段禁对象/数组写入、
+ * 数组字段禁非数组写入、对象字段禁标量写入——违规**确定性丢弃**并计数（enrich_type_violation）。
+ * 返回违规计数（0 = 无）。
+ */
+function mergeAdditionsChecked(target: Record<string, unknown>, additions: Record<string, unknown>): number {
+  let violations = 0
+  const walk = (t: Record<string, unknown>, p: Record<string, unknown>): void => {
+    for (const [k, v] of Object.entries(p)) {
+      const tv = t[k]
+      if (Array.isArray(v)) {
+        if (tv !== undefined && !Array.isArray(tv)) {
+          violations++ // 数组字段禁非数组写入
+          continue
+        }
+        const base = Array.isArray(tv) ? (tv as unknown[]) : []
+        t[k] = [...base, ...v.filter((x) => !base.some((b) => JSON.stringify(b) === JSON.stringify(x)))]
+      } else if (typeof v === 'string') {
+        if (tv !== undefined && typeof tv !== 'string' && !Array.isArray(tv)) {
+          violations++ // 标量写入非标量字段
+          continue
+        }
+        if (typeof tv === 'string') {
+          t[k] = tv.toLowerCase().includes(v.toLowerCase()) ? tv : `${tv}, ${v}`
+        } else {
+          t[k] = v
+        }
+      } else if (isPlainObject(v)) {
+        if (tv !== undefined && !isPlainObject(tv)) {
+          violations++ // 对象写入非对象字段（run1 崩溃根因：对象覆写字符串 mood）
+          continue
+        }
+        if (!isPlainObject(tv)) t[k] = {}
+        walk(t[k] as Record<string, unknown>, v)
+      } else {
+        violations++ // 其他标量：仅允许写入 undefined 或同型标量字段
+        continue
+      }
+    }
+  }
+  walk(target, additions)
+  return violations
 }
 
 /**
@@ -53,25 +114,9 @@ function deepMerge(target: Record<string, unknown>, patch: Record<string, unknow
  * - 数组：concat 去重（保留 V0 原项，追加新项）
  * - 字符串（mood 细节）：未包含才以 ", " 追加（防重复描述）
  * - 其余（嵌套对象）：递归同规则
+ * A7：值类型不匹配的写入确定性丢弃（见 mergeAdditionsChecked）。
  */
-function mergeAdditions(target: Record<string, unknown>, additions: Record<string, unknown>): void {
-  const walk = (t: Record<string, unknown>, p: Record<string, unknown>): void => {
-    for (const [k, v] of Object.entries(p)) {
-      const tv = t[k]
-      if (Array.isArray(v)) {
-        const base = Array.isArray(tv) ? (tv as unknown[]) : []
-        t[k] = [...base, ...v.filter((x) => !base.some((b) => JSON.stringify(b) === JSON.stringify(x)))]
-      } else if (typeof v === 'string' && typeof tv === 'string') {
-        t[k] = tv.toLowerCase().includes(v.toLowerCase()) ? tv : `${tv}, ${v}`
-      } else if (isPlainObject(v) && isPlainObject(tv)) {
-        walk(tv as Record<string, unknown>, v)
-      } else {
-        t[k] = v
-      }
-    }
-  }
-  walk(target, additions)
-}
+const mergeAdditions = mergeAdditionsChecked
 
 export function buildEnrichPrompt(v0: SemanticBlueprint): string {
   return buildTaskText([
@@ -104,12 +149,14 @@ export function applySemanticPatch(
   const parsed = JSON.parse(body) as Record<string, unknown>
   const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed
   const additions = isPlainObject(parsed['additions']) ? (parsed['additions'] as Record<string, unknown>) : undefined
-  let violations = prunePatchPaths(set, COMPOSITING_SET_ALLOWED)
-  if (additions) violations += prunePatchPaths(additions, COMPOSITING_ADDITIONS_ALLOWED)
+  let pathViolations = prunePatchPaths(set, COMPOSITING_SET_ALLOWED)
+  if (additions) pathViolations += prunePatchPaths(additions, COMPOSITING_ADDITIONS_ALLOWED)
   const v1 = structuredClone(v0) as unknown as Record<string, unknown>
-  deepMerge(v1, set)
-  if (additions) mergeAdditions(v1, additions) // 追加语义（数组 concat 去重 / 字符串增量），非覆盖
-  const advisories = violations > 0 ? [`enrich_path_violation:${violations}`] : []
+  let typeViolations = deepMergeChecked(v1, set)
+  if (additions) typeViolations += mergeAdditionsChecked(v1, additions) // 追加语义（数组 concat 去重 / 字符串增量），非覆盖
+  const advisories: string[] = []
+  if (pathViolations > 0) advisories.push(`enrich_path_violation:${pathViolations}`)
+  if (typeViolations > 0) advisories.push(`enrich_type_violation:${typeViolations}`)
   return { v1: v1 as unknown as SemanticBlueprint, advisories }
 }
 

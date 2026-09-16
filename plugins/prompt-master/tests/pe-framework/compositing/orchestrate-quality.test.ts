@@ -15,7 +15,7 @@ const V0: SemanticBlueprint = {
 
 const ENRICH_PATCH = JSON.stringify({ set: { mood: 'nocturnal, quietly tense' }, additions: { core: { style_hints: ['cel shading'] } } })
 
-const SEARCH = async (q: string) => [{ prompt_form: q, match_type: 'canonical', usage_count: 1000 }]
+const SEARCH = (q: string) => [{ prompt_form: q, match_type: 'canonical', usage_count: 1000 }]
 
 const VALID_OUT = JSON.stringify({
   tags: [
@@ -27,22 +27,16 @@ const VALID_OUT = JSON.stringify({
   ],
   nl: 'She sits on the right third of the frame. Lantern light keeps her face exposed with no silhouette.',
   negative: [],
-  dropped_concepts: ['core.concept', 'core.scene.environment', 'core.scene.time_of_day', 'core.scene.weather', 'S1.identity', 'S1.expression', 'composition.camera_angle', 'composition.placement', 'mood'],
 })
 
-const PASS_JUDGE = JSON.stringify({
-  verdict: 'pass',
-  dimensionScores: { 'blueprint-fidelity': 90, 'nl-quality': 90, 'tag-selection': 90, 'negative-template': 90, 'composition-coherence': 90, 'aesthetic-vocabulary': 90 },
-  findings: [],
-  praise: [],
-})
+const PASS_AUDITOR = JSON.stringify({ verdict: 'pass', findings: [] })
 
-describe('compositing quality 三态（audit P3）', () => {
+describe('compositing quality 三态（audit P3，agentic 管线）', () => {
   it('clean pass → quality=passed', async () => {
     const outcome = await orchestrateCompositing(V0, 'safe', {
       enrichRunner: async () => ENRICH_PATCH,
       writerRunner: async () => VALID_OUT,
-      critic: async () => PASS_JUDGE,
+      auditorRunner: async () => PASS_AUDITOR,
       search: SEARCH,
     }, { minTags: 0 })
     expect(outcome.ok).toBe(true)
@@ -50,17 +44,18 @@ describe('compositing quality 三态（audit P3）', () => {
     expect(outcome.quality).toBe('passed')
   })
 
-  it('repair round then writer kept → quality=degraded', async () => {
-    let writerCalls = 0
+  it('repair round then repaired output kept → quality=degraded', async () => {
+    let auditorCalls = 0
     const outcome = await orchestrateCompositing(V0, 'safe', {
       enrichRunner: async () => ENRICH_PATCH,
-      writerRunner: async () => {
-        writerCalls++
-        return writerCalls === 1
-          ? JSON.stringify({ tags: [{ text: 'neon glow', source_concept: 'S1.pose' }], nl: 'She stands alone.', negative: [], dropped_concepts: [] })
-          : VALID_OUT
+      writerRunner: async () => VALID_OUT,
+      auditorRunner: async () => {
+        auditorCalls++
+        return auditorCalls === 1
+          ? JSON.stringify({ verdict: 'needs_revision', findings: [{ severity: 'major', dimension: 'D', problem: 'mood missing', requiredFix: 'express nocturnal mood in nl' }] })
+          : PASS_AUDITOR
       },
-      critic: async () => PASS_JUDGE,
+      repairRunner: async () => VALID_OUT,
       search: SEARCH,
     }, { minTags: 0 })
     expect(outcome.corrections).toBe(1)

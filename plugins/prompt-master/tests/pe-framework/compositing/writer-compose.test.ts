@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { parseWriterOutput, buildWriterPrompt, WRITER_PERSONA } from '../../../src/pe-framework/compositing/writer.js'
 import { assemblePositive, assembleNegative, deterministicCompose } from '../../../src/pe-framework/compositing/compose.js'
 import type { SemanticBlueprint } from '../../../src/pe-framework/blueprint/semantic-schema.js'
-import type { RetrievalPack } from '../../../src/pe-framework/dialect/retrieval-pack.js'
 
 const BP: SemanticBlueprint = {
   schema_version: 1, media: 'image',
@@ -13,21 +12,13 @@ const BP: SemanticBlueprint = {
   composition: { framing: 'cowboy shot', camera_angle: 'from below', placement: 'right third' },
   mood: 'nocturnal', negative_hints: ['no modern elements'],
 }
-const PACK: RetrievalPack = {
-  evidence: [{ concept: 'S1.appearance', query: 'long black hair', hits: [{ prompt_form: 'long hair', match_type: 'canonical', usage_count: 891234 }] }],
-  unresolved: [{ concept: 'composition.placement', query: 'right third' }],
-  artists: [],
-  mutual_exclusion_pairs: [['solo', '1boy']],
-  truncated: [],
-}
 const OUT = {
   tags: [{ text: 'long hair', source_concept: 'S1.appearance' }],
   nl: 'The subject sits on the right third of the frame. Warm sunset glow from the west keeps her face exposed with no silhouette.',
   negative: ['no modern elements'],
-  dropped_concepts: [],
 }
 
-describe('parseWriterOutput (spec §6)', () => {
+describe('parseWriterOutput (agentic 管线契约)', () => {
   it('valid output parses', () => {
     const r = parseWriterOutput(JSON.stringify(OUT))
     expect(r.tags).toHaveLength(1)
@@ -35,6 +26,9 @@ describe('parseWriterOutput (spec §6)', () => {
   })
   it('fenced output tolerated', () => {
     expect(parseWriterOutput('```json\n' + JSON.stringify(OUT) + '\n```').nl).toContain('right third')
+  })
+  it('prose after JSON tolerated（活跑实证：LLM 在 JSON 后追加说明文字）', () => {
+    expect(parseWriterOutput(JSON.stringify(OUT) + '\n以上是修复产物。').nl).toContain('right third')
   })
   it('tag without source_concept → contract error citing T2', () => {
     const bad = { ...OUT, tags: [{ text: 'long hair' }] }
@@ -47,22 +41,22 @@ describe('parseWriterOutput (spec §6)', () => {
   it('non-JSON → parse error', () => {
     expect(() => parseWriterOutput('no braces here')).toThrow(/非 JSON/)
   })
+  it('dropped_concepts 可缺省（A1：unresolved 出口已废除）', () => {
+    const r = parseWriterOutput(JSON.stringify(OUT))
+    expect(r.dropped_concepts).toBeUndefined()
+  })
 })
 
-describe('buildWriterPrompt (spec §2.1/§8)', () => {
-  it('sectioned template with blueprint/evidence; frozen block when hash present', () => {
-    const p = buildWriterPrompt(BP, PACK, { frozenHash: 'abc123' })
+describe('buildWriterPrompt (agentic：无 evidence 块 + 工具协议)', () => {
+  it('sectioned template with blueprint/rules/contract；无 <evidence>（A1）', () => {
+    const p = buildWriterPrompt(BP)
     expect(p).toContain('<task_persona>')
     expect(p).toContain('<blueprint_v1>')
-    expect(p).toContain('<evidence>')
-    expect(p).toContain('<output_contract>')
-    expect(p).toContain('blueprint_v1_hash="abc123"')
-    expect(p).toContain(WRITER_PERSONA.slice(0, 20))
-  })
-  it('feedback lands in rules block', () => {
-    const p = buildWriterPrompt(BP, PACK, { feedback: 'use canonical long hair' })
     expect(p).toContain('<rules>')
-    expect(p).toContain('use canonical long hair')
+    expect(p).toContain('<output_contract>')
+    expect(p).not.toContain('<evidence>')
+    expect(p).toContain(WRITER_PERSONA.slice(0, 20))
+    expect(p).toContain('catalog_search')
   })
 })
 
@@ -80,28 +74,27 @@ describe('assemblePositive / assembleNegative (spec §6/§7)', () => {
   })
 })
 
-describe('deterministicCompose (spec §7 D7)', () => {
-  it('evidence top hits → tags; unresolved + composition + lighting + mood → NL', () => {
-    const r = deterministicCompose(BP, PACK)
-    expect(r.tags).toEqual([{ text: 'long hair', source_concept: 'S1.appearance' }])
-    const sents = r.nl.split(/(?<=\.)\s+/)
-    expect(sents.length).toBeGreaterThanOrEqual(2)
-    expect(sents.length).toBeLessThanOrEqual(4)
+// A6 回退直查缝
+const CANON = (form: string) => [{ prompt_form: form, match_type: 'canonical', usage_count: 1000 }]
+
+describe('deterministicCompose (A6：catalog 直查，无 unresolved 倾泻)', () => {
+  it('canonical 命中 → tag；source_concept = fallback.catalog', () => {
+    const r = deterministicCompose(BP, (q) => (q === 'long black hair' ? CANON('long hair') : []))
+    expect(r.tags).toEqual([{ text: 'long hair', source_concept: 'fallback.catalog' }])
     expect(r.nl).toContain('right third')
-    expect(r.nl).toContain('warm sunset glow from the west')
-    expect(r.nl).toContain('no silhouette')
-    expect(r.negative).toEqual(['no modern elements'])
   })
-  it('empty evidence + empty unresolved still composes (never fails)', () => {
-    const empty: RetrievalPack = { evidence: [], unresolved: [], artists: [], mutual_exclusion_pairs: [], truncated: [] }
-    const r = deterministicCompose(BP, empty)
+  it('fuzzy/semantic 未验证形式不采纳', () => {
+    const r = deterministicCompose(BP, () => [{ prompt_form: 'junk', match_type: 'fuzzy' }])
+    expect(r.tags).toEqual([])
+  })
+  it('全查不到 → tags 空、NL 仍由蓝图组装（永不失败）', () => {
+    const r = deterministicCompose(BP, () => [])
     expect(r.tags).toEqual([])
     expect(r.nl.length).toBeGreaterThan(0)
   })
 })
 
 describe('deterministicCompose 预算合规（audit P2）', () => {
-  // 压力 fixture：enrich 扩写后的长 lighting/mood + 40 个长词形证据 + 6 条 unresolved
   const STRESS_BP: SemanticBlueprint = {
     ...BP,
     core: {
@@ -110,43 +103,22 @@ describe('deterministicCompose 预算合规（audit P2）', () => {
     },
     mood: 'glacial confidence with cinematic nightlife allure and a sense of lonely grandeur under the endless city hum',
   }
-  const STRESS_PACK: RetrievalPack = {
-    evidence: Array.from({ length: 40 }, (_, i) => ({
-      concept: `c${i}`,
-      query: `q${i}`,
-      hits: [{ prompt_form: `very long tag form number ${i} with many words here`, match_type: 'canonical', usage_count: 1000 + i }],
-    })),
-    unresolved: Array.from({ length: 6 }, (_, i) => ({ concept: `u${i}`, query: `unresolved concept phrase number ${i}` })),
-    artists: [],
-    mutual_exclusion_pairs: [],
-    truncated: [],
-  }
 
   it('positive 总长 ≤ 1200（长词形 tags + 长 NL 压力）', () => {
-    const p = assemblePositive(deterministicCompose(STRESS_BP, STRESS_PACK), 'explicit')
+    let i = 0
+    const r = deterministicCompose(STRESS_BP, () => CANON(`very long tag form number ${i++} with many words here`))
+    const p = assemblePositive(r, 'explicit')
     expect(p.length).toBeLessThanOrEqual(1200)
   })
 
-  it('nl 返回截断版本（修 L83 死变量 bug：截断结果必须真正进入产物）', () => {
-    const r = deterministicCompose(STRESS_BP, STRESS_PACK)
+  it('nl 返回截断版本', () => {
+    const r = deterministicCompose(STRESS_BP, () => [])
     expect(r.nl.length).toBeLessThanOrEqual(600)
   })
 
-  it('tags 大小写去重（重复词形只保留一个）', () => {
-    const dupPack: RetrievalPack = {
-      evidence: [
-        { concept: 'c1', query: 'q1', hits: [{ prompt_form: 'Long Hair', match_type: 'canonical', usage_count: 10 }] },
-        { concept: 'c2', query: 'q2', hits: [{ prompt_form: 'long hair', match_type: 'canonical', usage_count: 20 }] },
-      ],
-      unresolved: [], artists: [], mutual_exclusion_pairs: [], truncated: [],
-    }
-    const r = deterministicCompose(BP, dupPack)
+  it('tags 大小写去重', () => {
+    let i = 0
+    const r = deterministicCompose(BP, () => CANON(i++ % 2 === 0 ? 'Long Hair' : 'long hair'))
     expect(r.tags).toHaveLength(1)
-  })
-
-  it('预算内短产物原样通过（不误伤正常 case）', () => {
-    const r = deterministicCompose(BP, PACK)
-    expect(r.tags).toEqual([{ text: 'long hair', source_concept: 'S1.appearance' }])
-    expect(r.nl).toContain('right third')
   })
 })

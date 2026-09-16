@@ -1,122 +1,64 @@
 /**
- * compositing 编排器（spec §2/§8，2026-09-15 管线重设计）：
- * S1 产物（语义蓝图 v0）→ S2 扩写 → S2.5 检索包 → S3 成文 → S4 双轨审核 → S5 窄修复（≤2）。
- * 依赖全部注入（enrich/writer runner、critic、search、vectorSim）——本模块零 host 依赖、可全 mock 测试。
- * 失败语义：writer 失败/耗尽 → deterministicCompose 回退（D7 fail-open，永不空手出稿）；
- * judge 故障 → skipped 降级（审计门独立成立）；blueprint/扩写产物对修复轮冻结（D4）。
+ * compositing 编排器（spec 2026-09-17 agentic-pipeline-redesign，第三版管线）：
+ * S2 扩写 → S3 成文（pm-writer，工具查字典）→ S4 双轨审核（机器门 ∥ pm-auditor 每轮必跑，A3）
+ * → S5 修复（独立 pm-repairer，A4；≤2 轮，每轮修复后重跑 S4）。
+ * A1：检索层（S2.5 检索包）已废除——writer 不再吃 evidence pack，tag 合法性由
+ * writer 工具自证 + 机审 verifyTag 直查（A5）双保险。
+ * 依赖全部注入（enrich/writer/auditor/repair runner、verifyTag、search、vectorSim）——
+ * 本模块零 host 依赖、可全 mock 测试。
+ * 失败语义：writer/repair 失败/耗尽 → deterministicCompose 回退（D7 fail-open，永不空手出稿）；
+ * auditor 故障 → advisory 降级（机器门独立成立）。
  */
 import { createHash } from 'node:crypto'
 import { runSemanticEnrich } from './enrich.js'
 import { buildWriterPrompt, parseWriterOutput, type WriterOutput } from './writer.js'
 import { auditCompositing, type CompositingGate } from './audit.js'
-import { assemblePositive, assembleNegative, deterministicCompose } from './compose.js'
-import { buildRetrievalPack, type CatalogSearchFn, type RetrievalPack } from '../dialect/retrieval-pack.js'
-import { buildCompositingJudgePrompt, COMPOSITING_RUBRIC_IDS } from '../eval/rubrics/compositing.js'
+import { assemblePositive, assembleNegative, deterministicCompose, type FallbackSearch } from './compose.js'
+import { buildAuditorPrompt, parseAuditorVerdict, type AuditorVerdict } from './auditor.js'
+import { buildRepairPrompt, parseRepairOutput } from './repair.js'
 import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
 import type { Rating } from '../types.js'
-
-export interface CompositingJudgeResult {
-  verdict: 'pass' | 'needs_revision'
-  score: number
-  findings: Array<{ severity: string; dimension: string; problem: string; requiredFix: string }>
-  debate: Array<{ round: number; reviewer: { findings: unknown[]; score: number } }>
-}
 
 export interface CompositingDeps {
   /** S2 扩写 runner（pm-enrich 子代理）；缺省 → enrich_skipped 降级 */
   enrichRunner?: (taskText: string) => Promise<string>
-  /** S3 成文 runner（pm-writer 子代理）；缺省 → 立即回退 deterministicCompose */
+  /** S3 成文 runner（pm-writer 子代理，工具开放 catalog_search）；缺省 → 立即回退 deterministicCompose */
   writerRunner?: (taskText: string) => Promise<string>
-  /** S4 评审（pm-critic CriticProvider）；缺省（judge_mode=off 或 judge 故障注入失败）→ 仅审计门 */
-  critic?: (req: { persona: string; schema: string; user: string }) => Promise<string>
-  /** S2.5 catalog 级联检索 */
-  search: CatalogSearchFn
-  /** audit P4b：检索前批量预热语义查询向量（catalog 层做同步命中过滤）；缺省 → 各查询单条嵌入 */
-  retrievalPrewarm?: (queries: string[]) => Promise<void>
+  /** S4 审计 runner（pm-auditor 子代理，工具开放 catalog_search）；缺省 → 仅机器门（judge_mode=off 语义） */
+  auditorRunner?: (taskText: string) => Promise<string>
+  /** S5 修复 runner（pm-repairer 子代理，工具开放 catalog_search）；缺省 → 退化为 writer feedback 重入 */
+  repairRunner?: (taskText: string) => Promise<string>
+  /** A5：tag 合法性直查（canonical/alias/artist 命中 = true）；缺省 → fabricated_tag 门跳过 */
+  verifyTag?: (tag: string) => boolean
+  /** 回退直查缝（A6）：deterministicCompose 的 catalog 同步查询 */
+  search: FallbackSearch
   /** bge-base-en-v1.5 相似度注入点（NL 句 × tag）；缺省 → 审计仅词面 + overlap_vector_unavailable */
   vectorSim?: (a: string, b: string) => number | undefined
-  /** audit P1：审计前预热向量缓存（嵌入异步而审计同步，故拆两半）；缺省/故障 → sim 对未缓存对 undefined */
+  /** 审计前预热向量缓存（嵌入异步而审计同步，故拆两半）；缺省 → sim 对未缓存对 undefined */
   vectorPrewarm?: (nl: string, tags: string[]) => Promise<void>
 }
-
-export type CompositingQuality = 'passed' | 'degraded' | 'fallback'
 
 export interface CompositingOutcome {
   ok: boolean
   /** audit P3：质量三态——调用方读此一键即知产品质量带，无需解析 advisories。ok 语义不变（D7） */
-  quality: CompositingQuality
+  quality: 'passed' | 'degraded' | 'fallback'
   positive: string
   negative: string
   gates: CompositingGate[]
   advisories: string[]
   corrections: number
   fallbackUsed: boolean
-  unresolvedCount: number
   v1: SemanticBlueprint
-  judge?: CompositingJudgeResult
-  judgeFeedback: string[]
-  trace: Array<{ name: 'semantic_enrich' | 'retrieval_pack' | 'writer_loop'; ms: number }>
+  auditor?: AuditorVerdict
+  /** 审计 findings 投影（[severity] requiredFix）——修复轮输入之一 */
+  auditorFeedback: string[]
+  trace: Array<{ name: 'semantic_enrich' | 'writer_loop'; ms: number }>
 }
 
 export interface CompositingOpts {
   maxCorrections?: number
   /** 透传 auditCompositing（测试 fixture tag 数常小于预算下限；生产缺省 20） */
   minTags?: number
-}
-
-const normJsonLoose = (raw: string): string => {
-  const start = raw.indexOf('{')
-  const end = raw.lastIndexOf('}')
-  return start >= 0 && end > start ? raw.slice(start, end + 1) : raw
-}
-
-async function runJudge(
-  critic: NonNullable<CompositingDeps['critic']>,
-  out: WriterOutput,
-  v1: SemanticBlueprint,
-  pack: RetrievalPack,
-  previousFindings: string[],
-): Promise<{ judge?: CompositingJudgeResult; judgeFeedback: string[]; advisories: string[] }> {
-  const prompt = buildCompositingJudgePrompt(out, v1, pack, { previousFindings })
-  let raw: string
-  try {
-    raw = await critic(prompt)
-  } catch (e) {
-    return { judgeFeedback: [], advisories: [`judge_skipped:critic_error:${(e as Error).message.slice(0, 120)}`] }
-  }
-  try {
-    const parsed = JSON.parse(normJsonLoose(raw)) as Record<string, unknown>
-    const verdict = parsed.verdict
-    if (verdict !== 'pass' && verdict !== 'needs_revision') throw new Error('invalid verdict')
-    const scores = parsed.dimensionScores as Record<string, unknown> | undefined
-    if (!scores || !COMPOSITING_RUBRIC_IDS.every((id) => typeof scores[id] === 'number')) {
-      throw new Error('invalid_dimensions')
-    }
-    const score = Math.round(
-      COMPOSITING_RUBRIC_IDS.reduce((sum, id) => sum + (scores[id] as number), 0) / COMPOSITING_RUBRIC_IDS.length,
-    )
-    const rawFindings = Array.isArray(parsed.findings) ? (parsed.findings as Record<string, unknown>[]) : []
-    const findings = rawFindings
-      .filter((f) => typeof f.requiredFix === 'string' && (f.severity === 'major' || f.severity === 'minor' || f.severity === 'blocker'))
-      .map((f) => ({
-        severity: String(f.severity),
-        dimension: String(f.dimension ?? ''),
-        problem: String(f.problem ?? ''),
-        requiredFix: String(f.requiredFix),
-      }))
-    const judge: CompositingJudgeResult = {
-      verdict,
-      score,
-      findings,
-      debate: [{ round: 1, reviewer: { findings: rawFindings, score } }],
-    }
-    const judgeFeedback = findings
-      .filter((f) => f.severity === 'major' || f.severity === 'blocker')
-      .map((f) => `[${f.severity}] ${f.requiredFix}`)
-    return { judge, judgeFeedback, advisories: [] }
-  } catch (e) {
-    return { judgeFeedback: [], advisories: [`judge_skipped:${(e as Error).message.slice(0, 80)}`] }
-  }
 }
 
 export async function orchestrateCompositing(
@@ -126,7 +68,7 @@ export async function orchestrateCompositing(
   opts: CompositingOpts = {},
 ): Promise<CompositingOutcome> {
   const advisories: string[] = []
-  const trace: Array<{ name: 'semantic_enrich' | 'retrieval_pack' | 'writer_loop'; ms: number }> = []
+  const trace: Array<{ name: 'semantic_enrich' | 'writer_loop'; ms: number }> = []
   const maxCorrections = opts.maxCorrections ?? 2
 
   // audit P1：审计前预热 nl_tag_overlap 向量缓存（嵌入异步、审计同步，接缝拆两半）。
@@ -139,6 +81,12 @@ export async function orchestrateCompositing(
       /* prewarm 故障不阻塞审计 */
     }
   }
+  const auditOpts = () => ({
+    ...(deps.verifyTag ? { verifyTag: deps.verifyTag } : {}),
+    ...(deps.vectorSim ? { vectorSim: deps.vectorSim } : {}),
+    rating,
+    ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}),
+  })
 
   // S2 扩写
   const tEnrich = performance.now()
@@ -147,95 +95,107 @@ export async function orchestrateCompositing(
   const v1 = enriched.v1
   trace.push({ name: 'semantic_enrich', ms: performance.now() - tEnrich })
 
-  // S2.5 检索包（唯一 catalog 消费点）
-  const tPack = performance.now()
-  const pack = await buildRetrievalPack(v1, deps.search, {}, deps.retrievalPrewarm)
-  trace.push({ name: 'retrieval_pack', ms: performance.now() - tPack })
-  if (pack.evidence.length === 0 && pack.unresolved.length > 0) advisories.push('evidence_partial')
-  if (pack.truncated.length > 0) advisories.push(`evidence_truncated:${pack.truncated.length}`)
-  advisories.push(...(pack.advisories ?? []))
-
   const v1Hash = createHash('sha256').update(JSON.stringify(v1)).digest('hex')
   let corrections = 0
-  let feedback: string | undefined
   let writerOut: WriterOutput | undefined
   let gates: CompositingGate[] = []
-  let judge: CompositingJudgeResult | undefined
-  let judgeFeedback: string[] = []
+  let auditor: AuditorVerdict | undefined
+  let auditorFeedback: string[] = []
   let fallbackUsed = false
-  let lastJudgeFindings: string[] = []
   const t0 = performance.now()
 
-  while (true) {
-    // S3 成文
-    let raw: string | undefined
-    if (deps.writerRunner) {
-      try {
-        raw = await deps.writerRunner(
-          buildWriterPrompt(v1, pack, {
-            feedback,
-            frozenHash: corrections > 0 ? v1Hash : undefined,
-          }),
-        )
-      } catch (e) {
-        advisories.push(`writer_failed:${(e as Error).message.slice(0, 120)}`)
-      }
-    } else if (corrections === 0) {
-      advisories.push('writer_fallback_used:no_runner')
-    }
-
-    let parsedOk = false
-    if (raw !== undefined) {
-      try {
-        writerOut = parseWriterOutput(raw)
-        parsedOk = true
-      } catch (e) {
-        advisories.push(`writer_parse_failed:${(e as Error).message.slice(0, 120)}`)
-      }
-    }
-    if (!parsedOk) {
-      // D7 fail-open：确定性回退出稿，闭环终止
-      writerOut = deterministicCompose(v1, pack)
-      fallbackUsed = true
-      advisories.push('writer_fallback_used')
-      await prewarmOverlap(writerOut)
-      gates = auditCompositing(writerOut as WriterOutput, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
-      break
-    }
-
-    // S4 审计
-    await prewarmOverlap(writerOut as WriterOutput)
-    gates = auditCompositing(writerOut as WriterOutput, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
-    const critical = gates.filter((g) => g.severity === 'critical')
-
-    // S4 judge（规则 critical 时跳审——沿 legacy rule_critical 语义）
-    if (critical.length === 0 && deps.critic) {
-      const j = await runJudge(deps.critic, writerOut as WriterOutput, v1, pack, lastJudgeFindings)
-      advisories.push(...j.advisories)
-      judge = j.judge
-      judgeFeedback = j.judgeFeedback
-      // audit P4a：本轮 major/blocker findings 传下轮 judge（去重指令由 prompt 携带）
-      lastJudgeFindings = (j.judge?.findings ?? [])
+  const runAuditor = async (out: WriterOutput): Promise<void> => {
+    auditor = undefined
+    auditorFeedback = []
+    if (!deps.auditorRunner) return // judge_mode=off 语义：仅机器门
+    try {
+      const v = parseAuditorVerdict(await deps.auditorRunner(buildAuditorPrompt(v1, out)))
+      auditor = v
+      auditorFeedback = v.findings
         .filter((f) => f.severity === 'major' || f.severity === 'blocker')
-        .map((f) => f.requiredFix)
+        .map((f) => `[${f.severity}] ${f.requiredFix}`)
+    } catch (e) {
+      advisories.push(`auditor_skipped:${(e as Error).message.slice(0, 120)}`)
     }
+  }
 
-    const judgeFailed = judge?.verdict === 'needs_revision'
-    if (critical.length === 0 && !judgeFailed) break
-    if (corrections >= maxCorrections) {
-      advisories.push('loop_exhausted:true')
-      break
-    }
-
-    // S5 窄修复：feedback 只投 writer（蓝图/扩写冻结，D4）
+  /** S5 修复：返回 true = 修复产物已就绪进入下一轮审核 */
+  const runRepair = async (current: WriterOutput): Promise<boolean> => {
     corrections++
-    feedback = JSON.stringify({
-      violations: gates
-        .filter((g) => g.severity === 'critical' || g.severity === 'important')
-        .map((g) => ({ rule: g.rule, evidence: g.detail, required_fix: g.detail })),
-      judge_feedback: judgeFeedback,
-      frozen: { blueprint_v1_hash: v1Hash },
-    })
+    const gateViolations = gates
+      .filter((g) => g.severity === 'critical' || g.severity === 'important')
+      .map((g) => `${g.rule}(${g.severity}): ${g.detail}`)
+    const repairRunner = deps.repairRunner
+    if (repairRunner === undefined) {
+      // 无 pm-repairer（含 judge_mode=off 场景外的降级装配）：无修复通道 → 终止
+      advisories.push('repair_unavailable:no_runner')
+      return false
+    }
+    let raw: string
+    try {
+      raw = await repairRunner(buildRepairPrompt({ bp: v1, draft: current, gateViolations, auditorFindings: auditorFeedback }))
+    } catch (e) {
+      advisories.push(`repair_failed:${(e as Error).message.slice(0, 120)}`)
+      return false
+    }
+    try {
+      writerOut = parseRepairOutput(raw)
+      return true
+    } catch (e) {
+      advisories.push(`repair_parse_failed:${(e as Error).message.slice(0, 120)}`)
+      return false
+    }
+  }
+
+  // S3 成文（writer 只跑一次；修复由独立 pm-repairer 承担，A4）
+  let raw: string | undefined
+  if (deps.writerRunner) {
+    try {
+      raw = await deps.writerRunner(buildWriterPrompt(v1))
+    } catch (e) {
+      advisories.push(`writer_failed:${(e as Error).message.slice(0, 120)}`)
+    }
+  } else {
+    advisories.push('writer_fallback_used:no_runner')
+  }
+  let parsedOk = false
+  if (raw !== undefined) {
+    try {
+      writerOut = parseWriterOutput(raw)
+      parsedOk = true
+    } catch (e) {
+      advisories.push(`writer_parse_failed:${(e as Error).message.slice(0, 120)}`)
+    }
+  }
+  if (!parsedOk) {
+    // D7 fail-open：确定性回退出稿，闭环终止
+    writerOut = deterministicCompose(v1, deps.search)
+    fallbackUsed = true
+    advisories.push('writer_fallback_used')
+    await prewarmOverlap(writerOut)
+    gates = auditCompositing(writerOut, v1, auditOpts())
+  } else {
+    // S4 双轨审核 ∥ S5 修复循环：机器门 ∥ 审计 LLM（每轮必跑，A3——废除 critical 跳审）
+    while (true) {
+      await prewarmOverlap(writerOut as WriterOutput)
+      gates = auditCompositing(writerOut as WriterOutput, v1, auditOpts())
+      const critical = gates.filter((g) => g.severity === 'critical')
+      await runAuditor(writerOut as WriterOutput)
+      const auditorFailed = auditor?.verdict === 'needs_revision'
+
+      if (critical.length === 0 && !auditorFailed) break
+      if (corrections >= maxCorrections) {
+        advisories.push('loop_exhausted:true')
+        break
+      }
+
+      // S5 修复（独立 pm-repairer，A4）；修复产物回到本循环顶部重跑 S4
+      const repaired = await runRepair(writerOut as WriterOutput)
+      if (!repaired) {
+        advisories.push('loop_exhausted:true')
+        break // repair 失败/不可用 → 保留当前产物，交由末尾 D7 判定
+      }
+    }
   }
   trace.push({ name: 'writer_loop', ms: performance.now() - t0 })
 
@@ -243,14 +203,14 @@ export async function orchestrateCompositing(
   // 确定性回退出稿（真实会话 gen_1789521620450 实证：耗尽后 ok=false 且 result 被丢，违反 D7）
   const hasCritical = gates.some((g) => g.severity === 'critical')
   if (!fallbackUsed && hasCritical) {
-    writerOut = deterministicCompose(v1, pack)
+    writerOut = deterministicCompose(v1, deps.search)
     fallbackUsed = true
     advisories.push('writer_fallback_used')
     await prewarmOverlap(writerOut)
-    gates = auditCompositing(writerOut, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
+    gates = auditCompositing(writerOut, v1, auditOpts())
   }
 
-  // ok 语义（legacy P3 对齐）：确定性审计全过 → ok=true（judge needs_revision 耗尽走 loop_exhausted
+  // ok 语义（legacy P3 对齐）：确定性审计全过 → ok=true（auditor needs_revision 耗尽走 loop_exhausted
   // advisory，不丢 result）；回退通道 fail-open 恒 ok=true（产品已出，故事在 advisories/gates 里）
   const finalWriterOut = writerOut as WriterOutput // 循环不变式：break 前必已赋值（解析失败/耗尽走 fallback 分支）
   const ok = fallbackUsed ? true : gates.every((g) => g.severity !== 'critical')
@@ -266,10 +226,9 @@ export async function orchestrateCompositing(
     advisories,
     corrections,
     fallbackUsed,
-    unresolvedCount: pack.unresolved.length,
     v1,
-    ...(judge !== undefined ? { judge } : {}),
-    judgeFeedback,
+    ...(auditor !== undefined ? { auditor } : {}),
+    auditorFeedback,
     trace,
   }
 }

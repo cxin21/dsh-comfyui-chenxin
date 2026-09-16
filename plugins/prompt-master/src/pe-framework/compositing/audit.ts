@@ -1,11 +1,12 @@
 /**
- * S4 确定性审计（spec §7，零 LLM）：成文产物的机器契约谓词集。
- * 任一 critical → 直接进修复轮（不烧 judge，judge rule_critical 跳审语义不变）。
+ * S4 确定性审计（spec 2026-09-17 agentic-pipeline-redesign §6）：成文产物的机器契约谓词集。
+ * 任一 critical → 进修复轮（同时审计 LLM 每轮必跑，A3——本门不再承担全部审核职责）。
  * 词表复用 dialect/anima.ts 单一事实源（LIGHTING_BAN / FRAMING_MISMATCH / MUTUAL_EXCLUSIONS）。
+ * fabricated_tag（A5）：tag 合法性经注入 verifyTag 直查 catalog（canonical/alias/artist），不再依赖检索包。
+ * 检索包依赖已随 S2.5 层废除（A1）：unresolved_dropped 门删除。
  */
 import type { WriterOutput } from './writer.js'
 import { assemblePositive } from './compose.js'
-import type { RetrievalPack } from '../dialect/retrieval-pack.js'
 import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
 import { detectTagForm } from '../blueprint/semantic-schema.js'
 import { LIGHTING_BAN, FRAMING_MISMATCH, MUTUAL_EXCLUSIONS } from '../dialect/anima.js'
@@ -21,13 +22,15 @@ export interface CompositingGate {
 }
 
 export interface AuditOptions {
-  /** bge-base-en-v1.5 相似度注入点（nl 句 × tag）；不可用时传 undefined → 仅词面 + advisory */
-  vectorSim?: (nlSentence: string, tag: string) => number | undefined
+  /** A5：tag 合法性直查（canonical/alias/artist 命中 = true）；缺省 → fabricated_tag 门跳过 */
+  verifyTag?: (tag: string) => boolean
   rating: Rating
   minTags?: number
   maxTags?: number
   maxChars?: number
   overlapThreshold?: number
+  /** bge-base-en-v1.5 相似度注入点（nl 句 × tag）；不可用时传 undefined → 仅词面 + advisory */
+  vectorSim?: (nlSentence: string, tag: string) => number | undefined
 }
 
 const MIN_TAGS = 20
@@ -44,7 +47,6 @@ export function splitNlSentences(nl: string): string[] {
 
 export function auditCompositing(
   out: WriterOutput,
-  pack: RetrievalPack,
   bp: SemanticBlueprint,
   opts: AuditOptions,
 ): CompositingGate[] {
@@ -53,13 +55,12 @@ export function auditCompositing(
     gates.push({ rule, severity, detail, source: 'compositing/audit' })
   }
 
-  // fabricated_tag：tag.text 必须能在检索包（evidence ∪ artists）中回查命中（spec §7）
-  const known = new Set<string>()
-  for (const e of pack.evidence) for (const h of e.hits) known.add(norm(h.prompt_form))
-  for (const a of pack.artists) known.add(norm(a.prompt_form))
-  for (const t of out.tags) {
-    if (!known.has(norm(t.text))) {
-      push('fabricated_tag', 'critical', `tag '${t.text}' not in retrieval evidence; required_fix: use evidence prompt_form or move to NL`)
+  // fabricated_tag（A5）：tag.text 必须经 verifyTag 直查 catalog 命中（canonical/alias/artist）
+  if (opts.verifyTag) {
+    for (const t of out.tags) {
+      if (!opts.verifyTag(t.text)) {
+        push('fabricated_tag', 'critical', `tag '${t.text}' not verified in catalog; required_fix: query catalog for the real prompt_form or move the concept to NL`)
+      }
     }
   }
 
@@ -73,7 +74,7 @@ export function auditCompositing(
   }
 
   // tag_order（T3 权重序的可机检投影）：已知 rank 的 tag 序列必须非降——违反 = important
-  // （搭车反馈；顺序"通顺"的语义级判断归 judge tag-selection 维度）
+  // （搭车反馈；顺序"通顺"的语义级判断归审计 LLM 维度 E）
   const ORDER_RANK: Array<[RegExp, number]> = [
     [/^S\d+\.identity$/, 1],
     [/^core\.style_hints/, 2], // artist 槽
@@ -127,23 +128,6 @@ export function auditCompositing(
     push('overlap_vector_unavailable', 'minor', 'vectorSim not provided; nl_tag_overlap checked lexically only')
   }
 
-  // unresolved_dropped：unresolved 概念必须 ∈ NL 或 dropped_concepts（spec §6 N1）。
-  // 覆盖判定 = query 词覆盖率 ≥ 60%（3+ 字词；整句子串过苛，与 N3 的信息增量容忍度一致）。
-  const nlNorm = norm(out.nl)
-  const dropped = new Set(out.dropped_concepts.map(norm))
-  const queryCovered = (query: string): boolean => {
-    if (nlNorm.includes(norm(query))) return true
-    const words = norm(query).split(/\s+/).filter((w) => w.length >= 3)
-    if (words.length === 0) return true
-    const hitWords = words.filter((w) => nlNorm.includes(w)).length
-    return hitWords / words.length >= 0.6
-  }
-  for (const u of pack.unresolved) {
-    if (!queryCovered(u.query) && !dropped.has(norm(u.concept))) {
-      push('unresolved_dropped', 'critical', `unresolved concept '${u.concept}' (${u.query}) absent from NL and not declared in dropped_concepts`)
-    }
-  }
-
   // tag_in_blueprint：V1 蓝图文本字段零 tag 形态（D3；S1 解析层同款谓词）
   const bpPaths: string[] = []
   const scan = (node: unknown, path: string): void => {
@@ -162,17 +146,12 @@ export function auditCompositing(
   scan(bp, '')
   if (bpPaths.length > 0) push('tag_in_blueprint', 'critical', `blueprint fields contain tag-form words: ${bpPaths.join(',')}`)
 
-  // tag_budget：数量 + 字符（spec §6 T7）。
-  // 2026-09-16 活跑实证修订（gen_1789521620450）：min 硬门与 T1（tag 只能来自证据）自相矛盾——
-  // 证据概念数不足 20 时 writer 无法达标。下限取 min(minTags, 可用证据概念数)：
-  // 低于它 = writer 丢弃了可得证据（critical）；高于它但未满 minTags = 数量偏少（important，搭车反馈不跳审）。
-  const min = Math.min(opts.minTags ?? MIN_TAGS, pack.evidence.length + pack.artists.length)
+  // tag_budget：数量 + 字符（spec §6 T7）。writer 可自由查字典，20 下限恢复硬门。
+  const min = opts.minTags ?? MIN_TAGS
   const max = opts.maxTags ?? MAX_TAGS
   const maxChars = opts.maxChars ?? MAX_CHARS
   if (out.tags.length < min || out.tags.length > max) {
     push('tag_budget', 'critical', `tag count ${out.tags.length} outside [${min},${max}]`)
-  } else if (out.tags.length < (opts.minTags ?? MIN_TAGS)) {
-    push('tag_budget', 'important', `tag count ${out.tags.length} below target ${opts.minTags ?? MIN_TAGS} (evidence-limited: ${pack.evidence.length} concepts resolved)`)
   }
   const positive = assemblePositive(out, opts.rating)
   if (positive.length > maxChars) {
@@ -215,11 +194,12 @@ export function auditCompositing(
     push('rating_seed', 'critical', `positive missing rating seed 'rating_${opts.rating}'`)
   }
 
-  // artist_whitelist：@tag 必须在检索包 artists 清单内
-  const artistAllowed = new Set(pack.artists.map((a) => norm(a.prompt_form)))
-  for (const t of out.tags) {
-    if (t.text.startsWith('@') && !artistAllowed.has(norm(t.text))) {
-      push('artist_whitelist', 'critical', `artist tag '${t.text}' not in evidence artists block`)
+  // artist_whitelist：@tag 必须经 verifyTag 命中（artist registry）
+  if (opts.verifyTag) {
+    for (const t of out.tags) {
+      if (t.text.startsWith('@') && !opts.verifyTag(t.text)) {
+        push('artist_whitelist', 'critical', `artist tag '${t.text}' not verified in catalog artist registry`)
+      }
     }
   }
 

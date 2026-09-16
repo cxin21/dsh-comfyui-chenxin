@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { orchestrateCompositing } from '../../../src/pe-framework/compositing/orchestrate.js'
 import type { SemanticBlueprint } from '../../../src/pe-framework/blueprint/semantic-schema.js'
 
+// fixtures（spec 2026-09-17 agentic-pipeline-redesign：S3 writer / S4 auditor / S5 repairer 三 LLM）
 const V0: SemanticBlueprint = {
   schema_version: 1, media: 'image',
   core: { concept: 'a girl on a rooftop at dusk',
@@ -14,7 +15,8 @@ const V0: SemanticBlueprint = {
 
 const ENRICH_PATCH = JSON.stringify({ set: { mood: 'nocturnal, quietly tense' }, additions: { core: { style_hints: ['cel shading'] } } })
 
-const SEARCH = async (q: string) => [{ prompt_form: q, match_type: 'canonical', usage_count: 1000 }]
+// A6 回退直查缝：同步返回 canonical 命中
+const SEARCH = (q: string) => [{ prompt_form: q, match_type: 'canonical', usage_count: 1000 }]
 
 const VALID_OUT = JSON.stringify({
   tags: [
@@ -26,114 +28,135 @@ const VALID_OUT = JSON.stringify({
   ],
   nl: 'She sits on the right third of the frame. Lantern light keeps her face exposed with no silhouette.',
   negative: [],
-  dropped_concepts: ['core.concept', 'core.scene.environment', 'core.scene.time_of_day', 'core.scene.weather', 'S1.identity', 'S1.expression', 'composition.camera_angle', 'composition.placement', 'mood'],
 })
 
-const PASS_JUDGE = JSON.stringify({
-  verdict: 'pass',
-  dimensionScores: { 'blueprint-fidelity': 90, 'nl-quality': 90, 'tag-selection': 90, 'negative-template': 90, 'composition-coherence': 90, 'aesthetic-vocabulary': 90 },
-  findings: [],
-  praise: ['clean mapping'],
-})
-const NEEDS_JUDGE = JSON.stringify({
+const PASS_AUDITOR = JSON.stringify({ verdict: 'pass', findings: [] })
+const NEEDS_AUDITOR = JSON.stringify({
   verdict: 'needs_revision',
-  dimensionScores: { 'blueprint-fidelity': 60, 'nl-quality': 70, 'tag-selection': 80, 'negative-template': 90, 'composition-coherence': 85, 'aesthetic-vocabulary': 88 },
-  findings: [{ severity: 'major', dimension: 'blueprint-fidelity', problem: 'mood not expressed', evidence: { tool: 'catalog', query: 'nocturnal', result: 'missing' }, requiredFix: 'express nocturnal mood in nl' }],
-  praise: [],
+  findings: [{ severity: 'major', dimension: 'D', problem: 'mood not expressed', requiredFix: 'express nocturnal mood in nl' }],
 })
 
-describe('orchestrateCompositing (spec §2/§8)', () => {
-  it('happy path: enrich → pack → writer → judge pass; corrections=0, ok=true', async () => {
+describe('orchestrateCompositing (agentic 三 LLM 管线)', () => {
+  it('happy path: writer → auditor pass → ok, corrections=0, quality=passed', async () => {
     const outcome = await orchestrateCompositing(V0, 'explicit', {
       enrichRunner: async () => ENRICH_PATCH,
       writerRunner: async () => VALID_OUT,
-      critic: async () => PASS_JUDGE,
+      auditorRunner: async () => PASS_AUDITOR,
+      repairRunner: async () => { throw new Error('repair should not run') },
       search: SEARCH,
     }, { minTags: 0 })
     expect(outcome.ok).toBe(true)
     expect(outcome.corrections).toBe(0)
     expect(outcome.fallbackUsed).toBe(false)
+    expect(outcome.quality).toBe('passed')
     expect(outcome.positive).toContain('rating_explicit')
     expect(outcome.positive).toContain('long black hair')
     expect(outcome.v1.mood).toContain('quietly tense')
-    expect(outcome.judge?.verdict).toBe('pass')
+    expect(outcome.auditor?.verdict).toBe('pass')
     expect(outcome.advisories.some((a) => a.startsWith('enrich_path_violation'))).toBe(false)
   })
-  it('fabricated tag → narrow repair: writer re-entered with frozen hash + feedback; enrich frozen (D4)', async () => {
-    const writerPrompts: string[] = []
-    let authorCalls = 0
-    const outcome = await orchestrateCompositing(V0, 'safe', {
-      enrichRunner: async () => { authorCalls++; return ENRICH_PATCH },
-      writerRunner: async (p: string) => {
-        writerPrompts.push(p)
-        return writerPrompts.length === 1
-          ? JSON.stringify({ tags: [{ text: 'neon glow', source_concept: 'S1.pose' }], nl: 'She stands alone. Lantern light glows.', negative: [], dropped_concepts: [] })
-          : VALID_OUT
-      },
-      critic: async () => PASS_JUDGE,
+
+  it('A2：writer/auditor/repairer 是三个独立 runner（各自被调用，label 由装配层区分）', async () => {
+    const writer = vi.fn(async () => VALID_OUT)
+    const auditor = vi.fn(async () => PASS_AUDITOR)
+    const repair = vi.fn(async () => VALID_OUT)
+    await orchestrateCompositing(V0, 'safe', {
+      enrichRunner: async () => ENRICH_PATCH,
+      writerRunner: writer,
+      auditorRunner: auditor,
+      repairRunner: repair,
       search: SEARCH,
     }, { minTags: 0 })
-    expect(authorCalls).toBe(1) // 蓝图/扩写冻结（D4）
-    expect(writerPrompts.length).toBe(2)
-    expect(writerPrompts[1]).toContain('frozen blueprint_v1_hash')
-    expect(writerPrompts[1]).toContain('fabricated_tag')
-    expect(outcome.corrections).toBe(1)
-    expect(outcome.ok).toBe(true)
+    expect(writer).toHaveBeenCalledTimes(1)
+    expect(auditor).toHaveBeenCalledTimes(1)
+    expect(repair).not.toHaveBeenCalled()
   })
-  it('judge needs_revision persists 2 rounds → loop_exhausted advisory, ok stays true (P3 parity)', async () => {
+
+  it('fabricated tag（verifyTag 拒绝）→ repairer 产出修复版 → 每轮 auditor 必跑（A3）', async () => {
+    const writerPrompts: string[] = []
+    const auditorPrompts: string[] = []
+    const repairPrompts: string[] = []
+    const BAD = JSON.stringify({ tags: [{ text: 'neon glow', source_concept: 'S1.pose' }], nl: 'She stands alone.', negative: [], dropped_concepts: [] })
+    const outcome = await orchestrateCompositing(V0, 'safe', {
+      enrichRunner: async () => ENRICH_PATCH,
+      writerRunner: async (p) => { writerPrompts.push(p); return VALID_OUT },
+      auditorRunner: async (p) => { auditorPrompts.push(p); return auditorPrompts.length === 1 ? NEEDS_AUDITOR : PASS_AUDITOR },
+      repairRunner: async (p) => { repairPrompts.push(p); return BAD },
+      verifyTag: (tag) => tag !== 'neon glow',
+      search: SEARCH,
+    }, { minTags: 0 })
+    // 第一轮：writer 产物被 auditor 判 needs_revision（无 critical）→ repairer 介入
+    expect(repairPrompts.length).toBe(2) // r1 修复 BAD（仍含 fabricated tag）→ r2 再修 → 耗尽
+    expect(repairPrompts[0]).toContain('<violations>')
+    expect(repairPrompts[0]).toContain('express nocturnal mood in nl')
+    // 修复产物持续含 verifyTag 拒绝的 neon glow → 机审 critical → 耗尽 → D7 fallback 兜底
+    expect(outcome.corrections).toBe(2)
+    expect(auditorPrompts.length).toBeGreaterThanOrEqual(2) // A3：auditor 每轮必跑
+    expect(writerPrompts.length).toBe(1) // A4：writer 只跑一次，修复不重入 writer
+    expect(outcome.advisories).toContain('loop_exhausted:true')
+    expect(outcome.fallbackUsed).toBe(true)
+  })
+
+  it('auditor needs_revision 持续 → loop_exhausted, ok=true, quality=degraded', async () => {
     const outcome = await orchestrateCompositing(V0, 'safe', {
       enrichRunner: async () => ENRICH_PATCH,
       writerRunner: async () => VALID_OUT,
-      critic: async () => NEEDS_JUDGE,
+      auditorRunner: async () => NEEDS_AUDITOR,
+      repairRunner: async () => VALID_OUT,
       search: SEARCH,
     }, { minTags: 0 })
     expect(outcome.corrections).toBe(2)
     expect(outcome.advisories).toContain('loop_exhausted:true')
     expect(outcome.ok).toBe(true)
-    expect(outcome.judgeFeedback[0]).toContain('express nocturnal mood')
+    expect(outcome.quality).toBe('degraded')
+    expect(outcome.auditorFeedback[0]).toContain('express nocturnal mood')
   })
-  it('no writerRunner → immediate deterministic fallback, ok=true (D7 fail-open)', async () => {
-    const outcome = await orchestrateCompositing(V0, 'safe', { search: SEARCH }, { minTags: 0 })
-    expect(outcome.fallbackUsed).toBe(true)
-    expect(outcome.ok).toBe(true)
-    expect(outcome.advisories).toContain('writer_fallback_used')
-    expect(outcome.positive.length).toBeGreaterThan(0)
-  })
-  it('writer parse failure → fallback with writer_parse_failed advisory', async () => {
+
+  it('A1/A6：writer 解析失败 → fallback 直查字典，positive 无碎片倾泻', async () => {
     const outcome = await orchestrateCompositing(V0, 'safe', {
       enrichRunner: async () => ENRICH_PATCH,
       writerRunner: async () => 'not json at all',
       search: SEARCH,
     }, { minTags: 0 })
     expect(outcome.fallbackUsed).toBe(true)
+    expect(outcome.ok).toBe(true)
+    expect(outcome.quality).toBe('fallback')
     expect(outcome.advisories.some((a) => a.startsWith('writer_parse_failed'))).toBe(true)
+    expect(outcome.positive).not.toContain('tall mature woman in') // 碎片倾泻不复存在
   })
-  it('judge critic error → judge_skipped, audit gates alone decide', async () => {
+
+  it('无 auditorRunner（judge_mode=off 语义）→ 仅机器门，auditor 缺席', async () => {
     const outcome = await orchestrateCompositing(V0, 'safe', {
       enrichRunner: async () => ENRICH_PATCH,
       writerRunner: async () => VALID_OUT,
-      critic: async () => { throw new Error('llm down') },
       search: SEARCH,
     }, { minTags: 0 })
-    expect(outcome.advisories.some((a) => a.startsWith('judge_skipped'))).toBe(true)
+    expect(outcome.ok).toBe(true)
+    expect(outcome.auditor).toBeUndefined()
+    expect(outcome.auditorFeedback).toEqual([])
+  })
+
+  it('auditor 故障 → auditor_skipped 降级，机器门独立成立', async () => {
+    const outcome = await orchestrateCompositing(V0, 'safe', {
+      enrichRunner: async () => ENRICH_PATCH,
+      writerRunner: async () => VALID_OUT,
+      auditorRunner: async () => { throw new Error('llm down') },
+      search: SEARCH,
+    }, { minTags: 0 })
+    expect(outcome.advisories.some((a) => a.startsWith('auditor_skipped'))).toBe(true)
     expect(outcome.ok).toBe(true)
   })
-  it('repair round judge prompt carries previous findings (audit P4a 跨轮去重)', async () => {
-    const criticPrompts: string[] = []
+
+  it('无 repairRunner 且机审 critical → repair_unavailable + loop_exhausted + D7 fallback', async () => {
     const outcome = await orchestrateCompositing(V0, 'safe', {
       enrichRunner: async () => ENRICH_PATCH,
-      writerRunner: async () => VALID_OUT,
-      critic: async (p: unknown) => {
-        criticPrompts.push(typeof p === 'string' ? p : JSON.stringify(p))
-        return NEEDS_JUDGE
-      },
+      writerRunner: async () => JSON.stringify({ tags: [{ text: 'neon glow', source_concept: 'S1.pose' }], nl: 'She stands alone.', negative: [] }),
+      verifyTag: (tag) => tag !== 'neon glow',
       search: SEARCH,
     }, { minTags: 0 })
-    expect(criticPrompts.length).toBeGreaterThanOrEqual(2)
-    expect(criticPrompts[0]).not.toContain('<previous_findings>')
-    // 第二轮 judge 必须看到第一轮的 major finding requiredFix，才能执行去重指令
-    expect(criticPrompts[1]).toContain('<previous_findings>')
-    expect(criticPrompts[1]).toContain('express nocturnal mood in nl')
-    expect(outcome.corrections).toBe(2)
+    expect(outcome.advisories).toContain('repair_unavailable:no_runner')
+    expect(outcome.advisories).toContain('loop_exhausted:true')
+    expect(outcome.fallbackUsed).toBe(true)
+    expect(outcome.ok).toBe(true)
   })
 })

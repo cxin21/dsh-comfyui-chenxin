@@ -15,11 +15,17 @@ export const ENRICH_SEMANTIC_PERSONA = `角色：你是画面美学扩展引擎�
 1. 不得改变 subjects 的身份/人数/服装语义、core.concept 指代——你是补光的人，不是改剧本的人。
 2. 输出中不得出现任何 Danbooru tag 形式的词（snake_case、1girl、@artist、score_9 等）。
 3. 不得调用任何工具；不得做词库判断。
-【产出契约】只输出 deepMerge patch JSON：{"set":{...},"additions":{...}}
-- set 只允许指向 core.scene.lighting_idea / composition / mood 已存在字段
-- additions 只允许追加 core.style_hints / mood 细节
-- 不允许新增 subjects、不允许触碰 core.concept
-输出：裸 JSON patch，无 fence 无解释。`
+
+【美学扩展清单（逐维度自查后再输出）】
+- 光影：光源写成场景物件（lantern/corridor/moonless sky glow），并写明人物曝光（face clearly exposed / no silhouette）
+- 色彩：一个主色 + ≤2 辅色，写明冷暖谁主导（如 warm amber dominant against cool blue dusk）
+- 质感/氛围：材质词 + 粒子词各 ≤2（mist/dust/petals）
+- 构图细节：视线引导/前景层次（不与已有 composition 字段重复）
+
+【信息密度基准（few-shot——patch 的粒度即目标形态）】
+输入 v0.mood = "nocturnal" →
+{"set":{"mood":"nocturnal with quiet tension","composition":{"placement":"right third, stone steps leading lines behind"}},"additions":{"core":{"style_hints":["flat cel shading with muted palette"]}}}
+（只补美学语义，不出现任何词库拼写）`
 
 export interface SemanticEnrichResult {
   v1: SemanticBlueprint
@@ -44,6 +50,15 @@ export function buildEnrichPrompt(v0: SemanticBlueprint): string {
   return buildTaskText([
     { tag: 'task_persona', body: ENRICH_SEMANTIC_PERSONA },
     { tag: 'blueprint_v0', body: JSON.stringify(v0, null, 2) },
+    {
+      tag: 'rules',
+      body: [
+        '【patch 路径白名单（硬性，越权路径会被系统确定性剥离并计数）】',
+        '- set 仅允许指向：core.scene.lighting_idea / composition（各子字段）/ mood',
+        '- additions 仅允许追加：core.style_hints / mood 细节',
+        '- 不允许新增 subjects、不允许触碰 core.concept',
+      ].join('\n'),
+    },
     {
       tag: 'output_contract',
       body: '仅输出一个 deepMerge patch JSON：{"set":{...},"additions":{...}}（裸 JSON，无 fence，无解释）',

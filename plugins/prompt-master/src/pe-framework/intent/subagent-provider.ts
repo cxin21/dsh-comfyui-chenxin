@@ -138,6 +138,8 @@ export function createSubagentIntentProvider(
           {
             tag: 'rules',
             body: [
+              ANIMA_SEMANTIC_RULES,
+              '',
               '输出 JSON Schema:',
               schema,
               ...(req.feedback
@@ -145,7 +147,7 @@ export function createSubagentIntentProvider(
                     '',
                     '【修订纪律（硬性）】',
                     '- 只修复反馈点名的问题，逐条执行 requiredFix；未被点名的部分保持原样，不得顺手删改',
-                    '- 修订 = 按规则整图重投影（输出完整蓝图 JSON），不是追加修改说明',
+                    '- 修订 = 按规则整图重投影（输出完整语义蓝图 JSON），不是追加修改说明',
                   ]
                 : []),
             ].join('\n'),
@@ -448,11 +450,17 @@ export const ANIMA_SCHEMA = `{
 - 用户提供 references 时保持 ref 标签稳定
 `
 
-/* ── 2026-09-15 管线重设计（spec §3）：compositing 形态 S1 语义蓝图 persona/schema ── */
+/* ── 2026-09-15 管线重设计（spec §3 + §2.1 拆分）：compositing 形态 S1 语义蓝图 persona/rules/schema ── */
 
+/** task_persona 块：角色定位 + few-shot（同构即模板） */
 export const ANIMA_SEMANTIC_PERSONA = `角色：你是画面意图分析引擎。把用户的创作意图转成一张「画面语义蓝图 v0」——只描述画面本身，不做任何词表判断。你的产出会被美学扩写引擎增强，再由成文引擎对照 tag 词库翻译为最终提示词。
 
-【输出语言】所有字段：英文自然语言（除 count 数字）。
+【信息密度基准（few-shot——你的产出应达到同等密度）】
+用户意图「雨夜街头，一个穿黑色皮夹克的白发少女在霓虹灯下回眸」→
+{"schema_version":1,"media":"image","core":{"concept":"a white-haired girl glances back under neon lights on a rain-soaked night street","scene":{"environment":"night city street","time_of_day":"night","weather":"rain","lighting_idea":"neon signage glows from both sides, a streetlamp keeps her face clearly exposed"},"style_hints":[]},"subjects":[{"id":"S1","count":1,"identity":"a girl","appearance":"white hair, black leather jacket, crop top and denim shorts","pose":"standing, looking back over her shoulder","expression":"parted lips"}],"composition":{"framing":"seen from the knees up","camera_angle":"slightly low","placement":"right of center"},"mood":"nocturnal, confident","negative_hints":[]}`
+
+/** task_rules 块：硬性规则谓词（数据段之后、契约之前） */
+export const ANIMA_SEMANTIC_RULES = `【输出语言】所有字段：英文自然语言（除 count 数字）。
 【绝对禁令】
 1. 输出中不得出现任何 Danbooru tag 形式的词（snake_case、1girl、@artist、score_9 等）。判定标准：一个词若只能作为 tag 而非普通英文短语理解，即违规。
 2. 不得调用任何工具；不得猜测词库里有什么；不要为"适配词库"改写画面语义。
@@ -467,12 +475,7 @@ core.style_hints[]  0-3 条画风倾向描述（如 "retro anime cel shading"）
 subjects[]          每个主体：{id: "S1", count: 数字, identity ≤1句, appearance ≤3句(发型/发色/瞳色/体型/服装/配饰), pose ≤2句, expression ≤1句}
 composition         {framing ≤1句, camera_angle ≤1句, placement ≤1句}
 mood                ≤2 句
-negative_hints[]    用户明示的排除意图，0-3 条；无则空
-信息密度基准（few-shot——你的产出应达到同等密度）：
-用户意图「雨夜街头，一个穿黑色皮夹克的白发少女在霓虹灯下回眸」→
-{"schema_version":1,"media":"image","core":{"concept":"a white-haired girl glances back under neon lights on a rain-soaked night street","scene":{"environment":"night city street","time_of_day":"night","weather":"rain","lighting_idea":"neon signage glows from both sides, a streetlamp keeps her face clearly exposed"},"style_hints":[]},"subjects":[{"id":"S1","count":1,"identity":"a girl","appearance":"white hair, black leather jacket, crop top and denim shorts","pose":"standing, looking back over her shoulder","expression":"parted lips"}],"composition":{"framing":"seen from the knees up","camera_angle":"slightly low","placement":"right of center"},"mood":"nocturnal, confident","negative_hints":[]}
-
-输出：只输出一个语义蓝图 JSON（裸 JSON，不要 markdown fence，不要解释）；不要调用任何工具。`
+negative_hints[]    用户明示的排除意图，0-3 条；无则空`
 
 export const ANIMA_SEMANTIC_SCHEMA = `{
   "schema_version": 1,

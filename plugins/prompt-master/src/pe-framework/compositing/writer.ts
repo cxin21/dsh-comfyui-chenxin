@@ -8,26 +8,9 @@ import { buildTaskText } from '../llm/task-text.js'
 import type { RetrievalPack } from '../dialect/retrieval-pack.js'
 import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
 
+/** task_persona 块：角色定位 + few-shot（同构即模板）；硬性规则在 WRITER_RULES（§2.1 拆分） */
 export const WRITER_PERSONA = `角色：你是 Anima 提示词成文引擎。输入 = 画面语义蓝图 v1 + 【词表证据】块。
 你把蓝图翻译为最终提示词的 tag 区与 NL 尾。词表证据是唯一事实来源。
-
-【tag 区规则（硬性）】
-T1. tag 只能从【词表证据】的 hits[].prompt_form 中逐字选取——禁止自造、禁止拼接、禁止变换单复数/下划线。证据块没有对应命中的概念，该概念不得进 tag 区（出口：写进 NL 尾或 dropped_concepts）。
-T2. 每个 tag 必须在 output.tags[] 中携带 source_concept 字段，指回它服务的蓝图概念路径（如 "S1.appearance.hair"）。无 source_concept 的 tag = 违规。
-T3. 顺序（即权重序——这是训练分布事实，不是风格偏好）：人数 → 主体身份锚 → artist → 外观/服装 → 动作 → 表情 → 景别/视角 → 场景锚点 → 氛围粒子。
-T4. artist：仅当 core.style_hints 有明确画风暗示且【词表证据】artists 清单非空，取 1-3 位 prompt_form 原样；否则空数组。
-T5. 景别一致性：选定唯一景别后，取景外元素不进 tag（close-up 无下装鞋袜；cowboy shot 无鞋袜；仅 full body 保留全身）。
-T6. 互斥对：mutual_exclusion_pairs 内的词对不得同时出现在 tag 区。
-T7. 总量：tag 数 20-40。超限按 场景锚点 > 氛围粒子 > 次要动作 顺序裁剪。
-
-【NL 尾规则（硬性）】
-N1. unresolved 列表中的每个概念必须出现在 NL 尾中（用其 query 的英文表达），除非蓝图语义允许舍弃（舍弃需在 output.dropped_concepts 中声明路径）。
-N2. NL 尾承担且仅承担四类信息：①构图占比与视线引导 ②光源物件与人物曝光（物件名 + no silhouette 写法）③unresolved 概念 ④色彩主次。
-N3. NL 尾不得复述 tag 区任何已表达概念——判定标准：若删去该句，某个 tag 的信息完全丢失，则该句是复述；若删去后仍有信息增量（关系/曝光/比例/层级），则允许。
-N4. NL 长度 2-4 句英文。
-N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源一律写场景物件（neon signs / streetlamp / paper lanterns）。
-
-【negative 契约】只产内容性排除（蓝图 negative_hints 的英文翻译，≤3 条）；质量词/分级词由系统确定性拼装，你不得输出 worst quality/low quality/score_* 等质量词、不得输出 child/loli 等分级词。
 
 【信息密度基准（few-shot——示例的结构/粒度/句数即目标形态）】
 例 1（单人雨夜霓虹；unresolved 概念进 NL、光源物件写法）：
@@ -49,6 +32,25 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 </evidence>
 输出：
 {"tags":[{"text":"2girls","source_concept":"subjects"},{"text":"silver hair","source_concept":"S1.appearance"},{"text":"holding sword","source_concept":"S1.pose"},{"text":"black hair","source_concept":"S2.appearance"},{"text":"symmetrical composition","source_concept":"composition.placement"}],"nl":"The two swordswomen hold mirrored stances across the courtyard at dawn. Paper lanterns along the corridor give both faces even exposure with no silhouette. Mist pools low and leaves the upper bodies clearly separated.","negative":[],"dropped_concepts":[]}`
+
+/** task_rules 块：硬性规则谓词（T=tag 区 / N=NL 尾 / negative 契约） */
+export const WRITER_RULES = `【tag 区规则（硬性）】
+T1. tag 只能从【词表证据】的 hits[].prompt_form 中逐字选取——禁止自造、禁止拼接、禁止变换单复数/下划线。证据块没有对应命中的概念，该概念不得进 tag 区（出口：写进 NL 尾或 dropped_concepts）。
+T2. 每个 tag 必须在 output.tags[] 中携带 source_concept 字段，指回它服务的蓝图概念路径（如 "S1.appearance.hair"）。无 source_concept 的 tag = 违规。
+T3. 顺序（即权重序——这是训练分布事实，不是风格偏好）：人数 → 主体身份锚 → artist → 外观/服装 → 动作 → 表情 → 景别/视角 → 场景锚点 → 氛围粒子。
+T4. artist：仅当 core.style_hints 有明确画风暗示且【词表证据】artists 清单非空，取 1-3 位 prompt_form 原样；否则空数组。
+T5. 景别一致性：选定唯一景别后，取景外元素不进 tag（close-up 无下装鞋袜；cowboy shot 无鞋袜；仅 full body 保留全身）。
+T6. 互斥对：mutual_exclusion_pairs 内的词对不得同时出现在 tag 区。
+T7. 总量：tag 数 20-40。超限按 场景锚点 > 氛围粒子 > 次要动作 顺序裁剪。
+
+【NL 尾规则（硬性）】
+N1. unresolved 列表中的每个概念必须出现在 NL 尾中（用其 query 的英文表达），除非蓝图语义允许舍弃（舍弃需在 output.dropped_concepts 中声明路径）。
+N2. NL 尾承担且仅承担四类信息：①构图占比与视线引导 ②光源物件与人物曝光（物件名 + no silhouette 写法）③unresolved 概念 ④色彩主次。
+N3. NL 尾不得复述 tag 区任何已表达概念——判定标准：若删去该句，某个 tag 的信息完全丢失，则该句是复述；若删去后仍有信息增量（关系/曝光/比例/层级），则允许。
+N4. NL 长度 2-4 句英文。
+N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源一律写场景物件（neon signs / streetlamp / paper lanterns）。
+
+【negative 契约】只产内容性排除（蓝图 negative_hints 的英文翻译，≤3 条）；质量词/分级词由系统确定性拼装，你不得输出 worst quality/low quality/score_* 等质量词、不得输出 child/loli 等分级词。`
 
 const WRITER_OUTPUT_CONTRACT = `仅输出一个 JSON 对象：
 {"tags":[{"text":"…","source_concept":"…"}…],"nl":"…2-4 句英文…","negative":["…"],"dropped_concepts":[]}
@@ -74,7 +76,7 @@ export function buildWriterPrompt(
   pack: RetrievalPack,
   opts: { feedback?: string; frozenHash?: string } = {},
 ): string {
-  const rules: string[] = []
+  const rules: string[] = [WRITER_RULES]
   if (opts.frozenHash !== undefined) {
     rules.push(`<frozen blueprint_v1_hash="${opts.frozenHash}">蓝图与扩写产物已冻结：本修复轮不得改变画面语义结构，只允许调整 tag 区/NL 尾/negative 以满足违规清单。</frozen>`)
   }
@@ -85,7 +87,7 @@ export function buildWriterPrompt(
     { tag: 'task_persona', body: WRITER_PERSONA },
     { tag: 'blueprint_v1', body: JSON.stringify(bp, null, 2) },
     { tag: 'evidence', body: JSON.stringify(pack, null, 2) },
-    ...(rules.length > 0 ? [{ tag: 'rules', body: rules.join('\n\n') }] : []),
+    { tag: 'rules', body: rules.join('\n\n') },
     { tag: 'output_contract', body: WRITER_OUTPUT_CONTRACT },
   ])
 }

@@ -57,6 +57,16 @@ normalizeSemanticHits<T>(items: T[], lookup: TagLookupFn, opts?): { items: T[]; 
 
 ## 验收
 
-1. TDD：normalize 纯函数 6 用例（去重代表选择/形状清洗/wiki 分桶优先/跨桶不重排/非语义透传/lookup 缺行 grace）
-2. 既有 anima-catalog-semantic 测试全绿（stub record_id 落在真实库上，断言按新契约校准并留 justification）
-3. 活体终验：`catalog_search` 对 "1girl" 类查询的语义命中不再出现 `1_girl,` 类变体；wiki 行浮出
+1. ✅ TDD：normalize 纯函数 9 用例（递进放宽/严档保持/minResults 注入/归一化形去重/形状清洗/wiki 分桶优先/跨桶不重排/非语义透传/lookup 缺行 grace）
+2. ✅ 既有 anima-catalog-semantic 测试全绿（种子校准为 twintails usage 1.31M；'组合' 测试按递进式契约重写并留 justification）
+3. ⚠️ 活体终验（部分达成，见下「完成记录」遗留）：变体清场/放宽/垫尾/形状清洗全部生效；**1girl 概念近邻的 wiki 浮出未达成**——根因在索引内容（变体行 passage 与真行向量近乎重合，查询侧排序无法分离），根治需方案 1（重建向量库）
+
+## 完成记录（2026-09-17，commit 6c7d368）
+
+- 新增 `dialect/semantic-normalize.ts`（纯函数，递进两档）+ `anima-catalog.ts` 装配（createCatalogTagLookup 独立缓存句柄 / searchCatalogWithMeta / KNN 过采样 ×3 / sub 召回长度门 24 + Levenshtein ≥0.5 相关门）+ `catalog-search` 工具切 meta 版透传 advisory。
+- 实现期修复三处自伤：①回填 undefined（门丢弃后 semanticResults 短于槽位 → 压缩语义）；②SemanticHit 无 match_type 字段（joinWithCatalog 之后才加——调用点显式打标）；③泛型 spread 丢 T（Object.assign as T）。
+- 活体终验（新 dist 真实查询）：
+  - 长自然语言查询：`semantic_usage_relaxed:true` + `semantic_malformed_dropped:2`，脏行（`one eye closed,`）消失，usage 降序可见 ✅
+  - selafuku：serafuku fuzzy 提位 #1，serfafuku 等 usage 0 变体宽档垫尾（不再饿死）✅
+  - 1girl 概念近邻：**wiki 浮出未达成**——KNN 近邻被 fallback 变体 passage 挤占是索引内容问题，查询侧无法分离；根治 = 方案 1 重建（变体行不建/按 canonical 合并建 + meta provenance），届时本模块自动受益
+- 全量：tsc 0 / eslint 0 / 155 files / 1328 tests pass

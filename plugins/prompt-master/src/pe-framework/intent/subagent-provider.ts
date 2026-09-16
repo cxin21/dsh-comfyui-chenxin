@@ -139,9 +139,6 @@ export function createSubagentIntentProvider(
             tag: 'rules',
             body: [
               ANIMA_SEMANTIC_RULES,
-              '',
-              '输出 JSON Schema:',
-              schema,
               ...(req.feedback
                 ? [
                     '',
@@ -155,7 +152,9 @@ export function createSubagentIntentProvider(
           {
             tag: 'output_contract',
             body: [
-              '仅输出一个 JSON 对象：直接输出裸 JSON（不要 markdown fence，不要解释，不要任何前后缀文字）',
+              // 统一格式（spec §2.1.1）：JSON 形状模板归契约块，rules 只留行为谓词
+              '仅输出一个 JSON 对象（裸 JSON：无 markdown fence、无解释、无任何前后缀文字）：',
+              schema,
               '本任务为 one-shot 结构产出：不要调用任何工具',
             ].join('\n'),
           },

@@ -58,6 +58,12 @@ describe('buildWriterPrompt (agentic：无 evidence 块 + 工具协议)', () => 
     expect(p).toContain(WRITER_PERSONA.slice(0, 20))
     expect(p).toContain('catalog_search')
   })
+  it('统一格式（spec §1.1）：few-shot 基准块 + 契约三行纪律 + 形状模板', () => {
+    const p = buildWriterPrompt(BP)
+    expect(p).toContain('【信息密度基准')
+    expect(p).toContain('无 markdown fence、无解释、无任何前后缀文字')
+    expect(p).toContain('"source_concept"')
+  })
 })
 
 describe('assemblePositive / assembleNegative (spec §6/§7)', () => {

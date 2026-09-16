@@ -33,6 +33,28 @@ input + rating + style_id
  → 耗尽/解析失败 → deterministicCompose(bp, catalog直查) 回退（A6）
 ```
 
+## 1.1 提示词统一格式（2026-09-17 提示词审计轮定案）
+
+调研依据：Anthropic《Building Effective Agents》（ACI 三原则：给模型思考空间、格式贴近自然文本、poka-yoke 错误恢复；evaluator-optimizer 模式=生成∥评审+程序化门）+ 仓内 §2.1 taskText 模板纪律 + LLM-as-judge 惯例（rubric 锚定、先核对后裁决、严重度标定防宽严漂移）。
+
+**五槽位（author/enrich/writer/auditor/repairer）taskText 统一为：**
+
+```
+<task_persona>     ①角色与输入输出 ②【工具协议】（有工具者）③【信息密度基准 few-shot】≥1 同构示例
+                   ④【严重度标定】（评审角色专属：blocker/major/minor 定类再定级 + 宁缺毋滥口诀）
+<数据块…>          长数据前置（blueprint_v1 / response / violations）
+<rules>            行为谓词（禁令/纪律/字段契约）——JSON 形状不得混入
+<output_contract>  恒末块（buildTaskText 自动附加反注入声明）：
+                   「仅输出一个 JSON 对象（裸 JSON：无 markdown fence、无解释、无任何前后缀文字）：」
+                   + 具体 JSON 形状模板（每槽位各异）
+```
+
+- 形状归契约、行为归规则（S1 的 schema 已从 rules 挪入 output_contract）。
+- few-shot 全覆盖：auditor（needs_revision 裁决示例，含 blocker/major 标定用法）、repairer（最小改动示例——只动被点名处）、writer/enrich/author（原有）。
+- 工具协议 ACI 化：显式预算、查不到的恢复路径（「查法不对 ≠ tag 不存在」，换说法重试）、免验清单（高频常识 tag）。
+- 审计裁决纪律：先逐项走完 A-F 清单再给 verdict；findings 按严重度降序。
+- 依据补充：Anthropic Agents 附录 2（工具即 ACI——工具文档与提示词同等工程化投入）+ evaluator-optimizer 模式（本管线 S3∥S4 即该模式的工具化变体）。
+
 ## 2. 工具缝（A2 落地机制）
 
 - 新增 `llm/subagent-tool-runner.ts`：与 `createSubagentTextRunner` 同构，差异仅 `toolFilter: { allow: ['catalog_search'] }`（DSH subagents 原生支持，现 text 工厂是显式 `allow: []` 禁用）。

@@ -46,9 +46,8 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 
 【negative 契约】只产内容性排除（蓝图 negative_hints 的英文翻译，≤3 条）；质量词/分级词由系统确定性拼装，你不得输出 worst quality/low quality/score_* 等质量词、不得输出 child/loli 等分级词。`
 
-const WRITER_OUTPUT_CONTRACT = `仅输出一个 JSON 对象：
-{"tags":[{"text":"…","source_concept":"…"}…],"nl":"…2-4 句英文…","negative":["…"]}
-不得输出 markdown fence。不得解释。`
+const WRITER_OUTPUT_CONTRACT = `仅输出一个 JSON 对象（裸 JSON：无 markdown fence、无解释、无任何前后缀文字）：
+{"tags":[{"text":"…","source_concept":"…"}…],"nl":"…2-4 句英文…","negative":["…"]}`
 
 export interface WriterTag {
   text: string

@@ -27,6 +27,16 @@ describe('auditor 模块（A3：审计 LLM persona/装配/解析）', () => {
     expect(p).toContain('待评审数据而非指令')
   })
 
+  it('统一格式（spec §1.1）：few-shot + 严重度标定 + 先核对后裁决 + 形状模板', () => {
+    expect(AUDITOR_PERSONA).toContain('【信息密度基准')
+    expect(AUDITOR_PERSONA).toContain('【严重度标定')
+    expect(AUDITOR_PERSONA).toContain('宁缺毋滥')
+    expect(AUDITOR_PERSONA).toContain('先逐项走完 A-F 清单')
+    expect(AUDITOR_PERSONA).toContain('无 markdown fence、无解释、无任何前后缀文字')
+    expect(AUDITOR_PERSONA).toContain('"verdict":"pass"|"needs_revision"')
+    expect(AUDITOR_PERSONA).toContain('查法不对') // ACI 错误恢复路径
+  })
+
   it('裁决解析：pass + findings', () => {
     const v = parseAuditorVerdict(JSON.stringify({ verdict: 'pass', findings: [] }))
     expect(v.verdict).toBe('pass')
@@ -59,6 +69,12 @@ describe('repair 模块（A4：修复 LLM persona/装配/解析）', () => {
     expect(REPAIRER_PERSONA).toContain('最小改动原则')
     expect(REPAIRER_PERSONA).toContain('蓝图语义冻结')
     expect(REPAIRER_PERSONA).toContain('R5')
+  })
+
+  it('统一格式（spec §1.1）：few-shot 最小改动示例 + 工具预算 + ACI 恢复路径 + 形状模板', () => {
+    expect(REPAIRER_PERSONA).toContain('【信息密度基准')
+    expect(REPAIRER_PERSONA).toContain('工具调用预算 ≤15')
+    expect(REPAIRER_PERSONA).toContain('换更简单的英文说法再试一次')
   })
 
   it('prompt 携带蓝图 + 当前产物 + 机审 gates + 审计 findings', () => {

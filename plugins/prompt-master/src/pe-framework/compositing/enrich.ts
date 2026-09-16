@@ -133,7 +133,11 @@ export function buildEnrichPrompt(v0: SemanticBlueprint): string {
     },
     {
       tag: 'output_contract',
-      body: '仅输出一个 deepMerge patch JSON：{"set":{...},"additions":{...}}（裸 JSON，无 fence，无解释）',
+      body: [
+        '仅输出一个 JSON 对象（裸 JSON：无 markdown fence、无解释、无任何前后缀文字）：',
+        '{"set":{"core":{"scene":{"lighting_idea":"…"}},"composition":{"placement":"…"},"mood":"…"},"additions":{"core":{"style_hints":["…"]}}}',
+        'set/additions 块按需省略；本任务为 one-shot 结构产出：不要调用任何工具',
+      ].join('\n'),
     },
   ])
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRetrievalPack, extractConcepts, PACK_CHAR_BUDGET } from '../../../src/pe-framework/dialect/retrieval-pack.js'
+import { buildRetrievalPack, extractConcepts, PACK_CHAR_BUDGET, type RetrievalPack } from '../../../src/pe-framework/dialect/retrieval-pack.js'
 import type { SemanticBlueprint } from '../../../src/pe-framework/blueprint/semantic-schema.js'
 
 const BP: SemanticBlueprint = {
@@ -47,14 +47,14 @@ describe('buildRetrievalPack (spec §5)', () => {
   })
   it('semantic hit passes through with score', async () => {
     const search = async (q: string) =>
-      q === 'cowboy shot' ? [{ prompt_form: 'cowboy_shot', match_type: 'semantic', score: 0.91, usage_count: 57 }] : []
+      q === 'cowboy shot' ? [{ prompt_form: 'cowboy_shot', match_type: 'semantic', score: 0.91, usage_count: 5700 }] : []
     const pack = await buildRetrievalPack(BP, search)
     const comp = pack.evidence.find((e) => e.concept === 'composition.framing')
     expect(comp?.hits[0]).toMatchObject({ prompt_form: 'cowboy_shot', score: 0.91 })
   })
   it('hits capped at MAX_HITS per concept', async () => {
     const search = async (q: string) =>
-      q.includes('hair') ? Array.from({ length: 7 }, (_, i) => ({ prompt_form: `hit${i}`, match_type: 'fuzzy' })) : []
+      q.includes('hair') ? Array.from({ length: 7 }, (_, i) => ({ prompt_form: `hit${i}`, match_type: 'fuzzy', usage_count: 500 })) : []
     const pack = await buildRetrievalPack(BP, search)
     expect(pack.evidence.find((e) => e.concept === 'S1.appearance')?.hits.length).toBe(5)
   })
@@ -81,3 +81,74 @@ describe('buildRetrievalPack (spec §5)', () => {
     expect(pack.artists.map((a) => a.prompt_form)).toEqual(['@as109'])
   })
 })
+
+describe('向量命中质量门（spec §5 修订 2026-09-16；冒烟噪声形态回归锁 gen_1789525639240）', () => {
+  const NOISE = [
+    // 冒烟实证的真实噪声形态（bge-m3 字面碰瓷命中）
+    { prompt_form: 'nishino - the boy at the bottom of the school caste and also at the top of the underground', match_type: 'semantic', score: 0.88, usage_count: 12 },
+    { prompt_form: 'general:handlebar deepthroat', match_type: 'semantic', score: 0.86, usage_count: 300 },
+    { prompt_form: 'standing upskirt', match_type: 'semantic', score: 0.83, usage_count: 9000 },
+    { prompt_form: 'pathfinder: wrath of the righteous', match_type: 'semantic', score: 0.87, usage_count: 40 },
+  ]
+  it('Q1 原子性：多词长句拒绝', async () => {
+    const pack = await gatedPack(NOISE.slice(0, 1))
+    expect(pack.evidence).toHaveLength(0)
+    expect(pack.unresolved.length).toBeGreaterThan(0)
+  })
+  it('Q2 标点：含冒号/连接结构拒绝（canonical 也不例外）', async () => {
+    const pack = await gatedPack([
+      { prompt_form: 'general:handlebar deepthroat', match_type: 'canonical', usage_count: 999999 },
+    ])
+    expect(pack.evidence).toHaveLength(0)
+  })
+  it('Q3 语义分：score < 0.85 拒绝；≥ 0.85 且频次达标通过', async () => {
+    const pack = await gatedPack([
+      { prompt_form: 'standing upskirt', match_type: 'semantic', score: 0.83, usage_count: 9000 },
+      { prompt_form: 'paper lantern', match_type: 'semantic', score: 0.91, usage_count: 5000 },
+    ])
+    // 同一概念：合格命中留下、低分命中被拒
+    expect(pack.evidence[0].hits.map((h) => h.prompt_form)).toEqual(['paper lantern'])
+  })
+  it('Q4 频次：非 canonical 且 usage_count < 100 拒绝；canonical 免频次门', async () => {
+    const pack = await gatedPack([
+      { prompt_form: 'rare obi', match_type: 'fuzzy', usage_count: 42 },
+      { prompt_form: 'kimono', match_type: 'canonical', usage_count: 1 },
+    ])
+    expect(pack.evidence[0].hits.map((h) => h.prompt_form)).toEqual(['kimono'])
+  })
+  it('拒绝量可观测：advisories 携带 vector_hits_rejected:N', async () => {
+    const pack = await gatedPack(NOISE)
+    expect(pack.advisories?.[0]).toMatch(/^vector_hits_rejected:\d+$/)
+  })
+  it('预算收缩先裁低质：semantic/fuzzy 先于 canonical 被丢弃', async () => {
+    // 构造超预算：每概念 5 hits（1 canonical + 4 长 semantic），echo search 让全部概念命中
+    // → 13 概念 × ~800 字符/概念 ≫ 4096 → 收缩必然触发；qualityRank 低的 semantic 先被裁
+    const hits = [
+      { prompt_form: 'canon', match_type: 'canonical', usage_count: 10 },
+      ...Array.from({ length: 4 }, (_, i) => ({ prompt_form: `semantic ${i} ${'x'.repeat(240)}`, match_type: 'semantic', score: 0.99, usage_count: 1000 })),
+    ]
+    const search = async () => hits
+    const pack = await buildRetrievalPack(BP, search)
+    expect(pack.truncated.length).toBeGreaterThan(0)
+    // canonical（qualityRank 最低）在每个概念的证据里存活
+    expect(pack.evidence.length).toBeGreaterThan(0)
+    expect(pack.evidence.every((e) => e.hits.some((h) => h.prompt_form === 'canon'))).toBe(true)
+  })
+})
+
+/** 最小单概念蓝图：仅 S1.appearance 一个查询（'long black hair'），其余字段空串跳过 */
+const GATED_BP: SemanticBlueprint = {
+  schema_version: 1, media: 'image',
+  core: { concept: 'x',
+    scene: { environment: '', time_of_day: '', weather: '', lighting_idea: '' },
+    style_hints: [] },
+  subjects: [{ id: 'S1', count: 1, identity: '', appearance: 'long black hair', pose: '', expression: '' }],
+  composition: { framing: '', camera_angle: '', placement: '' },
+  mood: '', negative_hints: [],
+}
+
+/** 门测试便捷装配：search 仅对 'long black hair' 返回给定 hits（复用真实 buildRetrievalPack 门逻辑） */
+async function gatedPack(hits: Array<{ prompt_form: string; match_type: string; score?: number; usage_count?: number }>): Promise<RetrievalPack> {
+  const search = async (q: string) => (q === 'long black hair' ? hits : [])
+  return buildRetrievalPack(GATED_BP, search)
+}

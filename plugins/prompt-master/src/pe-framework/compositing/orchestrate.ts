@@ -133,6 +133,7 @@ export async function orchestrateCompositing(
   trace.push({ name: 'retrieval_pack', ms: performance.now() - tPack })
   if (pack.evidence.length === 0 && pack.unresolved.length > 0) advisories.push('evidence_partial')
   if (pack.truncated.length > 0) advisories.push(`evidence_truncated:${pack.truncated.length}`)
+  advisories.push(...(pack.advisories ?? []))
 
   const v1Hash = createHash('sha256').update(JSON.stringify(v1)).digest('hex')
   let corrections = 0

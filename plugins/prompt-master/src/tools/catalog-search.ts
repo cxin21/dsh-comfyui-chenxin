@@ -2,8 +2,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import {
   lastManifestCheck,
   overlayStatus,
-  searchCatalog,
-  type CatalogHit,
+  searchCatalogWithMeta,
   type CatalogQueryOptions,
 } from '../pe-framework/dialect/anima-catalog.js';
 import type { Config } from '../plugin/config.js';
@@ -38,7 +37,11 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
       const mode = (args.mode === 'exact' ? 'exact' : 'auto') as CatalogQueryOptions['mode'];
       let limit = args.limit ?? 5;
       if (!(limit >= 1 && limit <= 20)) limit = 5;
-      const hits: CatalogHit[] = await searchCatalog(tag, { mode, limit });
+      const { hits, advisories: normAdvisories } = await searchCatalogWithMeta(tag, {
+        mode,
+        limit,
+        tagLookup: undefined,
+      });
       const status = overlayStatus();
       // G5：fuzzy 命中仅作候选参考；usage_count 低于采纳阈值时给出 advisory。
       // spec §3.2：semantic 命中的 score/text_source 透传进 result.hits（显式列出契约字段，
@@ -49,9 +52,12 @@ export function registerCatalogSearchTool(_ctx: Context, _config: Config) {
         ...(h.score !== undefined ? { score: h.score } : {}),
         ...(h.text_source !== undefined ? { text_source: h.text_source } : {}),
       }));
-      const advisories = flagged
-        .filter((h) => h.match_type === 'fuzzy' && (h.usage_count ?? 0) < 1000)
-        .map((h) => `fuzzy_below_threshold: usage_count=${h.usage_count ?? 0} 低于采纳阈值 1000，仅作候选参考`);
+      const advisories = [
+        ...normAdvisories,
+        ...flagged
+          .filter((h) => h.match_type === 'fuzzy' && (h.usage_count ?? 0) < 1000)
+          .map((h) => `fuzzy_below_threshold: usage_count=${h.usage_count ?? 0} 低于采纳阈值 1000，仅作候选参考`),
+      ];
       return JSON.stringify({
         hits: flagged,
         advisories: advisories.length > 0 ? advisories : undefined,

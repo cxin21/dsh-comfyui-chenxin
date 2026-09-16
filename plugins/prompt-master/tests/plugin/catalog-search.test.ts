@@ -86,8 +86,8 @@ describe('catalog_search', () => {
 
   it('semantic passthrough: score/text_source flow into result.hits (spec §3.2)', async () => {
     // 真实 catalog 必 miss 的 tag + stub 向量层指向真实 record（JOIN 一定成功）
-    const seed = searchCatalogSync('silvery hair', { mode: 'canonical', limit: 1 })[0];
-    if (!seed?.record_id) throw new Error('fixture seed missing: silvery hair');
+    const seed = searchCatalogSync('twintails', { mode: 'canonical', limit: 1 })[0]; // usage 1.31M——语义 usage 门后存活种子
+    if (!seed?.record_id) throw new Error('fixture seed missing: twintails');
     const seedId: string = seed.record_id;
     setVectorSearch(async (q) =>
       q === 'zzzzzzzzq' ? [{ record_id: seedId, score: 0.82, text_source: 'wiki' as const }] : [],
@@ -97,7 +97,7 @@ describe('catalog_search', () => {
       expect(raw.hits[0].match_type).toBe('semantic');
       expect(raw.hits[0].score).toBe(0.82);
       expect(raw.hits[0].text_source).toBe('wiki');
-      expect(raw.hits[0].prompt_form).toBe('silvery hair');
+      expect(raw.hits[0].prompt_form).toBe('twintails');
       expect(raw.hits[0].candidate).toBe(false); // candidate 标记仍只认 fuzzy
     } finally {
       setVectorSearch(null);

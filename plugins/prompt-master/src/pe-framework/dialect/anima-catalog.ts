@@ -14,6 +14,7 @@ import { resolveKnowledgePath } from '../resources/resolve.js';
 import { assertAnimaCatalog } from '../resources/manifest.js';
 import { openOverlayDb, overlayPath as overlayLibraryPath } from '../anima-knowledge/relations.js';
 import { createVectorSearch, type SemanticHit } from './anima-vector.js';
+import { normalizeSemanticHits, type TagLookupFn, type TagRow } from './semantic-normalize.js';
 
 export interface CatalogHit {
   match_type: 'canonical' | 'alias' | 'fuzzy' | 'semantic' | 'miss';
@@ -38,6 +39,8 @@ export interface CatalogQueryOptions {
   /** G7：source 白名单（names.source_id 精确匹配 ∪ records.source_ids 包含匹配）。
    *  overlay accepted 别名命中同样受 categories/sources 过滤（目标端解析走 records JOIN）。 */
   sources?: string[];
+  /** 实测计划 D1/D2：语义归一化 lookup 注入（测试 stub）；缺省 = createCatalogTagLookup() 真库点查 */
+  tagLookup?: TagLookupFn;
 }
 
 export type MatchKind = 'canonical' | 'alias' | 'fuzzy' | 'miss';
@@ -518,21 +521,106 @@ function applyStringTieBreak(query: string, hits: CatalogHit[]): CatalogHit[] {
  *  降级为空返回，不阻塞、不抛出。调用方注意：本函数为 async——judge-assembly 证据适配器、
  *  catalog_search 工具等异步消费方 await；同步消费方（grounding/F2/召回）必须用 searchCatalogSync。 */
 export async function searchCatalog(tag: string, opts?: CatalogQueryOptions): Promise<CatalogHit[]> {
+  return (await searchCatalogWithMeta(tag, opts)).hits;
+}
+
+/** 带元数据版（实测计划 2026-09-17 D3）：归一化 advisory（semantic_dedupe/malformed/usage_dropped）
+ *  由此透传——catalog_search 工具消费；普通消费方继续用 searchCatalog（只取 hits）。 */
+export interface CatalogSearchResult {
+  hits: CatalogHit[];
+  advisories: string[];
+}
+
+/** D1/D2 默认 lookup：tag-catalog.sqlite records 表（record_id → canonical/form/category/usage；单库即含全部字段）。
+ *  独立缓存句柄（records 查询是点查，避免与 db() 主句柄的 FTS 语句缓存互相污染）。 */
+let recordsDb: DatabaseSync | null = null;
+let recordsMtime = 0;
+export function createCatalogTagLookup(): TagLookupFn {
+  return (recordIds) => {
+    if (recordIds.length === 0) return new Map();
+    const path = resolveKnowledgePath({ skillDir: 'anima-prompt-v1', asset: 'tag-catalog.sqlite' });
+    let mtimeMs = 0;
+    try {
+      mtimeMs = statSync(path).mtimeMs;
+    } catch {
+      return new Map();
+    }
+    if (recordsDb && mtimeMs !== recordsMtime) {
+      try {
+        recordsDb.close();
+      } catch {
+        /* 陈旧句柄 */
+      }
+      recordsDb = null;
+    }
+    if (!recordsDb) {
+      recordsDb = new DatabaseSync(path, { readOnly: true });
+      recordsMtime = mtimeMs;
+    }
+    const placeholders = recordIds.map(() => '?').join(',');
+    const rows = recordsDb
+      .prepare(
+        `SELECT record_id, canonical_name, prompt_form, category, usage_count FROM records WHERE record_id IN (${placeholders})`,
+      )
+      .all(...recordIds) as Array<{
+      record_id: string;
+      canonical_name: string;
+      prompt_form: string;
+      category: string;
+      usage_count: number;
+    }>;
+    const m = new Map<string, TagRow>();
+    for (const r of rows) {
+      m.set(r.record_id, {
+        canonical_name: r.canonical_name,
+        prompt_form: r.prompt_form,
+        category: r.category,
+        usage_count: Number(r.usage_count ?? 0),
+      });
+    }
+    return m;
+  };
+}
+
+let tagLookupSingleton: TagLookupFn | undefined;
+function getCatalogTagLookup(): TagLookupFn {
+  if (tagLookupSingleton === undefined) tagLookupSingleton = createCatalogTagLookup();
+  return tagLookupSingleton;
+}
+
+export async function searchCatalogWithMeta(tag: string, opts?: CatalogQueryOptions): Promise<CatalogSearchResult> {
   const hits = searchCatalogSync(tag, opts);
   const modeRaw = opts?.mode ?? 'auto';
-  if (modeRaw !== 'auto' || hits.length > 0) return hits;
+  if (modeRaw !== 'auto' || hits.length > 0) return { hits, advisories: [] };
   const normalized = normalizeTag(tag);
   const limit = opts?.limit === undefined ? 20 : opts.limit;
-  if (!normalized || limit < 1) return hits;
+  if (!normalized || limit < 1) return { hits, advisories: [] };
   const vs = getVectorSearch();
-  if (!vs) return hits;
+  if (!vs) return { hits, advisories: [] };
   try {
-    const sem = await vs(normalized, limit);
+    // D3 KNN 过采样 ×3：去重/形状清洗/usage 门收缩后仍能裁满 limit。
+    // 注意：SemanticHit 本身无 match_type 字段（joinWithCatalog 之后才加）——归一化前显式打标。
+    const semRaw = (await vs(normalized, limit * 3)).map((h) => ({ ...h, match_type: 'semantic' as const }));
+    const lookup = opts?.tagLookup ?? getCatalogTagLookup();
+    const { items: semNorm, advisories: normAdvisories } = normalizeSemanticHits(semRaw, lookup);
+    const sem = semNorm.slice(0, limit);
     // 子串召回补候选（附录 A1 处置②）：KNN 对拼错查询结构性 miss，三元组 LIKE 扫描召回
     // 含查询子串的 catalog tag（如 selafuku → serafuku），与 KNN 候选按 record_id 去重合并
     // （KNN 在前，带 score），再经 tie-breaker 提位近拼写候选。
-    const sub = substringRecall(normalized, limit);
-    if (!sem.length && !sub.length) return hits;
+    // 实测计划 D3 收口：三元组 OR-LIKE 对长自然语言查询是噪声源（任一三字母序列命中即召回
+    // 高 usage 无关 tag，如 silence→highres 类）——本召回的设计对象是短拼错查询（selafuku 类），
+    // 归一化长度 >24 时跳过（语义层此时本就应命中）。
+    const sub =
+      normalized.length <= 24
+        ? substringRecall(normalized, limit).filter((h) => {
+            const form = normalizeTag(h.prompt_form ?? h.raw ?? '');
+            return form ? levenshteinSimilarity(normalized, form) >= 0.5 : false;
+          })
+        : [];
+    // D3 收口②：三元组 OR-match 是召回装置而非相关度——usage 降序会把高 usage 词碰撞行
+    // （school uniform/eyelashes 类）顶到前面。与 tie-breaker 同尺的 Levenshtein ≥0.5 相关门：
+    // 拼写容错候选（selafuku→serafuku=0.875）保留，词碰撞丢弃。
+    if (!sem.length && !sub.length) return { hits, advisories: normAdvisories };
     const merged: Array<{ record_id?: string; score?: number; text_source?: 'wiki' | 'fallback' }> = [];
     const seenIds = new Set<string>();
     for (const s of [...sem, ...sub]) {
@@ -541,10 +629,10 @@ export async function searchCatalog(tag: string, opts?: CatalogQueryOptions): Pr
       merged.push(s);
     }
     const joined = applyStringTieBreak(normalized, joinWithCatalog(merged)).slice(0, limit);
-    return joined.length ? joined : hits;
+    return { hits: joined.length ? joined : hits, advisories: normAdvisories };
   } catch {
     // 增强层纪律：语义层故障只降级为空，永不阻塞前四级级联结果
-    return hits;
+    return { hits, advisories: [] };
   }
 }
 

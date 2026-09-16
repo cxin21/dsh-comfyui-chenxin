@@ -22,7 +22,7 @@ afterAll(() => {
 
 describe('semantic level in auto cascade (spec §3.2)', () => {
   it('auto 级联前四级全空 → 落到 semantic 层（stub 向量层，零真库依赖）', async () => {
-    const seed = seedRecordId('silvery hair');
+    const seed = seedRecordId('twintails'); // usage 1.31M ≥100——usage 门后仍存活的种子（audit F：语义层 usage 门契约）
     setVectorSearch(async (q) =>
       q === 'zzzzzzzzq' ? [{ record_id: seed.record_id, score: 0.82, text_source: 'wiki' as const }] : [],
     );
@@ -51,7 +51,7 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
   });
 
   it('字符串 tie-breaker 不触发于无近拼写命中的查询（zzzzzzzzq 类）', async () => {
-    const seed = seedRecordId('silvery hair');
+    const seed = seedRecordId('twintails'); // usage 1.31M ≥100——usage 门后仍存活的种子（audit F：语义层 usage 门契约）
     setVectorSearch(async () => [{ record_id: seed.record_id, score: 0.82, text_source: 'wiki' as const }]);
     const hits = await searchCatalog('zzzzzzzzq', { mode: 'auto', limit: 5 });
     expect(hits[0].prompt_form).toBe(seed.prompt_form); // 序保持 = 原 semantic 序
@@ -67,13 +67,15 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
     expect(hits.find((h) => h.prompt_form === 'serafuku')?.match_type).toBe('fuzzy');
   });
 
-  it('子串召回 + tie-breaker 组合：KNN 返回高分类似 typo 时，子串召回的 serafuku 被 tie-breaker 提到 #1', async () => {
+  it('子串召回 + tie-breaker 组合：KNN typo 命中触发递进放宽，serafuku 提到 #1、serfafuku 垫尾（递进式契约）', async () => {
+    // 递进式两档（用户裁决）：KNN 仅 serfafuku（usage 0）→ 严档饥饿 → 宽档回收；
+    // 子串召回的 serafuku（usage 375K）经 tie-breaker 提位 #1，serfafuku 作为低置信候选垫尾。
     const typo = seedRecordId('serfafuku');
     setVectorSearch(async () => [{ record_id: typo.record_id, score: 0.7742, text_source: 'fallback' as const }]);
     const hits = await searchCatalog('selafuku', { mode: 'auto', limit: 10 });
-    // 子串召回带进 serafuku（lev_sim 0.875 ≥0.8 提位）+ KNN 的 serfafuku（0.78 <0.8 不提位）
     expect(hits[0].prompt_form).toBe('serafuku');
-    expect(hits.map((h) => h.prompt_form)).toContain('serfafuku');
+    const serfafukuIdx = hits.map((h) => h.prompt_form).indexOf('serfafuku');
+    expect(serfafukuIdx).toBeGreaterThan(0); // 回收但排在 serafuku 之后（垫尾）
   });
 
   it('子串召回对 <3 字符查询安全（不触发、不崩溃）且级联行为不变', async () => {
@@ -132,7 +134,7 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
     ) as Array<{ record_id: string; prompt_form: string }>;
     if (!atRows.length) throw new Error('fixture missing: no @-prefixed record in catalog');
     expect((atRows[0].prompt_form ?? '').startsWith('@')).toBe(true);
-    const seed = seedRecordId('silvery hair');
+    const seed = seedRecordId('twintails'); // usage 1.31M ≥100——usage 门后仍存活的种子（audit F：语义层 usage 门契约）
     setVectorSearch(async () => [
       { record_id: atRows[0].record_id, score: 0.95, text_source: 'wiki' },
       { record_id: seed.record_id, score: 0.82, text_source: 'wiki' },

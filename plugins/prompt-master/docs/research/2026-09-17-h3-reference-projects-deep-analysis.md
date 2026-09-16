@@ -104,3 +104,63 @@
 ## E. 明确不采纳（同第一轮 + 本轮新增）
 
 workflow JSON 构建/提交监控/剪映拼合（D-U3）；剧本生成层；六独立 agent；5000 字符限（tokenizer 精确计数）；V1/V2 双版本；审稿覆盖矩阵（单审计 LLM）；leos output-contracts 的中文纯文本模板外壳（我们输出集成格式 JSON 管线，模板思想进 persona 纪律）。
+
+---
+
+## F. ★官方提示词技能精读（第三轮：MiniMax-AI/MiniMax-H3 官方库）
+
+用户质询"官方的提示词技能"后定位官方本体：**`MiniMax-AI/MiniMax-H3` 模型库内 `skills/h3-prompt-writing/`**（SKILL.md + `references/base-en.txt` 222 行 + `references/ref-en.txt` 341 行，全读）+ `skills/` 下 10 个官方下游技能（3d-animation/brand-promo/game-intro/music-video 等，各含 qc-checklist/shot-table-spec/storyboard-guidelines——目录级，实施期按 stage 取材）。整库 `git clone` 本地化：`C:\Users\11245\AppData\Local\Temp\h3-refs\MiniMax-H3\`。
+
+### F1 官方 stage 模型（修正 spec 事实缺口）
+
+**官方 5 stages**：T2VA / I2VA / FL2VA / L2VA / Ref2VA。官方输出格式：
+
+- **base 四模式**（T2VA/I2VA/FL2VA/L2VA）：`integrated_multimodal_description` + `overall_soundscape` + `non_diegetic_music` 三字段；I2VA/FL2VA/L2VA 首行为固定对齐前言（逐字：`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.` / `How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark...; Picture 2 (from Shot N) aligns with the S.SS-second mark...` / `<Picture 1> (from [Shot N]) aligns with the S.SS-second mark...`）
+- **Ref2VA**：六段式 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music
+- **对照结论：dialect/h3.ts 已逐字实现全部分 stage 格式**（alignmentPreamble 三种前言与官方逐字一致；buildRef2vaText 六段式 + `[reference generation]` 前缀 + fully_preserved 文案；golden 测试锁定的即官方文案）——**spec v2.1 的 stage 枚举（t2v/i2v/ref2v）写错，本节修正为官方 5 stages**
+
+### F2 官方对白契约（G-dialogue 权威依据，含 dialect 缺口）
+
+- 稳定 speaker ID `(S1)(S2)`，合唱 `(S1,S2)`；跨镜同 ID；从不发声的角色无 ID
+- 身份描述短语 + ID + 动作 + 语气在 `<d>` **之外**；`<d>` 内**只有语言标签 + 用户口语原文**（逐字保真，不翻译不改写）
+- 画外音：固定短语 `says in an off-screen voiceover` + `<d>` 块后紧跟 `while his lips remain completely closed.`
+- 对白跨切：`<scenetrans>` 两处标注 + 显式声明跨切延续；片尾截断：`<cutoff>`
+- **dialect 缺口**：`buildDialogue` 只发 `<d>[lang] text</d>`，无 (S1) ID 发射/voiceover 短语/scenetrans/cutoff——触及"dialect 契约零改动"不变式，标注为 **dialect 增强候选（需用户裁决）**；管线侧先以机检/审计承载
+
+### F3 官方运镜三维语法
+
+12 种 motion type（Zoom In/Out、Push In/Out、Pan L/R、Truck L/R、Tilt Up/Down、Pedestal Up/Down、Arc Shot、Tracking Shot、Static Shot、Shake Slightly/Strongly、POV、Roll CW/CCW）× 幅度（small/large amplitude，中幅常省略）× 速度（slow/fast）；**写成镜头内自然英语动作**（"The camera pushes in with small amplitude at slow speed toward..."），禁止堆叠标签
+
+### F4 官方切点语法
+
+首镜**无时间戳**；后续镜 `[Shot N] At 00:03.500, ...`（mm:ss.mmm，严格递增且在时长内）；切点动词枚举（camera cuts to/shot cuts to/transitions to/changes to/switches to；cross-dissolve/fade/wipe 仅用户要求时）；**cut 必须引入新信息**——仅距离/角度变化优先运镜
+
+### F5 官方声音/画面文字规则
+
+- overall_soundscape：1-4 句英文单段（环境/动作声/非人声）；对白/歌声/剧中音乐不重复进此段；N/A 仅当用户明确要求全静默
+- non_diegetic_music：1-3 句（乐器/速度/节奏/动态），禁抽象情绪词；角色可听音乐是剧中事件归 multimodal；无则 N/A
+- 画面可见文字：英文双引号逐字保留原语言（"营业中"例）
+
+### F6 Ref2VA 六段细则（ref-en.txt）
+
+- **summary 任务类型前缀六分类**（可 `+` 组合）：`[reference generation]` / `[keyframe completion]` / `[video editing]` / `[video continuation]` / `[audio reuse]` / `[audio reference]`；仅提供运镜/节奏的视频 → reference generation 而非 editing
+- **retention 标记**：可见 fully_preserved / partially_preserved / attribute_transfer / weak_reference；音频 fully_copy / partially_copy / reference / weak_reference；条目格式 `<Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - ...`
+- **reference label 语法**：`<Subject N>` 可复用内容（一人可多资产合成定义）；`<Picture N>` 独立条目仅限首帧/关键帧/末帧/构图锚（仅定义角色服装时并入 Subject 不单列）；`<Video N>` 整片关系专用；`<Audio N>` 音色参考绑定 `<Subject N> (S1)`
+- **FL2VA 偏好单镜**（连续插值）；L2VA 结构：合理前态→显式过渡→末镜收敛→落位
+- 时长 4-15s；detail 标准：每镜明确构图/主体位置/环境光照/动作状态变化/运镜/当前声音/参考生效点——**禁止剧情摘要式或纯参考关系列表式描述**
+
+## G. Spec 修正（v2.2，基于 F 节官方证据）
+
+| Δ   | 内容                                                                                                                                                                                                                                          | spec 落点 |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| R1  | **stage 枚举修正**：t2v/i2v/ref2v → 官方 5 stages `t2va/i2va/fl2va/l2va/ref2va`；G-refbinding 矩阵按 5 stages 重建（t2va 无引用；i2va=Picture 1 首帧；fl2va=Picture 1+2 首尾帧；l2va=Picture 1 末帧；ref2va=identity/location/prop subjects） | §4/§6     |
+| R2  | **S3 角色重定义**：逐镜产出 **H3Shot 内容字段**（what/who/duration/camera/action/micro/carry/ambient/dialogue），**官方分 stage 格式由 dialect 确定性编译**（golden 已逐字节对齐官方 base-en/ref-en）——LLM 产内容、确定性层管格式，零格式漂移 | §5        |
+| R3  | **官方对白契约进 S3 persona + 机检**：speaker 稳定 ID/`<d>` 只装口语原文/voiceover 短语+闭嘴声明/`<scenetrans>`/`<cutoff>`                                                                                                                    | §5/§6     |
+| R4  | **官方运镜三维语法 + 切点语法进 S2/S3 persona + 机检**（12 motion types × amplitude × speed 自然英语；首镜无时间戳/切点递增/cut 必须引入新信息）                                                                                              | §5/§6     |
+| R5  | **Ref2VA 六段细则进机检**：summary 任务类型前缀六分类、retention 四标记枚举（dialect 已实现，机检对账）、detailed_description 禁剧情摘要式                                                                                                    | §6        |
+| R6  | **h3-prompt-writing base-en/ref-en 官方黄金文本 = golden 测试与 dialect 对账的权威源**（官方技能引用进 spec 证据链）                                                                                                                          | 全文      |
+| R7  | **dialect 增强候选（需用户裁决，触及不变式）**：buildDialogue 补 (S1) 稳定 ID 发射/voiceover 短语/`<scenetrans>`/`<cutoff>`——当前管线以机检+审计承载，不动 dialect                                                                            | §6 标注   |
+
+## H. 证据覆盖声明（v2）
+
+三轮累计：director-suite 6 份核心文档全读；leos 7 份精读（另 7 份 = persona 实施期资料源：directing-grammar/performance-direction/cinematography-direction/spatial-and-assets/role-council/continuity-and-learning/knowledge-and-provenance）；short-drama 2 份精读（其余为剧本层工艺，超范围）；**官方 MiniMax-AI/MiniMax-H3 库：h3-prompt-writing 三件全读 + 官方下游技能 10 个目录级**（实施期按 stage 取材其 qc-checklist/shot-table-spec/storyboard-guidelines）。

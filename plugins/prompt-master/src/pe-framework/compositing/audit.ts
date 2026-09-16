@@ -37,6 +37,11 @@ const OVERLAP_THRESHOLD = 0.85
 
 const norm = (s: string): string => s.trim().toLowerCase()
 
+/** NL 分句（nl_tag_overlap 与 vector-sim prewarm 共用单一事实源，防切分漂移；audit P1） */
+export function splitNlSentences(nl: string): string[] {
+  return nl.split(/(?<=\.)\s+/).filter((s) => s.trim() !== '')
+}
+
 export function auditCompositing(
   out: WriterOutput,
   pack: RetrievalPack,
@@ -98,7 +103,7 @@ export function auditCompositing(
   }
 
   // nl_tag_overlap：词面包含 或 bge-base-en-v1.5 余弦 ≥ 阈值（spec §7 D6）
-  const sentences = out.nl.split(/(?<=\.)\s+/).filter((s) => s.trim() !== '')
+  const sentences = splitNlSentences(out.nl)
   let vectorUnavailable = false
   let vectorChecked = false
   for (const s of sentences) {

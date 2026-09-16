@@ -33,6 +33,8 @@ export interface CompositingDeps {
   search: CatalogSearchFn
   /** bge-base-en-v1.5 相似度注入点（NL 句 × tag）；缺省 → 审计仅词面 + overlap_vector_unavailable */
   vectorSim?: (a: string, b: string) => number | undefined
+  /** audit P1：审计前预热向量缓存（嵌入异步而审计同步，故拆两半）；缺省/故障 → sim 对未缓存对 undefined */
+  vectorPrewarm?: (nl: string, tags: string[]) => Promise<void>
 }
 
 export interface CompositingOutcome {
@@ -120,6 +122,17 @@ export async function orchestrateCompositing(
   const trace: Array<{ name: 'semantic_enrich' | 'retrieval_pack' | 'writer_loop'; ms: number }> = []
   const maxCorrections = opts.maxCorrections ?? 2
 
+  // audit P1：审计前预热 nl_tag_overlap 向量缓存（嵌入异步、审计同步，接缝拆两半）。
+  // 故障静默——未缓存对 sim=undefined，audit 自然落入词面路径。
+  const prewarmOverlap = async (o: WriterOutput): Promise<void> => {
+    if (!deps.vectorPrewarm) return
+    try {
+      await deps.vectorPrewarm(o.nl, o.tags.map((t) => t.text))
+    } catch {
+      /* prewarm 故障不阻塞审计 */
+    }
+  }
+
   // S2 扩写
   const tEnrich = performance.now()
   const enriched = await runSemanticEnrich(v0, { runner: deps.enrichRunner })
@@ -177,11 +190,13 @@ export async function orchestrateCompositing(
       writerOut = deterministicCompose(v1, pack)
       fallbackUsed = true
       advisories.push('writer_fallback_used')
+      await prewarmOverlap(writerOut)
       gates = auditCompositing(writerOut as WriterOutput, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
       break
     }
 
     // S4 审计
+    await prewarmOverlap(writerOut as WriterOutput)
     gates = auditCompositing(writerOut as WriterOutput, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
     const critical = gates.filter((g) => g.severity === 'critical')
 
@@ -219,6 +234,7 @@ export async function orchestrateCompositing(
     writerOut = deterministicCompose(v1, pack)
     fallbackUsed = true
     advisories.push('writer_fallback_used')
+    await prewarmOverlap(writerOut)
     gates = auditCompositing(writerOut, pack, v1, { vectorSim: deps.vectorSim, rating, ...(opts.minTags !== undefined ? { minTags: opts.minTags } : {}) })
   }
 

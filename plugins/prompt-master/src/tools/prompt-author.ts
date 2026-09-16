@@ -12,6 +12,8 @@ import { runStage } from '../pe-framework/pipeline/runStage.js'
 import { createProductionEvidenceDeps, createProductionCriticProvider } from '../pe-framework/pipeline/judge-assembly.js'
 import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js'
 import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js'
+// audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
+import { getSharedBgeOverlapSim } from '../pe-framework/compositing/vector-sim.js'
 import { searchCatalog } from '../pe-framework/dialect/anima-catalog.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
@@ -1112,12 +1114,16 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
           : undefined
         const critic = judgeOpts?.criticProvider
+        // audit P1：bge 余弦注入 nl_tag_overlap（嵌入在审计前经 vectorPrewarm 预热进进程缓存）
+        const overlapSim = getSharedBgeOverlapSim()
         const tOrch0 = performance.now()
         const outcome = await orchestrateCompositing(draft.semantic, resolved.rating, {
           ...(enrichRunner ? { enrichRunner } : {}),
           ...(writerRunner ? { writerRunner } : {}),
           ...(critic ? { critic } : {}),
           search: async (q: string) => searchCatalog(q),
+          vectorSim: overlapSim.sim,
+          vectorPrewarm: overlapSim.prewarm,
         }, { maxCorrections: MAX_CORRECTIONS })
         traceExtra.push({ name: 'compositing_orchestrate', ms: performance.now() - tOrch0 })
 

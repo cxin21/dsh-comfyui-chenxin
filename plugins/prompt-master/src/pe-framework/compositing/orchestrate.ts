@@ -37,8 +37,12 @@ export interface CompositingDeps {
   vectorPrewarm?: (nl: string, tags: string[]) => Promise<void>
 }
 
+export type CompositingQuality = 'passed' | 'degraded' | 'fallback'
+
 export interface CompositingOutcome {
   ok: boolean
+  /** audit P3：质量三态——调用方读此一键即知产品质量带，无需解析 advisories。ok 语义不变（D7） */
+  quality: CompositingQuality
   positive: string
   negative: string
   gates: CompositingGate[]
@@ -247,6 +251,7 @@ export async function orchestrateCompositing(
 
   return {
     ok,
+    quality: fallbackUsed ? 'fallback' : corrections > 0 ? 'degraded' : 'passed',
     positive,
     negative,
     gates,

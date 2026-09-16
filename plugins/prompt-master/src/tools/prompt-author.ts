@@ -1168,6 +1168,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           ],
         }, {
           generation_id: generationId,
+          // audit P3：compositing 分支顶层质量三态（passed/degraded/fallback），条件键风格对齐 blueprint_id
+          quality: outcome.quality,
           ...judgeTopLevel(stage),
           rating: { resolved: resolved.rating, escalatedFrom: resolved.escalatedFrom, source: resolved.source },
           aesthetics: { recommendedCards },

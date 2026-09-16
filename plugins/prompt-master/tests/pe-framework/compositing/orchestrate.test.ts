@@ -118,4 +118,22 @@ describe('orchestrateCompositing (spec §2/§8)', () => {
     expect(outcome.advisories.some((a) => a.startsWith('judge_skipped'))).toBe(true)
     expect(outcome.ok).toBe(true)
   })
+  it('repair round judge prompt carries previous findings (audit P4a 跨轮去重)', async () => {
+    const criticPrompts: string[] = []
+    const outcome = await orchestrateCompositing(V0, 'safe', {
+      enrichRunner: async () => ENRICH_PATCH,
+      writerRunner: async () => VALID_OUT,
+      critic: async (p: unknown) => {
+        criticPrompts.push(typeof p === 'string' ? p : JSON.stringify(p))
+        return NEEDS_JUDGE
+      },
+      search: SEARCH,
+    }, { minTags: 0 })
+    expect(criticPrompts.length).toBeGreaterThanOrEqual(2)
+    expect(criticPrompts[0]).not.toContain('<previous_findings>')
+    // 第二轮 judge 必须看到第一轮的 major finding requiredFix，才能执行去重指令
+    expect(criticPrompts[1]).toContain('<previous_findings>')
+    expect(criticPrompts[1]).toContain('express nocturnal mood in nl')
+    expect(outcome.corrections).toBe(2)
+  })
 })

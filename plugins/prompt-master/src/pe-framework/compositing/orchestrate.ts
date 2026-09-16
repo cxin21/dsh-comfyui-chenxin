@@ -73,8 +73,9 @@ async function runJudge(
   out: WriterOutput,
   v1: SemanticBlueprint,
   pack: RetrievalPack,
+  previousFindings: string[],
 ): Promise<{ judge?: CompositingJudgeResult; judgeFeedback: string[]; advisories: string[] }> {
-  const prompt = buildCompositingJudgePrompt(out, v1, pack)
+  const prompt = buildCompositingJudgePrompt(out, v1, pack, { previousFindings })
   let raw: string
   try {
     raw = await critic(prompt)
@@ -160,6 +161,7 @@ export async function orchestrateCompositing(
   let judge: CompositingJudgeResult | undefined
   let judgeFeedback: string[] = []
   let fallbackUsed = false
+  let lastJudgeFindings: string[] = []
   const t0 = performance.now()
 
   while (true) {
@@ -206,10 +208,14 @@ export async function orchestrateCompositing(
 
     // S4 judge（规则 critical 时跳审——沿 legacy rule_critical 语义）
     if (critical.length === 0 && deps.critic) {
-      const j = await runJudge(deps.critic, writerOut as WriterOutput, v1, pack)
+      const j = await runJudge(deps.critic, writerOut as WriterOutput, v1, pack, lastJudgeFindings)
       advisories.push(...j.advisories)
       judge = j.judge
       judgeFeedback = j.judgeFeedback
+      // audit P4a：本轮 major/blocker findings 传下轮 judge（去重指令由 prompt 携带）
+      lastJudgeFindings = (j.judge?.findings ?? [])
+        .filter((f) => f.severity === 'major' || f.severity === 'blocker')
+        .map((f) => f.requiredFix)
     }
 
     const judgeFailed = judge?.verdict === 'needs_revision'

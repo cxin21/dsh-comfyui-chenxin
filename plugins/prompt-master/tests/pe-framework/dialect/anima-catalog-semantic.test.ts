@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest'
-import { searchCatalog, searchCatalogSync, setVectorSearch, closeCatalog, queryCatalogInternal } from '../../../src/pe-framework/dialect/anima-catalog.js'
+import { searchCatalog, searchCatalogSync, setVectorSearch, closeCatalog, queryCatalogInternal, prewarmSemanticQueries } from '../../../src/pe-framework/dialect/anima-catalog.js'
 
 /** 取一条真实 canonical 记录作为 semantic stub 的 JOIN 目标（record_id 形态不对测试硬编码） */
 function seedRecordId(tag: string): { record_id: string; prompt_form: string } {
@@ -142,5 +142,34 @@ describe('semantic level in auto cascade (spec §3.2)', () => {
     })
     expect(searchCatalogSync('zzzzzzzzq', { mode: 'auto', limit: 5 })).toEqual([])
     expect(semanticQueried).toBe(false)
+  })
+})
+
+describe('prewarmSemanticQueries（audit P4b：同步命中过滤 + 批量预热转发）', () => {
+  it('同步级联已命中的 query 跳过；仅语义候选转发 prewarm；query 去重', async () => {
+    const prewarmed: string[][] = []
+    setVectorSearch(Object.assign(async () => [], {
+      prewarm: async (qs: string[]) => { prewarmed.push(qs) },
+    }))
+    // 'silvery hair' = 真实 canonical（seedRecordId 同款）；'zzzzzzzzq' 同步全空 → 语义候选
+    await prewarmSemanticQueries(['silvery hair', 'zzzzzzzzq', 'zzzzzzzzq'])
+    expect(prewarmed).toEqual([['zzzzzzzzq']])
+  })
+
+  it('向量 seam 无 prewarm 方法（旧形态注入）→ no-op 不抛', async () => {
+    setVectorSearch(async () => [])
+    await expect(prewarmSemanticQueries(['zzzzzzzzq'])).resolves.toBeUndefined()
+  })
+
+  it('语义层禁用（null）→ no-op 不抛', async () => {
+    setVectorSearch(null)
+    await expect(prewarmSemanticQueries(['zzzzzzzzq'])).resolves.toBeUndefined()
+  })
+
+  it('prewarm 故障不抛出（best-effort，与向量层降级纪律一致）', async () => {
+    setVectorSearch(Object.assign(async () => [], {
+      prewarm: async () => { throw new Error('prewarm boom') },
+    }))
+    await expect(prewarmSemanticQueries(['zzzzzzzzq'])).resolves.toBeUndefined()
   })
 })

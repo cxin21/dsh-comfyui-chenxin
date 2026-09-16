@@ -182,11 +182,17 @@ export interface SemanticHit {
 
 const DEFAULT_THRESHOLD = 0.55
 
+/** audit P4b：向量检索闭包形状——prewarm 供检索包在并行查询前一次 extractor 调用批量嵌入
+ *  （bge ONNX 单条 ~4-6s，14+ 概念逐条嵌入是管线延迟大头；批量 + 缓存把 N 次 → 1 次） */
+export type VectorSearchFn = ((query: string, k: number) => Promise<SemanticHit[]>) & {
+  prewarm: (queries: string[]) => Promise<void>
+}
+
 export function createVectorSearch(opts?: {
   dbPath?: string
   embed?: EmbedFn
   threshold?: number
-}): (query: string, k: number) => Promise<SemanticHit[]> {
+}): VectorSearchFn {
   const threshold = opts?.threshold ?? (process.env.PM_SEMANTIC_THRESHOLD ? Number(process.env.PM_SEMANTIC_THRESHOLD) : DEFAULT_THRESHOLD)
   // 惰性解析（对齐 anima-catalog MF-1）：dbPath 在首次查询时才求值，避免模块求值期触碰文件系统
   let resolvedPath: string | null = null
@@ -215,6 +221,35 @@ export function createVectorSearch(opts?: {
   let mtime = 0
   let warned = false
   let metaWarned = false
+  // audit P4b：查询向量缓存——prewarm 批量填充，查询期命中则零嵌入调用
+  const queryVecCache = new Map<string, Float32Array>()
+  const getCachedOrEmbed = async (query: string): Promise<Float32Array | undefined> => {
+    const cached = queryVecCache.get(query)
+    if (cached) return cached
+    if (!embedFn) return undefined
+    const rows = await embedFn([query], 'query')
+    const v = rows[0]
+    if (v && v.length > 0) queryVecCache.set(query, v)
+    return v
+  }
+  const prewarm = async (queries: string[]): Promise<void> => {
+    if (!embedFn) return
+    // CJK/空串与查询入口同规则拒收（英文单语域）；去重 + 跳过已缓存
+    const missing = [...new Set(queries)].filter((q) => {
+      if (!q || /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(q)) return false
+      return !queryVecCache.has(q)
+    })
+    if (missing.length === 0) return
+    try {
+      const rows = await embedFn(missing, 'query')
+      missing.forEach((q, i) => {
+        const v = rows[i]
+        if (v && v.length > 0) queryVecCache.set(q, v)
+      })
+    } catch {
+      // 预热 best-effort：失败 → 查询期各自单条嵌入照旧（或降级为空），不阻塞管线
+    }
+  }
   const warn = (msg: string) => {
     if (!warned) {
       warned = true
@@ -255,7 +290,7 @@ export function createVectorSearch(opts?: {
     }
     return db
   }
-  return async (query: string, k: number): Promise<SemanticHit[]> => {
+  const searchFn = async (query: string, k: number): Promise<SemanticHit[]> => {
     if (!query || k < 1) return []
     // 英文匹配约束（用户定案）：查询含 CJK（汉字/假名）时直接拒绝——不编码、不检索，
     // 中文 tag 走 catalog_miss advisory 既有路径。索引与查询必须同语域，跨语言不在本层。
@@ -270,7 +305,8 @@ export function createVectorSearch(opts?: {
         warn('api embedder unavailable (check PM_EMBED_API_BASE/KEY/MODEL)')
         return []
       }
-      const q = await embedFn([query], 'query')
+      const q = await getCachedOrEmbed(query)
+      if (!q) return []
       // provenance 对账（spec §3.3 fail-fast）：查询向量维度必须与 meta 落盘的索引维度一致。
       // 错配 = 配置错误（建库/查询两侧模型漂移），不是环境故障——显式抛类型化错误，
       // 不走下方 catch-all 静默降级（2026-09-15 实测教训：768/1024 双默认曾一度并存）。
@@ -280,14 +316,14 @@ export function createVectorSearch(opts?: {
           metaWarned = true
           warn('vector db has no meta provenance (pre-meta build) — dim verification skipped; rebuild to enable fail-fast')
         }
-      } else if (Number.isFinite(meta.dim) && q[0].length !== meta.dim) {
+      } else if (Number.isFinite(meta.dim) && q.length !== meta.dim) {
         const msg =
-          `vector dim mismatch: index dim=${meta.dim} (model=${meta.model}) vs query dim=${q[0].length} — ` +
+          `vector dim mismatch: index dim=${meta.dim} (model=${meta.model}) vs query dim=${q.length} — ` +
           'align query-side PM_EMBED_MODEL/PM_EMBED_PROVIDER with the index, or rebuild tag-vector.sqlite'
         console.error(`[prompt-master] semantic layer FAIL-FAST: ${msg}`)
         throw new VectorDimensionMismatchError(msg)
       }
-      const qv = quantizeInt8(q[0])
+      const qv = quantizeInt8(q)
       const rows = d.prepare(
         `SELECT payload.record_id, payload.text_source, vec_items.distance
          FROM vec_items JOIN payload ON payload.rowid = vec_items.rowid
@@ -305,4 +341,5 @@ export function createVectorSearch(opts?: {
       return []
     }
   }
+  return Object.assign(searchFn, { prewarm })
 }

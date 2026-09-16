@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildRetrievalPack, extractConcepts, PACK_CHAR_BUDGET, type RetrievalPack } from '../../../src/pe-framework/dialect/retrieval-pack.js'
 import type { SemanticBlueprint } from '../../../src/pe-framework/blueprint/semantic-schema.js'
 
@@ -152,3 +152,31 @@ async function gatedPack(hits: Array<{ prompt_form: string; match_type: string; 
   const search = async (q: string) => (q === 'long black hair' ? hits : [])
   return buildRetrievalPack(GATED_BP, search)
 }
+
+describe('prewarm seam（audit P4b：检索前批量预热，Phase 2 收口）', () => {
+  it('prewarm 以去重后的 query 清单调一次，先于任何 search', async () => {
+    const callOrder: string[] = []
+    const prewarm = vi.fn(async (qs: string[]) => { callOrder.push(`prewarm:${qs.join('|')}`) })
+    const search = vi.fn(async (q: string) => { callOrder.push(`search:${q}`); return [] })
+    await buildRetrievalPack(BP, search, {}, prewarm)
+    expect(prewarm).toHaveBeenCalledTimes(1)
+    const pwArg = prewarm.mock.calls[0][0] as string[]
+    expect(new Set(pwArg).size).toBe(pwArg.length) // 去重
+    expect(callOrder[0].startsWith('prewarm:')).toBe(true) // 预热先于检索
+  })
+
+  it('有/无 prewarm 的 pack 产出字节级一致（纯性能缝，零语义变化）', async () => {
+    const search = async (q: string) =>
+      q.includes('hair') ? [{ prompt_form: 'long hair', match_type: 'canonical', usage_count: 891234 }] : []
+    const without = await buildRetrievalPack(BP, search)
+    const withPw = await buildRetrievalPack(BP, search, {}, async () => {})
+    expect(JSON.stringify(withPw)).toBe(JSON.stringify(without))
+  })
+
+  it('prewarm 故障降级：pack 照常构建（预热是 best-effort）', async () => {
+    const search = async (q: string) =>
+      q.includes('hair') ? [{ prompt_form: 'long hair', match_type: 'canonical', usage_count: 891234 }] : []
+    const pack = await buildRetrievalPack(BP, search, {}, async () => { throw new Error('prewarm boom') })
+    expect(pack.evidence.find((e) => e.concept === 'S1.appearance')?.hits[0]).toMatchObject({ prompt_form: 'long hair' })
+  })
+})

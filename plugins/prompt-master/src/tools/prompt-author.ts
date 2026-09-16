@@ -14,7 +14,7 @@ import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js'
 import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js'
 // audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
 import { getSharedBgeOverlapSim } from '../pe-framework/compositing/vector-sim.js'
-import { searchCatalog } from '../pe-framework/dialect/anima-catalog.js'
+import { searchCatalog, prewarmSemanticQueries } from '../pe-framework/dialect/anima-catalog.js'
 import type { CriticProvider, CriticFinding } from '../pe-framework/eval/critic.js'
 import type { EvidenceDeps } from '../pe-framework/eval/evidence.js'
 import { assembleEnvelope, computeNextAction, type RepairHint } from '../pe-framework/render/envelope.js'
@@ -1122,6 +1122,8 @@ export function registerAuthorTool(ctx: Context, config: Config) {
           ...(writerRunner ? { writerRunner } : {}),
           ...(critic ? { critic } : {}),
           search: async (q: string) => searchCatalog(q),
+          // audit P4b：检索包批量预热（bge ONNX 14+ 概念逐条嵌入 → 1 次批量调用）
+          retrievalPrewarm: prewarmSemanticQueries,
           vectorSim: overlapSim.sim,
           vectorPrewarm: overlapSim.prewarm,
         }, { maxCorrections: MAX_CORRECTIONS })

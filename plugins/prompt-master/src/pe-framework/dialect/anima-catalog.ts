@@ -91,15 +91,20 @@ export function setCatalogPath(path: string): void {
 
 /* ── semantic 层 seam（spec §3.2/§6）：惰性装配，测试可注入/禁用（null=禁用语义层）──
  * 增强层纪律：装配失败 → null（语义层静默缺席），前四级级联永不受阻；查询期零网络
- * （向量库缺失时 createVectorSearch 的查询闭包自降级为空，模型永不加载）。 */
-let vectorSearch: ((q: string, k: number) => Promise<SemanticHit[]>) | null | undefined
+ * （向量库缺失时 createVectorSearch 的查询闭包自降级为空，模型永不加载）。
+ * audit P4b：seam 可携带可选 prewarm（批量预热查询向量缓存）；测试注入的旧形态
+ * 纯函数（无 prewarm）依旧合法。 */
+type VectorSeam = ((q: string, k: number) => Promise<SemanticHit[]>) & {
+  prewarm?: (queries: string[]) => Promise<void>
+}
+let vectorSearch: VectorSeam | null | undefined
 
 /** 测试/调用方注入 seam：传 null 显式禁用语义层（此后 getVectorSearch 恒为 null，不再惰性装配） */
-export function setVectorSearch(s: ((q: string, k: number) => Promise<SemanticHit[]>) | null): void {
+export function setVectorSearch(s: VectorSeam | null): void {
   vectorSearch = s
 }
 
-function getVectorSearch(): ((q: string, k: number) => Promise<SemanticHit[]>) | null {
+function getVectorSearch(): VectorSeam | null {
   if (vectorSearch === undefined) {
     try {
       vectorSearch = createVectorSearch()
@@ -108,6 +113,34 @@ function getVectorSearch(): ((q: string, k: number) => Promise<SemanticHit[]>) |
     }
   }
   return vectorSearch
+}
+
+/**
+ * audit P4b：检索包预热入口——把概念 query 先过一遍同步级联，只有「语义层真会被咨询」
+ * 的 query（前四级全空）才转发向量层批量预热；canonical/alias/fuzzy 已命中的 query
+ * 根本不会进 semantic 层，预热它们纯属浪费 batch 槽位。best-effort：任何故障静默，
+ * 不阻塞管线（预热失败 → 各查询期单条嵌入照旧）。
+ */
+export async function prewarmSemanticQueries(queries: string[]): Promise<void> {
+  const vs = getVectorSearch()
+  if (!vs?.prewarm) return
+  const candidates: string[] = []
+  const seen = new Set<string>()
+  for (const raw of queries) {
+    const n = normalizeTag(raw)
+    if (!n || seen.has(n)) continue
+    seen.add(n)
+    // 与 searchCatalog 同判据：同步级联（canonical→alias→artistRegistry→fuzzy→overlay）
+    // 有命中 → 该 query 永远不会落到 semantic 层，无需预热
+    if (searchCatalogSync(n, { mode: 'auto', limit: 5 }).length > 0) continue
+    candidates.push(n)
+  }
+  if (candidates.length === 0) return
+  try {
+    await vs.prewarm(candidates)
+  } catch {
+    /* 预热故障不阻塞管线 */
+  }
 }
 
 function db(): DatabaseSync {

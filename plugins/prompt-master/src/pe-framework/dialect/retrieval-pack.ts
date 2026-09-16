@@ -200,6 +200,7 @@ export async function buildRetrievalPack(
   bp: SemanticBlueprint,
   search: CatalogSearchFn,
   gate: RetrievalGateOpts = {},
+  prewarm?: (queries: string[]) => Promise<void>,
 ): Promise<RetrievalPack> {
   const evidence: ConceptEvidence[] = []
   const unresolved: Array<{ concept: string; query: string }> = []
@@ -208,9 +209,22 @@ export async function buildRetrievalPack(
   // 2026-09-16 活跑实证（retrieval_pack 56.7s）：概念间独立，并行查询——bge-base-en-v1.5 ONNX 单次嵌入 ~4s，
   // 串行 14+ 概念是管线延迟大头。降级语义不变：单查询故障 → 该概念进 unresolved。
   // 相同 query 去重：只查一次，多概念共享命中（extractConcepts 可能产出重复短语）。
+  // audit P4b：可选 prewarm 缝——先批量预热全部去重 query 的向量（一次 extractor 调用），
+  // 之后各 search 命中缓存零嵌入；预热失败静默（best-effort，单条路径照旧）。
+  const conceptList = extractConcepts(bp)
+  if (prewarm) {
+    const uniqueQueries = [...new Set(conceptList.map((c) => c.query).filter((q) => q.trim() !== ''))]
+    if (uniqueQueries.length > 0) {
+      try {
+        await prewarm(uniqueQueries)
+      } catch {
+        /* 预热故障不阻塞检索包 */
+      }
+    }
+  }
   const queryCache = new Map<string, EvidenceHit[]>()
   const results = await Promise.all(
-    extractConcepts(bp).map(async ({ concept, query }) => {
+    conceptList.map(async ({ concept, query }) => {
       let hits = queryCache.get(query)
       if (hits === undefined) {
         try {

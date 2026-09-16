@@ -180,3 +180,50 @@ describe('createVectorSearch', () => {
     await expect(search('sailor uniform', 3)).rejects.toThrow(/index dim=1024.*query dim=384/)
   })
 })
+
+describe('prewarm 批量嵌入（audit P4b：检索包延迟收口）', () => {
+  it('prewarm 一次 extractor 调用批量嵌入 N 个 query；查询期缓存命中零新增嵌入', async () => {
+    const p = makeFixtureDb()
+    const batches: number[] = []
+    const seedBy: Record<string, number> = { 'sailor uniform': 101, 'bunny ears': 303, 'unknown thing': 999 }
+    const stub: EmbedFn = async (texts) => {
+      batches.push(texts.length)
+      return texts.map((t) => unitVec(seedBy[t] ?? 999))
+    }
+    const search = createVectorSearch({ dbPath: p, embed: stub })
+    await search.prewarm(['sailor uniform', 'bunny ears', 'unknown thing'])
+    expect(batches).toEqual([3]) // 一次批量调用，非 3 次单条
+    const hits = await search('sailor uniform', 3)
+    expect(hits[0]?.record_id).toBe('serafuku')
+    expect(batches).toEqual([3]) // 查询期零新增嵌入（缓存命中）
+    await search.prewarm(['sailor uniform', 'unknown thing']) // 已缓存 → 不再嵌入
+    expect(batches).toEqual([3])
+  })
+
+  it('prewarm 去重并跳过 CJK/空串', async () => {
+    const p = makeFixtureDb()
+    const seen: string[] = []
+    const stub: EmbedFn = async (texts) => {
+      seen.push(...texts)
+      return texts.map(() => unitVec(101))
+    }
+    const search = createVectorSearch({ dbPath: p, embed: stub })
+    await search.prewarm(['sailor uniform', 'sailor uniform', '水手服', '', 'sailor uniform'])
+    expect(seen).toEqual(['sailor uniform'])
+  })
+
+  it('prewarm 失败不抛出（best-effort；查询期各自单条嵌入照旧降级路径）', async () => {
+    const p = makeFixtureDb()
+    const search = createVectorSearch({ dbPath: p, embed: async () => { throw new Error('embed boom') } })
+    await expect(search.prewarm(['sailor uniform'])).resolves.toBeUndefined()
+    // 查询期同样失败 → 空数组降级（既有语义）
+    expect(await search('sailor uniform', 3)).toEqual([])
+  })
+
+  it('dim 对账不因 prewarm 缓存被绕过（fail-fast 语义保持）', async () => {
+    const p = makeFixtureDb(undefined, { model: 'BAAI/bge-m3', dim: 1024 })
+    const search = createVectorSearch({ dbPath: p, embed: async (texts) => texts.map(() => unitVec(101)) })
+    await search.prewarm(['sailor uniform'])
+    await expect(search('sailor uniform', 3)).rejects.toBeInstanceOf(VectorDimensionMismatchError)
+  })
+})

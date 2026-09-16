@@ -31,6 +31,8 @@ export interface CompositingDeps {
   critic?: (req: { persona: string; schema: string; user: string }) => Promise<string>
   /** S2.5 catalog 级联检索 */
   search: CatalogSearchFn
+  /** audit P4b：检索前批量预热语义查询向量（catalog 层做同步命中过滤）；缺省 → 各查询单条嵌入 */
+  retrievalPrewarm?: (queries: string[]) => Promise<void>
   /** bge-base-en-v1.5 相似度注入点（NL 句 × tag）；缺省 → 审计仅词面 + overlap_vector_unavailable */
   vectorSim?: (a: string, b: string) => number | undefined
   /** audit P1：审计前预热向量缓存（嵌入异步而审计同步，故拆两半）；缺省/故障 → sim 对未缓存对 undefined */
@@ -147,7 +149,7 @@ export async function orchestrateCompositing(
 
   // S2.5 检索包（唯一 catalog 消费点）
   const tPack = performance.now()
-  const pack = await buildRetrievalPack(v1, deps.search)
+  const pack = await buildRetrievalPack(v1, deps.search, {}, deps.retrievalPrewarm)
   trace.push({ name: 'retrieval_pack', ms: performance.now() - tPack })
   if (pack.evidence.length === 0 && pack.unresolved.length > 0) advisories.push('evidence_partial')
   if (pack.truncated.length > 0) advisories.push(`evidence_truncated:${pack.truncated.length}`)

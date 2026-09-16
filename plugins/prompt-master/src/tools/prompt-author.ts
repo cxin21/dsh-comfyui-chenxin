@@ -37,7 +37,8 @@ import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/s
 import { recordGeneration } from '../pe-framework/feedback/store.js'
 import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js'
 import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js'
-import { catalogCandidatesForText } from '../pe-framework/dialect/catalog-recall.js'
+// 2026-09-16 定稿：catalogCandidatesForText（B7 前置召回）随 legacy slots 路径移除——
+// anima 词表证据唯一由 compositing S2.5 检索包承载（retrieval-pack.ts）
 import { resolveRating } from '../pe-framework/safety/rating.js'
 import { h3RatingUnsupportedError } from './h3-rating-gate.js'
 import { checkBoundaries } from '../pe-framework/safety/boundaries.js'

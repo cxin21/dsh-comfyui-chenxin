@@ -47,6 +47,32 @@ function deepMerge(target: Record<string, unknown>, patch: Record<string, unknow
   }
 }
 
+/**
+ * additions 追加语义（spec §4「additions 只允许追加」——自我复审发现：deepMerge 对数组是
+ * 整体替换，会把 V0 已有的 style_hints 清掉，与"追加细节"契约相反）：
+ * - 数组：concat 去重（保留 V0 原项，追加新项）
+ * - 字符串（mood 细节）：未包含才以 ", " 追加（防重复描述）
+ * - 其余（嵌套对象）：递归同规则
+ */
+function mergeAdditions(target: Record<string, unknown>, additions: Record<string, unknown>): void {
+  const walk = (t: Record<string, unknown>, p: Record<string, unknown>): void => {
+    for (const [k, v] of Object.entries(p)) {
+      const tv = t[k]
+      if (Array.isArray(v)) {
+        const base = Array.isArray(tv) ? (tv as unknown[]) : []
+        t[k] = [...base, ...v.filter((x) => !base.some((b) => JSON.stringify(b) === JSON.stringify(x)))]
+      } else if (typeof v === 'string' && typeof tv === 'string') {
+        t[k] = tv.toLowerCase().includes(v.toLowerCase()) ? tv : `${tv}, ${v}`
+      } else if (isPlainObject(v) && isPlainObject(tv)) {
+        walk(tv as Record<string, unknown>, v)
+      } else {
+        t[k] = v
+      }
+    }
+  }
+  walk(target, additions)
+}
+
 export function buildEnrichPrompt(v0: SemanticBlueprint): string {
   return buildTaskText([
     { tag: 'task_persona', body: ENRICH_SEMANTIC_PERSONA },
@@ -67,7 +93,7 @@ export function buildEnrichPrompt(v0: SemanticBlueprint): string {
   ])
 }
 
-/** patch 解析 + 白名单剥离 + deepMerge（导出供测试）；非法 JSON 抛错由 runSemanticEnrich 捕获降级 */
+/** patch 解析 + 白名单剥离 + set 深合并 + additions 追加（导出供测试）；非法 JSON 抛错由 runSemanticEnrich 捕获降级 */
 export function applySemanticPatch(
   v0: SemanticBlueprint,
   raw: string,
@@ -82,7 +108,7 @@ export function applySemanticPatch(
   if (additions) violations += prunePatchPaths(additions, COMPOSITING_ADDITIONS_ALLOWED)
   const v1 = structuredClone(v0) as unknown as Record<string, unknown>
   deepMerge(v1, set)
-  if (additions) deepMerge(v1, additions)
+  if (additions) mergeAdditions(v1, additions) // 追加语义（数组 concat 去重 / 字符串增量），非覆盖
   const advisories = violations > 0 ? [`enrich_path_violation:${violations}`] : []
   return { v1: v1 as unknown as SemanticBlueprint, advisories }
 }

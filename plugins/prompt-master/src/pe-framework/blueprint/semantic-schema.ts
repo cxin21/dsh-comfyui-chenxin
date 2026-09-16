@@ -46,11 +46,26 @@ export function detectTagForm(text: string): boolean {
   return TAG_FORM_RE.test(text)
 }
 
+function isPlainObjectShallow(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
 export function validateSemanticBlueprint(raw: unknown): ValidateResult {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return { ok: false, error: 'blueprint must be a JSON object' }
   }
   const bp = raw as Record<string, unknown>
+  // ── envelope 形状漂移归一化（2026-09-16 活跑两轮实证：LLM 产出 schema_version/media 缺失、
+  // subjects 为对象或缺省——envelope 形状漂移用确定性 coercion 容忍并记录，语义垃圾仍 fail-closed）──
+  if (bp.schema_version === undefined) bp.schema_version = 1
+  else if (bp.schema_version === '1' || bp.schema_version === 1.0) bp.schema_version = 1
+  if (bp.media === undefined || bp.media === '') bp.media = 'image'
+  if (bp.subjects === undefined || bp.subjects === null) bp.subjects = []
+  else if (isPlainObjectShallow(bp.subjects)) bp.subjects = Object.values(bp.subjects)
+  if (bp.mood === undefined) bp.mood = ''
+  if (bp.negative_hints === undefined) bp.negative_hints = []
+  if (bp.core === undefined || bp.core === null) return { ok: false, error: 'core missing' }
+
   if (bp.schema_version !== 1) return { ok: false, error: 'schema_version must be 1' }
   if (bp.media !== 'image') return { ok: false, error: `media must be "image", got ${JSON.stringify(bp.media)}` }
 
@@ -62,7 +77,7 @@ export function validateSemanticBlueprint(raw: unknown): ValidateResult {
   if (scene === null || typeof scene !== 'object') return { ok: false, error: 'core.scene missing' }
   const sc = scene as Record<string, unknown>
   for (const k of ['environment', 'time_of_day', 'weather', 'lighting_idea'] as const) {
-    if (!isStr(sc[k])) return { ok: false, error: `core.scene.${k} must be string` }
+    if (!isStr(sc[k])) sc[k] = '' // scene 子字段缺省为空串（记录供下游）
   }
   if (c.style_hints !== undefined && (!Array.isArray(c.style_hints) || c.style_hints.some((x) => !isStr(x)))) {
     return { ok: false, error: 'core.style_hints must be string[]' }
@@ -73,14 +88,13 @@ export function validateSemanticBlueprint(raw: unknown): ValidateResult {
     // 纯场景输入（c14）允许空 subjects——空数组记 missing advisory，不算错误（spec §3 字段契约 + golden c14）
   }
   const ids = new Set<string>()
-  for (const s of bp.subjects as Record<string, unknown>[]) {
+  for (const [si, s] of (bp.subjects as Record<string, unknown>[]).entries()) {
     if (s === null || typeof s !== 'object') return { ok: false, error: 'subject must be object' }
-    for (const k of ['id', 'identity', 'appearance', 'pose', 'expression'] as const) {
-      if (!isStr(s[k])) return { ok: false, error: `subject.${k} must be string` }
+    if (!isStr(s.id) || (s.id as string).trim() === '') s.id = `S${si + 1}` // 漂移归一化：缺 id 自动编号
+    for (const k of ['identity', 'appearance', 'pose', 'expression'] as const) {
+      if (!isStr(s[k])) s[k] = '' // 漂移归一化：缺字段补空串（missing advisory 面覆盖语义缺失）
     }
-    if (typeof s.count !== 'number' || !Number.isInteger(s.count) || (s.count as number) < 1) {
-      return { ok: false, error: 'subject.count must be positive integer' }
-    }
+    if (typeof s.count !== 'number' || !Number.isInteger(s.count) || (s.count as number) < 1) s.count = 1
     if (ids.has(s.id as string)) return { ok: false, error: `duplicate subject id: ${s.id}` }
     ids.add(s.id as string)
   }
@@ -89,7 +103,7 @@ export function validateSemanticBlueprint(raw: unknown): ValidateResult {
   if (comp === null || typeof comp !== 'object') return { ok: false, error: 'composition missing' }
   const cm = comp as Record<string, unknown>
   for (const k of ['framing', 'camera_angle', 'placement'] as const) {
-    if (!isStr(cm[k])) return { ok: false, error: `composition.${k} must be string` }
+    if (!isStr(cm[k])) cm[k] = '' // 漂移归一化：缺字段补空串
   }
   if (!isStr(bp.mood) && bp.mood !== undefined) return { ok: false, error: 'mood must be string' }
   if (bp.negative_hints !== undefined && (!Array.isArray(bp.negative_hints) || (bp.negative_hints as unknown[]).some((x) => !isStr(x)))) {

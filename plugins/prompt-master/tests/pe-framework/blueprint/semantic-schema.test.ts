@@ -46,6 +46,42 @@ describe('validateSemanticBlueprint (spec §3)', () => {
   })
 })
 
+describe('envelope 形状漂移归一化（spec §3 修订 2026-09-16 活跑实证）', () => {
+  it('schema_version 缺失 → 补 1', () => {
+    const { schema_version, ...rest } = GOOD
+    const r = validateSemanticBlueprint(rest)
+    expect(r.ok).toBe(true)
+  })
+  it('media 缺失 → 补 image', () => {
+    const { media, ...rest } = GOOD
+    const r = validateSemanticBlueprint(rest)
+    expect(r.ok).toBe(true)
+  })
+  it('subjects 为对象（按 id 键控）→ 归一化为数组', () => {
+    const r = validateSemanticBlueprint({ ...GOOD, subjects: { S1: GOOD.subjects[0] } })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.bp.subjects[0].id).toBe('S1')
+  })
+  it('subject 缺 id/count → 自动编号与缺省 count', () => {
+    const r = validateSemanticBlueprint({
+      ...GOOD,
+      subjects: [{ identity: 'a girl', appearance: 'long black hair', pose: 'standing', expression: 'smile' }],
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.bp.subjects[0].id).toBe('S1')
+      expect(r.bp.subjects[0].count).toBe(1)
+    }
+  })
+  it('mood/negative_hints 缺失 → 补空缺省', () => {
+    const r = validateSemanticBlueprint({ ...GOOD, mood: undefined, negative_hints: undefined })
+    expect(r.ok).toBe(true)
+  })
+  it('media 错误值（video）仍拒绝——语义方向不归一化', () => {
+    expect(validateSemanticBlueprint({ ...GOOD, media: 'video' }).ok).toBe(false)
+  })
+})
+
 describe('detectTagForm (spec §3 D3)', () => {
   it('plain english phrases pass', () => {
     expect(detectTagForm('long black hair')).toBe(false)

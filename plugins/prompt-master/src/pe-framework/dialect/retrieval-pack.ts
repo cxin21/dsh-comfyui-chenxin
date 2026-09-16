@@ -163,7 +163,7 @@ export async function buildRetrievalPack(
   const unresolved: Array<{ concept: string; query: string }> = []
   let rejectedCount = 0
   let evidenceAdvisory: string | undefined
-  // 2026-09-16 活跑实证（retrieval_pack 56.7s）：概念间独立，并行查询——bge-m3 单次嵌入 ~4s，
+  // 2026-09-16 活跑实证（retrieval_pack 56.7s）：概念间独立，并行查询——bge-base-en-v1.5 ONNX 单次嵌入 ~4s，
   // 串行 14+ 概念是管线延迟大头。降级语义不变：单查询故障 → 该概念进 unresolved。
   // 相同 query 去重：只查一次，多概念共享命中（extractConcepts 可能产出重复短语）。
   const queryCache = new Map<string, EvidenceHit[]>()

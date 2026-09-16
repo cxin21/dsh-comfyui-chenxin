@@ -21,7 +21,7 @@ export interface CompositingGate {
 }
 
 export interface AuditOptions {
-  /** bge-m3 相似度注入点（nl 句 × tag）；不可用时传 undefined → 仅词面 + advisory */
+  /** bge-base-en-v1.5 相似度注入点（nl 句 × tag）；不可用时传 undefined → 仅词面 + advisory */
   vectorSim?: (nlSentence: string, tag: string) => number | undefined
   rating: Rating
   minTags?: number
@@ -97,7 +97,7 @@ export function auditCompositing(
     }
   }
 
-  // nl_tag_overlap：词面包含 或 bge-m3 余弦 ≥ 阈值（spec §7 D6）
+  // nl_tag_overlap：词面包含 或 bge-base-en-v1.5 余弦 ≥ 阈值（spec §7 D6）
   const sentences = out.nl.split(/(?<=\.)\s+/).filter((s) => s.trim() !== '')
   let vectorUnavailable = false
   let vectorChecked = false

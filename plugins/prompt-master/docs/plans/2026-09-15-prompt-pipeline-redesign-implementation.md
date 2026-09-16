@@ -6,7 +6,7 @@
 
 **Architecture:** 新增 `pe-framework/compositing/`（writer/audit/确定性回退组装）与 `pe-framework/dialect/retrieval-pack.ts`（唯一 catalog 查询点），复用既有 subagent seam（新增 `pm-writer` label）；`prompt-author.ts` anima 分支按 `PM_PIPELINE_FORM` 分流 compositing|legacy 双态，legacy 保留为回滚面与失败回退通道。
 
-**Tech Stack:** TypeScript (ESM, tsc→dist)、vitest、node:sqlite（catalog）、bge-m3 向量层（既有 `searchCatalog` async 语义级联）。
+**Tech Stack:** TypeScript (ESM, tsc→dist)、vitest、node:sqlite（catalog）、bge-base-en-v1.5 向量层（查询侧 Xenova ONNX）（既有 `searchCatalog` async 语义级联）。
 
 **Spec:** `plugins/prompt-master/docs/specs/2026-09-15-prompt-pipeline-redesign-design.md`（执行者必须同读）
 

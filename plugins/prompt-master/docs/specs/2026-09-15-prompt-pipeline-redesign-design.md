@@ -3,7 +3,7 @@
 - 日期：2026-09-15
 - 状态：已批准方向（方案 A，用户定案），待 T1R 实施计划
 - 关联：`docs/specs/2026-09-13-blueprint-form-migration-design.md`（M5，本稿推翻其 D4）、
-  `docs/specs/2026-09-15-tag-vector-semantic-search-design.md`（bge-m3 向量层，本稿 §S2.5 消费方）、
+  `docs/specs/2026-09-15-tag-vector-semantic-search-design.md`（bge-base-en-v1.5 向量层，本稿 §S2.5 消费方）、
   `docs/2026-08-31-redesign-spec.md` §6（决策表，本稿修订 prompt_author 行）
 - 范围：**仅 prompt_author 的 anima 默认路径**。h3 未迁移（沿用 M5 后现状）；blueprint_id 增量路径在 §7 另述。
 
@@ -16,7 +16,7 @@
 | D3 | 零词表契约机检 | S1/S2 输出出现 tag 形态词 → 确定性 gate `tag_in_blueprint` 拦截 | 契约不靠自觉，靠谓词 |
 | D4 | 窄修复 | 修复轮只重入成文+审核；蓝图/扩写产物冻结（hash 校验） | 修复成本 3→2 次 LLM/轮；杜绝无效修复重烧上游（实测 2 轮白烧 6 次） |
 | D5 | 双轨审核 | 确定性审计（critical 直进修复，不烧 judge）∥ judge（6 维新 rubric） | 机器契约零 LLM 判定；LLM 只审语义 |
-| D6 | NL-tag 零重叠 | 词面检查 + bge-m3 余弦 ≥0.85 → critical `nl_tag_overlap` | 消除双重加权；向量层首个管线内消费点 |
+| D6 | NL-tag 零重叠 | 词面检查 + bge-base-en-v1.5 余弦 ≥0.85 → critical `nl_tag_overlap` | 消除双重加权；向量层首个管线内消费点 |
 | D7 | 回退通道 | 现有 compileAnima 降级为确定性回退 writer（fail-open）：成文失败/修复耗尽时出稿 | 任何情况下不空手出稿 |
 | D8 | 回滚面 | env `PM_PIPELINE_FORM=compositing|legacy`（非法值 fail-fast + advisory） | 模式对齐 `PM_AUTHOR_INTENT_FORM`；legacy = 今日行为 |
 | D9 | judge rubric 替换 | 7 维 → 6 维（新增 blueprint-fidelity / nl-quality，删对确定性编译有意义的维度） | 审核对象从编译产物变为成文产物 |
@@ -127,7 +127,7 @@ Schema（机器校验）：`{schema_version:1, media:"image", core, subjects, co
 
 **抽取规则（确定性，无裁量）**：V1 中每个 `subjects[].appearance/pose/expression` 句子、每个 `core.scene` 字段、`composition` 三字段、`mood`、`style_hints[]` 各成一个 concept_query；粒度 = 名词短语级（复用既有 catalog-recall 切分器）。
 
-**查询级联**：canonical/alias → **bge-m3 向量语义**（`searchCatalog` async 语义层，dim 校验与降级语义按 tag-vector-semantic-search spec）→ fuzzy。`usage_count` 仅作模型裁决参考，编译层不自动替换（原文原则延续）。
+**查询级联**：canonical/alias → **bge-base-en-v1.5 向量语义（ONNX 查询侧）**（`searchCatalog` async 语义层，dim 校验与降级语义按 tag-vector-semantic-search spec）→ fuzzy。`usage_count` 仅作模型裁决参考，编译层不自动替换（原文原则延续）。
 
 ```json
 { "evidence": [
@@ -198,7 +198,7 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 |---|---|
 | `tag_in_blueprint` | V0/V1 任一文本字段命中 tag 形态模式（snake_case / `^\d+girl` / `^@` / `^score_`） |
 | `fabricated_tag` | tag.text 回查三层全 miss |
-| `nl_tag_overlap` | NL 分句 × tag：词面包含命中，或 bge-m3 余弦 ≥ 0.85（向量层不可用时仅词面 + advisory `overlap_vector_unavailable`） |
+| `nl_tag_overlap` | NL 分句 × tag：词面包含命中，或 bge-base-en-v1.5 余弦 ≥ 0.85（向量层不可用时仅词面 + advisory `overlap_vector_unavailable`） |
 | `unresolved_dropped` | unresolved 概念既不在 NL 也不在 dropped_concepts |
 | `tag_budget` | tag 数 ∉ [20,40] 或 positive 总字符 > 1200 |
 | `mutual_exclusion` / `framing_consistency` / `lighting_term_banned` / `cjk_in_positive` / `rating_seed` / `artist_whitelist` | 沿现行语义，判定对象改为成文产物 |
@@ -258,7 +258,7 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 - **legacy brief 扩写（runEnrich）仅服务 h3**；anima 美学扩展 = S2 `runSemanticEnrich`（patch 白名单）。
 - 活跑冒烟驱动的两处接线热修复已并入本设计：①intentBase persona 踩踏（compositing 态不下发 persona/schema）；②runEnrich 守卫。
 - **T1R 收尾（2026-09-16 第二轮活跑后，`048ec05`/`db47f56`/`8370ef8`）**：③D7 耗尽回退分支补齐（此前耗尽 → ok=false 空手，违反 D7）；④tag_budget 证据感知下限（min(20, 证据概念数)，其上未满降 important——化解 T1 与 min-20 的矛盾）；⑤检索并行化 + 相同 query 去重；⑥**Q0 形式白名单**（证据仅收 canonical/alias/semantic，fuzzy/unknown 一律拒——`fingering from behind` 类真 tag 碰瓷通道堵死）；⑦平衡花括号 JSON 提取器统一 semantic/writer/enrich 三处解析器（LLM 尾随文字免疫）；⑧阈值 env 标定面 `PM_VECTOR_MIN_SCORE`/`PM_VECTOR_MIN_USAGE`（§12.3 不改代码标定）。
-- 遗留移交（tag-vector-semantic 计划）：bge-m3 批量嵌入降延迟；semantic 增量蓝图（anima blueprint_id，现行显式报错）。
+- 遗留移交（tag-vector-semantic 计划）：bge-base ONNX 批量嵌入降延迟；semantic 增量蓝图（anima blueprint_id，现行显式报错）。
 
 ## 13. 提示词工程纪律来源（2026-09-15 调研）
 

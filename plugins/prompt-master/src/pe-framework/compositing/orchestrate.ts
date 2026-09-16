@@ -31,7 +31,7 @@ export interface CompositingDeps {
   critic?: (req: { persona: string; schema: string; user: string }) => Promise<string>
   /** S2.5 catalog 级联检索 */
   search: CatalogSearchFn
-  /** bge-m3 相似度注入点（NL 句 × tag）；缺省 → 审计仅词面 + overlap_vector_unavailable */
+  /** bge-base-en-v1.5 相似度注入点（NL 句 × tag）；缺省 → 审计仅词面 + overlap_vector_unavailable */
   vectorSim?: (a: string, b: string) => number | undefined
 }
 

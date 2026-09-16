@@ -176,3 +176,4 @@ R5. 违规清单无法在不违反 R3 的前提下满足时，如实输出当前
 - 重写：`compositing/writer.ts`（§3 persona，去 evidence）、`compositing/audit.ts`（§6 机器门签名 bp+verifyTag）、`compositing/compose.ts`（A6 直查回退）、`compositing/orchestrate.ts`（新四段循环）、`compositing/enrich.ts`（A7 deepMergeChecked/mergeAdditionsChecked）、`tools/prompt-author.ts`（三工具 runner + verifyTag/fallbackSearch 装配 + envelope auditor 顶层键）、`render/envelope.ts`（compositing 痕迹形状）。
 - 保留未拆除（回归审慎，独立清单待裁决）：`dialect/retrieval-pack.ts`（extractConcepts 被 A6 回退复用）、`eval/rubrics/compositing.ts` + `pipeline/judge-assembly.ts`（compositing 分支不再消费，模块级测试继续有效）、P4b `prewarmSemanticQueries`（管线外 catalog_search 工具仍消费语义层）。
 - 实测发现：`buildWriterPrompt` 的 rating_seed 机审门为结构恒真（assemblePositive 恒前置档位种子）——保留为防御性谓词，已在 audit.test.ts 文档化。
+- 提示词统一轮（commit da3b0cc，2026-09-17）：§1.1 模板全五槽位落地——S1 schema 挪入 output_contract；auditor 补 few-shot/严重度标定/先核对后裁决；repairer 补 few-shot 最小改动示例；enrich/writer 契约形状统一。回归 154 files / 1320 passed / 0 failed。

@@ -1,91 +1,106 @@
-# H3 参照项目深度分析（文件级）与 spec 增量提案
+# H3 参照项目深度分析 v2（文件级两轮精读）与 spec 增量
 
-- 日期：2026-09-17
-- 方法：raw 文件级精读（非 README 级）。已读文件清单见各节「证据范围」。
-- 关联：`docs/specs/2026-09-17-h3-agentic-directing-pipeline-design.md`（本文件 §4 提出对它的修订）
-
----
-
-## A. minimax-h3-director-suite（精读 3 份核心文档）
-
-**证据范围**：README + `references/workflow-routing.md` + `runner/references/director-schema-v2.md` + `runner/references/director-playbook.md`（未读：setup-guide/api-and-mcp——执行向，D-U3 范围外）。
-
-### A1 workflow-routing.md —— 路由与参数契约
-
-- **路由优先级链**：`segments[].template` > `meta.workflow_map[段号]` > `meta.workflow_map[模式名]` > 内置模式推断（有 refs → ref2va；有首尾帧 → i2v；否则 t2v）
-- **参数覆盖按 class_type 而非节点 ID**：`PrimitiveStringMultiline.value`=提示词、H3 视频节点 `length`=时长×24 帧、`ResolutionSelector`=画幅/MP——工作流模板可换，字段映射规则不变
-- **后端校验范围**：duration 5-15s、steps 4-40、参考图本地存在性、提示词非空——校验在提交侧不做前端侧
-- **断点恢复**：job 文件持久化 prompt_id/status/attempt，重跑跳过已完成段
-
-### A2 director-schema-v2.md —— ★对我们 DirectingIR 最有价值的数据契约
-
-- **creative_intent 四件套**：`state_before` / `trigger` / `state_after` / `audience_takeaway`——每 Beat 的戏剧状态机必须可观察、非空
-- **shot_intents 与镜头数严格相等**：每 shot 必须声明 `new_information`（无新信息的 cut 应删除或改为运镜）+ `narrative_subject` + `contains_reaction`；对白 Beat 必须至少一个 `contains_reaction: true`
-- **continuity_handoff 四通道**：`positions` / `emotion` / `props` / `audio`——Beat 间显式交接（比我 spec 里的单 `anchor` 字段强一个量级）
-- **reference roles 六类与 H3 标签绑定**：`identity_subject`/`location_subject`/`prop_subject` → H3 `Subject N`；`composition_picture` → `Picture N`；`motion_video` → `Video N`；`audio_reference` → `Audio N`。**关键原则：runner 不支持的 schema-only 角色，编译器拒绝——"提示词不得引用到不了模型的参考"**
-- **V1/V2 共存策略**：meta.director_schema_version=2 显式启用；禁止为凑校验填占位符
-
-### A3 director-playbook.md —— 导演纪律与 QC 矩阵（S2/S4 persona 的规则金矿）
-
-- **受众结论先行**：先写"本 Beat 结束时观众必须理解/感受什么"，再选镜头；shot purpose 六分类 **`{dialogue}/{mixed}/{action}/{establish}/{insert}/{reaction}`——编译器强制每个镜头以其开头**并校验时长区间
-- **时长 taxonomy（机检可校验）**：对白/微表演 2-4s；混合叙事 1.5-3s；高动态 0.4-1.5s；空间建立 2-4s；道具/证据插入 0.5-2s；对白反应后效 1-2s。生成单元 4-10s 优先，10-15s 仅当拆分会打断连续表演；**H3 4s 下限**，不足 4s 的素材合并而非凑数
-- **双锚点铁律**：身份锚 + 空间锚缺一不可；空间参考必须是单一连续空间（禁拼贴）；一 Beat 至多绑一个空间参考；道具参考仅在叙事必需时加（且不得引入竞争环境）
-- **失效模式库**：Ref2VA 末态泄漏（请求的结束状态泄漏进前帧）→ 改用 FL2VA 字面首尾帧；**次级角色/道具首尾帧无 endpoint delta → FL2VA 冻结该角色**（每 movers 需约束内微差异）
-- **空间连续性先于运镜多样性**：180° 轴线；屏幕方位不足——还要站/坐/蹲、相对肩线高低、相对地标前后；同侧 master 覆盖优先；cutaway = 同几何的 temporal pickup；拒绝瞬移/空间重置/发明房间
-- **对白契约**：稳定 speaker ID `(S1)(S2)`；`<d>[Language] ...</d>` 标签**只装口语**（禁角色名/冒号/旁白标注）；说话前建立指向关系；反应后效 1-2s；显式反字幕约束
-- **道具因果几何**：初态 → 物理触发 → 末态 + 手部接触点/朝向（实例：手机 黑屏→亮屏通知→阅读→侧键锁屏→黑屏，禁止替代成聊天列表）
-- **QC 八维矩阵**：Story/Identity/Location/Blocking/Interaction/Dialogue/Text/Rhythm × 通过条件 × 典型修复；**单维失败只修该维**；**两次同类失败 → 改结构/锚点而非换 seed**
-
-## B. leos 六部门（精读 SKILL.md + prompt-director.md + video-prompt-template.txt）
-
-**证据范围**：3 份（references/ 共 11 份，其余为目录级——role-council/output-contracts 等标注为后续按需）。
-
-### B1 SKILL.md —— 组织协议
-
-- **角色权限负面清单**：每角色一张"不得擅自改动"表（表演指导不得暗改剧情/blocking；摄影指导不得炫技改写场次重点；场记不得以小穿帮否定核心表演但硬连续性问题可提**生成门禁**）
-- **11 步联合导演流**：场次包 → 总导演澄清 → 场记建连续性基线 → 三部门简报 → 合并确认 → **生成授权门** → v001 → 版本登记 → 多岗逐镜审稿 → 修订 v002 → 审片学习
-- **不可破坏原则**（节选）：先导演后提示词；空间可行性先行（多人场面无共享空间关系不进镜头细化）；一资产一职责；关键道具三态（初态/变化/结果）；相邻镜头共享可核对出口/入口状态；失败第二次必须含人类诊断且一次只改一个变量；时长/画幅等未明确时**不得自动补默认值**
-- **P/O/C 知识分级**：P 跨项目原则 / O 当前操作参数 / C 项目设定——通用经验需证据门槛才回写
-
-### B2 prompt-director.md —— 编译职位契约
-
-- **身份**：编译与整合职位，**不是第二个总导演**——冲突不擅自折中，交裁决
-- **输入合同**：七方输入（总导演/表演/镜内/摄影/场记/用户/项目配置）收齐或标明不适用
-- **字数预算分配**：资产+空间 ≤20%、逐镜 ≥65%、环境+风格 ~15%；超限 → 拆多 package，**不得截断镜头或省略连续性**
-- **输出前 11 项校验清单** + 两个 validate 脚本（提示词结构 / 审稿覆盖矩阵）——**校验未通过不得交付**
-
-### B3 video-prompt-template.txt —— 镜头文本骨架
-
-```
-资产声明（@imageN 场景/角色/道具，各一行职责限定）
-→ ⚠️空间布局（MAIN VIEW=从[方向]看；位置A/B 相对锚点/距离/朝向/遮挡）
-→ ⚠️对白规则 → ⚠️本视频严格只有 N 个镜头（禁止加镜）
-→ 【镜头N】构图参考/机位/摄影机运动/摄影机位置/背景/动作/微表演①刺激②重音③余波
-→ 环境活动 → 风格
-```
-
-## C. short-drama-factory（精读 SKILL.md）
-
-- **唯一执行顺序 + 冲突裁决顺序**：用户明确要求 > 本文件 > 权威 reference > 其他——干净的优先级链
-- **台账先行**："无台账不开写"；每集写前读台账、写后更新（伏笔/人物/道具状态机/规则）
-- **机检纪律**：`validate_episode` / `validate_series` FAIL 必须修复重跑，**不得裸交**；机检验证结构不评价艺术
-- 8 绝对红线（硬帽/断章/复读检测等）——单句硬上限、体量区间全是**可机检谓词**而非形容词
+- 日期：2026-09-17（v2：三库整库克隆后第二轮全量精读）
+- 方法：三库 `git clone --depth 1` 本地化，逐文件精读。第一轮 9 份 + 第二轮 10 份 = **19 份文档/脚本级证据**（详见各节证据范围；未读文件均标注理由）。
+- 关联 spec：`docs/specs/2026-09-17-h3-agentic-directing-pipeline-design.md`（v2）——本文件 §D 提出增量吸收（N1-N12）。
 
 ---
 
-## §4 对 spec 的增量提案（修订 `h3-agentic-directing-pipeline-design.md`）
+## A. minimax-h3-director-suite（6 份核心文档全读）
 
-| Δ | 内容 | 影响节 |
-|---|---|---|
-| Δ1 | **DirectingIR 吸收 director-schema-v2**：Beat 增 `creative_intent`（state_before/trigger/state_after/audience_takeaway）+ `shot_intents[]`（new_information/narrative_subject/contains_reaction，**与镜头数严格相等**——与 rules-h3 信息增量审计同源）；`anchor` 单字段升级为 `continuity_handoff` 四通道（positions/emotion/props/audio） | §4 |
-| Δ2 | **shot purpose 六分类强制标签**（dialogue/mixed/action/establish/insert/reaction）+ 各类时长区间机检谓词（对白 2-4s/动作 0.4-1.5s/插入 0.5-2s/反应后效 1-2s/建立 2-4s；生成单元 4-10s 优先、H3 4s 下限）——rules-h3 新增机检 | §4/§6 |
-| Δ3 | **双锚点 + reference roles 绑定 H3 标签语法**（identity/location/prop → Subject N；composition → Picture N；motion → Video N；audio → Audio N）+ **"提示词不得引用到不了模型的参考"编译拒绝原则**（stage 路由不支持的引用角色 = 机检 critical） | §4/§6 |
-| Δ4 | **对白契约**：稳定 speaker ID `(S1)(S2)` + `<d>[Language]</d>` 只装口语 + 说话前指向关系 + 反应后效 1-2s + 反字幕约束——注入 S2/S3 persona 纪律 + 机检谓词（`<d>` 标签内禁角色名冒号） | §5 |
-| Δ5 | **S4 审计维度升级为八维矩阵**（Story/Identity/Location/Blocking/Interaction/Dialogue/Text/Rhythm × 通过条件 × 典型修复）——替换原三维度；findings 逐镜 | §5 |
-| Δ6 | **S5 repairer 增纪律**：单维失败只修该维；两次同类失败 → 改结构/锚点而非换参数；好表演是稀缺资产——局部修不整镜重写 | §5 |
-| Δ7 | **两段式确认沿用 leos 授权门语义**（已有 await_user_approval）+ 版本状态机：方案确认→授权→v001→逐镜审稿→v002（每版登记进 continuity_ledger） | §5 |
-| Δ8 | **道具因果几何三态**（初态→物理触发→末态+接触点）写入 S2 persona + 台账机检谓词（props.state_by_beat 与逐镜 prompt 的状态词匹配已有，补触发词） | §5/§6 |
+证据：SKILL.md、references/wenwu-director.md、references/storyboard-schema.md、references/workflow-routing.md、runner/references/director-schema-v2.md、runner/references/director-playbook.md。（未读：setup-guide/api-and-mcp/autodl/cloudflared/resource-monitoring/hybrid-example——执行向，D-U3 范围外；scripts/*——执行脚本。）
 
-**明确不采纳**：workflow JSON 构建/参数覆盖/提交监控（D-U3 执行闭环范围外）；剧本生成层；六独立 agent（D-U2 已裁）；5000 非空白字符限（我们用官方 tokenizer 精确 token 计数，强于字符估算）；角色×镜头全覆盖审稿矩阵（单审计 LLM 架构下收敛为逐镜 findings）。
+### A1 SKILL.md —— 流水线全貌与三模式
 
-**证据覆盖声明**：director-suite 精读 3 份核心文档（routing/schema/playbook）；leos 精读 3 份（SKILL/prompt-director/template），references 另 8 份目录级；short-drama-factory 精读 SKILL.md（11 references/scripts 目录级）。足以支撑上述 Δ；leos `output-contracts.md` / `role-council.md` 若实施期需要可再补读。
+- **三提示词模式**：`official`（H3 官方六段式英文：subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music）/ `wenwu`（中文导演分镜）/ **`hybrid`（推荐：官方六段式外壳 + WenWu 导演级内容）**；`meta.prompt_mode` + `prompt_mode_reason` **强制写入 storyboard.json，禁止静默走默认**
+- **人物四视图**：每主要角色 front/side/back/face 四图锁定同一身份；网上已有角色先搜下载再生成四视图；`refs/<角色名>_*.png` 登记进 characters
+- **段结构**：段 = 一个 H3 视频单元（默认 10s，5-15s），段内 2-3 分镜；上下镜至少传递一个衔接锚点（动作方向/视线/光线/道具/轮廓/声桥/受力），禁止无理由跳切；**每段独立生成，禁止引用上一段尾帧（衔接靠文字锚点）**
+- **分镜汇报强制精确时间轴**（"几秒到几秒→画面→对白"表格，时间连续无空洞无重叠；用户只改个别镜头只重报受影响段）
+- 失败恢复：连续 3 次无变化停下报告；单段重试失败不静默跳过
+
+### A2 wenwu-director.md —— ★导演级内容引擎（S2/S3 persona 的规则源）
+
+- **三生命迹象**：注意力在流动 / 动作有前因后果 / 镜头有观看动机
+- **叙事温度判别 + 镜头密度公式**：高动态（0.4-1.5s/镜，`round(T/1.0)`）/ 细腻文戏（2-4s/镜，`round(T/3.0)`）/ 混合（1.5-3s/镜，`round(T/2.0)`）；仅当用户未指定镜头结构时启用
+- **创作者指令优先级**：用户硬约束（一镜到底/镜头数/分镜顺序）精确遵守 > 自动导演
+- **生命核**：人物身份/材质/状态 + 跨镜持续要素 + 开始/转折/最终三态——只写影响成片的细节
+- **镜头脉冲七段式**：`观察理由 → 画面入口 → 新信息 → 主体变化 → 摄影机响应 → 结果落点 → 下一脉冲牵拉物`
+- **表演肌理链**：`刺激抵达 → 本能反应刚要出现 → 主动压住 → 保护层失效 → 身体泄露 → 选择 → 余波`；先身体变化后情绪结论；禁止同瞬间堆叠多表情
+- **八条生命通道**：形（身份材质）/ 场（空间关系）/ 视（摄影机注意力：远答何处/中答身体/近答控制/特写只服务决定性证据）/ 力（动作因果：准备-发力-接触-受力-恢复）/ 念（未说出口的目的→停顿眼神呼吸）/ 息（情绪=压力穿透保护层的过程，呼吸先于台词）/ 言（台词三阶段：开口前-说话时-说完后；双引号只装口语）/ 续（跨镜锚点传递）
+- **FACS AU 面部微调**：AU1-26 强度 A-E 分级（日常 A-C、D 峰值、E 罕用）；AU 组合须同一心理原因，与自然动作冲突时删 AU
+- **四种生镜形态**：关系燃烧 / 动力对抗 / 九态视觉谱（九状态格）/ 精准改造
+- **素材契约**：H3 实际标签 `<Picture N>/<Video N>/<Audio 1>`；每素材分配职责；不能从未取听音频编造台词
+- **生镜校验 17 项**（交付前自检，不输出过程）
+
+### A3 storyboard-schema.md —— 数据规范全集
+
+- **官方六段式结构**（模式 A）：subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music——顺序固定、英文书写、镜头间写衔接锚点、`<d>[Chinese]...</d>` 装原生对白、无 BGM 写 N/A
+- **hybrid 映射表**（WenWu 概念 → 六段落位）：生命核→subject_definitions；最终发展线→summary；八通道核对→retention_analysis（fully_preserved/partially_preserved/attribute_transfer/weak_reference）；镜头脉冲→detailed_description（起止时间+景别机位+唯一事件+主体变化+摄影机回应+交镜锚点）；声音脉络→overall_soundscape；视觉母题/风格禁令→结尾 `constraints:` 块
+- **7 列镜头卡**：no/time/duration/shot_size/camera/content(≤30字)/sound(必填，静默也写)/transition(默认硬切)/technique/tags(≤2，枚举：海报帧/伏笔/关键/重特效/长镜/音锚/特设备)；镜号连续；**时长累加 = 段长**
+- **景别 7 档中文强制**（禁 ECU/CU 缩写）+ 速查（情感顶点→极端特写；对白→中近景；动作→中远景交替；建立→全景/远景）；**机位库 11**、**运镜库 15**（速度修饰：慢推/急摇接切/Flash Cut）、**转场库 14**、**高级技法 8**
+- **视听签名 8 字段**（hybrid 建议）：medium/aspect/color_ids(≤6，每角色一色相)/texture/core_theme(必须可拍：主语+比喻动词+宾语)/master_dna(≤3)/genre_formula(opening/turn/climax/ending)
+- **单元结构**：unit/dramatic_task(25-60字)/visual_motif(3-6字，来自签名)/hook；相邻单元至少 1 种对比；高潮单元位于全片 60-80%；首末单元意象 echo
+- **声音 12-slot**（固定顺序不许跳号）：开场基底/第一个高频锚点/仪式启动音/第一次撞击/中频群/关键V.O./第一次静默/静默回归/主题动作音/高潮余震/全片唯一/结尾尾音；overall_soundscape 按低/中/高频+人声四层
+- **ASL 节奏统计**：段 ASL 偏离全片均值 >50% 诊断；σ<0.3 过平、>1.5 过抖；高潮前呼吸段 ≥2× 均值
+- **world_anchors 5 slot**（origin/equipment/energy/rule/support，每条带出处）；characters 可选字段（function/visible_shots/dialogue_count/gender_age；反派 size/color_id/sound_signature/drive/appearances）
+- **后端校验清单**：段时长累加偏差 ≤5%、climax 60-80%、签名 color ≤6/dna ≤3、sound_events ≤12、镜头卡 7 列齐全镜号连续、ASL 诊断、world_anchors 齐全、visible_shots 引用、reference_films ≤6——**默认警告；meta.strict_prompt_validation=true 直接拒绝**
+- **分镜汇报格式**：强制时间轴表格（连续/精确到秒/无空洞无重叠）
+
+### A4 workflow-routing / director-schema-v2 / director-playbook（第一轮已析，要点保留）
+
+路由优先级链与按 class_type 参数覆盖；creative_intent 四件套 + shot_intents 严格相等 + continuity_handoff 四通道 + reference roles 六类绑定 Subject/Picture/Video/Audio N（schema-only 角色 runner 不支持 → 编译拒绝）；shot purpose 六标签强制开头 + 时长 taxonomy；双锚点；Ref2VA 末态泄漏 → FL2VA endpoint delta；QC 八维矩阵；两次同类失败改结构。
+
+## B. leos 六部门（7 份精读 + 10 份目录级）
+
+证据：SKILL.md、prompt-director.md、video-prompt-template.txt、output-contracts.md、review-and-repair.md、generation-control.md、scripts/validate_prompt_text.py。（未读：role-council/directing-grammar/performance-direction/cinematography-direction/spatial-and-assets/continuity-and-learning/knowledge-and-provenance——S2-S4 persona 实施期的**内容源资料**，已列入实施计划必读；validate_review_coverage.py——单审计 LLM 架构不需要覆盖矩阵校验；4 个 CSV 模板——台账字段样例。）
+
+### B1 SKILL.md（第一轮已析）+ B2 prompt-director.md / output-contracts.md（本轮深挖）
+
+- **输出契约模板集**（output-contracts）：六角色联合会诊表 / 场次导演拆解（戏剧节拍表、Blocking states 表、空间可行性、尺度契约、主观视点与轴线、道具/动作状态机、镜头覆盖、控制强度、待核验项）/ 导演生成方案 / 表演指导工作单（逐 Beat 表演谱：刺激|可演动作|注意对象|目光呼吸|台词动作|反应延迟|退出状态|禁用套路）/ 摄影指导工作单（承托/运镜路径/触发/速度曲线/光源动机/明暗比/色温/相邻接缝）
+- **联合会诊结构**：总导演总判断 → 已知事实/导演推断/待核验三分 → 各岗位独立小结 → 生成门状态 → 逐镜审稿表（角色×镜头笛卡尔全覆盖，没问题也写"通过"）→ 裁决与验收条件
+- **validate_prompt_text.py 机检谓词**（可移植）：最终产物禁 JSON；有效字符（非空白）≤5000；全局必备字段（空间布局/对白规则/环境活动/风格）；【镜头N】编号连续不跳号；**声明镜头总数与实际一致**；每镜必备字段（机位/摄影机运动/摄影机位置/背景/动作/微表演细节）；前置信息占比 ≤25% 警告、逐镜占比 ≥55% 警告；旧版固定时长/画幅结尾检测
+- **generation-control**：七方输入合同收齐或标 N/A；"电影感/紧张/高级"必须落实成可观察条件；**一条生成尽量只用一个场景参考**（多场景分开生成防资产污染）；互动分支分别生成；跨段接缝=重叠覆盖区+显式写出上段结束/下段进入状态；重试分类（空间/资产/表演/物理/画质/能力边界六类根因），第二次必须改变条件；高优先级禁止项可移到资产绑定之后复测（模型对末尾注意不均）
+
+### B3 review-and-repair.md —— ★审片分级与最小返工路由（S4/S5 契约源）
+
+- **审片顺序**：先完整看一遍（这场戏讲清了吗/情绪抵达了吗/观众知道看谁/空间可信/摄影支持主戏/最好的一刻），第二遍按时间码记录
+- **P0/P1/P2 分级**：P0 必须修（叙事信息错误/身份看不懂/空间因果崩溃/道具状态错误/表演与剧情相反）；P1 优先（情绪无过程/无反应时间/节奏单一/背景静止舞台/接缝/摄影命题未实现）；P2 集中处理（纹理/车牌/轻微漂移）
+- **保护好表演**：好表演比小连续性更难重现——删错误区间/插反应/插特写/裁切重构图/只补过渡/声音连接，优先于扩大重做
+- **最小返工路由**：剪辑可解 → 单镜补拍 → 小节重做 → 整场重设计（每修法写保留区间/首选/备选/新资产/验收条件）
+- **症状→根因→修法表 22 行**（人物漂移→无 master；情绪跳变→无过渡状态；群戏僵尸→无逐人任务；动作漂浮→未拆状态重量接触；AI 感表演→无对手刺激微表演通道过载；反应早于事件→未定义时序；运镜花哨无张力→无触发点路径落点；道具跳变→未建状态机……）
+- **通过标准**（10 条，P0 清零 + P1/P2 不反向破坏）
+
+### B4 生成前检查门（generation-control §7）
+
+台词前因可见 → 大全景比例现实可测 → 近景继承 master 位置与摄影机侧 → 每个可见角色任务/时点/强度不同 → 关键道具三态写明 → …（逐项确认后才送模型）
+
+## C. short-drama-factory（2 份精读）
+
+证据：SKILL.md、references/continuity-ledger.md。（未读：其余 11 references——剧本层创作工艺，D-U3/D-U1 边界外；validate_episode/validate_series——单集正文与全剧台账机检，验证对象是剧本文本而非视频提示词，谓词思想已被我们机检吸收。）
+
+### C1 continuity-ledger.md —— 四类账与读写规程
+
+- **四类账**：伏笔账（埋/养/收/废 + 超期机检）、人物账（存活状态机，死人不能开口）、**道具状态账**（每次易手/损毁/出示记一行；断章道具特写写前必核对持有者）、世界观规则账（能力边界/代价/禁忌，违反 → FAIL）
+- **读写规程主循环**：写前读台账 → 写 → 机检 FAIL 即修 → 写后更新台账（第 5 步没做视为未完成）→ 每 5 集跑一次全量机检
+- **"台账是唯一事实源，正文与台账冲突时停下向用户确认"**
+
+## D. Spec 增量（第二轮，N1-N12；并入 spec v2 裁决：全部吸收）
+
+| Δ   | 内容                                                                                                                                                                                                                                                                                                                  | spec 落点 |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| N1  | **格式映射澄清**：H3 存在两种目标格式——官方六段式（云 API）vs 集成格式（本地 ComfyUI 节点，我们 dialect 契约）。S3 输出 = 集成格式（不变式不动）；**六段式思维作为内容组织标准**：characters→subject_definitions、beats.purpose→summary、八通道核对→retention、镜头脉冲→detailed_description、声音→overall_soundscape | §4/§5     |
+| N2  | **WenWu 引擎进 persona**（本轮最大增量）：S2 注入叙事温度判别+密度公式+生命核八通道+四种生镜形态；S3 注入镜头脉冲七段式+表演肌理链+FACS AU+生镜校验 17 项自检；景别 7 档/机位 11/运镜 15/转场 14 库作为 persona 附录（中文强制，禁英文缩写）                                                                          | §5        |
+| N3  | **7 列镜头卡并入 DirectingIR.shots**：no/time/duration/shot_size/camera/content(≤30字)/sound(必填)/transition/technique/tags(≤2)；机检：镜号连续、时长累加=段长、sound 必填                                                                                                                                           | §4/§6     |
+| N4  | **声音设计**：DirectingIR 增 sound_events（12-slot 固定顺序）+ overall_soundscape 四层 + non_diegetic_music（BPM/进出时间）；机检 ≤12 跳号检查                                                                                                                                                                        | §4/§6     |
+| N5  | **视听签名 8 字段**入 meta.audiovisual_signature（S1/S2 产出）；机检 color_ids ≤6、master_dna ≤3、core_theme 可拍性                                                                                                                                                                                                   | §4/§6     |
+| N6  | **单元结构增强字段**（unit/dramatic_task/visual_motif/hook + climax_segment 60-80% + 首末 echo）+ ASL 节奏统计机检（默认警告；meta.strict_prompt_validation=true 拒绝——沿 director-suite 双模开关）                                                                                                                   | §4/§6     |
+| N7  | **S4 findings severity 对齐 P0/P1/P2**：P0=critical（叙事错误/身份不明/空间崩溃/道具状态错/表演相反）、P1=major、P2=minor；**审片顺序**（先整体判断再按时间码）与**通过标准 10 条**注入 S4 persona                                                                                                                    | §5        |
+| N8  | **S5 最小返工路由**：剪辑可解→单镜补拍→小节重做→整场重设计（每级写保留区间/首选/备选/验收）；**保护好表演**原则；**症状→根因→修法表 22 行**作为 S5 知识库（validation 期资料源）                                                                                                                                      | §5        |
+| N9  | **S3 生成前检查门**（generation-control §7 逐项清单 + WenWu 生镜校验 17 项）成文前自检                                                                                                                                                                                                                                | §5        |
+| N10 | **reference_plan 增四视图**：identity_subject 细化 front/side/back/face（D-U3 执行外，字段先立）；跨段接缝=显式写出上段结束/下段进入状态（禁假定模型理解"续拍"）——continuity_handoff 语义强化                                                                                                                         | §4        |
+| N11 | **strict_prompt_validation 双模开关**：meta.strict_prompt_validation=true 时机检不合格直接拒绝（默认警告）——沿 director-suite                                                                                                                                                                                         | §6        |
+| N12 | **分镜汇报时间轴强制格式**（连续/精确到秒/无空洞；用户只改个别镜头只重报受影响段）→ S2 后 envelope/await_user_approval 呈现契约                                                                                                                                                                                       | §5        |
+
+## E. 明确不采纳（同第一轮 + 本轮新增）
+
+workflow JSON 构建/提交监控/剪映拼合（D-U3）；剧本生成层；六独立 agent；5000 字符限（tokenizer 精确计数）；V1/V2 双版本；审稿覆盖矩阵（单审计 LLM）；leos output-contracts 的中文纯文本模板外壳（我们输出集成格式 JSON 管线，模板思想进 persona 纪律）。

@@ -62,22 +62,43 @@ DirectingIR ──→ dialect 编译层（h3: 现行 dialect/h3.ts 零改动）�
   meta: {
     title, source_script_hash, created_at,
     dialect: "h3", director_schema_version: 1,
-    rating, original_rating            // D-U4：透传元数据，管线不改写
+    rating, original_rating,            // D-U4：透传元数据，管线不改写
+    strict_prompt_validation: false,    // N11（双模开关）：true 时机检不合格直接拒绝，默认警告
+    climax_segment,                     // N6：高潮段号，机检校验位于全片 60-80%
+    audiovisual_signature: {            // N5（8 字段，S1/S2 产出）
+      medium, aspect,
+      color_ids: { "<角色/势力>": "<色相>" },   // ≤6，每角色一色相
+      texture: ["…"],                    // 质感词
+      core_theme,                        // 必须可拍：主语+比喻动词+宾语
+      master_dna: ["…"],                 // ≤3
+      genre_formula: { opening, turn, climax, ending }
+    },
+    sound_events: ["1 开场基底", "…", "12 结尾尾音"],   // N4：固定顺序 12-slot（无对应写 N/A，禁跳号）
+    world_anchors: { origin, equipment, energy, rule, support } | null   // 可选，每条带出处
   },
-  characters: [{ id: "S1", name, appearance_lock, wardrobe, notes }],   // speaker ID 与 characters.id 一一对应
+  characters: [{ id: "S1", name, appearance_lock, wardrobe, notes,
+    four_view_refs: { front, side, back, face } | null }],   // N10：四视图登记（D-U3 执行外，字段先立）；speaker ID 与 characters.id 一一对应
   locations:  [{ id, name, spatial_landmarks }],                         // 空间地标 = 轴线/方位依据
   props:      [{ id, name, state_by_beat: { beatId: "初态→触发→末态" } }],  // 道具因果几何三态台账（Δ8）
   beats: [{
     id: "B01",
     purpose,                                   // 本 Beat 信息变化/戏剧目的 ≤2 句
+    unit: { dramatic_task, visual_motif, hook } | null,   // N6 单元结构（visual_motif 来自签名；相邻单元 ≥1 种对比；首末 echo）
     creative_intent: {                         // Δ1（director-schema-v2）：四件套必须可观察、非空
       state_before, trigger, state_after, audience_takeaway
     },
     location_id, character_ids,
-    shots: [{
+    shots: [{                                  // Δ2/N3：7 列镜头卡 + 导演字段合一
       id: "B01-S1",
       purpose_tag: "dialogue" | "mixed" | "action" | "establish" | "insert" | "reaction",   // Δ2 强制标签
+      time: "mm:ss",                           // 连续时间轴（无空洞无重叠）
       duration_seconds,                        // Δ2 按 purpose_tag 时长区间机检（§6 G-duration）
+      shot_size: "极端特写|近景|中近景|中景|中远景|全景|远景",   // N3 景别 7 档中文强制（禁 ECU/CU 缩写）
+      camera: "<机位>·<运动>(·<速度修饰>)",      // N3 机位库 11 × 运镜库 15
+      transition: "硬切|匹配剪辑|撞切|J切|L切|…",               // N3 转场库 14（默认硬切可省略）
+      technique: "<高级技法 8 之一>" | null,
+      tags: ["海报帧|伏笔|关键|重特效|长镜|音锚|特设备"],        // ≤2
+      sound: "本镜声音（必填，静默也写）",      // N3：7 列镜头卡 sound 列
       stage: "t2v" | "i2v" | "ref2v",
       route_reason,                            // stage 选择理由（一致性需求）
       shot_intent: { new_information, narrative_subject, contains_reaction },   // Δ1：无新信息的 cut 应删除或改为运镜
@@ -89,7 +110,7 @@ DirectingIR ──→ dialect 编译层（h3: 现行 dialect/h3.ts 零改动）�
       direction: {                             // S2 产出（leos 三部门合并方案）
         performance, staging, cinematography,
         dialogue: { speaker_id: "S1", line, addressee_id } | null,   // line = 剧本台词逐字
-        micro_performance
+        micro_performance                      // 可含 FACS AU 注释（A-E 强度）
       },
       continuity_handoff: { positions, emotion, props, audio },   // Δ1 四通道：交下一 Beat
       prompt: { text, token_count } | null,    // S3 产出
@@ -111,15 +132,17 @@ DirectingIR ──→ dialect 编译层（h3: 现行 dialect/h3.ts 零改动）�
 
 提示词格式沿用统一模板（`<task_persona>`（角色+工具协议+few-shot）→ 数据块 → `<rules>` → `<output_contract>` + 自动反注入）。每槽位带 leos 式**权限负面清单**（"不得擅自改动"）。
 
-| 槽位                       | 工具                      | 输入 → 输出                                                                                                       | 关键纪律（含负面清单）                                                                                                                                                                                                                                |
-| -------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1 `pm-script-analyst`     | 无                        | 剧本 → ScriptIR JSON                                                                                              | 台词原文不改写；appearance_lock 必填；**不得暗改剧情/角色关系**                                                                                                                                                                                       |
-| S2 `pm-beat-director`      | catalog_search            | ScriptIR → beats[]（creative_intent/shot_intent/direction 三部门合并方案/stage 路由/reference_plan/道具三态登记） | **双锚点铁律**（identity+location，一 Beat 至多一个空间参考）；空间连续性先于运镜多样性（180° 轴线/同侧 master）；**先导演后提示词，可演动作先于情绪形容词**；**不得用抽象情绪词替代表演动作**；Ref2VA 末态泄漏失效模式 → 相反状态道具优先 i2v 首尾帧 |
-| S3 `pm-shot-writer`        | catalog_search            | Beat 方案 → 官方结构提示词（integrated_multimodal_description + overall_soundscape）                              | **编译职位非第二导演**——冲突交裁决不擅自折中；台词逐字装 `<d>[语言]...</d>`（禁角色名/冒号入标签）；说话前建立指向关系；反字幕约束；prompt 不得引用 reference_plan 之外的资产                                                                         |
-| S4 `pm-continuity-auditor` | catalog_search + 机检结果 | 逐镜语义审计 + 工程级跨镜连续性                                                                                   | **QC 八维矩阵**（§6）；每镜必跑；verdict+findings 逐镜（沿 anima A3：无 critical 跳审）                                                                                                                                                               |
-| S5 `pm-shot-repairer`      | catalog_search            | findings → 受影响镜头修复版                                                                                       | **单维失败只修该维**；最小改动；蓝图冻结（DirectingIR beats 方案不可变，只修 prompt）；**两次同类失败 → 上报结构性问题**（改 Beat 结构/锚点，不在 prompt 层硬修）                                                                                     |
+| 槽位                       | 工具                      | 输入 → 输出                                                                                                       | 关键纪律（含负面清单）                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1 `pm-script-analyst`     | 无                        | 剧本 → ScriptIR JSON                                                                                              | 台词原文不改写；appearance_lock 必填；**不得暗改剧情/角色关系**                                                                                                                                                                                                                                                                                                                                                                                        |
+| S2 `pm-beat-director`      | catalog_search            | ScriptIR → beats[]（creative_intent/shot_intent/direction 三部门合并方案/stage 路由/reference_plan/道具三态登记） | **双锚点铁律**（identity+location，一 Beat 至多一个空间参考）；空间连续性先于运镜多样性（180° 轴线/同侧 master）；**先导演后提示词，可演动作先于情绪形容词**；**不得用抽象情绪词替代表演动作**；Ref2VA 末态泄漏失效模式 → 相反状态道具优先 i2v 首尾帧；**WenWu 引擎（N2）**：叙事温度判别（高动态/细腻文戏/混合）+ 密度公式（round(T/1.0\|3.0\|2.0)，仅用户未指定结构时）+ 生命核八通道（形场视力念息言续）+ 四种生镜形态；**不得自动补默认时长/画幅** |
+| S3 `pm-shot-writer`        | catalog_search            | Beat 方案 → 官方结构提示词（integrated_multimodal_description + overall_soundscape）                              | **编译职位非第二导演**——冲突交裁决不擅自折中；台词逐字装 `<d>[语言]...</d>`（禁角色名/冒号入标签）；说话前建立指向关系；反字幕约束；prompt 不得引用 reference_plan 之外的资产；**镜头脉冲七段式**（观察理由→画面入口→新信息→主体变化→摄影机响应→结果落点→牵拉物，N2）；**表演肌理链**（刺激→压住→失效→泄露→选择→余波）+ FACS AU（A-C 日常/D 峰值）；**成文前过生成前检查门 + 生镜校验 17 项自检（N9）**                                                |
+| S4 `pm-continuity-auditor` | catalog_search + 机检结果 | 逐镜语义审计 + 工程级跨镜连续性                                                                                   | **QC 八维矩阵**（§6）；**findings severity 对齐 P0/P1/P2**（N7：P0=叙事错误/身份不明/空间崩溃/道具状态错/表演相反；P1=情绪无过程/接缝/命题未实现；P2=纹理漂移）；**审片顺序**：先整体判断（讲清了吗/情绪抵达了吗/最好的一刻）再按时间码记录；每镜必跑；verdict+findings 逐镜（沿 anima A3）                                                                                                                                                            |
+| S5 `pm-shot-repairer`      | catalog_search            | findings → 受影响镜头修复版                                                                                       | **单维失败只修该维**；**最小返工路由**（剪辑可解→单镜补拍→小节重做→整场重设计，N8）；**保护好表演**（好表演是稀缺资产——删错误区间/插反应/裁切重构图优先于扩大重做）；**症状→根因→修法表 22 行**为知识库（实施期资料源）；蓝图冻结（DirectingIR beats 方案不可变，只修 prompt）；**两次同类失败 → 上报结构性问题**（改 Beat 结构/锚点，不在 prompt 层硬修）                                                                                             |
 
 两段式确认（leos 授权门语义 + 版本状态机，§7）：S2 方案产出后默认自动进入 S3；`await_user_approval: true` 时挂起——envelope 返回方案 + `status: "awaiting_approval"`，用户确认后续跑（S3-S5）。版本登记：每次 S3/S5 产出登记进 continuity_ledger（版本号/上游设计 hash/相对上版变化）。
+
+**N12 分镜汇报时间轴强制格式**（S2 产出呈现给用户时，沿 director-suite）：必须逐镜给出「起止时间（精确到秒、连续、无空洞无重叠）→ 画面内容 → 对白」时间轴表格；**禁止宽泛概括**（"前面是开场、中间打斗"类）。用户只改个别镜头时，仅重报被改镜头及其前后衔接，不整片重述。
 
 ## 6. 双轨审核与机器门
 
@@ -140,6 +163,10 @@ LLM 轨 `pm-continuity-auditor` **QC 八维矩阵**（Δ5，每镜逐维 verdict
 
 - **G-schema**：DirectingIR schema 校验（字段/枚举/引用完整性）
 - **G-purpose**（Δ2）：purpose_tag ∈ 六枚举；**G-duration**：duration_seconds 落入该 tag 区间（对白 2-4/混合 1.5-3/动作 0.4-1.5/建立 2-4/插入 0.5-2/反应 1-2——violation = important；单生成单元 <4s 或 >15s = critical，H3 硬约束）
+- **G-shotcard**（N3）：镜号连续不跳号；**每镜时间连续且时长累加 = 段长**（无空洞无重叠）；sound 必填（静默也写）；tags ≤2
+- **G-sound**（N4）：sound_events ≤12、顺序固定禁跳号、每项含 time/event
+- **G-signature**（N5）：audiovisual_signature 8 字段齐全；color_ids ≤6（每角色一色相，禁漏色重色）；master_dna ≤3；core_theme 可拍性（主语+比喻动词+宾语）
+- **G-unit**（N6）：climax_segment 起始位于全片 60-80%；相邻单元 ≥1 种对比；首末单元意象 echo（默认 warning，strict 模式拒绝）
 - **G-intents**（Δ1）：shot_intent 数 = shots 数；每镜 new_information 非空；对白 Beat ≥1 contains_reaction
 - **G-refbinding**（Δ3）：**stage ↔ 角色绑定**——t2v：reference_plan 必空；i2v：仅 composition_picture（首/尾帧）；ref2v：identity/location/prop_subject（Subject N）；**引用 stage 不支持的角色 = critical**（"提示词不得引用到不了模型的参考"）
 - **G-dialogue**（Δ4）：`<d>[语言]...</d>` 标签内文本与 script 台词逐字相等（source_script_hash 对账）；标签内禁角色名/冒号；speaker_id ∈ characters
@@ -147,6 +174,7 @@ LLM 轨 `pm-continuity-auditor` **QC 八维矩阵**（Δ5，每镜逐维 verdict
 - **G-handoff**（Δ1）：非首 Beat 的 continuity_handoff 四通道非空
 - **G-budget**：官方 tokenizer 精确计数（现行机制复用，t2va/i2va/ref2va 各档预算）
 - 其余 `rules-h3.ts` 既有机检（镜头信息增量/cut 时间戳）复用不修改
+- **N11 双模开关**：`meta.strict_prompt_validation` 默认 false（G-unit/G-signature 类结构项降为 warning）；true 时机检不合格直接拒绝——沿 director-suite
 
 ## 7. 递进修复与版本状态机
 

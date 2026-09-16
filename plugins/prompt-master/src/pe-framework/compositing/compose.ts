@@ -9,6 +9,9 @@ import type { SemanticBlueprint } from '../blueprint/semantic-schema.js'
 
 export type Rating = 'safe' | 'sensitive' | 'explicit'
 
+/** 回退 NL 字符预算（positive = tags + nl ≤ 1200，tags 最多 40×~10 chars，NL 留 600） */
+export const NL_CHAR_BUDGET = 600
+
 /** 负面模板（spec §7：quality 系列 + 分级守卫；现行 policy 词表沿用） */
 export const NEGATIVE_TEMPLATE = [
   'worst quality',
@@ -68,6 +71,12 @@ export function deterministicCompose(bp: SemanticBlueprint, pack: RetrievalPack)
     sentences.push(`${pack.unresolved.map((u) => u.query).join(', ')}.`)
   }
   if (bp.mood.trim() !== '') sentences.push(`${bp.mood}.`)
+
+  // 2026-09-16 活跑实证（gen_1789530728519）：V1 的 lighting_idea/mood 被 enrich 扩成长段 →
+  // 回退 NL 整段塞入 → positive 2328 字符超预算（tag_budget critical）。
+  // 修：NL 总长截到 NL_CHAR_BUDGET(600)——按句保留，超预算句尾截断。
+  const nlJoined = sentences.slice(0, 4).join(' ')
+  const nl = nlJoined.length > NL_CHAR_BUDGET ? `${nlJoined.slice(0, NL_CHAR_BUDGET).replace(/\s+\S*$/, '')}…` : nlJoined
 
   return {
     tags: tags.slice(0, 40),

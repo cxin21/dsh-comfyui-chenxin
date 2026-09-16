@@ -147,7 +147,11 @@ export function applySemanticPatch(v0: SemanticBlueprint, raw: string): Semantic
   // parse 失败 → 扩写整轮被跳过。统一改用平衡花括号扫描（截取第一个完整 JSON 对象）。
   const body = extractFirstJsonObject(raw);
   const parsed = JSON.parse(body) as Record<string, unknown>;
-  const set = isPlainObject(parsed['set']) ? (parsed['set'] as Record<string, unknown>) : parsed;
+  // audit F7：无 'set' 键的 patch（additions-only）——set 回退必须排除 additions 键，
+  // 否则 prune 会把 additions 键本身误计 1 次越权（虚假 enrich_path_violation:1）
+  const set = isPlainObject(parsed['set'])
+    ? (parsed['set'] as Record<string, unknown>)
+    : Object.fromEntries(Object.entries(parsed).filter(([k]) => k !== 'additions'));
   const additions = isPlainObject(parsed['additions']) ? (parsed['additions'] as Record<string, unknown>) : undefined;
   let pathViolations = prunePatchPaths(set, COMPOSITING_SET_ALLOWED);
   if (additions) pathViolations += prunePatchPaths(additions, COMPOSITING_ADDITIONS_ALLOWED);

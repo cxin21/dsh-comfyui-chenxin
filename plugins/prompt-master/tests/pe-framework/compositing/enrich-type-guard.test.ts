@@ -63,6 +63,14 @@ describe('enrich patch 值类型守卫（A7）', () => {
     expect(advisories).toEqual([]);
   });
 
+  it('additions-only patch（无 set 键）不产生虚假 path violation（audit F7）', () => {
+    // 既有 quirk：set 回退取整个 parsed → prune 把 additions 键本身误计 1 次越权
+    const raw = JSON.stringify({ additions: { core: { style_hints: ['flat colors'] } } });
+    const { v1, advisories } = applySemanticPatch(V0, raw);
+    expect(v1.core.style_hints).toEqual(['cel', 'flat colors']);
+    expect(advisories).toEqual([]);
+  });
+
   it('additions.style_hints 数组追加语义保持（concat 去重）', () => {
     const raw = JSON.stringify({
       set: { mood: 'mood original' },

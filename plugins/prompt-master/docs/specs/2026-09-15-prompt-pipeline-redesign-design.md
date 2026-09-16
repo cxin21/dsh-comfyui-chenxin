@@ -257,6 +257,8 @@ N5. 禁止出现 sunlight/moonlight/rim light/god rays 等光效词——光源�
 - **M5 蓝图形态/slots 直译对 anima 移除**：`draft.blueprint` 分支与 slots 装配仅服务 h3（未迁移方言）；anima blueprint_id 增量未接入（T1R 项，显式报错不做静默旧路径）。
 - **legacy brief 扩写（runEnrich）仅服务 h3**；anima 美学扩展 = S2 `runSemanticEnrich`（patch 白名单）。
 - 活跑冒烟驱动的两处接线热修复已并入本设计：①intentBase persona 踩踏（compositing 态不下发 persona/schema）；②runEnrich 守卫。
+- **T1R 收尾（2026-09-16 第二轮活跑后，`048ec05`/`db47f56`/`8370ef8`）**：③D7 耗尽回退分支补齐（此前耗尽 → ok=false 空手，违反 D7）；④tag_budget 证据感知下限（min(20, 证据概念数)，其上未满降 important——化解 T1 与 min-20 的矛盾）；⑤检索并行化 + 相同 query 去重；⑥**Q0 形式白名单**（证据仅收 canonical/alias/semantic，fuzzy/unknown 一律拒——`fingering from behind` 类真 tag 碰瓷通道堵死）；⑦平衡花括号 JSON 提取器统一 semantic/writer/enrich 三处解析器（LLM 尾随文字免疫）；⑧阈值 env 标定面 `PM_VECTOR_MIN_SCORE`/`PM_VECTOR_MIN_USAGE`（§12.3 不改代码标定）。
+- 遗留移交（tag-vector-semantic 计划）：bge-m3 批量嵌入降延迟；semantic 增量蓝图（anima blueprint_id，现行显式报错）。
 
 ## 13. 提示词工程纪律来源（2026-09-15 调研）
 

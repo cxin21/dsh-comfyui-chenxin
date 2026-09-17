@@ -73,6 +73,8 @@ export interface DirectingShot {
   purpose_tag: PurposeTag;
   time: string;
   duration_seconds: number;
+  /** 主体标识（对白 speaker / reference 绑定用的 who 标签，与 characters.id 对应） */
+  who?: string;
   shot_size: string;
   camera: string;
   /** 镜头内容描述（G-prop 出现覆盖判定用） */
@@ -209,7 +211,7 @@ export function validateDirectingIr(ir: DirectingIr): { ok: boolean; missing: st
           if (!isStr(h[f])) missing.push(`${path}.shots[${s.id}].continuity_handoff.${f} 非空缺失`);
         }
       }
-      if (s.prompt !== null && (!isObj(s.prompt) || !isStr(s.prompt.text))) {
+      if (s.prompt != null && (!isObj(s.prompt) || !isStr(s.prompt.text))) {
         missing.push(`${path}.shots[${s.id}].prompt.text 非法`);
       }
     }

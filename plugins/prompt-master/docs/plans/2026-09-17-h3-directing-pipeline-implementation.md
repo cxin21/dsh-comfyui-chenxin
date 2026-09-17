@@ -142,4 +142,6 @@ tests/plugin/h3-directing.e2e.test.ts  # 端到端 mock（Task 7）
 
 ## 完成记录
 
-（每任务完成即回填：日期/改动/测试/commit）
+- Task 1: 完成，commit 04a29f6。`directing/ir-schema.ts`：DirectingIr/ScriptIr 类型 + validateDirectingIr（9 违规用例全绿）+ PURPOSE_TAGS/STAGES/DURATION_RANGES 常量；unit 可选、ScriptIr.appearance_lock 可缺（校验器报）。12/12 绿，tsc 0，build OK。
+- Task 2: 完成，commit cb46992。schema/h3-shots.ts dialogue 对象三布尔 + dialect collectSpeakerIds/buildDialogue 四种发射形态 + aesthetics/check.ts 消费点加固；golden 再生级联（t2va-baker 81→89 tokens、tokenizer golden 76→84 raw、fixture 同步；非对白 golden 逐字节不变）。157 files / 1349 passed。
+（后续任务完成即回填）

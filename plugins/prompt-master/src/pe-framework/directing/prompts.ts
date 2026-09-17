@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 五槽位 persona + prompt 装配 + 契约解析（spec 2026-09-17-h3-agentic-directing-pipeline-design §5）：
  * S1 pm-script-analyst / S2 pm-beat-director / S3 pm-shot-writer / S4 pm-continuity-auditor / S5 pm-shot-repairer。
  * 提示词格式沿用统一模板（task-text）+ 自动反注入。S2/S3/S4/S5 开放 catalog_search 工具。
@@ -7,7 +7,6 @@
 import { buildTaskText } from '../llm/task-text.js';
 import { extractFirstJsonObject } from '../llm/json-extract.js';
 import type { ScriptIr, DirectingIr, DirectingBeat, DirectingShot } from './ir-schema.js';
-import { validateScriptIr } from './ir-schema.js';
 
 // ─── S1 pm-script-analyst ───────────────────────────────────────────
 

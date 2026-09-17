@@ -2,9 +2,10 @@
 import {
   registerAuthorTool,
   setAuthorIntentProvider,
+  setDirectingDeps,
   type AuthorIntentRequest,
 } from '../../src/tools/prompt-author.js';
-import { stubCtx, runTool } from './helpers.js';
+import { stubCtx, runTool, dDeps } from './helpers.js';
 import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js';
 
 const cfg = { temperature: 0.7 };
@@ -22,7 +23,6 @@ function providerFor(drafts: Array<Record<string, unknown> | Error>) {
 
 describe('prompt_author full pipeline (P4)', () => {
   const GOOD_SLOTS = { slots: { count_gender: ['1girl'], appearance: ['long hair'] } };
-  const GOOD_SHOTS = { shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches.', ambient: 'soft wind' }] } };
 
   it('anima full chain: intent → compile → audit → Envelope with t2i.prompt hint', async () => {
     const { fn, calls } = providerFor([GOOD_SLOTS]);
@@ -44,23 +44,26 @@ describe('prompt_author full pipeline (P4)', () => {
     expect(raw.audit.gates).toBeDefined();
   });
 
-  it('h3 full chain: intent shots → compile → audit → Envelope with t2v.prompt + budget', async () => {
-    const { fn } = providerFor([GOOD_SHOTS]);
-    setAuthorIntentProvider(fn);
+  it('h3 full chain (directing): S1→S5 → dialect compile → Envelope with t2v.prompt + storyboard', async () => {
+    setDirectingDeps(dDeps({
+      shotWriterRunner: async () => JSON.stringify({ shots: [{ what: 'A cat stretches', who: 'S1', duration: 4 }] }),
+    }));
     const raw = JSON.parse(
       String(
         await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
           target: 'h3',
           input: 'cat stretch',
           judge_mode: 'off',
-          enrich: false,
         }),
       ),
     );
     expect(raw.ok).toBe(true);
     expect(raw.result.text).toContain('integrated_multimodal_description: [Shot 1] A cat stretches.');
     expect(raw.target_slot_hint).toBe('t2v.prompt');
-    expect(raw.audit.budget.counter).toBe('official-tokenizer');
+    expect(raw.audit.gates).toBeDefined();
+    expect(raw.quality).toBe('passed');
+    expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/);
+    setDirectingDeps(null);
   });
 
   it('sd/generic still report DIALECT_NOT_AVAILABLE envelope', async () => {

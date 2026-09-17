@@ -1,7 +1,7 @@
 ﻿import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { registerAuthorTool, setAuthorIntentProvider, setAuthorJudgeDeps } from '../../src/tools/prompt-author.js';
+import { registerAuthorTool, setAuthorIntentProvider, setAuthorJudgeDeps, setDirectingDeps } from '../../src/tools/prompt-author.js';
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js';
-import { stubCtx, runTool, textStream } from './helpers.js';
+import { stubCtx, runTool, textStream, dDeps, dBeat, dShot } from './helpers.js';
 import type { AuthorIntentFn } from '../../src/tools/prompt-author.js';
 // 注入蓝图 provider：第一轮产出 v0，后续轮只补 duration
 const fakeProvider: AuthorIntentFn = async (req: any) => {
@@ -111,7 +111,7 @@ describe('prompt_author blueprint_id incremental path', () => {
     const v = JSON.parse(
       String(
         await runTool(ctx, def, {
-          target: 'anima',
+          target: 'h3',
           blueprint_id: 'fight-15s',
           input: '把第二镜改成雨夜',
           judge_mode: 'off',
@@ -125,30 +125,20 @@ describe('prompt_author blueprint_id incremental path', () => {
   });
 });
 
-describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁)', () => {
-  // provider 每轮返回同一「不可修复」蓝图（8 镜 × 5s 超 max_shots(5)=2，preflightRepair 只记建议不改结构）
-  const alwaysBrokenProvider: AuthorIntentFn = async (_req: any) => ({
-    blueprint: {
-      schema_version: 1,
-      media: 'video',
-      core: { concept: '8镜打斗', negative: [] },
-      media_layer: {
-        video: { total_duration_seconds: 5, shots: Array.from({ length: 8 }, (_, i) => ({ beat: `镜${i + 1}` })) },
-      },
-    } as any,
-    missing: [],
-  });
-
-  it('Level 3: loop exhausted → next_action=manual + loop_exhausted:true (非 auto_repair)', async () => {
-    setAuthorIntentProvider(alwaysBrokenProvider as any);
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') });
+describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁, directing)', () => {
+  // 新管线契约：S5 修复耗尽（2 镜均不可修复）仍 critical → loop_exhausted:true + next_action=manual（非 auto_repair）
+  it('Level 3: S5 修复轮耗尽仍 critical → next_action=manual + loop_exhausted:true (非 auto_repair)', async () => {
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 1), { ...dShot('B01-S2', 1), time: '00:01' }])] }),
+      repairerRunner: async () => JSON.stringify({ what: 'still broken' }),
+    }));
+    const ctx = stubCtx();
     const def = registerAuthorTool(ctx as any, { temperature: 0.7 });
-    const v = JSON.parse(String(await runTool(ctx, def, { target: 'anima', input: '8镜打斗', judge_mode: 'off' })));
-    // Level 1 已触发（shots 超限建议）+ Level 2 两轮耗尽仍 critical → 必须 manual，不能因 repaired=true 误报 auto_repair
+    const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '8镜打斗', judge_mode: 'off' })));
     expect(v.next_action).toBe('manual');
     expect(v.advisories).toContain('loop_exhausted:true');
-    expect(v.observability.repairs.length).toBeGreaterThan(0); // Level 1 修复记录存在
-    setAuthorIntentProvider(null);
+    expect(v.observability.corrections).toBe(2);
+    setDirectingDeps(null);
   });
 });
 
@@ -248,7 +238,7 @@ describe('prompt_author blueprint_id enrich advisory (Round7 T6)', () => {
     const v = JSON.parse(
       String(
         await runTool(ctx, def, {
-          target: 'anima',
+          target: 'h3',
           blueprint_id: 'bp-enrich-check',
           input: '修改一个镜头',
           judge_mode: 'off',
@@ -266,7 +256,7 @@ describe('prompt_author blueprint_id enrich advisory (Round7 T6)', () => {
     const v = JSON.parse(
       String(
         await runTool(ctx, def, {
-          target: 'anima',
+          target: 'h3',
           blueprint_id: 'bp-enrich-check',
           input: '修改一个镜头',
           judge_mode: 'off',

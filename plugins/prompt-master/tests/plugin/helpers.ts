@@ -82,3 +82,59 @@ export async function runTool(
 ): Promise<unknown> {
   return def.execute(args, exec);
 }
+
+// ── directing 管线 e2e fixtures（新管线契约测试共用，spec 2026-09-17 §3/§7）──
+
+export const D_SCRIPT_IR = {
+  characters: [{ id: 'S1', name: 'A', appearance_lock: 'tall', wardrobe: 'coat', notes: '' }],
+  locations: [{ id: 'L1', name: 'street', spatial_landmarks: 'gate' }],
+  props: [],
+  info_cuts: [],
+};
+
+export function dShot(id: string, duration: number, extra: Record<string, unknown> = {}) {
+  return {
+    id,
+    purpose_tag: 'establish',
+    time: '00:00',
+    duration_seconds: duration,
+    what: 'wide establishing shot',
+    who: 'S1',
+    shot_size: '全景',
+    camera: 'wide',
+    stage: 't2va',
+    route_reason: 'text only',
+    sound: 'hum',
+    tags: [],
+    transition: '硬切',
+    technique: null,
+    shot_intent: { new_information: 'she appears', narrative_subject: 'her', contains_reaction: false },
+    reference_plan: [],
+    direction: { performance: 'stands tall', staging: 'center', cinematography: 'wide', dialogue: null, micro_performance: 'calm' },
+    continuity_handoff: { positions: 'center', emotion: 'composed', props: 'none', audio: 'hum' },
+    ...extra,
+  };
+}
+
+export function dBeat(id: string, shots: unknown[]) {
+  return {
+    id,
+    purpose: 'establish',
+    creative_intent: { state_before: 'calm', trigger: 'enters', state_after: 'alert', audience_takeaway: 'danger' },
+    location_id: 'L1',
+    character_ids: ['S1'],
+    shots,
+  };
+}
+
+/** 标准五槽位 runner mock（happy path：1 Beat × 1 镜 × 4s，零 critical）；overrides 覆盖任意 runner */
+export function dDeps(overrides: Record<string, unknown> = {}) {
+  return {
+    scriptAnalystRunner: async () => JSON.stringify(D_SCRIPT_IR),
+    beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 4)])] }),
+    shotWriterRunner: async () => JSON.stringify({ shots: [{ what: 'wide establishing shot', who: 'S1', duration: 4 }] }),
+    auditorRunner: async () => JSON.stringify({ verdict: 'pass', findings: [] }),
+    repairerRunner: async () => JSON.stringify({}),
+    ...overrides,
+  };
+}

@@ -1,128 +1,84 @@
-import { describe, expect, it, afterAll } from 'vitest';
+﻿import { describe, expect, it, afterAll } from 'vitest';
 import {
   registerAuthorTool,
   setAuthorIntentProvider,
+  setDirectingDeps,
   type AuthorIntentRequest,
 } from '../../src/tools/prompt-author.js';
-import { stubCtx, runTool } from '../plugin/helpers.js';
+import { stubCtx, runTool, dDeps, dBeat, dShot } from '../plugin/helpers.js';
 
 const cfg = { temperature: 0.7 };
 
-/** Per-round h3 drafts: round0 uses 2 references (critical ref_count) → round>=1 uses 3 (good) */
-function loopProvider() {
-  const rounds: number[] = [];
-  const fn = async (req: AuthorIntentRequest) => {
-    rounds.push(req.round);
-    const count = req.round === 0 ? 2 : 3;
-    return {
-      shots: {
-        duration_seconds: 8,
-        shots: [{ what: 'A waves.', who: 'A' }],
-        references: Array.from({ length: count }, (_, i) => ({
-          kind: 'picture',
-          who: ['A', 'B', 'C'][i],
-          image: `${['A', 'B', 'C'][i]}.png`,
-        })),
-      },
-    };
-  };
-  return { fn, rounds: () => rounds };
+async function runH3(args: Record<string, unknown> = {}) {
+  return JSON.parse(
+    String(
+      await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
+        target: 'h3',
+        input: 'x',
+        judge_mode: 'off',
+        ...args,
+      }),
+    ),
+  );
 }
 
-describe('prompt_author correction loop (P4)', () => {
-  it('bad → critical → corrected on 2nd intent round → passed', async () => {
-    const { fn, rounds } = loopProvider();
-    setAuthorIntentProvider(fn);
-    const raw = JSON.parse(
-      String(
-        await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-          target: 'h3',
-          input: 'x',
-          judge_mode: 'off',
-          enrich: false,
-        }),
-      ),
-    );
-    expect(rounds()).toEqual([0, 1]); // round0 bad (2 refs) → 1 correction (3 refs) → good
+describe('prompt_author directing loop (P4, spec §7)', () => {
+  it('bad → critical → S5 repair fixes on 1st round → passed', async () => {
+    let repairs = 0;
+    // Beat 总时长 2s < 4 → G-duration critical；repairer 修复 duration → 5s → 收敛
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 2)])] }),
+      repairerRunner: async () => { repairs++; return JSON.stringify({ duration_seconds: 4 }); },
+    }));
+    const raw = await runH3();
+    expect(repairs).toBe(1); // S5 修复真走一轮
     expect(raw.ok).toBe(true);
-    expect(raw.audit.passed).toBe(true);
-    expect(raw.audit.gates.some((g: any) => g.rule === 'ref_count')).toBe(false);
+    expect(raw.observability.corrections).toBe(1);
+    expect(raw.audit.gates.some((g: any) => g.rule === 'G-duration')).toBe(false);
+    setDirectingDeps(null);
   });
 
-  it('two corrections still failing → loop_exhausted advisory', async () => {
-    let calls = 0;
-    setAuthorIntentProvider(async () => {
-      calls++;
-      // Always bad: constant 2 refs (ref_count critical)
-      return {
-        shots: {
-          duration_seconds: 8,
-          shots: [{ what: 'A waves.', who: 'A' }],
-          references: [
-            { kind: 'picture', who: 'A', image: 'a.png' },
-            { kind: 'picture', who: 'B', image: 'b.png' },
-          ],
-        },
-      };
-    });
-    const raw = JSON.parse(
-      String(
-        await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-          target: 'h3',
-          input: 'x',
-          judge_mode: 'off',
-          enrich: false,
-        }),
-      ),
-    );
-    expect(calls).toBe(3); // round0 + 2 corrections
+  it('two repairs still failing → loop_exhausted advisory + ok=false', async () => {
+    let repairs = 0;
+    // 2 镜均 1s（tag 区间 + Beat 总时长双 critical），repairer 永不修复
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 1), { ...dShot('B01-S2', 1), time: '00:01' }])] }),
+      repairerRunner: async () => { repairs++; return JSON.stringify({ what: 'still bad' }); },
+    }));
+    const raw = await runH3();
+    expect(repairs).toBe(2); // round0 + 修复（每镜一次，共 2 = SHOTS_PER_REPAIR）
     expect(raw.ok).toBe(false);
     expect(raw.advisories).toContain('loop_exhausted:true');
+    expect(raw.next_action).toBe('manual');
+    setDirectingDeps(null);
   });
 
-  it('F1: ref2va with 2 references is rejected as critical ref_count gate (loop not engaged)', async () => {
-    setAuthorIntentProvider(async () => ({
-      shots: {
-        duration_seconds: 8,
-        shots: [{ what: 'Neko waves.', who: 'Neko' }],
-        references: [
-          { kind: 'picture', who: 'Neko', image: 'n.png' },
-          { kind: 'picture', who: 'Mei', image: 'm.png' },
-        ],
-      },
+  it('F1: i2va with identity_subject reference → G-refbinding critical gate fires', async () => {
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 4, { stage: 'i2va', reference_plan: [{ role: 'identity_subject', target: 'S1', h3_label: 'Subject 1' }] })])] }),
+      repairerRunner: async () => JSON.stringify({ what: 'x' }),
     }));
-    const raw = JSON.parse(
-      String(
-        await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-          target: 'h3',
-          input: 'x',
-          judge_mode: 'off',
-          enrich: false,
-        }),
-      ),
-    );
-    expect(raw.ok).toBe(false);
-    expect(raw.audit.gates.some((g: any) => g.rule === 'ref_count' && g.severity === 'critical')).toBe(true);
+    const raw = await runH3();
+    expect(raw.audit.gates.some((g: any) => g.rule === 'G-refbinding' && g.severity === 'critical')).toBe(true);
+    setDirectingDeps(null);
   });
 
-  it('F2: full_reference scenario without references → references_unmapped advisory + critical gate', async () => {
-    setAuthorIntentProvider(async () => ({
-      shots: { duration_seconds: 10, shots: [{ what: 'a snow house', who: 'Snow' }] },
+  it('F2: dialogue speaker_id not in characters → G-dialogue-official critical gate', async () => {
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 4, {
+        direction: { performance: 'p', staging: 's', cinematography: 'c', dialogue: { speaker_id: 'S99', line: 'x', addressee_id: null }, micro_performance: 'm' },
+        shot_intent: { new_information: 'x', narrative_subject: 'y', contains_reaction: true },
+      })])] }),
+      repairerRunner: async () => JSON.stringify({ what: 'x' }),
     }));
-    const raw = JSON.parse(
-      String(
-        await runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-          target: 'h3',
-          input: 'x',
-          scenario_id: 'full_reference',
-          judge_mode: 'off',
-          enrich: false,
-          form_fields: { subject: 'snow house', duration_seconds: '10' },
-        }),
-      ),
-    );
-    expect(raw.advisories).toContain('references_unmapped');
-    expect(raw.audit.gates.some((g: any) => g.rule === 'references_unmapped' && g.severity === 'critical')).toBe(true);
+    const raw = await runH3();
+    expect(raw.audit.gates.some((g: any) => g.rule === 'G-dialogue-official' && g.severity === 'critical')).toBe(true);
+    setDirectingDeps(null);
+  });
+
+  afterAll(() => {
+    setAuthorIntentProvider(null);
+    setDirectingDeps(null);
   });
 
   // Round7 T6：三期 T3 闭环联动的行为级锚定——中文片段触发 cjk_in_positive critical 后，

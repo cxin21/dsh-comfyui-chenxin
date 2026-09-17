@@ -13,13 +13,14 @@ import {
   setAuthorIntentProvider,
   setAuthorJudgeDeps,
   setAuthorFeedbackDbPath,
+  setDirectingDeps,
   type AuthorIntentRequest,
 } from '../../src/tools/prompt-author.js';
 import { getGeneration, recordFeedback } from '../../src/pe-framework/feedback/store.js';
 import type { CriticFinding, CriticProvider } from '../../src/pe-framework/eval/critic.js';
 import type { EvidenceDeps } from '../../src/pe-framework/eval/evidence.js';
 import type { StageResult } from '../../src/pe-framework/pipeline/types.js';
-import { stubCtx, runTool } from './helpers.js';
+import { stubCtx, runTool, dDeps, dBeat, dShot } from './helpers.js';
 import { closeCatalog } from '../../src/pe-framework/dialect/anima-catalog.js';
 
 const cfg = { temperature: 0.7 };
@@ -163,38 +164,35 @@ describe('规格4 judge LLM 全挂 → 降级出稿', () => {
   });
 });
 
-describe('规格7 fast + 规则 critical → judge skipped(rule_critical) 不投影（review F1, spec §2.5）', () => {
-  it('Envelope 无 judge/debate/judgeFeedback 字段；advisories 无 judge_skipped；闭环仍由 gates 驱动（loop_exhausted 照常）', async () => {
+describe('规格7 (directing) 规则 critical 驱动闭环：judge critic 零调用、judge 三字段不投影、loop_exhausted 照常', () => {
+  it('Envelope 无 judge/debate/judgeFeedback 字段；advisories 无 judge_skipped；S5 耗尽 → loop_exhausted:true + ok=false', async () => {
     const critic = criticOf([PASS_JSON]);
     setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence });
-    const intentCalls: AuthorIntentRequest[] = [];
-    setAuthorIntentProvider(async (req) => {
-      intentCalls.push(req);
-      return { shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches.' }] } } as never;
-    });
-    // i2va + 无 references → ref_count 规则 critical → runStage 返回 judge={skipped:true,reason:'rule_critical'}
+    // 2 镜均 1s（G-duration critical），repairer 永不修复 → S5 耗尽
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 1), { ...dShot('B01-S2', 1), time: '00:01' }])] }),
+      repairerRunner: async () => JSON.stringify({ what: 'still bad' }),
+    }));
     const raw = JSON.parse(
       String(
         await runTool(stubCtx(), tool(), {
           target: 'h3',
           input: 'cat stretch',
-          stage: 'i2va',
           judge_mode: 'fast',
-          enrich: false,
         }),
       ),
     );
     expect(raw.ok).toBe(false);
-    // 跳过评审不是评审结果：judge 字段缺省
+    // directing 管线不走 judge critic：评审字段缺省
     expect(raw.judge).toBeUndefined();
     expect(raw.debate).toBeUndefined();
     expect(raw.judgeFeedback).toBeUndefined();
-    // 评审根本没发生：critic 零调用；advisories 与现状一致（无 judge_skipped，rule critical 照常闭环）
     expect(critic.calls).toBe(0);
     expect(raw.advisories).not.toContain('judge_skipped');
     expect(raw.advisories).toContain('loop_exhausted:true');
     expect(raw.observability.corrections).toBe(2);
     expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/);
+    setDirectingDeps(null);
   });
 });
 
@@ -498,44 +496,24 @@ describe('T4 规格2 结构化 rebuttals（requiredFix 已在稿内 → 带证�
   });
 });
 
-describe('T4 规格3 h3 镜头段 patch', () => {
-  it('finding 定位到 [Shot N] 段 → requiredFix 重写该镜头段文本，不重拆', async () => {
-    const finding = {
-      severity: 'major',
-      dimension: 'shot-increment',
-      problem: '动作不清晰',
-      evidence: { tool: 'aesthetics', query: 'cat stretches', result: 'pass concreteness' },
-      requiredFix: 'The cat yawns and blinks slowly',
-    };
-    const NEEDS_H3 = JSON.stringify({
-      verdict: 'needs_revision',
-      dimensionScores: {
-        'shot-structure': 40,
-        'shot-increment': 40,
-        'cross-shot-consistency': 40,
-        'duration-fit': 40,
-        pacing: 40,
-        'atmosphere-coupling': 40,
-        'performance-causality': 40,
-        'continuity-exit-entry': 40,
-        'camera-motivation': 40,
-      },
-      findings: [finding],
-      praise: [],
-    });
-    const critic = criticOf([NEEDS_H3, REV_CLOSE_F1]);
-    setAuthorJudgeDeps({ criticProvider: critic, evidenceDeps: mockEvidence });
-    setAuthorIntentProvider(
-      async () => ({ shots: { duration_seconds: 6, shots: [{ what: 'A cat stretches' }] } }) as never,
-    );
+describe('T4 规格3 (directing) 逐镜修复：auditor finding → S5 repairer 重写该镜内容，不重拆', () => {
+  it('finding 定位到镜 → repairer 输出替换该镜字段，编译后 prompt 含修复文本', async () => {
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({ beats: [dBeat('B01', [dShot('B01-S1', 4)])] }),
+      shotWriterRunner: async () => JSON.stringify({ shots: [{ what: 'A cat stretches', who: 'S1', duration: 4 }] }),
+      auditorRunner: async () => JSON.stringify({ verdict: 'needs_revision', findings: [{ severity: 'major', dimension: 'Story', problem: '动作不清晰', requiredFix: 'The cat yawns and blinks slowly' }] }),
+      repairerRunner: async () => JSON.stringify({ what: 'The cat yawns and blinks slowly', who: 'S1' }),
+    }));
     const raw = JSON.parse(
       String(
-        await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', judge_mode: 'strict', enrich: false }),
+        await runTool(stubCtx(), tool(), { target: 'h3', input: 'cat stretch', judge_mode: 'fast' }),
       ),
     );
-    expect(String(raw.result.text)).toContain('[Shot 1] The cat yawns and blinks slowly.');
-    expect(raw.debate[1].reviser.changes[0]).toBe('patch:shot 1 (finding f1)');
-    expect(raw.judge).toMatchObject({ verdict: 'pass' });
+    expect(String(raw.result.text)).toContain('The cat yawns and blinks slowly');
+    expect(raw.observability.corrections).toBe(1);
+    expect(raw.quality).toBe('degraded');
+    expect(raw.next_action).toBe('ok');
+    setDirectingDeps(null);
   });
 });
 

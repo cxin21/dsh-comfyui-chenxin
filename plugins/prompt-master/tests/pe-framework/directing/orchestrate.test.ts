@@ -74,12 +74,15 @@ describe('orchestrateDirecting（spec §3/§7/§8）', () => {
     const r = await orchestrateDirecting(
       { script: 'x' },
       baseDeps({
-        beatDirectorRunner: async () => JSON.stringify({ beats: [...BEATS, ...BEATS].map((b, i) => ({ ...b, id: `B0${i + 1}` })) }),
+        beatDirectorRunner: async () =>
+          JSON.stringify({ beats: [...BEATS, ...BEATS].map((b, i) => ({ ...b, id: `B0${i + 1}`, shots: b.shots.map((s) => ({ ...s, id: `B0${i + 1}-S1` })) })) }),
         shotWriterRunner: async () => { call++; if (call === 1) throw new Error('writer fail'); return SHOT_WRITER_OUT },
       }),
     )
-    expect(r.ok).toBe(true) // 部分产出仍 ok
-    expect(r.quality).toBe('degraded')
+    expect(r.ok).toBe(true) // 部分产出仍 ok（修复未耗尽）
+    expect(r.quality).toBe('degraded') // S3 失败 → degraded
+    expect(r.advisories.some((a) => a.startsWith('shot_writer_failed'))).toBe(true)
+    expect(r.storyboard.beats).toHaveLength(2) // 链路未被单镜失败阻塞
   })
 
   it('S4 降级（auditor 故障）→ 仅机器门', async () => {

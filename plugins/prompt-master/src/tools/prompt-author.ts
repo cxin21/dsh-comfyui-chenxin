@@ -1,4 +1,4 @@
-import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
+﻿import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 import { TARGETS, type Target } from '../pe-framework/index.js';
 import { serializeReport } from '../pe-framework/audit/index.js';
 import type { AnimaSlots } from '../pe-framework/dialect/anima.js';
@@ -47,7 +47,7 @@ import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.j
 // 2026-09-16 定稿：catalogCandidatesForText（B7 前置召回）随 legacy slots 路径移除——
 // anima 词表证据唯一由 compositing S2.5 检索包承载（retrieval-pack.ts）
 import { resolveRating } from '../pe-framework/safety/rating.js';
-import { h3RatingUnsupportedError } from './h3-rating-gate.js';
+
 import { checkBoundaries } from '../pe-framework/safety/boundaries.js';
 import { recommendArtDirection } from '../pe-framework/aesthetics/recommend.js';
 import {
@@ -172,6 +172,13 @@ let _intentProvider: AuthorIntentFn | null = null;
 
 export function setAuthorIntentProvider(fn: AuthorIntentFn | null): void {
   _intentProvider = fn;
+}
+
+let _directingDeps: import('../pe-framework/directing/orchestrate.js').DirectingDeps | null = null;
+
+/** 测试 seam：注入 directing 五槽位 runner mock（与 setAuthorIntentProvider 同型；h3 routing 消费） */
+export function setDirectingDeps(deps: import('../pe-framework/directing/orchestrate.js').DirectingDeps | null): void {
+  _directingDeps = deps;
 }
 
 export function getAuthorIntentProvider(): AuthorIntentFn | null {
@@ -1284,9 +1291,10 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         const judgeMode = a.judge_mode ?? 'fast';
 
         // ── h3 directing 管线路由（spec 2026-09-17-h3-agentic-directing-pipeline-design §3，D-U4/D-U7）──
-        // target=h3 唯一路径 = directing 管线（旧 shots 直译路径移除，回滚 = revert）
+        // target=h3 新鲜请求 → directing 管线（旧 shots 直译路径移除）；
+        // blueprint_id + h3 → 保留旧增量路径（Round7 T6，fall through 到下方 blueprint 分支）
         // D-U4 不设防：rating 作为元数据透传，无分级拦截
-        if (target === 'h3') {
+        if (target === 'h3' && !a.blueprint_id) {
           const script = String(a.script ?? a.input ?? '');
           if (!script.trim()) throw new Error('target=h3 requires non-empty input or script (spec §3)');
           const saRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-script-analyst', parent: criticParent }) : undefined;
@@ -1294,15 +1302,16 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           const swRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-writer', parent: criticParent }) : undefined;
           const caRunner = subagentsReady && judgeMode !== 'off' ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-continuity-auditor', parent: criticParent }) : undefined;
           const srRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-repairer', parent: criticParent }) : undefined;
+          const subagentDeps = {
+            ...(saRunner ? { scriptAnalystRunner: saRunner } : {}),
+            ...(bdRunner ? { beatDirectorRunner: bdRunner } : {}),
+            ...(swRunner ? { shotWriterRunner: swRunner } : {}),
+            ...(caRunner ? { auditorRunner: caRunner } : {}),
+            ...(srRunner ? { repairerRunner: srRunner } : {}),
+          };
           const outcome = await orchestrateDirecting(
             { script, project: a.project, awaitUserApproval: a.await_user_approval === true, rating: resolved.rating },
-            {
-              ...(saRunner ? { scriptAnalystRunner: saRunner } : {}),
-              ...(bdRunner ? { beatDirectorRunner: bdRunner } : {}),
-              ...(swRunner ? { shotWriterRunner: swRunner } : {}),
-              ...(caRunner ? { auditorRunner: caRunner } : {}),
-              ...(srRunner ? { repairerRunner: srRunner } : {}),
-            },
+            _directingDeps ?? subagentDeps,
           );
           const stage: StageResult = {
             ok: outcome.ok,
@@ -1313,18 +1322,23 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             gates: outcome.gates as StageResult['gates'],
             advisories: outcome.advisories,
             assumptions: [],
-            targetSlotHint: 't2va.prompt',
+            targetSlotHint: 't2v.prompt',
             judgeFeedback: [],
             trace: { stages: outcome.trace as StageResult['trace'] extends { stages: infer T } ? T : never },
           };
-          const h3Extras: Record<string, unknown> = {
+          const h3Observability = {
+            corrections: outcome.corrections,
+            loopExhausted: outcome.loopExhausted,
+          };
+          const h3TopLevel: Record<string, unknown> = {
+            generation_id: generationId,
             quality: outcome.quality,
             ...(outcome.auditor !== undefined ? { auditor: outcome.auditor } : {}),
           };
           const h3NextAction = {
-            next_action: (outcome.status === 'awaiting_approval' ? 'manual' : 'ok') as 'manual' | 'ok',
+            next_action: (outcome.status === 'awaiting_approval' || outcome.loopExhausted ? 'manual' : 'ok') as 'manual' | 'ok',
           };
-          return assembleEnvelope(stage, outcome.advisories, h3Extras, h3NextAction);
+          return assembleEnvelope(stage, outcome.advisories, h3Observability, h3TopLevel, h3NextAction);
         }
 
         let judgeOpts: JudgeStageOpts | undefined;

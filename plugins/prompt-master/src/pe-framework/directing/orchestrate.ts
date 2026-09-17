@@ -1,4 +1,4 @@
-/**
+﻿/**
  * directing 编排器（spec 2026-09-17-h3-agentic-directing-pipeline-design §3/§7/§8）：
  * S1 剧本分析（fail-fast）→ S2 Beat 导演（可选挂起等授权）→ S3 逐镜成文（单镜失败不阻塞）
  * → S4 双轨审核（机器门 ∥ pm-continuity-auditor 每镜必跑）→ S5 修复（受影响镜 ≤2 轮）。
@@ -17,7 +17,7 @@ import {
   buildContinuityAuditorPrompt, parseContinuityAuditorOutput,
   buildRepairerPrompt, parseRepairerOutput,
 } from './prompts.js';
-import { emitEngineering, type EmitResult } from './engineering/emit.js';
+import type { EmitResult } from './engineering/emit.js';
 
 export interface DirectingDeps {
   scriptAnalystRunner?: (taskText: string) => Promise<string>;
@@ -44,6 +44,8 @@ export interface DirectingOutcome {
   gates: Array<{ rule: string; severity: string; detail: string; source: string }>;
   advisories: string[];
   corrections: number;
+  /** S5 修复轮耗尽且仍有关键门（spec §7 loop_exhausted 语义） */
+  loopExhausted: boolean;
   auditor?: { verdict: string; findings: unknown[] };
   trace: Array<{ name: string; ms: number }>;
 }
@@ -100,12 +102,13 @@ export async function orchestrateDirecting(
     if (deps.emit) deps.emit(ir);
     return {
       ok: true, status: 'awaiting_approval', quality: 'degraded',
-      storyboard: ir, gates: [], advisories, corrections: 0, trace,
+      storyboard: ir, gates: [], advisories, corrections: 0, loopExhausted: false, trace,
     };
   }
 
   // ── S3 逐镜成文 + S4 双轨审核 + S5 修复 ──
   const tLoop = performance.now();
+  let writerFailures = 0;
   let auditorResult: { verdict: string; findings: Array<{ severity: string; dimension: string; problem: string; requiredFix: string }> } | undefined;
   let allGates: Array<{ rule: string; severity: string; detail: string; source: string }> = [];
 
@@ -126,6 +129,7 @@ export async function orchestrateDirecting(
       } catch (e) {
         advisories.push(`shot_writer_failed:${shot.id}:${(e as Error).message.slice(0, 120)}`);
         shot.prompt = null;
+        writerFailures++;
       }
 
       // S4 机器门
@@ -198,8 +202,13 @@ export async function orchestrateDirecting(
   // 最终机器门（全工程）
   allGates = checkDirectingIr(ir, { strict: ir.meta.strict_prompt_validation === true });
   const hasCritical = allGates.some((g) => g.severity === 'critical');
-  const ok = !hasCritical || corrections > 0;
-  const quality: DirectingOutcome['quality'] = hasCritical ? 'degraded' : corrections > 0 ? 'degraded' : 'passed';
+  // S5 耗尽语义（spec §7）：修复轮用尽且仍有关键门 → loop_exhausted（storyboard 仍是有效 JSON）
+  const loopExhausted = corrections >= SHOTS_PER_REPAIR && hasCritical;
+  if (loopExhausted) advisories.push('loop_exhausted:true');
+  // ok=false 仅在修复耗尽（闭环无法收敛）；部分失败（S3 单镜/S4 降级）→ ok=true + quality=degraded
+  const ok = !loopExhausted;
+  const quality: DirectingOutcome['quality'] =
+    hasCritical || corrections > 0 || writerFailures > 0 ? 'degraded' : 'passed';
 
   // 工程落盘
   if (deps.emit) deps.emit(ir);
@@ -212,6 +221,7 @@ export async function orchestrateDirecting(
     gates: allGates,
     advisories,
     corrections,
+    loopExhausted,
     ...(auditorResult !== undefined ? { auditor: auditorResult } : {}),
     trace,
   };

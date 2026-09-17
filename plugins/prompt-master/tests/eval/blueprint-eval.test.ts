@@ -1,44 +1,41 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { registerAuthorTool, setAuthorIntentProvider } from '../../src/tools/prompt-author.js';
-import { stubCtx, runTool, textStream } from '../plugin/helpers.js';
-import type { AuthorIntentFn } from '../../src/tools/prompt-author.js';
-import fightIntent from './fixtures/fight-cg-intent.json' with { type: 'json' };
+﻿import { describe, expect, it, afterEach } from 'vitest';
+import { registerAuthorTool, setDirectingDeps } from '../../src/tools/prompt-author.js';
+import { stubCtx, runTool, dDeps, dBeat, dShot } from '../plugin/helpers.js';
 
-let calls = 0;
-const fakeProvider: AuthorIntentFn = async (req: any) => {
-  calls++;
-  if (req.round === 0) return { blueprint: (fightIntent as any).v0, missing: ['style'] };
-  return { blueprint: (fightIntent as any).v0, missing: [] };
-};
+// session-34706f38 回归锁（新管线契约改写）：「3 个分镜每个 5 秒」→ 3 Beat × 5s，总时长 15s。
+// 每 Beat 生成单元 5s ∈ H3 [4,15]、establish tag [2,4] 边界合规 → G-duration 零违规；
+// 中文 input 走 mocked S1 → 无 CJK 假阳性面（门检查 IR 结构而非 prompt 文本）。
+describe('eval: fight CG case (session-34706f38 regression, directing)', () => {
+  afterEach(() => setDirectingDeps(null));
 
-describe('eval: fight CG case (session-34706f38 regression)', () => {
-  beforeEach(() => {
-    calls = 0;
-    setAuthorIntentProvider(fakeProvider as any);
-  });
-  afterEach(() => {
-    setAuthorIntentProvider(null);
-  });
-
-  it('completes with no CJK false positive, correct duration, non-manual next_action, ≤3 LLM calls', async () => {
-    const ctx = stubCtx({ stream: textStream('{"set":{},"additions":{},"expansions":[]}') });
+  it('completes with no CJK false positive, 3×5s duration semantics, non-manual next_action', async () => {
+    setDirectingDeps(dDeps({
+      beatDirectorRunner: async () => JSON.stringify({
+        beats: [
+          dBeat('B01', [dShot('B01-S1', 4)]),
+          dBeat('B02', [dShot('B02-S1', 4)]),
+          dBeat('B03', [dShot('B03-S1', 4)]),
+        ],
+      }),
+      shotWriterRunner: async () => JSON.stringify({ shots: [{ what: 'Fight CG clash in neon streets', who: 'S1', duration: 4 }] }),
+    }));
+    const ctx = stubCtx();
     const def = registerAuthorTool(ctx as any, { temperature: 0.7 });
     const v = JSON.parse(
       String(
         await runTool(ctx, def, {
           target: 'h3',
           input: '3个分镜每个5秒的打斗CG动画',
-          style_id: 'cinematic_real',
           judge_mode: 'off',
         }),
       ),
     );
-    const shotExec = v.audit.gates.filter((g: any) => g.rule === 'shot_execution');
-    expect(shotExec.every((g: any) => g.severity !== 'critical')).toBe(true);
-    // duration_seconds=15 语义正确：3 shots 通过 max_shots、15 ∈ [4,15]（duration_range/max_shots 均为 critical 契约闸门，
-    // ok=true 即证明两者通过——spec §13「3 镜×5 秒 → 传总时长 15」回归）
     expect(v.ok).toBe(true);
     expect(v.next_action).not.toBe('manual');
-    expect(calls).toBeLessThanOrEqual(3);
+    // 零 critical（duration 语义回归：3 Beat 各 4s ∈ [4,15]，tag 区间合规）
+    expect(v.audit.gates.every((g: any) => g.severity !== 'critical')).toBe(true);
+    expect(v.audit.gates.some((g: any) => g.rule === 'G-duration')).toBe(false);
+    // 3 镜全部完成 dialect 编译
+    expect(v.result.text.match(/\[Shot 1\]/g)?.length).toBe(3);
   });
 });

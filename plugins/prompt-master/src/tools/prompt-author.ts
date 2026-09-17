@@ -33,6 +33,7 @@ import type { SemanticBlueprint } from '../pe-framework/blueprint/semantic-schem
 import z from '@deepseek-ai/schemastery';
 import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js';
+import { orchestrateDirecting } from '../pe-framework/directing/orchestrate.js';
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js';
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js';
 import type { Config } from '../plugin/config.js';
@@ -86,6 +87,12 @@ import { createHash } from 'node:crypto';
 export interface AuthorArgs {
   target: Target;
   input: string;
+  /** D-U1：短剧工程剧本（target=h3 必填，anima 忽略） */
+  script?: string;
+  /** D-U1：工程名（落盘目录名，缺省 untitled） */
+  project?: string;
+  /** D-U1：两段式确认——S2 方案产出后挂起等用户授权 */
+  await_user_approval?: boolean;
   profile?: string;
   variant?: string;
   stage?: string;
@@ -1149,14 +1156,10 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // gate 挂在 resolved.rating 上（显式声明与关键词升档两路径同拦），不做降级猜测；
         // 0 token（预检段，与硬边界检查同层）。M4-T2：错误串共享常量（h3-rating-gate.ts
         // 单一来源，与 t62 minimax_scenario 同源，文案零变化）。
-        if (target === 'h3' && resolved.rating !== 'safe') {
-          throw h3RatingUnsupportedError(
-            `target=h3 且 rating=${resolved.rating}（${resolved.source === 'input' ? '显式声明' : '关键词升档'}）`,
-            ' target=anima',
-          );
-        }
+        // D-U4 裁决不设防：h3-rating-gate 移除（rating 作为元数据透传进 storyboard.meta）
         const violations = checkBoundaries(input, resolved.rating);
         if (violations.length > 0) throw new Error(violations.map((v) => `${v.gate}:${v.matched}`).join('; '));
+        const generationId = makeGenerationId();
 
         // Task 14 ④：推荐器信号拼装（spec §6.2/§6.3）。captain ①②（t6 裁定 + t17 预登记）：
         // hasMotionIntent 仅在 motion 维度已满足（style 预设 hints.motion 存在）时置 true，
@@ -1279,6 +1282,51 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
 
         // Task 6 评审接线（spec §2.4/§3.1）：T9 起缺省 'fast'；judge_mode='off'（显式）→ judgeOpts=undefined，runStage 同步旧路径零变化
         const judgeMode = a.judge_mode ?? 'fast';
+
+        // ── h3 directing 管线路由（spec 2026-09-17-h3-agentic-directing-pipeline-design §3，D-U4/D-U7）──
+        // target=h3 唯一路径 = directing 管线（旧 shots 直译路径移除，回滚 = revert）
+        // D-U4 不设防：rating 作为元数据透传，无分级拦截
+        if (target === 'h3') {
+          const script = String(a.script ?? a.input ?? '');
+          if (!script.trim()) throw new Error('target=h3 requires non-empty input or script (spec §3)');
+          const saRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-script-analyst', parent: criticParent }) : undefined;
+          const bdRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-beat-director', parent: criticParent }) : undefined;
+          const swRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-writer', parent: criticParent }) : undefined;
+          const caRunner = subagentsReady && judgeMode !== 'off' ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-continuity-auditor', parent: criticParent }) : undefined;
+          const srRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-repairer', parent: criticParent }) : undefined;
+          const outcome = await orchestrateDirecting(
+            { script, project: a.project, awaitUserApproval: a.await_user_approval === true, rating: resolved.rating },
+            {
+              ...(saRunner ? { scriptAnalystRunner: saRunner } : {}),
+              ...(bdRunner ? { beatDirectorRunner: bdRunner } : {}),
+              ...(swRunner ? { shotWriterRunner: swRunner } : {}),
+              ...(caRunner ? { auditorRunner: caRunner } : {}),
+              ...(srRunner ? { repairerRunner: srRunner } : {}),
+            },
+          );
+          const stage: StageResult = {
+            ok: outcome.ok,
+            result: {
+              text: outcome.storyboard.beats.flatMap((b) => b.shots.map((s) => s.prompt?.text ?? '')).filter(Boolean).join('\n\n'),
+              storyboard: outcome.storyboard,
+            },
+            gates: outcome.gates as StageResult['gates'],
+            advisories: outcome.advisories,
+            assumptions: [],
+            targetSlotHint: 't2va.prompt',
+            judgeFeedback: [],
+            trace: { stages: outcome.trace as StageResult['trace'] extends { stages: infer T } ? T : never },
+          };
+          const h3Extras: Record<string, unknown> = {
+            quality: outcome.quality,
+            ...(outcome.auditor !== undefined ? { auditor: outcome.auditor } : {}),
+          };
+          const h3NextAction = {
+            next_action: (outcome.status === 'awaiting_approval' ? 'manual' : 'ok') as 'manual' | 'ok',
+          };
+          return assembleEnvelope(stage, outcome.advisories, h3Extras, h3NextAction);
+        }
+
         let judgeOpts: JudgeStageOpts | undefined;
         if (judgeMode !== 'off') {
           judgeOpts = {
@@ -1427,7 +1475,6 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             judgeFeedback: outcome.auditorFeedback,
             trace: { stages: outcome.trace },
           };
-          const generationId = makeGenerationId();
           const finalAdvisories = [...preflightAdvisories, ...enrichAdvisories, ...outcome.advisories];
           recordGenerationSafe({
             id: generationId,
@@ -1629,7 +1676,6 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           (ctx as unknown as { logger?: { info?: (msg: string) => void } }).logger?.info?.(
             `[prompt-master] prompt_author(blueprint) → ok=${stage.ok} gates=${stage.gates.length} critical=${stage.gates.filter((g) => g.severity === 'critical').length} expansions=${expansions.length} repairs=${repairs.length} trace=${JSON.stringify(stage.trace?.stages?.map((s) => `${s.name}:${s.ms}ms`))}`,
           );
-          const generationId = makeGenerationId();
           // M5-T2（D9，design §2.4）：蓝图落库（fail-open）——blueprint_id 增量入口从此有料（V7 验尸：
           // 此前 repo.save 生产零调用）；落库键 = generation_id（Q2 裁定）。settings 缺失 → 静默跳过；
           // 写失败 → advisory blueprint_save_failed，均不阻塞出稿。
@@ -1781,7 +1827,6 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           repairJudgeOpts === undefined && stage.judge === undefined && lastJudged !== undefined
             ? { ...stage, judge: lastJudged.judge, debate: lastJudged.debate, judgeFeedback: lastJudged.judgeFeedback }
             : stage;
-        const generationId = makeGenerationId();
         // F5（三期 Task 4）：canonical 替换可观测接线——独立字段 + advisory 进 trail（I-2 通道）
         const canon = canonicalObservabilityOf(stage);
         const substAdvisories = canon.substitutions.map((p) => `canonical_substitution:${p}`);

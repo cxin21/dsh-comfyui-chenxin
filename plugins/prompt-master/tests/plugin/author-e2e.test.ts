@@ -1,4 +1,4 @@
-import { describe, expect, it, afterAll } from 'vitest';
+﻿import { describe, expect, it, afterAll } from 'vitest';
 import {
   registerAuthorTool,
   setAuthorIntentProvider,
@@ -79,7 +79,7 @@ describe('prompt_author full pipeline (P4)', () => {
     });
     await expect(
       runTool(stubCtx(), registerAuthorTool(stubCtx() as never, cfg as never), {
-        target: 'h3',
+        target: 'anima',
         input: 'x',
         judge_mode: 'off',
         enrich: false,

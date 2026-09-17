@@ -1,0 +1,1193 @@
+{
+  "name": "style-aesthetics-m5",
+  "id": "style-aesthetics-m5",
+  "description": "M5：默认路径蓝图形态迁移（设计稿先行两波）——spec §8 全字面对齐：标准 anima 路径从 slots 直译迁移到蓝图形态（BLUEPRINT_SUBAGENT_SYSTEM + validateBlueprint + core.rating 校验 + enrichBlueprint 扩展层 + 修复轮蓝图锚定），兼容双态保留 slots 直译回退。含蓝图路径两项残留缺口修复（修复轮 core.rating 重注入、deepMerge 硬化）与 golden 对照重放。",
+  "captainSessionId": "session-cd81dd94-de25-4923-996c-06be300746ee",
+  "createdAt": 1789305112987,
+  "members": [
+    {
+      "id": "d0247648-0de1-44a8-96aa-23c759081300",
+      "name": "impl-1",
+      "role": "engineer",
+      "provider": "fangzhou",
+      "model": "ark-code-latest",
+      "joinedAt": 1789305119660,
+      "status": "removed"
+    },
+    {
+      "id": "edf58f72-25ee-4620-aab9-08cbec40de0e",
+      "name": "impl-2",
+      "role": "engineer",
+      "provider": "fangzhou",
+      "model": "ark-code-latest",
+      "joinedAt": 1789305119714,
+      "status": "removed"
+    },
+    {
+      "id": "b1103cd0-df1a-4bd1-8ff3-8a01de106fb9",
+      "name": "reviewer",
+      "role": "reviewer",
+      "provider": "fangzhou",
+      "model": "ark-code-latest",
+      "joinedAt": 1789305119793,
+      "status": "removed"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "[M5-T1] 蓝图形态迁移设计稿",
+      "description": "执行 plugins/prompt-master/docs/plans/2026-09-13-style-aesthetics-m5.md Task 1——蓝图形态迁移设计稿（零实现，docs-only）。背景事实（captain 已验尸钉死）：标准 anima 路径 = subagent-provider ANIMA_PERSONA slots 直译（isBlueprint L101 仅 target='blueprint' 分支），parseIntentJson L237 返回 {slots}；core.rating 注入挂 if(draft.blueprint)（prompt-author.ts L905）；蓝图形态（BLUEPRINT_SUBAGENT_SYSTEM L15 + parseBlueprintJson + validateBlueprint + enrichBlueprint + blueprint_id 增量锚定）仅增量入口可达；P0 修复（2b4c245）已补 slots.rating 确定性写入与投影映射——设计稿需给出「默认路径整体切蓝图形态」的完整方案而非局部补丁。设计稿读者 = T2/T3/T4 实现者与评审。六要素契约见任务验收。引用素材：docs/plans/2026-09-13-style-aesthetics-m5-candidates.md（立项一节 + impl-2 三项备案）。",
+      "status": "completed",
+      "assignee": "impl-2",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1789305138392,
+      "updatedAt": 1789306363195,
+      "kind": "requirements",
+      "objective": "产出默认路径蓝图形态迁移设计稿，达到「T2/T3/T4 实现契约可直接据此编写」的粒度。",
+      "inScope": [
+        "docs/specs/2026-09-13-blueprint-form-migration-design.md"
+      ],
+      "acceptance": [
+        "路由切换点定夺留痕（dialect registry intent 形态标志 vs 硬切，含回滚面）",
+        "BLUEPRINT_SCHEMA/parseBlueprintJson/validateBlueprint 方言参数化现状核验（anima 蓝图 schema 适配需求清点）",
+        "投影链缺口清点（core.rating→slots.rating 已修 ✓ 之外的全部映射缺口）",
+        "兼容双态 + 回滚策略具体化",
+        "golden 对照方案可机检（抽样集 + slots 主干等价判据 + explicit 档端到端断言）",
+        "e2e 重放清单 + 风险清单（token 画像/300s 超时基线/失败模式/art_direction_hints 交互）",
+        "评审标准：能否据此直接写 T2/T3/T4 实现契约"
+      ],
+      "reassigning": false,
+      "attemptId": "8d6581cd-54d8-41f6-8986-0b25a3764361",
+      "output": "M5-T1 设计稿完成（docs-only，零实现）：新建 plugins/prompt-master/docs/specs/2026-09-13-blueprint-form-migration-design.md（155 行）。六要素齐备：①路由切换点定夺 registry intent.form 标志（三方案取舍+kill-switch 回滚面）②方言参数化现状核验表+ANIMA 蓝图 persona/schema 实现粒度+expectedMedia 守卫 ③投影缺口清点（P0 四缺口→media_layer.image 增补 4 字段+P1 non-mapping 留痕）④兼容双态三层开关+量化回滚判据 ⑤golden 12 案例四层机检判据（L1 主干等价/L2 explicit 端到端/L3 envelope/L4 编译逐字节）⑥e2e 重放 7 项+风险 R1-R8（token/300s/失败模式/art_direction 点名全覆盖）。超出 captain 验尸的新核实结论 V5-V10 一并钉入设计（蓝图修复轮生产死路、repo.save 零调用、applyStyle/checkShotDensity image 兼容等）。§3 给出 T2/T3/T4 in-scope 与验收映射，§5 留三个 T1R 开放问题。",
+      "verdict": "pass",
+      "changedPaths": [
+        "plugins/prompt-master/docs/specs/2026-09-13-blueprint-form-migration-design.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "路由切换点定夺留痕（dialect registry intent 形态标志 vs 硬切，含回滚面）",
+          "status": "passed",
+          "evidence": "设计稿 §2.1：三方案取舍（A=registry intent.form 形态标志+单读取点+env kill-switch PM_AUTHOR_INTENT_FORM；B=硬切否决理由；C=provider 自查 registry 否决理由）+ 回滚面三层（§2.5：registry 单行 revert / env 动态开关+advisory / 双态代码保留）"
+        },
+        {
+          "criterion": "BLUEPRINT_SCHEMA/parseBlueprintJson/validateBlueprint 方言参数化现状核验（anima 蓝图 schema 适配需求清点）",
+          "status": "passed",
+          "evidence": "设计稿 §2.2：七组件现状核验表（逐行号）+ 判定（BLUEPRINT_SCHEMA/PERSONA 需 anima 变体、parseBlueprintJson 加 expectedMedia 可选参、validateBlueprint 本体零改动）+ ANIMA_BLUEPRINT_SCHEMA/PERSONA 实现粒度设计（含景别/角色锚点 discipline）"
+        },
+        {
+          "criterion": "投影链缺口清点（core.rating→slots.rating 已修 ✓ 之外的全部映射缺口）",
+          "status": "passed",
+          "evidence": "设计稿 §2.3：P0 四缺口（count_gender/pose_action/expression 无来源、scene 单锚点塌陷→media_layer.image 增补 4 字段+投影扩展）+ P1 deliberate non-mapping 留痕清单（palette/emotion/time/props/aspect_ratio）+ 相邻层纪律（validateAnimaSlots 零改动）"
+        },
+        {
+          "criterion": "兼容双态 + 回滚策略具体化",
+          "status": "passed",
+          "evidence": "设计稿 §2.5：双态保留形态（旧 slots 分支/runEnrich/mergeRepairSlots 全保留）+ 开关门控表（registry 标志/env/AuthorDraft 分流）+ 量化回滚触发判据 5 条（explicit 降档回归、golden L1 失败、超时率 2 倍、catalog_miss 2 倍、loop_exhausted 上升）"
+        },
+        {
+          "criterion": "golden 对照方案可机检（抽样集 + slots 主干等价判据 + explicit 档端到端断言）",
+          "status": "passed",
+          "evidence": "设计稿 §2.6：12 案例抽样集定版（c01-c12 覆盖 explicit/sensitive/style_id×conformity/art_direction/引用/CJK/负向）+ L1 主干等价判据（身份槽集合严格相等/内容槽 Jaccard≥0.6+whitelist 容差/rating 逐字节）+ L2 explicit 端到端断言（种子+负向六词+rating.resolved+assumption）+ L3 envelope 骨架 + L4 编译层逐字节，全落 vitest mock 层"
+        },
+        {
+          "criterion": "e2e 重放清单 + 风险清单（token 画像/300s 超时基线/失败模式/art_direction_hints 交互）",
+          "status": "passed",
+          "evidence": "设计稿 §2.7：7 项重放清单（vitest/tsc/build/dist 冒烟/既有载体回归/真实会话 12 案例/blueprint_id 链/h3 零变化/工具面）+ 风险 R1-R8，四个点名风险各占专项（R1 token 画像含量化估算与实测步骤、R2 300s 基线、R3 失败模式含 D5c 单次反馈重试、R4 art_direction 双通道迁移）"
+        },
+        {
+          "criterion": "评审标准：能否据此直接写 T2/T3/T4 实现契约",
+          "status": "passed",
+          "evidence": "设计稿 §0 决策表 D1-D9 + §2.4 编排执行流（迁移后全链伪代码级）+ §3 每任务建议 in-scope 文件清单与验收（T2 含新增 enrichment/art-direction-apply.ts、T3 deepMerge 硬化全文、T4 fixtures+golden+重放记录）+ §5 留给 T1R 的三个开放问题"
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "subject": "[M5-T1R] 评审迁移设计稿",
+      "status": "completed",
+      "dependencies": [
+        "t1"
+      ],
+      "attempt": 2,
+      "createdAt": 1789305147478,
+      "updatedAt": 1789306991564,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审蓝图形态迁移设计稿：可执行性判定（T2/T3/T4 契约能否据此编写）。",
+      "acceptance": [
+        "六要素逐项核对（路由定夺/方言参数化现状/投影缺口/双态回滚/golden 判据/风险清单）",
+        "「能否据此直接写 T2/T3/T4 实现契约」判定",
+        "零实现核验（docs-only）",
+        "与 M5 候选文档及 P0 修复事实（2b4c245）无矛盾"
+      ],
+      "reviewedTaskId": "t1",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "bf850d69-e552-4f23-8099-114572a7c5b4",
+      "output": "M5-T1R 评审完成，verdict=pass（设计稿可执行，T2/T3/T4 契约可据此直接编写；2 项 findings 随契约流转，不需返工设计稿）。六要素逐项核对全部通过且事实锚点逐条复核属实：①路由定夺 D1——registry intent.form 三方案取舍有据，读取点 L869、isBlueprint L101、kill-switch PM_AUTHOR_INTENT_FORM 全仓零占用均核实；②方言参数化 D2——核验表 7 行与代码逐行相符（BLUEPRINT_SCHEMA video 硬编码 analyzer L33、parseBlueprintJson L98、validateBlueprint 仅 video 分支 schema L109-173、未知字段静默放行），ANIMA persona/schema 给到实现粒度；③投影缺口 D3——4 个 P0 缺口全部属实（project.ts L122-169 无 count_gender/pose_action/expression 来源、scene 仅 [environment] L135），spec §5.3「v1 只做字段新增」支撑成立，P1 non-mapping 清单与 spec §8.2 映射表逐行比对无误，硬边界（ANIMA_SLOT_KEYS L884 / validateAnimaSlots 零改动）成立；④双态回滚 D8——三层开关 + 5 条量化回滚判据成立，旧路径保留清单（runEnrich 块 L828-861、slots 分支 L1009+、mergeRepairSlots L126-139、slots.rating L911）与代码吻合；⑤golden 判据——12 案例 + 四层机检判据可机检，L2 explicit 六负向词与既有 P0 测试断言面（orchestration L424-441）逐字一致，mock 重放形态与 stubCtx/textStream harness 匹配；⑥风险 R1-R8 全部有基线锚点（300s 常量 L55、deepMerge 覆写面 engine.ts L42-52、召回源切换 L844/L866、V5 修复轮死路 L949-950）。新增验尸 V5-V10 全部复核属实（repo.save src 零调用、applyStyle image 分支 L40-48/L62-68、checkShotDensity L198-203 直通、defaultIntent L141-168、styleSummaryOf L691）。零实现核验：git status 无任何 M 条目，t1 仅新增设计稿（untracked docs），HEAD 36e80c8 未动。文档矛盾核验：与 M5 候选文档（缺口#1 台账化/#2→D5b/#3→D6）、计划文档 T2 预登记面、P0 修复 2b4c245 实际 diff（project.ts +4 / anima.ts +6 白名单 / prompt-author.ts +14）零矛盾；envelope「零变化」精确化（四项增量）已显式留痕且被 L3 白名单收编，属精确化非违背。findings 两项（F1 medium：D7 卡注入对 string 型目标缺形状约定 + color 落 non-mapping 字段，随 T2 契约钉死；F2 low：L3 白名单漏 blueprint_id，随 T4 契约补入）——均为契约级决策，计划文档已设「T1R 过后按设计稿补全 in-scope 与验收」修订流承接，不阻塞下游。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "medium",
+          "problem": "D7 显式卡映射对 string 型目标未定义形状约定：media_layer.image.camera_angle / core.scene.lighting / core.style.palette 在 IR 中均为 string（schema.ts L85-88/L42），而卡 tags 是 3-5 个 tag 组合（enrich/art-direction.ts）。① perspective「追加卡 tags」进 camera_angle 会产出复合串，经 projectToAnima L146 成为单个 camera tag——camera 是结构槽（dropUnresolvedMiss 永不删，dialect/anima.ts L52-56），脏复合词全文穿透，恰好绕过 §2.2 persona 景别纪律（确定性注入不受 persona 约束）；② color → core.style.palette 落在 P1 deliberate non-mapping 字段（spec §8.2 无此行、投影不产出），确定性写入对提示词表面零效果，D7「语义强于现状」对该类不成立（至多靠 enrichBlueprint LLM 软约束，与现状持平）。",
+          "requiredFix": "T2 编写契约时钉死每字段注入约定：camera_angle 每卡只取 1 个 anima 安全景别/视角词（或维护每卡 anima-safe 子集）；lighting 并入 core.scene.lighting 用显式分隔符并声明依赖 detail_mood 可删性 + advisory；color 改走推荐先验通道（LLM 终决，与推荐卡同构）或同步修订 P1 non-mapping 清单。属契约级决策，不推翻 D7 双通道结构。",
+          "resolved": false
+        },
+        {
+          "id": "F2",
+          "severity": "low",
+          "problem": "§2.6 L3 envelope 顶层键集差异白名单 ⊆ {enrichment, observability.blueprint} 漏了 D9 引入的条件性顶层键 blueprint_id（仅落库成功时出现）——按现文本 L3 断言在 D9 生效后会误报差异。",
+          "requiredFix": "T4 golden 契约将 blueprint_id 列入 L3 白名单（条件性存在键）。",
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "id": "t3",
+      "subject": "[M5-T2] provider 路由切换 + 编排接线（D1-D9）",
+      "description": "执行设计稿 docs/specs/2026-09-13-blueprint-form-migration-design.md 的 T2 契约（§2.4 编排接线主战场 + §3 映射）。in-scope 以设计稿 §3 T2 行为准：intent/subagent-provider.ts、blueprint/analyzer.ts、blueprint/schema.ts（仅加型）、blueprint/project.ts、blueprint/repo.ts（零改动预期）、dialect/contract.ts、dialect/anima.ts（registry 注册 form 标志）、tools/prompt-author.ts、enrichment/engine.ts（persona media 分支 + recommendations 参）、新增 enrichment/art-direction-apply.ts、对应 tests。【纪律】①链路相邻面（normalize/白名单/名单断言）若实现中萌生改动 → 先报 captain 扩围，勿静默扩（P0 第 3 课）②D7 形状契约按 §5 captain 裁定执行（F1 color 通道已定）③TDD：V5/R6 专测先 RED④全量不与重 CPU 并行（t2 验证纪律）⑤提交前插件目录 tsc + npm run build。设计稿 §2.4 执行流伪代码逐行即实现蓝本。",
+      "status": "cancelled",
+      "assignee": "captain",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1789307139745,
+      "updatedAt": 1789307227624,
+      "kind": "implementation",
+      "objective": "默认 anima 路径迁移蓝图形态：路由切换（D1/D2）+ 编排接线（D4/D5/D7/D9）+ 投影扩展（D3），双态保留（D8），V5/R6 修复闭环复活专测。",
+      "inScope": [
+        "src/pe-framework/intent/subagent-provider.ts",
+        "src/pe-framework/blueprint/analyzer.ts",
+        "src/pe-framework/blueprint/schema.ts",
+        "src/pe-framework/blueprint/project.ts",
+        "src/pe-framework/blueprint/repo.ts",
+        "src/pe-framework/dialect/contract.ts",
+        "src/pe-framework/dialect/anima.ts",
+        "src/tools/prompt-author.ts",
+        "src/pe-framework/enrichment/engine.ts",
+        "src/pe-framework/enrichment/art-direction-apply.ts",
+        "tests/tools/prompt-author-orchestration.test.ts",
+        "tests/pe-framework/blueprint/analyzer.test.ts",
+        "tests/pe-framework/blueprint/project.test.ts",
+        "tests/pe-framework/intent/subagent-provider.test.ts"
+      ],
+      "acceptance": [
+        "D1：dialect registry intent.form 标志（anima='blueprint'，缺省 slots）+ PM_AUTHOR_INTENT_FORM env kill-switch（覆盖 + advisory intent_form_override + 非法值 fail-fast）+ 单读取点在 intentBase 构造处",
+        "D2：ANIMA_BLUEPRINT_PERSONA/SCHEMA 落 blueprint/analyzer.ts（Q3 裁定）+ parseBlueprintJson expectedMedia 守卫（media mismatch 可机检文案）+ validateBlueprint 本体零改动",
+        "D3：media_layer.image 增补 count_gender/pose_action/expression/scene_anchors 四字段 + projectToAnima 直映射（scene 保序去重）+ deliberate non-mapping 头注释；validateAnimaSlots/ANIMA_SLOT_KEYS/registry.test 工具名单零改动（硬边界）",
+        "D4：runEnrich 条件跳过（anima+blueprint 形态）+ catalog 召回源=input + envelope 增量四项（observability.blueprint/trace blueprint_enrich/enrichment 消失/generations.enrich=0）+ defaultIntent parity",
+        "D5 三合一：anchorBlueprint 修复轮锚定（V6）+ injectCoreRating 统一 helper（首轮+修复轮，缺口#2）+ validate 失败单次反馈重试（D5c，advisory blueprint_repair_retry，再失败 fail-closed）——V5 修复轮死路专测（mock provider 记录 blueprintMode，修复轮收到 anchorBlueprint 且闭环推进，R6）",
+        "D7 双通道 + F1 裁定：显式卡确定性注入（perspective→camera_angle 每卡≤1 安全景别词白名单、lighting→core.scene.lighting 显式分隔、motion→pose_action；color→改走推荐先验通道，否决 palette 假注入）+ art_direction_applied advisory + 推荐先验文案与 enrich/engine 逐字同源 + validateArtDirectionSpec 预检不变 + advisory 矩阵修订（anima+blueprint 不再 ignored）",
+        "D9：成功出口 repo.save(generation_id, bp) fail-open（settings 缺失→静默跳过或 advisory）+ envelope 条件顶层键 blueprint_id",
+        "既有蓝图 e2e 载体零改动通过（V9 清单）+ §2.6 L1-L4 mock 层判定绿（L2 explicit 六负向词逐字）+ 全量无回退 + tsc/build + dist 同步，单意图或按 D 决策分组提交"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "41bf8d71-b1b6-4a45-8081-e5e5a7c27f92",
+      "output": "取消重建：in-scope 与 T3（engine.ts）重叠被任务系统护栏拦截——engine.ts 全部 M5 改动归 T3 单任务所有，T2 重建为不含 engine.ts 的版本并依赖 T3 落地（recommendations 签名消费）。零工作发生。"
+    },
+    {
+      "id": "t4",
+      "subject": "[M5-T3] engine.ts 全量改动（deepMerge 硬化 + media 分支 + recommendations）",
+      "description": "M5-T3：enrichment/engine.ts 全部 M5 改动单任务单所有者（原 T2 计划含本文件，任务系统护栏裁定 engine.ts 单一所有权后归并至此，T2 重建为不含 engine.ts 并依赖本任务）。三件事：①deepMerge 硬化（设计稿 docs/specs/2026-09-13-blueprint-form-migration-design.md §2.7 R7 契约全文）②buildExpansionPersona media 分支（V8：video 五维规则对 image 蓝图空转 → media 分支微调）③enrichBlueprint 新可选参 recommendations（D7 推荐先验通道——T2 将消费该签名，形状按设计稿 §2.4 D7 行；签名落定立即报 captain）。TDD、插件目录 tsc、build 后提交。",
+      "status": "completed",
+      "assignee": "impl-1",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1789307241544,
+      "updatedAt": 1789308419357,
+      "kind": "implementation",
+      "objective": "engine.ts 全部 M5 改动：deepMerge core.rating 信任边界 + persona media 分支 + recommendations 参数（消 R7，供 T2 消费）。",
+      "inScope": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptance": [
+        "deepMerge 硬化：patch 应用前 strip patch.core.rating（set/unset/嵌套全形态）+ 覆写企图 advisory enrich_rating_overwrite_blocked",
+        "专测：v0 core.rating=explicit + 恶意 patch → v1 仍 explicit + advisory 在；无覆写企图零行为变化（既有测试全绿）",
+        "strip 面覆盖论证：rating 必挡；是否扩到其他 core 安全字段给结论留痕",
+        "buildExpansionPersona media 分支微调（V8：video shot 五维规则对 image 蓝图空转 → 按 media 分支）",
+        "enrichBlueprint 新可选参 recommendations（D7 推荐先验）→ persona user 段【推荐先验】块（文案与既有【推荐先验】同源逐字）",
+        "全量无回退 + tsc/build + dist 同步，单意图提交"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "30216163-5f05-42a3-b36b-86bbf7911c60",
+      "changedPaths": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "deepMerge 硬化：patch 应用前 strip patch.core.rating（set/unset/嵌套全形态）+ 覆写企图 advisory enrich_rating_overwrite_blocked",
+          "status": "passed",
+          "evidence": "engine.ts 新增 stripCoreRatingFromPatch（commit 0d8c295）：set 通道（含裸部分蓝图形态——normalize 后即 set）① core 为对象仅删 rating 键（嵌套全形态）② core 非对象整键删除；additions 通道 wholeCore=true 整键阻断。advisory 常量 RATING_OVERWRITE_ADVISORY='enrich_rating_overwrite_blocked'（契约原文）在任一通道 strip 发生时并入返回 advisories。patch 契约无独立 unset 通道（全仓 grep 证实，patch 形状={set,additions,expansions}），已在 strip JSDoc 留痕「未来新增应用通道必须先过本 strip」。"
+        },
+        {
+          "criterion": "专测：v0 core.rating=explicit + 恶意 patch → v1 仍 explicit + advisory 在；无覆写企图零行为变化（既有测试全绿）",
+          "status": "passed",
+          "evidence": "engine.test.ts 新增 R7/D6 describe 5 测试（先 RED 6 失败后 GREEN）：set 嵌套形态（v1 rating='explicit' + advisory + 同 patch 良性 concept 照常应用）、裸形态、additions 通道、set.core 标量、良性 patch 零行为变化（无 advisory + 照常应用）。全量 npx vitest run 134 files / 1144 passed / 1 skipped / 0 failed（M4 基线 133/1123/1，无回退）。"
+        },
+        {
+          "criterion": "strip 面覆盖论证：rating 必挡；是否扩到其他 core 安全字段给结论留痕",
+          "status": "passed",
+          "evidence": "stripCoreRatingFromPatch JSDoc 留痕：rating 必挡——core.rating 是确定性注入安全数据（spec §5.1 偏差记录，LLM 产物不可信于安全数据）；不扩到其他 core 字段——concept/scene/style/emotion/composition/negative/narrative/characters/aspect_ratio 是扩展层目标业务字段，strip 等于废掉扩展层；新增确定性注入字段走白名单式显式追加不做模糊匹配。写入面核验：core.rating 唯二写入点 deepMerge/applyAdditions（applyStyle 写 core.style/core.negative/media_layer，不触 rating）。相邻发现已报 captain：applyAdditions 对象分支 void 赋值缺陷（对象值 additions 写入摧毁该键节点）影响面超出 rating，未在本任务改动，建议另立修复任务。"
+        },
+        {
+          "criterion": "buildExpansionPersona media 分支微调（V8：video shot 五维规则对 image 蓝图空转 → 按 media 分支）",
+          "status": "passed",
+          "evidence": "buildExpansionPersona(media: BlueprintMedia)：media==='image' 走 IMAGE_DETAIL_DENSITY_RULES（画面细节密度纪律，与设计稿 §2.2 ANIMA 蓝图 persona discipline 同源：pose_action 峰值瞬间/expression ≤2/scene_anchors ≤3/camera_angle anima 景别词白名单/focal_length 留空纪律/四类信息归 narrative），video/mixed 保持 VIDEO_SHOT_DENSITY_RULES 原文逐字（mixed 可能含 video.shots，与 checkShotDensity video 分支语义一致）。测试锁双向：video system 含五维规则原文、image system 不含 video shot 规则且含 image 纪律。"
+        },
+        {
+          "criterion": "enrichBlueprint 新可选参 recommendations（D7 推荐先验）→ persona user 段【推荐先验】块（文案与既有【推荐先验】同源逐字）",
+          "status": "passed",
+          "evidence": "EnrichOptions.recommendations?: Array<{field,cardId,reason}>（与 runEnrich recommendations 参同构，enrich/engine.ts L114）。有推荐时 user 段末尾追加空行+头行「【推荐先验】艺术指导推荐器建议（你仍做最终设计决策，每类至多 1 张）：」+条目「- ${field}: ${cardId}（${reason}）」——与 enrich/engine.ts buildUser L74-78 同源逐字，测试逐字断言锁定；无推荐不渲染。签名已按要求即时报 captain（live 送达，消息 1b90c257）。"
+        },
+        {
+          "criterion": "全量无回退 + tsc/build + dist 同步，单意图提交",
+          "status": "passed",
+          "evidence": "npx vitest run 134 files/1144 passed/1 skipped/0 failed；npx tsc --noEmit exit 0；npm run build exit 0（build 在最终修复后执行）；dist 抽查：dist/src/pe-framework/enrichment/engine.js 含 RATING_OVERWRITE_ADVISORY(L38)+recommendations 消费(L135)+wholeCore strip(L47/L64)。单意图提交 0d8c295（2 files：src engine.ts + tests engine.test.ts，+194/−11），git status 仅剩既有未跟踪噪音。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "134 test files passed, 1144 tests passed, 1 skipped, 0 failed（含新增 R7/D6 5 测试 + V8 media 分支 2 测试 + D7 recommendations 2 测试；M4 基线 133/1123/1 无回退）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "无类型错误，exit 0"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "tsc 产出 dist 更新，exit 0；dist 抽查确认 RATING_OVERWRITE_ADVISORY/recommendations/wholeCore 均已编译进 dist/src/pe-framework/enrichment/engine.js"
+        }
+      ]
+    },
+    {
+      "id": "t5",
+      "subject": "[M5-T2] provider 路由切换 + 编排接线（D1-D9，重建版）",
+      "description": "M5-T2（重建版，engine.ts 已剥离归 T3/t4）：执行设计稿 docs/specs/2026-09-13-blueprint-form-migration-design.md T2 契约（§2.4 编排接线 + §3 映射）。依赖：t4（T3）先落地——消费其 enrichBlueprint recommendations 签名。in-scope 为设计稿 §3 T2 行去除 engine.ts 后的集合。设计稿 §2.4 执行流伪代码逐行即实现蓝本；D7 形状契约按 §5 captain 裁定（F1 color 通道已定）。【纪律】①链路相邻面（normalize/白名单/名单断言）萌生改动 → 先报 captain 扩围勿静默扩②V5/R6 专测先 RED③全量不与重 CPU 并行④插件目录 tsc + build 后提交⑤新增文件（ANIMA 蓝图 persona/schema 若放 dialect 侧）超出本 in-scope 时先报 captain。",
+      "status": "completed",
+      "assignee": "impl-2",
+      "dependencies": [
+        "t4"
+      ],
+      "attempt": 2,
+      "createdAt": 1789307262851,
+      "updatedAt": 1789311084301,
+      "kind": "implementation",
+      "objective": "默认 anima 路径迁移蓝图形态：路由切换（D1/D2）+ 编排接线（D4/D5/D7/D9）+ 投影扩展（D3），双态保留（D8），V5/R6 修复闭环复活专测。",
+      "inScope": [
+        "src/pe-framework/intent/subagent-provider.ts",
+        "src/pe-framework/blueprint/analyzer.ts",
+        "src/pe-framework/blueprint/schema.ts",
+        "src/pe-framework/blueprint/project.ts",
+        "src/pe-framework/blueprint/repo.ts",
+        "src/pe-framework/dialect/contract.ts",
+        "src/pe-framework/dialect/anima.ts",
+        "src/tools/prompt-author.ts",
+        "src/pe-framework/enrichment/art-direction-apply.ts",
+        "tests/tools/prompt-author-orchestration.test.ts",
+        "tests/pe-framework/blueprint/analyzer.test.ts",
+        "tests/pe-framework/blueprint/project.test.ts",
+        "tests/pe-framework/intent/subagent-provider.test.ts"
+      ],
+      "acceptance": [
+        "D1：dialect registry intent.form 标志（anima='blueprint'，缺省 slots）+ PM_AUTHOR_INTENT_FORM env kill-switch（覆盖 + advisory intent_form_override + 非法值 fail-fast）+ 单读取点在 intentBase 构造处",
+        "D2：ANIMA_BLUEPRINT_PERSONA/SCHEMA 落 blueprint/analyzer.ts（Q3 裁定）+ parseBlueprintJson expectedMedia 守卫（media mismatch 可机检文案）+ validateBlueprint 本体零改动",
+        "D3：media_layer.image 增补 count_gender/pose_action/expression/scene_anchors 四字段 + projectToAnima 直映射（scene 保序去重）+ deliberate non-mapping 头注释；validateAnimaSlots/ANIMA_SLOT_KEYS/registry.test 工具名单零改动（硬边界）",
+        "D4：runEnrich 条件跳过（anima+blueprint 形态）+ catalog 召回源=input + envelope 增量四项（observability.blueprint/trace blueprint_enrich/enrichment 消失/generations.enrich=0）+ defaultIntent parity",
+        "D5 三合一：anchorBlueprint 修复轮锚定（V6）+ injectCoreRating 统一 helper（首轮+修复轮，缺口#2）+ validate 失败单次反馈重试（D5c，advisory blueprint_repair_retry，再失败 fail-closed）——V5/R6 修复轮死路专测（mock provider 记录 blueprintMode，修复轮收到 anchorBlueprint 且闭环推进）",
+        "D7 双通道 + F1 裁定：显式卡确定性注入（perspective→camera_angle 每卡≤1 安全景别词白名单、lighting→core.scene.lighting 显式分隔、motion→pose_action；color→改走推荐先验通道）+ art_direction_applied advisory + 推荐先验文案同源逐字 + advisory 矩阵修订（anima+blueprint 不再 ignored）——消费 t4 落地的 recommendations 签名",
+        "D9：成功出口 repo.save(generation_id, bp) fail-open + envelope 条件顶层键 blueprint_id",
+        "既有蓝图 e2e 载体零改动通过（V9 清单）+ §2.6 L1-L4 mock 层判定绿（L2 explicit 六负向词逐字）+ 全量无回退 + tsc/build + dist 同步"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "31abc4c2-5ab6-4c9f-b1f4-49a5c21c429a",
+      "output": "M5-T2 完成（commits e5a958a + bb91ff1 + b4207b4；in-scope 12 files + 三项预告 scope 增量：render/envelope.ts observability.blueprint 类型字段、author-enrich.e2e/author-f5-corrections env 钉桩——均已在 message ab5f3863 预告并随 commits bb91ff1/b4207b4 落盘，供 T2R 核验；repo.ts 零改动符合预期）。默认 anima 路径已迁移蓝图形态：①D1/D2——registry intent.form='blueprint'（DialectIntent 接口）+ PM_AUTHOR_INTENT_FORM kill-switch（覆盖 advisory/非法值 fail-fast/单读取点）+ ANIMA_BLUEPRINT_PERSONA/SCHEMA 落 analyzer.ts（Q3 基座逐字前缀）+ parseBlueprintJson(expectedMedia) 守卫可机检文案；②D3——media_layer.image 四字段增补+直映射+scene 保序去重+non-mapping 留痕，硬边界（validateAnimaSlots/ANIMA_SLOT_KEYS/registry 14 工具名单）零改动；③D4——runEnrich 条件跳过+catalog 召回源 input+envelope 增量四项（observability.blueprint/trace blueprint_enrich/enrichment 消失/generations.enrich=0）+defaultIntent parity；④D5 三合一——V5 修复轮死路复活（blueprintMode 下行+anchorBlueprint 增量锚定 V6+injectBlueprintCoreRating 统一 helper 修复轮重注入缺口#2+D5c validate 单次反馈重试 fail-closed），V5/R6 专测 mock provider 断言修复轮收 blueprintMode+anchor 且闭环演进；⑤D7/F1——applyArtDirectionCards 纯函数双通道（perspective 白名单≤1 景别词/lighting '；' 显式分隔/motion→pose_action/color→推荐先验通道否决 palette 假注入），消费 t4 recommendations 签名（显式 color 卡优先+同源逐字），advisory 矩阵修订；⑥D9——repo.save(generation_id, bp) fail-open 三态+条件顶层键 blueprint_id（F2 载体）。全量 134 files/1172 passed/1 skipped/0 failed，tsc/build exit 0，dist 同步。台账事项：①D2 守卫边界=parse 层（生产 subagent/defaultIntent 两路经守卫，编排层对 mock 直返无二次防御，orchestration D2 测试留边界锚）②观察项：makeRevisionProvider strict 降级全重建路径不重注入 core.rating（与 D5b 同类但属既有行为、不在设计稿 D5b 范围，T2R/T4R 可酌情定夺）③camera_angle 追加用 ', ' 连接（结构槽脏词防护）与 lighting '；'（F1 原文裁定）分立，均留痕 art-direction-apply.ts 常量。",
+      "changedPaths": [
+        "src/pe-framework/blueprint/schema.ts",
+        "src/pe-framework/blueprint/analyzer.ts",
+        "src/pe-framework/blueprint/project.ts",
+        "src/pe-framework/dialect/contract.ts",
+        "src/pe-framework/dialect/anima.ts",
+        "src/pe-framework/intent/subagent-provider.ts",
+        "src/pe-framework/enrichment/art-direction-apply.ts",
+        "src/tools/prompt-author.ts",
+        "tests/pe-framework/blueprint/analyzer.test.ts",
+        "tests/pe-framework/blueprint/project.test.ts",
+        "tests/pe-framework/intent/subagent-provider.test.ts",
+        "tests/tools/prompt-author-orchestration.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "D1：dialect registry intent.form 标志（anima='blueprint'，缺省 slots）+ PM_AUTHOR_INTENT_FORM env kill-switch（覆盖 + advisory intent_form_override + 非法值 fail-fast），单读取点在 intentBase 构造处",
+          "status": "passed",
+          "evidence": "commits e5a958a+bb91ff1。dialect/contract.ts 增 DialectIntent 接口（form/blueprintPersona/blueprintSchema/blueprintExpectedMedia）；dialect/anima.ts intent 注册 form:'blueprint'+ANIMA 蓝图 persona/schema/expectedMedia 'image'（D8 rollback 注释）。prompt-author.ts 单读取点在 intentBase 构造处：blueprintForm = target==='anima' && (formEnv ?? intentCfg?.form ?? 'slots')==='blueprint'；env 覆盖仅 anima 生效；非法值 throw「PM_AUTHOR_INTENT_FORM 非法值: x（可选 slots|blueprint）」先于任何 LLM 调用。测试：orchestration M5-T2 组 D1/D4 测试（provider 收 blueprintMode=true/expectedMedia='image'/persona===ANIMA_BLUEPRINT_PERSONA）+ kill-switch 测试（env=slots → persona===ANIMA_PERSONA + advisory intent_form_override:slots）+ 非法值测试（rejects /PM_AUTHOR_INTENT_FORM/ 且 providerCalls=0 且 ctx.llm.calls=0）+ subagent-provider.test.ts M5-T2 describe（blueprintMode persona/schema 下行、无 req persona 回落通用蓝图常量、不回落 slots persona）。"
+        },
+        {
+          "criterion": "D2：ANIMA_BLUEPRINT_PERSONA/SCHEMA 落 blueprint/analyzer.ts（Q3 裁定）+ parseBlueprintJson expectedMedia 守卫（media mismatch 可机检文案）+ validateBlueprint 本体零改动",
+          "status": "passed",
+          "evidence": "analyzer.ts 新增 ANIMA_BLUEPRINT_PERSONA（基座=BLUEPRINT_SUBAGENT_SYSTEM 逐字前缀+目标媒介 image+规则1-10：单一瞬间/scene_anchors≤3/景别白名单纪律/角色锚点/narrative 四类信息/裸 JSON）与 ANIMA_BLUEPRINT_SCHEMA（image 模板含 D3 四字段，无 video/shots/rating 面）；parseBlueprintJson(text, {expectedMedia?}) 校验 media 方向，错误文案「blueprint media mismatch: expected image got video」可机检；validateBlueprint 函数体零改动（仅 parse 入口透传）。测试：analyzer.test.ts 新 describe 6 测试（startsWith 漂移钉死/schema 形状/mismatch 文案/expected 通过/缺省不启用/validate 回归）；subagent-provider.test.ts D2 测试（provider 面 video×expected image rejects 同文案）。边界披露：守卫在 parse 层（生产 subagent/defaultIntent 两路均经守卫），编排层对 mock provider 直返 draft 无二次防御——orchestration D2 测试改行为边界锚（mock 直返 video 蓝图时 observability.blueprint.media='video'），机检文案在 analyzer/subagent-provider 套件。"
+        },
+        {
+          "criterion": "D3：media_layer.image 增补 count_gender/pose_action/expression/scene_anchors 四字段 + projectToAnima 直映射（scene 保序去重）+ deliberate non-mapping 头注释；validateAnimaSlots/ANIMA_SLOT_KEYS/registry.test 工具名单零改动（硬边界）",
+          "status": "passed",
+          "evidence": "schema.ts media_layer.image 增四可选字段（M5-T2 D3 注释块）；project.ts projectToAnima 直映射 count_gender/pose_action/expression + scene=[environment,...scene_anchors] 保序去重（new Set），deliberate non-mapping 头注释覆盖 palette/emotion/time/atmosphere/props/variant/aspect_ratio；硬边界零改动：validateAnimaSlots/ANIMA_SLOT_KEYS 未触碰（grep 核验）、registry.test 14 工具名单全量绿。测试：project.test.ts 新 describe 3 测试（直映射+保序去重 ['rooftop','sunset','wind']、non-mapping 不含 palette/emotion、空 image 层不产出键）；orchestration D1/D3 测试断言产物含 1girl/rooftop/standing。"
+        },
+        {
+          "criterion": "D4：runEnrich 条件跳过（anima+blueprint 形态）+ catalog 召回源 input + envelope 增量四项（observability.blueprint/trace blueprint_enrich/enrichment 消失/generations.enrich=0）+ defaultIntent parity",
+          "status": "passed",
+          "evidence": "runEnrich 条件改为 a.enrich!==false && !a.blueprint_id && !blueprintForm（enrich=true+蓝图形态→enrich_ignored_blueprint advisory）；intentInput 恒=input 时 catalogCandidatesForText(intentInput) 源不变；envelope 增量四项：observability.blueprint 字段（form/media/missing_count/expansions_count/repairs_count/anchor_rounds，slots 形态不产出；类型字段落在 render/envelope.ts——预告的 scope 增量，见 output 台账）、traceStages 含 blueprint_enrich 子条目（首轮+修复轮各一）、enrichment 字段消失、generations.enrich=0（runEnrich 未走）。defaultIntent parity：blueprintMode 分支 system=req.persona??ANIMA_BLUEPRINT_PERSONA、user 含 catalog 候选+feedback、parse 走 parseBlueprintJson(+expectedMedia)。测试：orchestration D1/D4 测试五断言（observability.blueprint.form='blueprint'/media='image'/expansions_count=0/enrichment undefined/trace 含 blueprint_enrich）+ traceExtra 增量②两处计时。"
+        },
+        {
+          "criterion": "D5 三合一：anchorBlueprint 修复轮锚定（V6）+ injectCoreRating 统一 helper（首轮+修复轮，缺口#2）+ validate 失败单次反馈重试（D5c，advisory blueprint_repair_retry，再失败 fail-closed）——V5/R6 修复轮死路专测（mock provider 记录 blueprintMode，修复轮收到 anchorBlueprint 且闭环演进，R6）",
+          "status": "passed",
+          "evidence": "subagent-provider.ts：isBlueprint=target==='blueprint'||blueprintMode；taskText 在 isBlueprint&&anchorBlueprint 时插入 INCREMENTAL_ANCHOR(bp) 专用块（dumpIntentRequest 同时剥离 anchorBlueprint 防重复序列化）；parseIntentJson 蓝图分支透传 expectedMedia；applyBlueprintClarify 条件扩 blueprintMode。prompt-author.ts：AuthorIntentRequest 增 blueprintMode/blueprintExpectedMedia/anchorBlueprint；首轮 provider 调用 try/catch（blueprintForm 才重试）：advisory blueprint_repair_retry+round:1+feedback 含原始错误文案，再失败原错误透传；injectBlueprintCoreRating helper 统一承载首轮+修复轮重注入（缺口#2）；修复轮 provider 调用 ...(blueprintForm?{anchorBlueprint:bp}:{})；重试计入修正预算（corrections 初值=1）。V5/R6 专测：orchestration「M5-T2 V5/R6」describe——mock provider 记录 intentCalls，断言 [1].blueprintMode===true、[1].anchorBlueprint 含 rooftop（V6）、修复轮产物不带 rating 但最终 positive 含 rating_explicit 且不含 rating_sensitive + 六负向词逐字（缺口#2）、anchor_rounds=1、blueprint_enrich×2；D5c 专测 2 例（calls=2/seen[1].round=1/feedback 含错误文案/advisory/corrections=1；再失败 rejects /蓝图校验失败/）。"
+        },
+        {
+          "criterion": "D7 双通道 + F1 裁定：显式卡确定性注入（perspective→camera_angle 每卡≤1 安全景别词白名单、lighting→core.scene.lighting 显式分隔、motion→pose_action；color→改走推荐先验通道，否决 palette 假注入）+ art_direction_applied advisory + 推荐先验文案同源逐字 + advisory 矩阵修订（anima+blueprint 不再 ignored）——消费 t4 落地的 recommendations 签名",
+          "status": "passed",
+          "evidence": "新建 enrichment/art-direction-apply.ts 纯函数 applyArtDirectionCards：CAMERA_ANGLE_SAFE_TERMS=['full body','cowboy shot','upper body','close-up']（每卡≤1 白名单词，非白名单丢弃+advisory art_direction_dropped）、camera_angle 用 ', ' 连接（结构槽脏词防护）、lighting 用 ART_DIRECTION_FIELD_SEPARATOR='；' 显式分隔（F1 裁定原文）、motion→pose_action、color→colorRecommendations 返回（F1 否决 palette 假注入）；structuredClone 输入+未知卡防御跳过。prompt-author.ts：注入先于 enrichBlueprint（结果进 v0 供扩展层加工）；recommendations=[...recommendedCards.filter(显式 color 存在时滤 color), ...explicitCardRecs]（每类至多1张）消费 t4 EnrichOptions.recommendations 签名，推荐先验文案由 engine 层保证与 enrich/engine.ts buildUser 逐字同源；advisory 矩阵修订：h3→ignored_h3、enrich=false→ignored_enrich_off、蓝图形态不再 ignored。测试：orchestration D7/F1 测试——user 段含 close-up/不含 detailed face/含 golden hour/hair flowing in wind/【推荐先验】/warm_cool_contrast/不含 teal against orange accents；advisories 逐条（4×applied+1×dropped:shallow depth of field,detailed face）；产物面 positive 含 'hair in wind'（catalog 规范形 grounding）。"
+        },
+        {
+          "criterion": "D9：成功出口 repo.save(generation_id, bp) fail-open + envelope 条件顶层键 blueprint_id",
+          "status": "passed",
+          "evidence": "blueprint 分支成功出口（generationId 创建后、envelope 装配前）：createBlueprintRepo({settings}).save(generationId, bp)，落库键=generation_id（Q2 裁定）；fail-open 三态——settings 缺失静默跳过（无键无 advisory）、写失败 advisory blueprint_save_failed 不抛、成功 envelope 顶层条件键 blueprint_id（F2 载体）。测试 3 例：D1/D4 主测试断言 typeof blueprint_id==='string' 且 createBlueprintRepo({settings}).load(v.blueprint_id).media==='image' 回读同蓝图（含注入档位，['safe','sensitive','explicit'] toContain）；settings 缺失→blueprint_id undefined+无 advisory+ok=true；settings.update throw→advisory blueprint_save_failed+无键不抛。repo.ts 本体零改动符合预期。"
+        },
+        {
+          "criterion": "既有蓝图 e2e 载体零改动通过（E9 清单）+ §2.6 L1-L4 mock 层判定绿（L2 explicit 六负向词逐字）+ 全量无回退 + tsc/build + dist 同步",
+          "status": "passed",
+          "evidence": "既有蓝图 e2e：orchestration P0/h3 blueprint_id 用例断言零改动全绿；预披露的两文件（author-enrich.e2e/author-f5-corrections，编码 anima 缺省 enrich-brief/slots 旧行为）按 D8 双态设计用 env kill-switch 钉回 slots 兼容态——测试断言本体零改动，仅加 beforeEach/afterEach env 钩子（回滚面 R2 本身即被测对象），已在 message ab5f3863 预告。L2 判定：V5/R6+D5c 测试断言 rating_explicit+child/loli/shota/toddler/kid/preteen 六词逐字。全量：npx vitest run 134 files/1172 passed/1 skipped/0 failed（t3b 后基线 1148+新增 24，零回退）；dist 同步：npm run build 后 dist/src/tools/prompt-author.js、dist/src/pe-framework/intent/subagent-provider.js、dist/src/pe-framework/enrichment/art-direction-apply.js 均含新逻辑（build exit 0，build 在最终代码后执行）。提交分组：e5a958a（D1/D2/D3）、bb91ff1（D1/D4/D5/D7/D9）、b4207b4（D8 钉桩），dist 不入 git（preset .gitignore）。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "134 test files passed, 1172 tests passed, 1 skipped, 0 failed（t3b 后基线 1148 + 新增 M5-T2 24；预披露两 e2e 文件经 env 钉桩后零断言改动通过；全量串行不与重 CPU 并行）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "无类型错误，exit 0"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "tsc 产出 dist 更新，exit 0；dist 抽查确认蓝图形态路由/orchestration/art-direction-apply 新逻辑已编译进 dist（dist 不入 git，本机同步满足铁律）"
+        }
+      ]
+    },
+    {
+      "id": "t6",
+      "subject": "[M5-T3R] 评审 engine.ts 改动",
+      "status": "completed",
+      "dependencies": [
+        "t4"
+      ],
+      "attempt": 2,
+      "createdAt": 1789307281396,
+      "updatedAt": 1789308702351,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审 engine.ts 全量改动（deepMerge 硬化 + media 分支 + recommendations 参数）——T2 的消费前提。",
+      "acceptance": [
+        "R7 strip/advisory/专测三项核验 + 无覆写零行为变化",
+        "media 分支与 recommendations 签名对照设计稿 §2.4 D7 行",
+        "全量独立复跑 + dist 抽查",
+        "inScope 恰 2 文件"
+      ],
+      "reviewedTaskId": "t4",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "b21b3892-8a64-4c5b-9f16-881bc98b968b",
+      "output": "M5-T3R 评审完成，verdict=pass。被评审对象 = commit 0d8c295（engine.ts +103 / engine.test.ts +102，inScope 恰 2 文件 ✓，工作树 src/tests 干净）。四项验收逐项核验：①R7 三项 ✓——strip（stripCoreRatingFromPatch 覆盖 set 嵌套/裸部分蓝图/additions wholeCore/非对象 core 四形态，双通道均实际执行不短路）、advisory（enrich_rating_overwrite_blocked 契约常量并入 EnrichResult.advisories→envelope，仅出一次）、专测（4 个覆写形态 + 1 个良性对照，全部断言 v0 explicit 存活 + advisory 有/无）——恶意 patch 四形态 v1 仍 explicit；②无覆写零行为变化 ✓——deepMerge/applyAdditions 函数体未动、硬化全在调用点，良性 patch 照常应用且无 advisory，video/mixed persona 规则逐字保留（VIDEO_SHOT_DENSITY_RULES 原文搬家），返回形状无 advisory 时与旧一致；③media 分支 + recommendations 对照设计稿 §2.4 D7 行 ✓——buildExpansionPersona(media) image 分支用画面密度纪律（与 §2.2 景别白名单/结构槽脏词警示同源，防诱导编造 video.shots，双分支均有专测断言 persona 文本）；EnrichOptions.recommendations?: {field,cardId,reason}[] 与设计稿 L133/L147 签名一致，与 ArtDirectionRecommendation（recommend.ts L21-24）结构兼容——T2 可直接透传 recommendedCards；【推荐先验】块文案与 enrich/engine.ts buildUser 逐字同源（头行+条目行+空行形状一致），无推荐时不注入（专测钉死）；d0efe0c 设计稿修订已吸收 T1R F1 裁决（color 改走推荐先验通道），本实现正是该通道载体；④全量独立复跑 ✓——npx vitest run 134 files / 1144 passed / 1 skipped / 0 failed（exit 0，对 M4 基线 133/1123/1 漂移符合预期）+ npx tsc --noEmit 0 错；dist 抽查 ✓——dist/src/pe-framework/enrichment/engine.js（构建时间 22:04:53）含 RATING_OVERWRITE_ADVISORY/wholeCore strip/IMAGE_DETAIL_DENSITY_RULES/recommendations 全部新逻辑，src→dist 铁律满足。观察项（非本任务 finding，实现方已单独报 captain）：实现发现 applyAdditions 对象分支预存缺陷（deepMerge void 返回值赋键会摧毁目标节点），T3 以 additions.core 整键阻断保守兜住并留痕，处理正确且越界面控制得当。T2 消费前提成立：引擎层 rating 信任边界 + media 感知 + 推荐先验通道就绪。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t7",
+      "subject": "[M5-T2R] 评审蓝图形态迁移主线",
+      "status": "completed",
+      "dependencies": [
+        "t5"
+      ],
+      "attempt": 2,
+      "createdAt": 1789307281407,
+      "updatedAt": 1789311778001,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审蓝图形态迁移主线（路由切换 + 编排接线 D1-D9）——M5 核心评审。",
+      "acceptance": [
+        "D1-D9 逐项对照设计稿验收（§3 T2 行 + §5 captain 裁定 F1）",
+        "V5/R6 修复轮死路专测 RED→GREEN 留痕",
+        "硬边界核验：validateAnimaSlots/ANIMA_SLOT_KEYS/registry.test 工具名单零改动",
+        "既有蓝图 e2e 载体零改动通过 + L1-L4 mock 判据",
+        "全量独立复跑 + dist 内容级抽查",
+        "inScope 边界（重建版清单）"
+      ],
+      "reviewedTaskId": "t5",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "cf638c75-567e-4da7-837e-b8cf7d36c5f3",
+      "output": "M5-T2R 评审完成，verdict=pass。被评审对象 = commits e5a958a+bb91ff1+b4207b4（15 文件 = in-scope 12 + 三项预告增量，inScope 边界 ✓；repo.ts 零改动符合预期；registry.test.ts/plugin/index.ts 不在 diff → 14 工具名单硬边界 ✓；schema.ts 仅加型 +6 ✓；dialect/anima.ts 仅 import+intent 块 → validateAnimaSlots/ANIMA_SLOT_KEYS 零改动 ✓）。①D1-D9 逐项对照设计稿 §3 T2 行 + §5 F1 全过：D1（DialectIntent form 标志 + 单一读取点 + PM_AUTHOR_INTENT_FORM kill-switch fail-fast/advisory/anima-only + 回滚单行注释）；D2（ANIMA_BLUEPRINT_PERSONA 基座逐字前缀专测钉死 + image schema 无 rating/video 面 + expectedMedia 守卫可机检文案缺省不启用；Q3 落 analyzer.ts 无环）；D3（四字段直映射 + scene 保序去重 + deliberate non-mapping 留痕含 F1 否决 palette 注释）；D4（runEnrich swap 条件 + 召回源 input + envelope 增量①②③④齐 + defaultIntent parity）；D5 三合一（V5 复活 + D5a anchor 进 INCREMENTAL_ANCHOR 专用块不进 User Input JSON + D5b 统一 helper 修复轮重注入缺口#2 + D5c 单次重试 fail-closed 无 slots 静默降级）；D7/F1（applyArtDirectionCards：perspective 白名单≤1 + 丢弃 advisory + ', ' 连接 / lighting '；' / motion→pose_action / color→推荐先验通道否决 palette 假注入 + 显式卡优先去重 + advisory 矩阵修订）；D8（三层开关 + 两套 legacy 规格套件 env 钉桩 b4207b4）；D9（repo.save fail-open 三态全测 + 条件顶层键 blueprint_id）。②V5/R6 RED→GREEN 留痕 ✓——独立复现 RED：HEAD 测试文件 @ e5a958a → 1 failed「expected undefined to be true」(orchestration.test.ts:693 blueprintMode 断言 = V5 死路本体)，GREEN @ HEAD（全量含该测试通过）。③既有蓝图 e2e 载体零改动 ✓（author-blueprint.e2e/rating-intent 不在 diff，全量绿）；L2/L3 断言在 T2 测试内，L4 前提成立（方言层零触碰 + fidelity golden 全绿），L1 抽样归 T4（见 finding T2R-2）。④全量独立复跑 ✓ 134 files/1172 passed/1 skipped/0 failed（exit 0，恰 +24 T2 用例）+ tsc 0；dist 内容级抽查 ✓ 全部 8 模块新逻辑在 dist（含 envelope.d.ts 类型字段；dist mtime 22:46:42 先于 commit 22:47 完成提交前 build 纪律）。发现 2 项 low（T2R-1 strict 修订路径档位链路复核转 T4R；T2R-2 L1 golden 归 T4），均不阻塞。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "T2R-1",
+          "severity": "low",
+          "problem": "makeRevisionProvider strict 降级全重建路径在蓝图形态下不重注入 core.rating（实现方台账②自报）：blueprintMode 已随 intentBase 下行，strict 修订轮重建蓝图后无 D5b 等价注入。与台账缺口#1 同类（strict patchAnima 档位回落，计划明文不在 M5 范围），且全量绿说明测试面无回归。",
+          "requiredFix": "T4R 复核 strict 修订路径在蓝图形态下的档位链路；若确认残留风险则与缺口#1 同类立台账（不阻塞 T2 验收）。",
+          "resolved": false
+        },
+        {
+          "id": "T2R-2",
+          "severity": "low",
+          "problem": "t7 验收面中的「L1-L4 mock 判据」：L1（12 案例 slots 主干等价 golden 抽样）未在本任务落地——设计稿 §3 将 fixtures/golden 明文划归 T4（tests/fixtures/blueprint-migration/*），计划依赖图 T2→T2R→T4 一致。T2 已覆盖的等价层：L2（explicit 种子+负向组断言在 D5c/V5R6 测试）、L3（envelope 骨架断言在 D1/D4 测试）、L4 前提（方言层零触碰 + fidelity golden 套件全绿）。",
+          "requiredFix": "T4 落地 12 案例 fixtures + L1 判据并提交 T4R（设计稿/计划已预登记，非本任务缺陷）。",
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "id": "t8",
+      "subject": "[M5-T4] golden 对照 + NSFW 端到端 + 全量重放",
+      "description": "执行设计稿 T4 契约（§2.6 golden 方案 + §2.7 重放清单）：tests/fixtures/blueprint-migration/cases.json 12 案例定版 + 四层机检 vitest 化（全部断言落 tests/pe-framework/blueprint/migration-golden.test.ts——orchestration.test.ts 归 T2 所有，本任务不改它）+ 重放执行与记录（docs/blueprint-migration-replay.md）。mock 层判据 CI 可跑；真实会话重放（清单 4）由 captain 配合——重放脚本与断言面备好后报 captain 协作。F2 断言（envelope 条件键 blueprint_id）在本任务落地。全量不与重 CPU 并行；插件目录 tsc。",
+      "status": "completed",
+      "assignee": "impl-2",
+      "dependencies": [
+        "t6",
+        "t7"
+      ],
+      "attempt": 2,
+      "createdAt": 1789307324951,
+      "updatedAt": 1789313725307,
+      "kind": "implementation",
+      "objective": "golden 12 案例 + 四层机检 + e2e 重放 7 项 + 回滚判据指标采集——迁移正确性的量化证明面。",
+      "inScope": [
+        "tests/fixtures/blueprint-migration",
+        "tests/pe-framework/blueprint/migration-golden.test.ts",
+        "docs/blueprint-migration-replay.md"
+      ],
+      "acceptance": [
+        "golden 12 案例 fixtures 定版 + 四层机检全绿（L1 主干等价含 Jaccard 容差与 whitelist 机制/L2 explicit 逐字/L3 envelope 白名单含 F2 blueprint_id 条件键/L4 逐字节）",
+        "e2e 重放清单 1-7 执行留痕（全量/tsc/build+dist 冒烟/既有载体回归/真实会话 12 案例重放采集/blueprint_id 链路/h3 零变化/compile-audit 工具面）",
+        "回滚判据五项指标采集留痕（不一致率/golden 失败/超时率/catalog_miss 均值/loop_exhausted 率）",
+        "R1 token 画像实测留痕（偏差>30% 立案）",
+        "单意图提交（fixtures + golden 测试 + 重放记录 docs）；断言面全部落 migration-golden.test.ts（orchestration.test.ts 归 T2 所有，本任务不改）"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "1c1fd816-c9d1-493d-bc63-43da179d3fde",
+      "output": "M5-T4 完成（commit 3a9fd25，单意图 3 文件：tests/fixtures/blueprint-migration/cases.json 12 案例定版 + migration-golden.test.ts 40 用例 + docs/blueprint-migration-replay.md）。四层机检全绿：L1 主干等价（身份槽严格/内容槽 Jaccard≥0.6+白名单/narrative+rating 逐字节）、L2 explicit 五断言、L3 envelope 骨架+F2 条件键 blueprint_id 专测、L4 编译逐字节照妖镜；清单⑤ blueprint_id 链路与⑥ h3 零变化落 golden 套件；清单①②③⑦全量/tsc/build+dist 冒烟/既有载体/工具面留痕 replay doc。台账事项：①清单④真实会话重放——本会话挂载插件为迁移前 dist（probe 实证），重放 sheet+断言面+真实基线锚已备于 replay doc §4，需 captain 新 DSH 会话配合执行后补录②envelope 差异清单：next_action/repair_hints 装配不对称（blueprint 分支自始有/legacy 自始无，迁移零贡献，L3 白名单已显式扩展并双向断言）+L1 从严扩展（camera/exclusions 并入 Jaccard 集、rating 操作化为 resolved 相等、narrative 加逐字节）③R1 输入面 −44.2% 超 30% 已立案（基座复用收益面）；输出面 +74.5% 净增符合预测。全量 135/1212/1/0，tsc/build exit 0，dist 同步。",
+      "changedPaths": [
+        "tests/fixtures/blueprint-migration",
+        "tests/pe-framework/blueprint/migration-golden.test.ts",
+        "docs/blueprint-migration-replay.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "golden 12 案例 fixtures 定版 + 四层机检全绿（L1 主干等价含 Jaccard 容差与 whitelist 机制/L2 explicit 逐字/L3 envelope 白名单含 F2 blueprint_id 条件键/L4 逐字节）",
+          "status": "passed",
+          "evidence": "commit 3a9fd25。fixtures：tests/fixtures/blueprint-migration/cases.json 12 案例定版（c01-c12：单人基础/多人物/场景主导/画师/style_id×2（conformity 0 与 1 对照）/explicit/bikini 升档/<Picture N>/CJK 长叙事/art_direction 双卡/soft 负向；$meta 记录制来源与判据操作化）；expectedCompile 经 dist compileAnima 生产选项 {variant:'base',dropUnresolvedMiss:true} 录制。机检：migration-golden.test.ts 40 用例全绿——L1（12×2 双形态：身份槽 count_gender/character/artist 集合严格相等；内容槽六项+从严扩展 camera/exclusions Jaccard≥0.6+allowed_missing/allowed_extra 先剔后算（c05/c06 风格短语差异、c11 卡面差异由白名单承载）；narrative 存在性+非空+逐字节；rating resolved 相等）；L2（c07 五断言：种子 rating_explicit/六负向词逐字/resolved+source/assumptions）；L3（12×2：顶层键差异白名单+observability.blueprint 互斥+critical 家族 ⊆；F2 专测：settings→落库成功→blueprint_id 仅新路径且=generation_id 且可回读）；L4（12×逐字节 compileAnima(slotsBaseline) ≡ expectedCompile）。"
+        },
+        {
+          "criterion": "e2e 重放清单 1-7 执行留痕（全量/tsc/build+dist 冒烟/既有载体回归/真实会话 12 案例重放采集/blueprint_id 链路/h3 零变化/compile-audit 工具面）",
+          "status": "passed",
+          "evidence": "docs/blueprint-migration-replay.md §1-§7 逐项留痕。①全量 135 files/1212 passed/1 skipped/0 failed（含 golden 40 新增，零回退）②tsc 0+build 0+dist 冒烟（plugin index import 成功+6 模块内容级抽查 OK）③既有载体全量绿清单（author-blueprint.e2e/orchestration 28/anima-compile 15/registry 名单等）⑤blueprint_id 链路 mock 专测（落库→增量→修复轮收 anchorBlueprint 与落库蓝图同源→闭环推进→二次落库）⑥h3 零变化 mock 专测（persona===H3_PERSONA/无 blueprintMode/无蓝图痕迹）⑦compile-audit 工具面（anima-compile 15+audit 套件+registry 名单全绿）。④真实会话重放：按任务契约由 captain 配合——探测发现本会话挂载插件为迁移前 dist（证据：无 observability.blueprint/enrichment.skipped/trace 含 enrich+intent），本会话不可作迁移后重放载体；重放 sheet（12 案例 payload+断言面表）与真实基线锚（迁移前 probe 实录 gen_1789313381093_k4t473vn，含五项指标真实参考值）已备于 replay doc §4，已报 captain 新会话执行。"
+        },
+        {
+          "criterion": "回滚判据五项指标采集留痕（不一致率/golden 失败/超时率/catalog_miss 均值/loop_exhausted 率）",
+          "status": "passed",
+          "evidence": "replay doc §8 实测表：①explicit 一致率 c07 双路径 1/1（种子↔resolved 一致）②golden 失败 0/12③超时率 mock 0（真实参考：迁移前 probe intent 51.0s+enrich 44.7s，迁移后待清单④）④catalog_miss 均值 12 基线 compile 0.0 miss/run（fixtures 全 catalog-real tag；真实 probe 1 minor）⑤loop_exhausted 率 0（judge off 主线；清单⑤ fast 闭环 1 轮收敛）。五项均留痕含采集口径与补录方式。"
+        },
+        {
+          "criterion": "R1 token 画像实测留痕（偏差>30% 立案）",
+          "status": "passed",
+          "evidence": "replay doc §9：输入面 persona+schema 旧 7054B（ANIMA_PERSONA 6210+ANIMA_SCHEMA 844）→新 3936B（ANIMA_BLUEPRINT_PERSONA 2436+ANIMA_BLUEPRINT_SCHEMA 1500）=−44.2%；输出面 12 案例 provider 产物旧 3134B（均值 261）→新 5468B（均值 456）=+74.5%。方向与设计预测一致（输入净减/输出净增）；输入减幅 >30% 已立案留痕：归因 ANIMA_BLUEPRINT_PERSONA 逐字复用 BLUEPRINT_SUBAGENT_SYSTEM 基座（schema 不再内嵌 persona），属预期收益面非异常；输出净增为蓝图 JSON 结构开销，已留 T4R 可评估项（persona 最小 JSON 纪律）。"
+        },
+        {
+          "criterion": "单意图提交（fixtures + golden 测试 + 重放记录 docs）；断言面全部落 migration-golden.test.ts（orchestration.test.ts 归 T2 所有，本任务不改）",
+          "status": "passed",
+          "evidence": "commit 3a9fd25 单意图提交恰 3 文件（cases.json/migration-golden.test.ts/blueprint-migration-replay.md）；orchestration.test.ts 与其它 src/测试文件零触碰（git status 干净）；in-scope 三路径全落。提交前已过 npx vitest run 全量+tsc+build。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "135 files / 1212 passed / 1 skipped / 0 failed（对 T2R 基线漂移 = golden 套件新增 40 用例，零既有用例回退；串行执行不与重 CPU 并行）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "0 错（含新增 golden 套件与 JSON fixture 读取）"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；dist 同步后冒烟：plugin index import 成功 + 6 模块内容级抽查 OK（PM_AUTHOR_INTENT_FORM/blueprintMode/anchorBlueprint/INCREMENTAL_ANCHOR/ANIMA_BLUEPRINT_PERSONA/expectedMedia/CAMERA_ANGLE_SAFE_TERMS/art_direction_applied/blueprintPersona；envelope 的 blueprint 类型面在 .d.ts，运行时值由 prompt-author.js 产出）"
+        }
+      ]
+    },
+    {
+      "id": "t9",
+      "subject": "[M5-T4R] 评审 golden 对照与重放",
+      "status": "completed",
+      "dependencies": [
+        "t8"
+      ],
+      "attempt": 2,
+      "createdAt": 1789307339339,
+      "updatedAt": 1789314345601,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审 golden 对照与重放证明面——迁移正确性量化验收。",
+      "acceptance": [
+        "四层机检独立复跑 + fixtures 定版核对（12 案例与设计稿 §2.6 表逐行一致）",
+        "重放清单 1-7 留痕完整性 + 回滚判据五指标与 §2.5 判据表对照",
+        "R1 token 画像数字复核",
+        "F2 断言在场",
+        "无 Files 外改动（orchestration.test.ts 归 T2 核实）"
+      ],
+      "reviewedTaskId": "t8",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "dc4af922-9201-4e3b-b8b2-d1fb0219dde3",
+      "output": "M5-T4R 评审完成，verdict=pass。被评审对象 = commit 3a9fd25（恰 3 in-scope 文件：cases.json 869 行/migration-golden.test.ts 348 行/replay doc 102 行；orchestration.test.ts 不在 commit ✓ 归 T2；另有 1 处 in-scope 文件内未提交增量见 T4R-2）。①四层机检独立复跑 ✓：golden 套件单跑 40/40（12×L1+L2+12×L3+F2+12×L4+清单⑤+清单⑥）+ 全量 135 files/1212 passed/1 skipped/0 failed + tsc 0 + dist smoke OK（Config/apply/inject/name，与 replay §2 一致）。②fixtures 定版核对 ✓：12 案例与设计稿 §2.6 表逐行一致（id/覆盖面/args 要点全对齐，judge off 全系）；每案例四件套齐（args/slotsBaseline/blueprint/expectedCompile）；白名单（c05/c06 风格注入差/c11 卡注入差）均有 whitelistNote 说理；c11 卡 id（golden_hour/flowing_hair）实存 ✓；录制来源（$meta recordingProvenance：迁移后树上经 dist 录制 + T2R 方言零触碰前提）成立。③重放清单 1-7 留痕 ✓（④为 backlog 见 T4R-1）：①全量②tsc/build/dist③既有载体⑤blueprint_id 链（落库→增量→judge NEEDS→修复轮收 blueprintMode+anchor 与落库蓝图同源→闭环→二次落库）⑥h3 零变化（persona 原样/无蓝图泄漏）⑦工具面——⑤⑥落 golden 套件、①②③⑦落 replay doc 且本次独立复跑全部复现。④回滚判据五指标对照 §2.5 ✓：①种子/resolved 一致 1/1②golden 0/12③超时 mock 0+真实 probe 基线（51.0s intent/44.7s enrich）待补录④catalog_miss 基线 0.0/run⑤loop_exhausted 0——五项全数映射设计稿判据。⑤R1 复核 ✓：输出面逐字节精确复现（3134→5468 B，+74.5%）；输入面本审独立测量 −44.7% vs 文档 −44.2%（新侧字节精确一致，旧侧 ±0.5pp 测量点差）；>30% 立案处置成立（方向=设计稿预测的输入净减收益面，留痕充分）。⑥F2 断言在场 ✓：专测 settings→落库→条件顶层键 blueprint_id 仅新路径 + 可回读（media image）+ 键=generation_id（Q2）。⑦L3 白名单扩展（next_action/repair_hints 不对称）核验为迁移前既存（5c91341 L1004-1005 位于蓝图分支内、legacy 分支自始不装配），双向断言 + replay §10 披露，拉平与否留台账定夺——诚实披露面合格。T2R nit 已响应：generations.enrich 两态断言已入 L3（未提交态，见 T4R-2）。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "T4R-1",
+          "severity": "low",
+          "problem": "重放清单④（真实会话 12 案例重放）未执行——环境约束实证：本会话挂载插件为迁移前 dist（probe 留痕：无 observability.blueprint/enrich_skipped/trace 无 blueprint_enrich），非实现方过错；重放 sheet + 断言面 + 真实基线锚（generation_id=gen_1789313381093_k4t473vn 槽位/advisories/gates）已备于 replay doc §4。回滚判据五项中 ③④ 的真实会话数字待补录。",
+          "requiredFix": "captain 在新 DSH 会话（挂载已同步 dist）按 §4.2 sheet 执行 12 案例重放并补录 replay §4/§8 ③④ 实测数字；T5 收口必须把该补录列为门禁项（缺补录不得收口）。",
+          "resolved": false
+        },
+        {
+          "id": "T4R-2",
+          "severity": "low",
+          "problem": "工作树存在未提交增量：migration-golden.test.ts 在 commit 3a9fd25 之外新增 2 条断言（generations.enrich 两态对照 0/1——响应 T2R nit），含 getGeneration import。测试性增量、in-scope 文件内、套件全绿（本次独立复跑含该增量），但 commit 态与被评审态不一致。",
+          "requiredFix": "T4 实现方（或 captain takeover）以单一测试提交落盘该增量（commit message 注明 T2R nit 响应），T5 前完成。",
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "id": "t10",
+      "subject": "[M5-T5] M5 收口（docs-only）",
+      "description": "执行 M5 计划 Task 5 收口（docs-only）：全量隔离验证 + tsc/build + dist 冒烟（82 预设 + 14 工具终态不变声明——迁移不改工具面）+ AGENTS.md 迁移行为注记 + cookbook 核对 + spec 勘误段 D4 语义补录。Commit: docs: M5 closeout (blueprint-form migration)",
+      "status": "completed",
+      "assignee": "impl-1",
+      "dependencies": [
+        "t9"
+      ],
+      "attempt": 1,
+      "createdAt": 1789307339352,
+      "updatedAt": 1789314827346,
+      "kind": "work",
+      "inScope": [
+        "AGENTS.md",
+        "docs/cli-cookbook.md",
+        "docs/specs/2026-09-12-style-aesthetics-nsfw-design.md"
+      ],
+      "acceptance": [
+        "全量隔离验证留痕（基线 1135+M5 新增）0 failed + tsc/build（插件目录）+ dist 冒烟（82 + 14 工具不变）",
+        "AGENTS.md 同步（M5 迁移行为注记：anima 默认蓝图形态/kill-switch/repo 落库/blueprint_id 有料）+ cookbook 若涉 prompt_author 默认流描述则同步",
+        "spec 勘误段补 D4 语义（runEnrich 退出默认路径后 spec §7 P2 enrich persona 的存活面 = h3/blueprint_id/非迁移方言）",
+        "单意图提交"
+      ],
+      "attemptId": "c68f0d3d-cba1-4ef7-8852-f2c185476a5a",
+      "reassigning": false,
+      "output": "M5-T5 收口完成（docs-only，commit 5d9cdcb「docs: M5 closeout (blueprint-form migration)」，恰 3 in-scope 文件 +11/−2）。\n\n①全量隔离验证留痕：npx vitest run 135 files / 1212 passed / 1 skipped / 0 failed（exit 0，@ 42b9d97——收口 docs-only 不改行为，与 T4/T4R 记录基线一致）；插件目录 npx tsc --noEmit exit 0 + npm run build exit 0；dist 冒烟 = 工具面/预设数终态不变声明成立：node 加载 dist/src/plugin/index.js（registry.test 同款 stubCtx）→ toolCount=14（catalog_artist_add/catalog_build/catalog_relations/catalog_search/minimax_scenario/profile_list/prompt_audit/prompt_author/prompt_compile/prompt_expand/prompt_feedback/prompt_reverse/style_list/style_save 逐名一致）+ stylePresetCount()=82（冒烟脚本 temp/m5-dist-smoke.mjs，不入 git）。\n\n②AGENTS.md（preset 根）同步——M5 迁移行为注记四要点齐：anima 默认蓝图形态（蓝图链全流程 + runEnrich 退出默认路径 + 首轮调用数持平）、kill-switch（PM_AUTHOR_INTENT_FORM=slots 运行时回滚 + intent_form_override advisory + 非法值 fail-fast）、repo 落库（fail-open + blueprint_save_failed advisory）、blueprint_id 有料（条件顶层键 =generation_id 可增量续链）+ observability.blueprint 痕迹；同步修订 enrich 参数语义（蓝图形态下忽略）、envelope 顶层字段表（enrichment 在 anima 默认路径消失、blueprint_id 条件键）、成本提示中段调用名。\n\n③cookbook 同步（docs/cli-cookbook.md 涉 prompt_author 默认流）：新增「prompt_author 默认流（M5 起蓝图形态）」小节——蓝图链/回滚开关/落库/blueprint_id/observability.blueprint/enrichment 消失，链设计稿路径。\n\n④spec 勘误段补 D4 语义（docs/specs/2026-09-12-style-aesthetics-nsfw-design.md 勘误节新增「M5 补录」）：§7 P2 enrich persona 存活面收敛 = h3 目标 / blueprint_id 增量入口（扩写归 enrichBlueprint 扩展层）/ 未迁移方言（form 缺省 slots 含回滚态）；【内容分级】→ injectBlueprintCoreRating 确定性注入、【推荐先验】→ enrichBlueprint user 段同源逐字等价承载；原文留痕不改写。\n\n⑤单意图提交：5d9cdcb，git show --stat 恰 3 文件（AGENTS.md / docs/cli-cookbook.md / plugins/prompt-master/docs/specs/2026-09-12-style-aesthetics-nsfw-design.md）。docs-only 零 src 改动，dist 已是提交前 build 产物（当前）。t10 → T5R 评审就绪；M5 剩余：t11（T5R）→ t12（M5-FINAL 全分支终审）+ t8 台账的清单④真实会话重放（需 captain 新 DSH 会话，replay doc §4 sheet 已备）。"
+    },
+    {
+      "id": "t11",
+      "subject": "[M5-T5R] 评审 M5 收口",
+      "status": "completed",
+      "dependencies": [
+        "t10"
+      ],
+      "attempt": 1,
+      "createdAt": 1789307351009,
+      "updatedAt": 1789315093673,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审 M5 收口。",
+      "acceptance": [
+        "收口三类证据齐（全量/dist/文档同步）",
+        "无 Files 外改动"
+      ],
+      "reviewedTaskId": "t10",
+      "assignee": "impl-2",
+      "attemptId": "dfd94295-1120-4752-a144-b52868368517",
+      "reassigning": false,
+      "output": "M5-T5R 评审完成，verdict=pass。被评审对象 = commit 5d9cdcb（docs-only 收口，恰 3 文件 +11/−2：AGENTS.md / docs/cli-cookbook.md / nsfw spec 勘误节；零 src/测试改动）。①三类证据独立复验齐：全量 135 files/1212 passed/1 skipped/0 failed + tsc 0 + build 0 @ HEAD（与 t10 记录一致，docs-only 行为不变证实）；dist 冒烟独立复刻 registry.test stub → toolCount=14（逐名与权威名单精确一致）+ stylePresetCount=82；文档同步逐行核验——AGENTS.md M5 四要点+enrich 语义+envelope 字段表+成本提示、cookbook 新小节、spec 勘误 M5 补录（原文留痕不改写）全部到位，且行为面抽查（enrich_ignored_blueprint 发射条件 L917-921、observability.blueprint 字段面、blueprint_id=generation_id）与实现实测一致。②无 Files 外改动：恰 3 文件、三文件工作树无未提交增量、T4R-2 增量已由 42b9d97 闭合。无 finding。M5 剩余：t12（M5-FINAL 全分支终审）+ 清单④真实会话重放（replay doc §4 sheet 备妥，需 captain 新 DSH 会话）。",
+      "verdict": "pass",
+      "acceptanceResults": [
+        {
+          "criterion": "收口三类证据齐（全量/dist/文档同步）",
+          "status": "passed",
+          "evidence": "【全量】本审独立复跑 @ HEAD 5d9cdcb（插件目录）：npx vitest run = 135 files / 1212 passed / 1 skipped / 0 failed + npx tsc --noEmit 0 错 + npm run build exit 0——与 t10 声称（@ 42b9d97）数字一致，收口 docs-only 不改行为得到独立证实。【dist】独立复刻 registry.test 同款 stubCtx（tools.register 收集器 + settings.register + effect 同步 cb）加载 dist/src/plugin/index.js：toolCount=14 且逐名与 tests/plugin/registry.test.ts:36 权威名单精确一致（catalog_artist_add…style_save）+ stylePresetCount()=82（dist/src/pe-framework/styles/registry.js）——工具面/预设数终态不变声明成立；冒烟脚本用后即删（temp/ 不入 git）。【文档同步】git show 5d9cdcb 全 diff 逐行核验：①AGENTS.md：M5 迁移 bullet 四要点齐（蓝图链六段含首轮调用数持平 / kill-switch PM_AUTHOR_INTENT_FORM=slots + intent_form_override advisory + 非法值 fail-fast / 落库 fail-open + blueprint_save_failed / blueprint_id=generation_id 增量续链 + observability.blueprint 六字段）+ enrich 语义修订（蓝图形态忽略 + enrich_ignored_blueprint advisory + brief 存活面=h3/blueprint_id/未迁移方言）+ envelope 顶层字段表（enrichment 在 anima 默认路径消失、blueprint_id 条件键）+ 成本提示中段调用名（intent + 蓝图扩展/brief enrich + fast 评审）②cookbook：新小节「prompt_author 默认流（M5 起蓝图形态，2026-09-13）」同语义完整（回滚开关/落库/blueprint_id 续链/observability.blueprint/enrichment 消失，链设计稿路径）③nsfw spec 勘误「M5 补录」：§7 P2 存活面收敛三类 + 【内容分级】→injectBlueprintCoreRating + 【推荐先验】→enrichBlueprint user 段同源逐字等价承载 + 原文留痕不改写（纯追加）。行为面抽查：enrich_ignored_blueprint 发射条件（src/tools/prompt-author.ts L917-921：a.enrich===true && (blueprint_id || blueprintForm)，D4 注释明示默认蓝图形态适用）与 AGENTS.md「参数被忽略必须可观测」口径一致；observability.blueprint 字段面与 envelope.d.ts 实测一致；blueprint_id=generation_id 与 golden F2 断言一致。"
+        },
+        {
+          "criterion": "无 Files 外改动",
+          "status": "passed",
+          "evidence": "git show --stat 5d9cdcb = 恰 3 文件（AGENTS.md +5/−2、docs/cli-cookbook.md +4、plugins/prompt-master/docs/specs/2026-09-12-style-aesthetics-nsfw-design.md +4，合计 +11/−2）——零 src/零测试改动（docs-only 契约成立，插件 AGENTS.md 的 src→dist 铁律不触发、dist 无需重建且本审 build 复跑产物与提交前一致）。三文件工作树无未提交增量（git status --short 定向查询为空）。前序 T4R-2 指出的未提交增量已由 42b9d97 在 5d9cdcb 之前闭合，HEAD 干净。仓库根未跟踪目录（.agent-teams/.superpowers/ 等）为会话工件，非 t10 产物、不入提交，不构成本审 finding。"
+        }
+      ]
+    },
+    {
+      "id": "t12",
+      "subject": "[M5-FINAL] 全分支终审（蓝图形态迁移）",
+      "status": "completed",
+      "dependencies": [
+        "t11"
+      ],
+      "attempt": 1,
+      "createdAt": 1789307351022,
+      "updatedAt": 1789315340040,
+      "kind": "review",
+      "round": 1,
+      "objective": "M5 全分支终审：36e80c8（计划）起全部提交——设计稿、engine 改动、迁移主线、golden 重放、收口。",
+      "acceptance": [
+        "提交链×评审映射全（T1R/T3R/T2R/T4R/T5R + 无专 TR 提交补审若有）",
+        "spec §8 对齐终态判定（默认路径蓝图形态 + validateBlueprint 进默认流 + 双态回滚面）",
+        "envelope 契约增量四项 + blueprint_id 条件键",
+        "与真实会话问题链（824d2f22/8e31ff2a）的闭合关系陈述",
+        "分支级总结 + 台账更新（h3 迁移/strict patchAnima/旧路径删除提案）"
+      ],
+      "reviewedTaskId": "t10",
+      "assignee": "impl-1",
+      "attemptId": "aed5eb8e-9449-413b-bd55-25e04dad5973",
+      "reassigning": false,
+      "output": "M5-FINAL 全分支终审完成，verdict=pass。【利益冲突披露】终审者（impl-1）为 0d8c295/5c91341（T3/T3b engine.ts）作者——该两提交的独立评审记录 = t6/T3R（verdict=pass，评审对象 0d8c295）；本终审对二者做复核而非首次评审，5c91341 无专 TR 由本终审补审（见 FINAL-1）。\n\n①提交链×评审映射全（36e80c8..HEAD 共 9 提交）：d0efe0c 设计稿+T1R 裁定→t2/T1R pass；0d8c295 T3→t6/T3R pass；5c91341 T3b→无专 TR，本终审补审（diff 复核：base 承接既有节点就地 deepMerge、数组/标量通道零动、strip JSDoc ③「缺陷已修边界保留」同步；组合专测+全量复跑覆盖）→ 无缺陷；e5a958a+bb91ff1+b4207b4 T2→t7/T2R pass；3a9fd25+42b9d97 T4→t9/T4R pass（42b9d97 闭合 T4R-2）；5d9cdcb T5→t11/T5R pass。映射完备，无漏审提交。\n\n②spec §8 对齐终态判定（代码锚点亲验）：默认路径蓝图形态 ✓——dialect/anima.ts L940 form:'blueprint' 注册（L935 回滚注释）；validateBlueprint 进默认流 ✓——parseBlueprintJson→validateBlueprint（analyzer.ts L173-185）+ expectedMedia 守卫（可机检文案 L185）经 prompt-author L182 与 subagent-provider L244 双路下行，defaultIntent parity（L164/L182）；双态回滚面 ✓——三层：registry 单行 revert / env PM_AUTHOR_INTENT_FORM（prompt-author L852-857 非法值 fail-fast、L887 runEnrich 原样恢复）/ 双态代码保留+legacy 套件 env 钉桩（b4207b4）；缺省失败不做 slots 静默降级（fail-closed）。\n\n③envelope 契约增量四项+blueprint_id 条件键 ✓：observability.blueprint（render/envelope.ts L86 form 类型字段）、trace blueprint_enrich、enrichment 顶层字段 anima 默认路径消失、generations.enrich 两态对比（42b9d97 L3 钉死 blueprint=0/slots=1）；blueprint_id 条件顶层键（=generation_id，F2 专测 t9 核验）。\n\n④真实会话问题链闭合关系：session-8e31ff2a（静默降档）→ P0 2b4c245（slots.rating 确定性写入+投影+校验白名单）→ M5 闭合残余链：缺口#2 修复轮 core.rating 重注入（D5b injectBlueprintCoreRating 统一 helper）、缺口#3 deepMerge 覆写（D6/R7 strip+advisory）、D5c 校验失败单次重试再失败 fail-closed、D8 明文不做静默降级（设计稿 §2.5 直接点名 8e31ff2a）——蓝图路径的档位信任边界全链闭合。session-824d2f22（pre-M1 dist 静默失效 18h、文档-运行时矛盾不可归因）→ 立项二运行时版本戳**不在 M5**（计划执行注记明示留台账）——现有缓解：插件 AGENTS.md dist 铁律 + M5 实操中 t8 的挂载 dist probe 实证（正是立项二要制度化的归因手段）；根因性闭合待版本戳立项。\n\n⑤分支级总结：M5 主目标全达——标准 anima 路径 spec §8 字面对齐（蓝图形态默认+validateBlueprint 进默认流+enrichBlueprint 扩展层+修复轮锚定），双态保留回滚面三层，两项残留缺口（#2/#3）修复并经 t13 扩展（applyAdditions 对象分支缺陷一并修复），golden 四层机检 40 用例+12 案例 fixtures 定版，全量 135/1212/1/0（终审独立复跑）+ tsc 0 + dist 终态不变（14 工具/82 预设）。台账更新（终态）：h3 蓝图迁移（form 机制已预留，另立里程碑）；strict patchAnima 档位回落（缺口#1，T2R-1 复核→T4R 裁定 N/A→台账维持）；旧 slots 路径删除提案（双态稳定一个里程碑后评审）；立项二运行时版本戳（824d2f22 根因闭合，半天级，建议下里程碑优先）；清单④真实会话 12 案例重放（backlog，replay doc §4 sheet+断言面+基线锚已备，需 captain 新 DSH 会话执行后补录——M5 证明面唯一未闭合项）；L3 白名单 next_action/repair_hints 装配不对称（迁移前既存，拉平与否留台账）；R1 输入面 −44.2% 超 30% 立案（方向=设计稿预测收益面）；T3b applyAdditions void 缺陷（已修，台账留痕）。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "FINAL-1",
+          "severity": "low",
+          "problem": "5c91341（M5-T3b applyAdditions 对象分支修复）无专用评审轮次（T3R 评审对象为 0d8c295，先于 T3b 落地）——本终审已补审：diff 复核（合并语义正确/数组标量通道零动/JSDoc 边界声明同步）+ 专测组合场景核验 + 全量独立复跑，无缺陷。根因是任务系统护栏重切（T2/T3 文件所有权归并）导致的评审时序缝隙。",
+          "requiredFix": "无代码动作。后续里程碑维持「单任务单所有者 + 每次实现提交闭合专属评审轮次」纪律；若同文件追加改动，评审任务声明明确覆盖增量 commit。",
+          "resolved": true
+        }
+      ]
+    },
+    {
+      "id": "t13",
+      "subject": "[M5-T3b] applyAdditions 对象分支合并语义修复",
+      "description": "M5-T3b（t4 随行报备缺陷的正式立项，captain 裁定）：engine.ts applyAdditions 对象分支（L60-62 现状）把 deepMerge 的 void 返回值赋给键 → 对象值 additions 写入覆键成 undefined 摧毁节点。t4 的 wholeCore strip 已护 core.rating，但对象值通道（additions.media_layer 等）缺陷本体仍在——M5 蓝图路径 enrichBlueprint patch 恰好会用对象 additions，T4 golden 前必须修。engine.ts 仍是你独占文件（与 t5/T2 零交集，可并行）。TDD、插件目录 tsc、build 后提交。Commit: fix(enrich): applyAdditions object-branch merge semantics (M5 T3b)",
+      "status": "completed",
+      "assignee": "impl-1",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1789308477016,
+      "updatedAt": 1789308782984,
+      "kind": "implementation",
+      "objective": "修复 applyAdditions 对象分支 void 赋值摧毁节点缺陷（对象值 additions 正确合并），消 M5 蓝图路径的地雷。",
+      "inScope": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptance": [
+        "applyAdditions 对象分支 void 赋值修复（deepMerge 返回值语义正确采用，破坏性覆写改节点合并）",
+        "回归专测：对象值 additions（additions.media_layer 等）不再写成 undefined、既有键内容保留、数组/标量通道零行为变化",
+        "与 t4 的 wholeCore strip 叠加验证：恶意 patch core.rating 场景下 strip 先行 + 对象合并修复不冲突（组合专测）",
+        "全量无回退 + tsc/build + dist 同步，单意图提交"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "df4cda35-29b0-423c-b1fe-46b6fc978297",
+      "output": "M5-T3b 完成（commit 5c91341，2 files +70/−5：src/pe-framework/enrichment/engine.ts + tests/pe-framework/enrichment/engine.test.ts）。\n\n【缺陷与修复专项留痕（供 T3R 评审与台账）】\n◆ 缺陷本体：applyAdditions 对象分支旧实现 `target[k] = deepMerge({...target[k]}, pv)`——deepMerge 签名为 void（原地变异、无返回值），赋值表达式的值是 undefined → 任何对象值 additions 写入把目标键整体覆成 undefined，摧毁既有节点（例：additions.media_layer 对象 → v1.media_layer = undefined，既有 image 层数据全丢；additions.core 对象 → core 全丢连带 rating，该路径已被 t4 wholeCore strip 先行阻断）。注释宣称的「对象深合并」语义与实际行为不符；全仓既有测试零覆盖（全部 additions 用例为空对象），属潜伏缺陷非行为退化面。\n◆ 修复：对象分支改为 `const base = isPlainObject(target[k]) ? target[k] : {}; deepMerge(base, pv); target[k] = base`——target[k] 为对象时就地深合并（既有键内容保留、patch 键并入），非对象（缺失/标量/数组）以空对象承接 pv 合并后赋回；数组 pv 追加通道与标量覆盖通道零改动。\n◆ 信任边界关系：修复后 wholeCore strip 语义不变——additions 通道对 core（rating 载体节点）仍零写权限，信任边界不因节点保全而放宽；strip JSDoc ③ 已改写为「缺陷已修、边界保留」。\n◆ 验证：TDD 先 RED（3 个缺陷暴露测试失败）→ 修复后 GREEN（engine.test.ts 19/19）；全量 134 files/1148 passed/1 skipped/0 failed（较 t4 后基线 1144 净增 4，无回退）；tsc/build exit 0；dist 同步抽查（engine.js L33）。\n◆ 测试面：M5-T3b describe 4 测试（media_layer 新节点合并 / 既有节点保留合入 / 数组标量零变化 guard / 与 t4 wholeCore strip 组合专测——strip 先行 + 合并修复不冲突）。\n\n注：captain 原裁定要求在 t4 output 留痕，t4 已 terminal（结果不可变），本 output 即为该缺陷与修复的正式台账载体，T3R/T5 实现者可据此追溯。",
+      "changedPaths": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "applyAdditions 对象分支 void 赋值修复（deepMerge 返回值语义正确采用，破坏性覆写改节点合并）",
+          "status": "passed",
+          "evidence": "commit 5c91341：对象分支改为 target[k] 为对象时就地 deepMerge（既有键保留、patch 键并入），非对象以空对象承接再赋回（旧实现把 deepMerge void 返回值赋给键 → 节点覆成 undefined）。strip JSDoc ③ 同步改写：缺陷标记已修、wholeCore 信任边界不因修复放宽（additions 通道对 rating 载体节点零写权限）。dist 抽查 engine.js L33 确认编译进 dist。"
+        },
+        {
+          "criterion": "回归专测：对象值 additions（additions.media_layer 等）不再写成 undefined、既有键内容保留、数组/标量通道零行为变化",
+          "status": "passed",
+          "evidence": "TDD RED（3 失败）→GREEN（19/19）：新增 M5-T3b describe 4 测试——①additions.media_layer 新增子节点合并（修复前节点被覆成 undefined，断言 toEqual 全量形状）；②落既有 image 节点：lighting_detail/focal_length 保留 + depth_of_field 并入；③数组/标量通道零行为变化 guard（extraTags 追加 ['a','b']、extraScalar 覆盖 2）；全量 npx vitest run 134 files/1148 passed/1 skipped/0 failed（t4 后基线 1144，+4 无回退）。"
+        },
+        {
+          "criterion": "与 t4 的 wholeCore strip 叠加验证：恶意 patch core.rating 场景下 strip 先行 + 对象合并修复不冲突（组合专测）",
+          "status": "passed",
+          "evidence": "组合专测：同 patch 含 set.core.rating='safe' + additions.core.rating='sensitive' + 良性 additions.media_layer 对象——断言 v0 rating='explicit' 保全 + advisory enrich_rating_overwrite_blocked 在（t4 strip 先行生效）且 media_layer.image = {lighting_detail 保留, depth_of_field 并入}（对象合并修复生效）——两机制互不冲突。"
+        },
+        {
+          "criterion": "全量无回退 + tsc/build + dist 同步，单意图提交",
+          "status": "passed",
+          "evidence": "npx vitest run 134 files/1148 passed/1 skipped/0 failed；npx tsc --noEmit exit 0；npm run build exit 0（build 在最终代码后执行）；dist/src/pe-framework/enrichment/engine.js L33 含修复后合并语义。单意图提交 5c91341「fix(enrich): applyAdditions object-branch merge semantics (M5 T3b)」（2 files +70/−5）。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "134 test files passed, 1148 tests passed, 1 skipped, 0 failed（t4 后基线 1144 + 新增 M5-T3b 4 测试；TDD 先 RED 3 失败）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "无类型错误，exit 0"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "tsc 产出 dist 更新，exit 0；dist 抽查确认修复后合并语义已编译进 dist/src/pe-framework/enrichment/engine.js（L33 const base = …）"
+        }
+      ]
+    },
+    {
+      "id": "t14",
+      "subject": "[M5-HOTFIX] 蓝图落库 settings 接线 + save rejection 逃逸（P0：DSH 进程死亡）",
+      "description": "P0 热修（真实会话 DSH 进程死亡，captain 已定罪，堆栈在手）：dsh: fatal TypeError settings namespace \"[object Object]\" must match /^[a-z][a-z0-9-]*$/，栈 = repo.js save → cordis Proxy.update → parseSettingsNamespace。双层缺陷：①Bug B（根因）prompt-author.ts L1106 把裸 ctx.settings（dsh-settings 服务，签名 async update(ns: string, patch, expectedRevision?)，ns 须 ^[a-z][a-z0-9-]*$ 且须 register）类型断言成 RepoSettingsScope（owner scope 形状 update(patch)）——设计稿 §2.4 D9 与 repo.ts 头注释要求的「真实 namespace 解包接线」从未实现，V7「生产零调用」的真相是一调即炸；②Bug A（放大器）repo.ts L27 void settings.update(...) 丢弃 promise + prompt-author 不 await → rejection 无主 → Node 默认 unhandledRejection=进程退出。owner scope 形状 = settings.register(ns, schema) 返回值（dsh-settings lib/index.js register L281；schema 库 = schemastery，DSH 源内找既有 register 用例参照）。修复后告知 captain 重建 dist 供重启验证。TDD、插件目录 tsc、build 后提交。",
+      "status": "completed",
+      "assignee": "impl-2",
+      "dependencies": [],
+      "attempt": 2,
+      "createdAt": 1789318644499,
+      "updatedAt": 1789319802872,
+      "kind": "implementation",
+      "objective": "修复蓝图落库双缺陷：真实 settings 接线（register owner scope）+ save 异步 rejection 逃逸（进程死亡根因），fail-open 语义落地。",
+      "inScope": [
+        "src/pe-framework/blueprint/repo.ts",
+        "src/tools/prompt-author.ts",
+        "tests/pe-framework/blueprint/repo.test.ts",
+        "tests/tools/prompt-author-orchestration.test.ts"
+      ],
+      "acceptance": [
+        "接线修复：prompt-author 蓝图落库改用 settings.register('prompt-master-blueprints', <dict schema>) 的 owner scope（首次调用惰性注册 + 复用，防重复注册；namespace 合法 ^[a-z][a-z0-9-]*$；schema 用 schemastery dict——形状先核 DSH 源内既有 register 用例），RepoSettingsScope 契约不变",
+        "崩溃修复：BlueprintRepo.save 返回 Promise（void 丢弃改 await 透传），prompt-author L1108 await save 于既有 try/catch 内——任何 rejection 落 advisory blueprint_save_failed（fail-open 语义真正成立），杜绝浮空 rejection（本次进程死亡根因）",
+        "回归专测：①scope.update 返回 rejected promise → await save → advisory 在 + 无未处理 rejection 逃逸 ②重复 register 防御 ③合法 owner scope 存取回读（save→load 往返）",
+        "真实堆栈回归面：用堆栈中的形状（update(ns,patch) 服务对象）做反例测试——误传裸服务必须编译期类型错误（RepoSettingsScope 收紧）或运行期可检",
+        "全量无回退 + tsc/build + dist 同步，单意图提交"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "91a70313-4553-4411-9725-bd8fd473264d",
+      "output": "M5-HOTFIX 完成（commit f8b89a3，单意图 6 文件 = 4 in-scope + 2 预告 scope 增量）。双层缺陷修复：①接线——prompt-author 落库块与 blueprint_id 增量入口（同款 Bug B 的 load 侧，修复中发现）改走 blueprintSettingsScope(ctx)：settings.register('prompt-master-blueprints', z.object({blueprints: z.dict(z.string(),z.string()).default({})})) owner scope 惰性注册 + WeakMap 按服务复用 + registerOrReuseNamespace 兜 already-registered，双层防重复注册；RepoSettingsScope 契约零改动；②崩溃——repo.save 返回 Promise（同步 throw 也统一异步面），prompt-author await 于 try/catch 内，rejection 恒落 advisory blueprint_save_failed；settings 在场但不可接线→同 advisory（可观测 fail-open），settings 缺失→静默跳过（D9 原语义）。TDD：8 新专测 RED→GREEN（rejection 逃逸探针/重复注册防御/round-trip/堆栈形状反例零直调/缺 register 反例）。全量 135/1220/1/0、tsc 0、build 0、dist 同步。**请 captain 重建后重启 DSH 会话验证**：新会话挂载 f8b89a3 dist 后，真实出稿 envelope 应出现 blueprint_id（=generation_id）且进程存活（旧 dist 一调即炸）。",
+      "changedPaths": [
+        "src/pe-framework/blueprint/repo.ts",
+        "src/tools/prompt-author.ts",
+        "tests/pe-framework/blueprint/repo.test.ts",
+        "tests/tools/prompt-author-orchestration.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "接线修复：prompt-author 蓝图落库改用 settings.register('prompt-master-blueprints', <dict schema>) 的 owner scope（首次调用惰性注册 + 复用，防重复注册；namespace 合法 ^[a-z][a-z0-9-]*$；schema 用 schemastery dict——形状先核 DSH 源内既有 register 用例），RepoSettingsScope 契约不变",
+          "status": "passed",
+          "evidence": "commit f8b89a3。先核 DSH 源：dsh-settings lib/index.js register 确认 owner scope 形状 {get/watch/update(patch)/replace(section)}、重复注册抛 already registered、parseSettingsNamespace 校验 ns（即本次堆栈点）；插件内成熟先例 = plugin/index.ts custom-profiles 的 registerOrReuseNamespace + z.dict 模式。修复：prompt-author.ts 新增模块级 blueprintSettingsScope(ctx)——惰性 register（首次落库才注册）+ 按 settings 服务对象 WeakMap 缓存复用（同进程重复出稿零二次注册）+ registerOrReuseNamespace 兜 already-registered 复用，双层防重复注册；namespace 'prompt-master-blueprints' 合法；schema z.object({blueprints: z.dict(z.string(), z.string()).default({})})（根 z.object 与两个既有 namespace 同形，default 纪律遵 storage-v2 注）；owner scope ↔ RepoSettingsScope 适配读写收敛 blueprints 段（写 read-merge-write 整段，与 overrides 层 set() 同款语义）；RepoSettingsScope 接口零改动。落库块与 blueprint_id 增量入口两个消费点均改走该接线（后者为同款 Bug B 的 load 侧）。orchestration ②断言 register 恰 1 次 + ns 名精确；DSH 服务形状核对见 commandsRun 说明。"
+        },
+        {
+          "criterion": "崩溃修复：BlueprintRepo.save 返回 Promise（void 丢弃改 await 透传），prompt-author L1108 await save 于既有 try/catch 内——任何 rejection 落 advisory blueprint_save_failed（fail-open 语义真正成立），杜绝浮空 rejection（本次进程死亡根因）",
+          "status": "passed",
+          "evidence": "repo.ts：save 返回 Promise<unknown>，同步 throw 也经 Promise.reject 统一到异步面（try/catch 包裹 settings.update 调用）；接口 BlueprintRepo.save 签名同步更新。prompt-author.ts：落库块 await createBlueprintRepo(...).save(...) 于既有 try/catch 内，任何 rejection 落 advisory blueprint_save_failed 且 savedBlueprintId 不置位（blueprint_id 条件键不出现）；settings 服务在场但不可接线（缺 register/注册失败）→ 同 advisory（可观测 fail-open）；settings 缺失 → 静默跳过（D9 原语义，既有测试 L522 仍绿）。orchestration ①专测：scope.update reject → advisory 在 + blueprint_id 无 + ok 仍 true + process unhandledRejection 探针两轮 setImmediate 后零命中（浮空 rejection 杜绝）。"
+        },
+        {
+          "criterion": "回归专测：①scope.update 返回 rejected promise → await save → advisory 在 + 无未处理 rejection 逃逸 ②重复 register 防御 ③合法 owner scope 存取回读（save→load 往返）",
+          "status": "passed",
+          "evidence": "repo.test.ts +3（RED→GREEN 留痕：改前 2 失败——rejection 透传/同步 throw 转异步面；await save 往返）+ orchestration M5-HOTFIX describe +5 全绿：①rejection→advisory+无 blueprint_id+ok true+unhandledRejection 探针零命中 ②同服务两次出稿 register 恰 1 次+ns 精确 ③落库真实可达（blueprint_id→store 蓝图 JSON media image→repo.load 读回）④服务级 update(ns,patch) 零直调+ns 正则合法 ⑤缺 register 异常形状→fail-open advisory 不炸进程。TDD：先写测试跑出 RED（repo 2 失败+orchestration 5 失败）再修复转 GREEN（88/88 五套件）。"
+        },
+        {
+          "criterion": "真实堆栈回归面：用堆栈中的形状（update(ns,patch) 服务对象）做反例测试——误传裸服务必须编译期类型错误（RepoSettingsScope 收紧）或运行期可检",
+          "status": "passed",
+          "evidence": "运行期可检（契约二选一取后者）：orchestration ④ 专测用真实堆栈形状的 mock 服务（服务级 update(ns,patch) spy 在场）跑完整出稿→断言服务级 update 通道零直调（误传裸服务=patch 落 ns 位=本次堆栈形状，一旦回归该 spy 必被命中）+ register 收到的 ns 匹配 ^[a-z][a-z0-9-]*$；orchestration ⑤ 反向反例：无 register 的 owner-scope 形状假扮服务→运行期落 blueprint_save_failed advisory（可观测、不假成功、不炸进程）。编译期收紧：blueprintSettingsScope 参数面以结构化类型要求 register 函数存在，误传 RepoSettingsScope 形状对象在类型面不可赋值。"
+        },
+        {
+          "criterion": "全量无回退 + tsc/build + dist 同步，单意图提交",
+          "status": "passed",
+          "evidence": "commit f8b89a3 单意图恰 6 文件（4 in-scope + 2 预告 scope 增量）；npx vitest run 135 files/1220 passed/1 skipped/0 failed（对 T4 基线 1212 恰 +8 新增专测，零既有用例回退）；npx tsc --noEmit 0；npm run build exit 0（src 改动后 build，dist 已同步本机，待 captain 重启 DSH 会话验证）。预告 scope 增量（同 T2 先例，随 commit 落盘）：①tests/plugin/author-blueprint.e2e.test.ts——3 个 blueprint_id 用例的 settings stub 形状随生产契约迁移（旧 stub 编码了 Bug B 错误假设：裸 owner scope 直传 ctx.settings，修复后不可达），断言语义零改动；②tests/pe-framework/blueprint/migration-golden.test.ts——F2 与清单⑤同款 stub 迁移（settingsRepo 改服务形状 + repoScope 投影），断言语义零改动；两文件均在文件头/函数头留修订原因注释。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "135 files / 1220 passed / 1 skipped / 0 failed——对 T4 基线 1212 恰 +8（repo 3 + M5-HOTFIX describe 5），零回退（含 T2 既有 D9/D1/D5 专测与 T4 golden 40 全绿）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "0 错（新增 blueprintSettingsScope/import z/settingsNamespace/registerOrReuseNamespace 及 BlueprintRepo.save 签名变更均过类型门）"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；src→dist 铁律履行（build 在 src 改动后执行，dist/src/tools/prompt-author.js 与 blueprint/repo.js 已含新逻辑；dist 不入 git，本机同步待重启验证）"
+        }
+      ]
+    },
+    {
+      "id": "t15",
+      "subject": "[M5-HOTFIX-R] 评审落库热修",
+      "status": "completed",
+      "dependencies": [
+        "t14"
+      ],
+      "attempt": 2,
+      "createdAt": 1789318653184,
+      "updatedAt": 1789320527106,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审 P0 热修——进程死亡根因闭环。",
+      "acceptance": [
+        "堆栈复核：仓库形状与运行时调用路径（await + try/catch）逐行核验",
+        "register 接线正确性（ns 合法性/惰性单次/schema 形状）",
+        "反例测试判别力（rejected promise 场景 + 裸服务形状）",
+        "全量独立复跑 + dist 抽查",
+        "inScope 边界"
+      ],
+      "reviewedTaskId": "t14",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "0ea38593-f713-4b17-ba5f-5ffdcc1dae72",
+      "output": "M5-HOTFIX-R 评审完成，verdict=pass。被评审对象 = commit f8b89a3（恰 6 文件 = 4 in-scope：repo.ts/prompt-author.ts/repo.test.ts/orchestration.test.ts + 2 预告 scope 增量：migration-golden.test.ts/author-blueprint.e2e.test.ts；无其他文件；doc 更新正确分离至 5d9cdcb）。①堆栈复核 ✓：双重缺陷逐行闭环——Bug B（裸 ctx.settings 误断言 RepoSettingsScope → 服务级 update(ns,patch) 通道 patch 落 ns 位 → parseSettingsNamespace TypeError）由 blueprintSettingsScope 接线根除（prompt-author.ts L787-819：服务检测→WeakMap 按服务缓存→registerOrReuseNamespace(ctx, settingsNamespace('prompt-master-blueprints'), z.object({blueprints: z.dict(z.string(),z.string()).default({})})) owner scope 惰性注册→读取合并写适配器→注册失败缓存 undefined fail-open）；Bug A（repo.save void 丢弃 promise → unhandledRejection 杀进程）由双层收容根除——repo.ts save 返回 Promise<unknown>（try/Promise.resolve + catch/Promise.reject 同步 throw 统一异步面），prompt-author 落库块 await 于 try/catch 内（rejection→advisory blueprint_save_failed，ok 恒 true），blueprint_id 载入入口同源接线且 fail-closed（显式报错文案可机检）。②register 接线 ✓：ns 合法（'prompt-master-blueprints' 过 ^[a-z][a-z0-9-]*$，测试④钉死）；惰性单次（WeakMap + has 检查，测试②两轮出稿 register 恰 1 次）；schema 形状（根 z.object + z.dict + .default({})，与 custom-profiles 成熟模式同款）；三态语义（缺 settings→静默跳过 D9/不可接线→advisory/写失败→advisory）全部有测试钉死。③反例测试判别力 ✓：8 新专测（orchestration ①-⑤ + repo.test 3）：①真实 unhandledRejection 探针（process.on + 双 setImmediate flush，非模拟）；②register-once；③落库真实可达 + save→load 往返；④服务级 update 通道零直调（本次 P0 堆栈形状）+ ns 正则；⑤缺 register 异常形状 fail-open 不炸；repo 层 rejection 透传/同步 throw 转 rejected promise/await 往返。RED 独立复现（42b9d97 src + f8b89a3 测试）：hotfix describe 5/5 RED（advisory 缺失/blueprint_id 假成功）+ repo 层 2 RED（.rejects 断言遇 void 返回）——判别力实证。④全量独立复跑 + dist 抽查 ✓：全量 1220 passed/1 skipped（1212+8 ✓，0 failed）、tsc 0；dist 热修面在场（scope=5/ns=2/advisory=5/awaitSave=1）+ import 链完整（storage-v2.js dist 在场）+ dist 构建时序（01:15:46 build → 01:16:00 commit）= f8b89a3 内容同步（src mtime 01:22 为本审 git switch 产物，非陈旧）。⑤inScope ✓：6 文件均属热修意图；2 预告增量为接线修复强制 test-infra 迁移（裸 owner-scope stub 形状修复后不可达，迁移为真实服务形状 + register 对意外 ns 抛错从严 + repoScope 供断言侧回读），披露属实。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "HOTFIXR-1",
+          "severity": "low",
+          "problem": "运营层验证待执行：本会话挂载 DSH 插件仍为热修前 dist；t14 报告要求的「重建+重启 DSH 会话+真实出稿 envelope 出现 blueprint_id 且进程存活」尚未执行。代码契约已由 mock 层全覆盖（含进程死亡机制的真实 unhandledRejection 探针），此项为环境性收尾，非代码缺陷。",
+          "requiredFix": "captain 重建（npm run build）+ 重启 DSH 会话后跑一次真实 prompt_author (target=anima)，验证 envelope.blueprint_id（=generation_id）在场且进程存活；建议将本项并入清单④真实会话重放一并执行（同一新会话）。",
+          "resolved": false
+        },
+        {
+          "id": "HOTFIXR-2",
+          "severity": "low",
+          "problem": "closeout 文档提交 5d9cdcb 的 AGENTS.md 措辞「fail-open：settings 缺失/写失败仅 advisory blueprint_save_failed」混淆了热修实际钉死的三态语义：settings 缺失 → 静默跳过（D9 原语义，无 advisory，测试⑤/落库块 settingsPresent 分支钉死）；服务在场但不可接线/写失败 → advisory。文档与实现不符（doc-only）。另：5d9cdcb 目前游离（main tip = f8b89a3，未含 closeout 提交）。",
+          "requiredFix": "captain 将 5d9cdcb 重落地（cherry-pick）时顺手把该句改为「settings 缺失 → 静默跳过（D9）；服务在场但不可接线或写失败 → advisory blueprint_save_failed」，避免回滚面消费者对可观测性产生错误预期。",
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "id": "t16",
+      "subject": "[M5-DIAG] enrich 直连通道真实会话 100% 失败诊断",
+      "description": "真实会话 enrichBlueprint 通道 100% 失败诊断（清单④重放实锤，非 mock 面问题）：两次重放运行（01:52 与 00:46 两代 dist）enrichBlueprint 均 fallback_to_v0（generation gen_1789331738213_68bdqrok / gen_1789331818416 系列 envelope expansions=['enrichment_failed:fallback_to_v0']，traceStages blueprint_enrich 10.3s/11.3s/10.5s/10.4s/10.9s）。intent 走 DSH 子代理基础设施正常（15-95s 成功），enrichBlueprint 走插件直连 LLM（enrichment/engine.ts → llm/route.ts → complete.ts）恒败。级联后果：美学扩展层生产空转 → tag_count_out_of_range（c02 11/c03 9/c04 6 content tags）+ aesthetic_*_missing 全家桶。c04 另发现 artist 槽丢失（LLM 未把 wlop 写入 core.style.artist_hints，落入 detail_mood 文本）——一并核查 blueprint persona 对 artist_hints 的引导强度与 schema 显著性。mock 测试全绿（stub route 不暴露真实通道问题）。",
+      "status": "completed",
+      "assignee": "impl-2",
+      "dependencies": [
+        "t15"
+      ],
+      "attempt": 2,
+      "createdAt": 1789332024705,
+      "updatedAt": 1789332848104,
+      "kind": "work",
+      "inScope": [
+        "src/pe-framework/enrichment/engine.ts",
+        "src/llm/route.ts",
+        "src/llm/complete.ts",
+        "src/pe-framework/intent/subagent-provider.ts",
+        "docs/enrich-channel-diagnosis.md",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptance": [
+        "根因定位留痕：enrichBlueprint 直连 LLM 通道在真实 DSH 上下文 100% 失败（实测 6/6 次，~10-11s/次，fallback_to_v0，expansions 记录在案；intent 子代理通道同期正常）——读 llm/route.ts + complete.ts + enrichBlueprint 调用链，找出直连通道失败的确切原因（route 配置缺失/API key 通道差异/超时设置/错误分类）",
+        "修复或升级：若可在插件侧修（route 解析/参数/重试）→ 修复 + 专测；若属宿主侧限制（插件无直连 LLM 凭据）→ 给出宿主侧结论 + 把 enrichBlueprint 失败升级为可观测 advisory（enrichment_failed 详情进 envelope 供诊断）",
+        "真实会话验证路径说明：修复后如何验证（replay 补充或单案例实测）",
+        "全量无回退 + tsc/build（若动 src）",
+        "单意图提交或诊断报告落 docs/"
+      ],
+      "reassigning": false,
+      "attemptId": "62b54f10-7794-4b65-91dd-9719da8f86be",
+      "output": "M5-DIAG 完成（commit d0a9fe1，诊断报告 docs/enrich-channel-diagnosis.md）。根因闭环：①主因=插件侧可修——maxTokens=1024 截断（dsh-llm 'max-tokens' 是正常终止非 error → 截断文本 JSON.parse 失败）+ 三处 catch {} 吞掉真实原因 → generic fallback；量化吻合 ~10.3-11.3s ≈ 1024 tok @ ~100 tok/s；②修复：maxTokens→4096 + 失败原因进 envelope expansions（enrichment_failed_reason:llm|parse|apply:<详情>，legacy token 首位不变）+ EnrichOptions.signal 透传；③c04 artist 槽丢失=蓝图 persona/schema 零 artist_hints 引导（slots 时代【artist 槽】块未随迁）→ analyzer.ts 预告 scope 增量修复；④宿主侧结论：非凭据限制（ctx.llm 宿主同源凭据，intent 同期成功）；⑤真实会话验证路径：重启会话（挂 d0a9fe1 dist，含 t14）→ 单案例（建议 c04）查 expansions——无 enrichment_failed=恢复，有则 reason token 直接分类。全量 135/1226/1/0、tsc 0、build 0（dist 已同步）。in-scope 零改动：route.ts/complete.ts/subagent-provider.ts 核查无缺陷（留痕）。",
+      "changedPaths": [
+        "src/pe-framework/enrichment/engine.ts",
+        "docs/enrich-channel-diagnosis.md",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "根因定位留痕：enrichBlueprint 直连 LLM 通道真实 DSH 上下文 100% 失败（实测 6/6，~10-11s/次，fallback_to_v0，expansions 记录在案；intent 子代理通道同期正常）——读 llm/route.ts + complete.ts + enrichBlueprint 调用链，找出直连通道失败的确切原因（route 配置缺失/API key 通道差异/超时设置/错误分类）",
+          "status": "passed",
+          "evidence": "诊断报告落 docs/enrich-channel-diagnosis.md（§1-§3 全链路留痕）。逐层排查：①route 配置缺失——排除：resolveRoute 三环（会话 requestHeader→agent.options→显式报错），解析失败会显式抛错不产生 fallback_to_v0，与实测形状不符，且 intent 子代理同期成功证明会话路由可用；②API key 通道差异——排除：ctx.llm 是宿主服务（cordis inject），凭据与会话同源（dsh-llm lib 核对：LlmRuntime.stream 为宿主 llm 服务，非插件自有 HTTP），无插件独立凭据面；③超时设置——排除：旧代码孤儿 AbortController 从不触发（反而无超时）；④错误分类——【命中主因】：dsh-llm FinishReasonMap 核对确认 'max-tokens' 是正常终止（非 error/aborted）——maxTokens=1024 时 patch 回显/推理吃满预算 → 截断文本静默返回 → JSON.parse throw → 旧代码三处 catch {} 吞掉真实原因 → generic fallback。量化吻合：~10.3-11.3s ≈ 1024 tok @ ~100 tok/s（会话模型生成速度同量级）；100% 失败与输入无关（预算必吃满）；intent 子代理成功（15-95s）因其 token 预算由宿主 subagent 基础设施控制，排除模型不能输出 JSON 的可能。级联后果（tag_count_out_of_range + aesthetic_*_missing 全家桶）= 美学扩展层空转的直接产物。"
+        },
+        {
+          "criterion": "修复或升级：插件侧可修（route 解析/参数/重试）→ 修复 + 专测；宿主侧限制 → 结论 + 失败升级为可观测 advisory（enrichment_failed 详情进 envelope 供诊断）",
+          "status": "passed",
+          "evidence": "插件侧可修，两项修复均落地（commit d0a9fe1）：①maxTokens 1024→4096（engine.ts，截断余量，对比 analyzer intent 1400 起步仍成功）；②可观测性升级（超出 advisory 的更低侵入方案——直接进 envelope expansions）：三处 catch 分支各自携带原因进 expansions——llm 抛错→enrichment_failed_reason:llm:<code>:<message≤160>、parse 失败→:parse:<finishKind>:<文本head JSON≤200>（max-tokens=预算截断可直接机检）、非对象→:parse:<finishKind>:non-object:<typeof>、apply 抛错→:apply:<message≤160>；legacy token enrichment_failed:fallback_to_v0 保持首位不变=既有断言面零漂移（grep 确认无既有测试断言该 token）；clip() 净化器单行化+截断保证条目可进 envelope。附带：EnrichOptions.signal 透传（孤儿 AbortController 修复，缺省行为不变）。宿主侧结论（§4）：非宿主侧限制——直连走宿主同凭据；若升级后真实会话 reason 显示 llm:AUTH|NO_ADAPTER 再按 code 升级宿主问题。专测：engine.test.ts M5-DIAG describe +6（TDD RED→GREEN，RED 时 6/6 失败留痕）。c04 artist 槽丢失一并修复（见第5条 evidence 的预告 scope 增量）。"
+        },
+        {
+          "criterion": "真实会话验证路径说明：修复后如何验证（replay 补充或单案例实测）",
+          "status": "passed",
+          "evidence": "docs/enrich-channel-diagnosis.md §5 三层路径：①重启 DSH 会话（挂载 d0a9fe1 dist，含 t14 热修）→ 单案例实测（建议 c04，顺带验证 artist 修复）：expansions 不含 enrichment_failed:* = 直连通道恢复 + aesthetic_*_missing 收敛；仍含 → enrichment_failed_reason:* 直接给出分类（llm:AUTH→宿主问题升级；parse:max-tokens→预算再调；parse:stop→输出形态问题再修）；②replay 补充：按 replay doc §4 sheet 跑 12 案例，回填 replay doc §8 指标③④；③c04 专项：blueprint_id 落库蓝图 core.style.artist_hints 应含 wlop（repo.load 可查）。"
+        },
+        {
+          "criterion": "全量无回退 + tsc/build（若动 src）",
+          "status": "passed",
+          "evidence": "动了 src（engine.ts + analyzer.ts）：npx vitest run 全量 135 files/1226 passed/1 skipped/0 failed（对 t14 基线 1220 恰 +6 新专测，零回退）；npx tsc --noEmit 0；npm run build 0（src 改动后 build，dist 已同步）。依赖面专项复跑：analyzer/golden/e2e/orchestration 四套件 89/89 全绿（persona/schema 增量编辑与基座逐字前缀断言、schema 断言、golden 40 项全兼容）。"
+        },
+        {
+          "criterion": "单意图提交或诊断报告落 docs/",
+          "status": "passed",
+          "evidence": "两者均满足：诊断报告落 docs/enrich-channel-diagnosis.md（§1 现象表/§2 链路核查/§3 根因①②③/§4 宿主侧结论/§5 验证路径/§6 测试留痕）+ 单意图 commit d0a9fe1 恰 4 文件（3 in-scope 实改 + 1 预告 scope 增量）。in-scope 零改动声明：llm/route.ts、llm/complete.ts、intent/subagent-provider.ts 经核查无缺陷（诊断结论已留痕）——route 解析三环健在、complete.ts 已透传 finish+usage、subagent-provider.ts 的 slots 时代 ANIMA_PERSONA 本就有完整【artist 槽】块（引导缺失在蓝图面 analyzer.ts，故增量落在该文件）。预告 scope 增量（同 T2/T14 先例，随 commit 落盘）：src/pe-framework/blueprint/analyzer.ts——c04 artist 槽丢失根因修复：ANIMA_BLUEPRINT_SCHEMA core.style 增 artist_hints 键 + ANIMA_BLUEPRINT_PERSONA 规则 11（用户明确提及的画师裸名原样入 artist_hints、不写文本字段、不确定存在不写防编造）；依据=任务书明示『一并核查 blueprint persona 对 artist_hints 的引导强度与 schema 显著性』，核查结论=蓝图面零引导（slots 时代引导未随迁），修复为最小 schema+persona 编辑，projectToAnima artist 槽消费面不变。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/enrichment/engine.test.ts (TDD RED)",
+          "status": "passed",
+          "evidence": "6/6 新 M5-DIAG 专测 RED（maxTokens 透传 4096、error-finish reason、max-tokens 截断 parse reason、non-object reason、apply reason、signal 透传——旧代码全部不满足），修复前留痕"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "全量 135 files / 1226 passed / 1 skipped / 0 failed（t14 基线 1220 恰 +6 新专测，零回退）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "0 错（maxTokens/finishKind/signal/clip 新增面 + analyzer schema/persona 编辑均过类型门）"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；build 在 src 改动后执行（dist/src/pe-framework/enrichment/engine.js + blueprint/analyzer.js 已含修复，dist 不入 git，本机同步待重启验证）"
+        }
+      ]
+    },
+    {
+      "id": "t17",
+      "subject": "[M5-DIAG-R] 评审 enrich 通道修复",
+      "status": "completed",
+      "dependencies": [
+        "t16"
+      ],
+      "attempt": 2,
+      "createdAt": 1789332953528,
+      "updatedAt": 1789333164830,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审 enrich 通道修复与 artist 槽修复——直连通道生产可用性闭环。",
+      "acceptance": [
+        "根因论证复核：maxTokens 截断链（FinishReasonMap 'max-tokens'=正常终止 → 静默非 JSON → parse 败）与量化证据（时长↔token 数）自洽；route/key/timeout 排除论证成立",
+        "修复核验：maxTokens 4096 + 三 catch 原因透传（enrichment_failed_reason:* 三态 clip 净化）+ legacy token 首位不变（既有断言零漂移）+ signal 透传",
+        "c04 修复核验：ANIMA_BLUEPRINT_SCHEMA artist_hints 键 + persona 规则 11（裸名入 artist_hints/不写文本/防编造）与基座逐字前缀断言/golden 40 兼容",
+        "全量 1226 独立复跑 + dist 抽查",
+        "inScope（3 实改 + 1 预告增量）"
+      ],
+      "reviewedTaskId": "t16",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "c35759dc-c88d-4739-aa3b-4adad356ed45",
+      "output": "M5-DIAG-R 评审完成，verdict=pass。被评审对象 = commit d0a9fe1（恰 4 文件 = 3 实改：engine.ts/engine.test.ts/诊断报告 + 1 预告增量：analyzer.ts；route.ts/complete.ts/subagent-provider.ts 零改动 ✓ 与 t16 留痕一致）。①根因论证复核 ✓：截断链逐环实证于 dsh-llm 源码——FinishReasonMap 中 max-tokens 不携带 failure（仅 aborted/error 有 LlmFailure）= 正常终止；providers 侧 length→{kind:'max-tokens'} 映射（pi-ai L1408/deepseek L1135）；BlockAssembler 在 max-tokens finish 保留文本块 → 截断文本静默返回 → JSON.parse throw → 旧三处 catch {} 吞原因 → generic fallback。量化自洽（~10.3-11.3s ≈ 1024 tok @ ~100 tok/s；100% 失败率 = 预算必被吃满，与输入无关，与两代 dist 6/6 实测吻合）。排除论证成立：ctx.llm 宿主同源凭据 + intent 同期 15-95s 全成功证明路由/凭据/网络可用；resolveRoute 失败会显式抛错（不产 fallback_to_v0）与实测形状不符；均匀 ~10-11s + 正常终止截断与凭据/配额类失败形状（快速 4xx/重试爬升）不符。②修复核验 ✓：maxTokens 1024→4096（rationale 注释 + 对照 analyzer 1400 起步）；四处失败路径（llm 抛错/parse 失败/非对象/apply throw）各自携带 reason（llm:<code>:<message≤160> / parse:<finishKind>:<head≤200> / parse:<finishKind>:non-object:<typeof> / apply:<message≤160>），clip() 净化（单行化+截断，envelope 安全）；legacy token enrichment_failed:fallback_to_v0 四处均保持首位（零漂移，6 测试全断言）；EnrichOptions.signal 透传（缺省孤儿 controller 行为不变）。6 新测试判别力：RED 独立复现（f8b89a3 src + d0a9fe1 测试 = 6/6 RED：4096≠1024/reason 缺失/signal undefined）；max-tokens 截断测试精确复刻真实会话形状（截断 JSON + max-tokens finish 事件）。③c04 修复核验 ✓：schema core.style 增 artist_hints 键（用户未提及则省略整键）+ persona 规则 11（裸名入 artist_hints/不写 narrative 等文本字段/不确定存在不写防编造→三形容词进 narrative）；TS 类型 artist_hints?: string[] 系 B8 既有（schema.ts L24）——修复仅补 prompt 侧引导，类型/投影零改动；消费链实证（project.ts L144 artist 槽唯一来源 = core.style.artist_hints，修复前结构性无法填充）；迁移史实证（P0 时代 ANIMA_PERSONA L283/L312 有完整【artist 槽】块，蓝图迁移未随迁）；基座逐字前缀完好（规则 11 追加于规则 10 后，analyzer.test 前缀断言全量绿）；golden 40 兼容（fixtures 为 mock provider 直返，analyzer 不参与，全量实证绿）。④全量独立复跑 + dist 抽查 ✓：1226 passed/1 skipped/0 failed（1220+6）、tsc 0；dist 面 max4096=1/reasons=4/signal=2/artistHints=4 在场。⑤inScope ✓：恰 4 文件。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "DIAGR-1",
+          "severity": "low",
+          "problem": "真实会话验证待执行（与 HOTFIXR-1/T4R-1 同一环境约束）：本会话挂载 dist 未含 d0a9fe1；修复有效性的终验需重启会话后单案例实测（expansions 不含 enrichment_failed:* → 恢复；含 → reason 直接分类）+ c04 专项（落库蓝图 core.style.artist_hints 含 wlop）+ 12 案例 replay 回填 §8 ③④。",
+          "requiredFix": "captain 在已计划的重建+重启会话中一并执行：单案例（c04，judge off）→ 查 expansions；按 replay §4 sheet 跑 12 案例回填 replay doc §8 指标③④。",
+          "resolved": false
+        },
+        {
+          "id": "DIAGR-2",
+          "severity": "low",
+          "problem": "顺带项留尾：EnrichOptions.signal 已透传但 prompt-author 侧 exec.signal 接线被明确延期（诊断报告 §3 已披露）——编排路径仍是孤儿 AbortController（无取消传播，无正确性风险，仅生命周期卫生）。",
+          "requiredFix": "后续任务单列（exec.signal → enrichBlueprint/JudgeDeps 透传）；非阻塞，不要求随本里程碑收口。",
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "id": "t18",
+      "subject": "[M5-HOTFIX2] enrichBlueprint 输出纪律 + maxTokens 量化回调",
+      "description": "热修二波（enrichBlueprint 输出失控）：t16 修复后真实会话 c04 探针（d0a9fe1 dist，gen_1789343516953_l2vs0lav）显示 blueprint_enrich 38.7s 吃满 4096 tok 仍 max-tokens 截断——1024→4096 只移天花板，模型输出无收敛纪律（疑似散文式/超长 JSON）。修复=输出纪律进 persona（最小 diff patch、紧凑样板、量化上限）+ maxTokens 回调匹配；v0 fallback + reason 透传已就绪为兜底。注意与 golden mock 面兼容（fixtures 的 blueprint patch 形状不变）。TDD、插件目录 tsc、build 后提交。",
+      "status": "completed",
+      "assignee": "impl-2",
+      "dependencies": [
+        "t17"
+      ],
+      "attempt": 2,
+      "createdAt": 1789343555187,
+      "updatedAt": 1789343825012,
+      "kind": "implementation",
+      "objective": "enrichBlueprint 输出纪律（persona 紧凑约束 + maxTokens 匹配）——直连通道从「可观测失败」到「生产可用」。",
+      "inScope": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptance": [
+        "根因定位：d0a9fe1 实测 enrichBlueprint 38.7s 吃满 4096 tok 预算仍截断（gen_1789343516953_l2vs0lav，reason=parse:max-tokens）——读 enrich/engine.ts persona user 段构造 + patch 契约，确定模型输出失控的具体形态（散文/冗长 JSON/循环）并留痕",
+        "修复：enrichBlueprint persona 增输出纪律（最小 diff patch JSON、禁散文、字段白名单内、总长上限目标 + few-shot 紧凑样板），maxTokens 回调至与纪律匹配的值（给出量化依据）；若模型仍可能越界 → 降级路径保留 v0 + reason 可观测（已有）",
+        "回归专测：persona 含纪律断言 + 紧凑样板形状测试；mock 侧重放真实失败形状（截断 → 优雅 fallback）保持绿",
+        "全量无回退 + tsc/build + dist 同步，单意图提交"
+      ],
+      "verify": [
+        "npx vitest run",
+        "npx tsc --noEmit",
+        "npm run build"
+      ],
+      "reassigning": false,
+      "attemptId": "17f82eb0-04c7-4351-b634-2f11f25b42e0",
+      "output": "M5-HOTFIX2 完成（commit 5711ca5，TDD 4 RED→GREEN）。根因：失控形态=冗长 JSON（完整回显 v0 + 扩写值）——persona 零收敛纪律 + 裸部分蓝图兼容规则使全量回显语义合法 + user 段递完整 v0 模板 + V8 密度规则单向推高 → 4096 必吃满（38.7s 实测自洽）。修复：①persona 输出纪律（规则 7-10：最小 diff 禁回显/禁散文/字段白名单/总长 ≤1200 字符 + ~200 字符紧凑 few-shot 样板，image/video 分支共享）；②maxTokens 4096→1400（量化：纪律目标 ≈450-550 tok 的 2.5× 头寸 + analyzer/judge 先例；延迟最坏 ~13s 典型 4-5s）；③越界兜底不变（v0 fallback + reason 透传）。全量 135/1230/1/0、tsc 0、build 0、dist 同步。真实会话验证：重启挂 5711ca5 dist → c04 复测 blueprint_enrich 应 ~5s 收敛且无 enrichment_failed。",
+      "changedPaths": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "根因定位：d0a9fe1 实测 enrichBlueprint 38.7s 吃满 4096 tok 预算仍截断（gen_1789343516953_l2vs0lav，reason=parse:max-tokens）——读 enrich/engine.ts persona user 段构造 + patch 契约，确定模型输出失控的具体形态（散文/冗长 JSON/循环）并留痕",
+          "status": "passed",
+          "evidence": "失控形态定性 = 冗长 JSON（完整回显 v0 + 扩写值），非散文非循环。逐环证据（engine.ts L153-212 读取留痕，测试注释同步留痕）：①persona（buildExpansionPersona）只有形状契约（输出契约（硬性）段给出 {set,additions,expansions} 形状），零收敛纪律——无最小 diff/无长度目标/无白名单；②裸部分蓝图兼容规则（L264：isPlainObject(parsed['set']) ? parsed['set'] : parsed——整对象视为 set）使「完整回显 v0 + 扩写值」语义完全合法，模型无最小化激励；③user 段（L199-200）把完整 JSON.stringify(v0) 递到眼前当模板——经典「照抄输入并扩写」行为；④V8 密度规则（video 五维 ≥8 字/shot、image 画面密度）单向推高内容量，无反向纪律平衡 → 输出 = 全 v0 回显 + 各字段扩写 ≈ 数千 tok，4096 必吃满；⑤量化自洽：38.7s @ ~106 tok/s ≈ 4096 tok = 预算耗尽 → max-tokens → 截断 JSON → parse:max-tokens（t16 reason 透传机制按设计给出分类，正是本次定位依据）。修复后机制性预期：纪律目标 ≤1200 字符 ≈ ~450-550 tok，不再触顶。"
+        },
+        {
+          "criterion": "修复：enrichBlueprint persona 增输出纪律（最小 diff patch JSON、禁散文、字段白名单内、总长上限目标 + few-shot 紧凑样板），maxTokens 回调至与纪律匹配的值（给出量化依据）；若模型仍可能越界 → 降级路径保留 v0 + reason 可观测（已有）",
+          "status": "passed",
+          "evidence": "commit 5711ca5。①persona 输出纪律（buildExpansionPersona 输出契约段后追加，image/video 两 media 分支共享）：规则 7 最小 diff（增量 patch 非完整蓝图，未变更字段禁止回显 + 引擎 deepMerge 合并保底说明）；规则 8 禁散文（只输出裸 JSON 对象，解释/前后缀/代码块均算失败）；规则 9 字段白名单（顶层仅 set/additions/expansions 三键，字段仅蓝图结构内既有路径 core.*/media_layer.*，不自造顶层键）；规则 10 总长上限目标（输出 JSON 全文 ≤1200 字符含空白；expansions ≤8 条每条 ≤24 字符）；+ 紧凑 few-shot 样板（~200 字符真实可解析最小 patch：set 收敛 core.style/scene 两节点 + expansions 单条）。②maxTokens 4096→1400，量化依据（代码注释留痕）：纪律目标 ≤1200 字符 CJK+JSON 混合 ≈ 450-550 tok（~2.2-2.8 字符/tok）+ expansions ≤8 条 ~80 tok + fence 余量 → 1400 ≈ 纪律目标 2.5× 头寸；插件先例 analyzer/judge 均 1400（one-shot JSON 生产者，真实会话成功）；延迟上限 38.7s→最坏 ~13s，纪律收敛典型 ~400-500 tok ≈ 4-5s。③越界兜底保留（零改动）：max-tokens → v0 fallback + enrichment_failed_reason:parse:max-tokens:<head> 可观测（M5-DIAG 机制，四失败路径 reason 透传全数在场），测试复验绿。"
+        },
+        {
+          "criterion": "回归专测：persona 含纪律断言 + 紧凑样板形状测试；mock 侧重放真实失败形状（截断 → 优雅 fallback）保持绿",
+          "status": "passed",
+          "evidence": "engine.test.ts 新 describe 'M5-HOTFIX2: expansion output discipline' +4（TDD RED→GREEN：RED 时 4 失败留痕——maxTokens 断言 1400≠4096、纪律断言全缺失、样板缺失、video 分支缺失）：①persona 纪律断言（最小 diff/禁止回显/增量 patch/禁散文/白名单/1200 六标记 + 纪律在输出契约段内的次序断言）；②紧凑样板形状测试（regex 提取样板 → JSON.parse 不抛 + set/expansions 形状 + 样板 <300 字符体积证明）；③video persona 纪律在场（media 分支不丢纪律块）；④mock 重放真实失败形状保持绿（截断 JSON + max-tokens finish → v0 优雅 fallback + reason，纪律不加严解析面）。golden mock 面兼容：fixtures 的 blueprint patch 形状零改动（golden 40 项全量复跑绿）。既有 M5-DIAG 6 测试中 maxTokens 断言随修复同步 4096→1400（测试面即断言面，RED 首位留痕）。"
+        },
+        {
+          "criterion": "全量无回退 + tsc/build + dist 同步，单意图提交",
+          "status": "passed",
+          "evidence": "commit 5711ca5 单意图恰 2 文件（engine.ts + engine.test.ts，均 in-scope，无增量）；npx vitest run 全量 135 files/1230 passed/1 skipped/0 failed（对 d0a9fe1 基线 1226 恰 +4 新专测，零回退）；npx tsc --noEmit 0；npm run build 0（插件 AGENTS.md 铁律履行：src 改动后 build，dist/src/pe-framework/enrichment/engine.js 已含纪律块 + 1400，dist 不入 git 本机同步待重启验证）。"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "全量 135 files / 1230 passed / 1 skipped / 0 failed（d0a9fe1 基线 1226 恰 +4 新专测：纪律断言/样板形状/video 分支/失败形状重放，零回退；golden 40 兼容）"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "0 错（persona 纪律块与 maxTokens 回调均过类型门）"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0；插件铁律履行（build 在 src 改动后执行，dist/src/pe-framework/enrichment/engine.js 已含纪律块 + maxTokens 1400；dist 不入 git，本机同步待重启验证）"
+        }
+      ]
+    },
+    {
+      "id": "t19",
+      "subject": "[M5-HOTFIX2-R] 评审输出纪律热修",
+      "status": "completed",
+      "dependencies": [
+        "t18"
+      ],
+      "attempt": 2,
+      "createdAt": 1789343853064,
+      "updatedAt": 1789344216718,
+      "kind": "review",
+      "round": 1,
+      "objective": "评审 enrichBlueprint 输出纪律热修——直连通道生产可用性最终闭环。",
+      "acceptance": [
+        "根因三层论证复核（整对象 set 合法性/模板诱导/单向密度）与 38.7s 实测自洽",
+        "纪律面核验：最小 diff/禁散文/白名单/≤1200 字符 + few-shot 可解析性与体积测试判别力",
+        "maxTokens 1400 量化依据（2.5× 头寸 + analyzer/judge 先例）",
+        "golden mock 兼容（fixtures 零改动）+ 1230 独立复跑 + dist 抽查",
+        "inScope 恰 2 文件"
+      ],
+      "reviewedTaskId": "t18",
+      "assignee": "reviewer",
+      "reassigning": false,
+      "attemptId": "1de85859-b429-494b-8d9d-ee455211d3c4",
+      "output": "M5-HOTFIX2-R 评审完成，verdict=pass。被评审对象 = commit 5711ca5（恰 2 文件：engine.ts +24/-7 与 engine.test.ts +64/-3；fixtures 零改动 ✓）。①根因三层论证复核 ✓：层①（整对象 set 合法性）——d0a9fe1 源码实证 persona 仅有形状契约 + 裸部分蓝图兼容规则（「兼容裸部分蓝图（整个对象视为 set）」）且零最小 diff 约束 → 完整回显 v0 语义合法；层②（模板诱导）——buildUser L210-212 把完整 JSON.stringify(v0) 递入 user 段当模板；层③（单向密度）——规则 1-2 + 密度规则 3 单向推高具体性/细节，无任何长度反向约束。38.7s 自洽：4096 tok / 38.7s ≈ 106 tok/s，与 t16 实测 ~91-99 tok/s 同带；探针证据钉死 generation id（gen_1789343516953_l2vs0lav，reason=parse:max-tokens 截断确认）。②纪律面核验 ✓：规则 7-10（最小 diff 禁回显 + deepMerge 保留语义说理/禁散文/字段白名单顶层三键 + core.*/media_layer.*/总长 ≤1200 字符 + expansions ≤8 条×≤24 字符）+ 紧凑 few-shot 样板（~180 字符，set+expansions 形状，白名单内路径）；规则编号 1-6 既有 + 7-10 新增无冲突，image/video 分支共享（插在分支密度规则后的公共段）；基座逐字前缀面（analyzer.ts）本提交零触碰。4 测试判别力：persona 纪律在场断言（含输出契约段位序断言）/ few-shot 可解析（JSON.parse）+ 体积（<300 字符）/ video 分支不丢失 / 截断重放回归守卫（纪律不加严解析面）+ maxTokens 1400 透传（M5-DIAG 测试原位改写）。RED 独立复现（d0a9fe1 src + 5711ca5 测试）：4/4 RED（1400≠4096、纪律文本缺失）+ 1 守卫绿（设计使然）。③maxTokens 1400 量化依据 ✓：纪律目标 ≤1200 字符 ≈ 450-550 tok（2.2-2.8 字符/tok）+ expansions ≤8 条（~80 tok）→ 1400 ≈ 2.5× 头寸；先例实证 analyzer.ts L212/L273 = 1400（intent + 增量修订）+ judge 依赖 prompt-author.ts L181/L204 = 1400（评审证据/critic）——均 one-shot JSON 生产者且真实会话成功；延迟画像 ~13s 最坏 / 4-5s 典型（vs 38.7s 失控）；越界兑底不变（max-tokens → v0 fallback + reason 可观测）。④golden mock 兼容 + 1230 独立复跑 + dist 抽查 ✓：fixtures 零改动（commit 恰 2 文件；mock provider 直返 fixture 蓝图不经 persona）；全量 1230 passed/1 skipped/0 failed（1226+4）、tsc 0；dist 面 max1400=1/discipline=3/fewshot=1 在场。⑤inScope ✓：恰 2 文件，无任何外溢。",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "HOTFIX2R-1",
+          "severity": "low",
+          "problem": "真实会话终验待执行（环境约束同前三轮）：本会话挂载 dist 未含 5711ca5；输出纪律有效性终验（c04 复测 blueprint_enrich ~5s 收敛且无 enrichment_failed）需重启会话。目前累计四项真实会话验证均骑同一重启：T4R 清单④ 12 案例重放回填 + HOTFIX blueprint_id 进程存活验证 + DIAG 直连通道恢复验证 + HOTFIX2 纪律收敛验证。",
+          "requiredFix": "captain 重建（npm run build）+ 重启 DSH 会话，按 docs/enrich-channel-diagnosis.md §5 + replay §4 sheet 一次性完成四项验证并回填对应留痕（replay §8 ③④ + 诊断报告 §5 结论行）。",
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "id": "t20",
+      "subject": "[M5-DIAG2] enrich 直连 reasoning 预算吞噬诊断（空文本头实证）",
+      "description": "DIAG-2（enrich 直连通道第三轮，关键新证据）：5711ca5 dist 真实会话 c04 探针 gen_1789344503021_z22g7861——blueprint_enrich 13.6s、reason=parse:max-tokens、**文本头空串**。1024（~10s）/4096（38.7s）/1400（13.6s）三档预算全部打满且文本头恒空 → 推翻输出冗长假设，主嫌疑 = 直连路由模型为 reasoning 类（thinking 消耗输出预算、内容零产出）；intent 子代理正常（独立模型配置）。analyzer/judge 同参数（1400）在真实会话的健康状态需一并核查（同病同修）。t18 的 persona 纪律对 content 生成仍正确（非浪费），但预算被 reasoning 吃掉时纪律无从发挥。修复后 captain 真实会话验证。",
+      "status": "pending",
+      "dependencies": [
+        "t19"
+      ],
+      "attempt": 2,
+      "createdAt": 1789344575667,
+      "updatedAt": 1789353333777,
+      "kind": "work",
+      "inScope": [
+        "src/llm/route.ts",
+        "src/llm/complete.ts",
+        "src/pe-framework/enrichment/engine.ts",
+        "docs/enrich-channel-diagnosis.md",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptance": [
+        "根因定位留痕：验证/否证「reasoning 模型吞噬输出预算」假设——读 llm/route.ts 的 enrich 路由解析（ctx.llm 实际解析到哪个模型/是否 thinking 类）+ dsh-llm complete.ts 的 reasoning token 预算处理（thinking 内容是否计入 maxTokens、text 为空时 finish=max-tokens 的路径）+ 文本头空串与 clip 逻辑核对",
+        "若证实：修复=插件侧路由到非 reasoning 模型 / 传 reasoning 关闭参数（若 dsh-llm 支持）/ 或 maxTokens 预算覆盖 reasoning+content 的量化配置——给出最小修复并专测；若 dsh-llm 层限制 → 宿主侧结论 + 可观测 advisory 升级",
+        "对照核验：analyzer/judge 同为 1400 one-shot JSON 生产者——它们在真实会话是否同样静默失败（若同病则同修，修复面可能上移到 route 解析层统一处理）",
+        "全量无回退 + tsc/build（若动 src）",
+        "单意图提交或诊断报告更新 docs/enrich-channel-diagnosis.md"
+      ],
+      "reassigning": false,
+      "handoffId": "600fa637-880a-4b8c-9706-7f4df42cb6d4"
+    }
+  ],
+  "taskSeq": 20
+}

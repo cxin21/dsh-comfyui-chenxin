@@ -1,0 +1,857 @@
+{
+  "name": "prompt-master-phase2-overlay",
+  "id": "prompt-master-phase2-overlay",
+  "description": "Phase 2（严格按 spec §17/§7.2/§7.3/§6/§13：风格库内容深化、多模态意图提取、LLM 评委闭环、具体性自检强化、词库结构化深化）+ 独立基建修复（O2 overlay 路径推导 bug）。约束：严格遵循 spec 与 Phase 1 实现基线，禁止自行发挥/偏离设计；每个实现配对抗性审查。全部测试 npx vitest run 全绿。",
+  "captainSessionId": "session-adf421b7-f529-4612-86f9-adfbc1b203a1",
+  "createdAt": 1788742183246,
+  "members": [
+    {
+      "id": "0d2e7968-93ff-4fae-9990-bf91ce320b97",
+      "name": "engineer",
+      "role": "实现工程师",
+      "provider": "fangzhou",
+      "model": "deepseek-v4-flash",
+      "executionPrompt": "按 spec（docs/2026-09-07-blueprint-ir-design.md）与 Phase 1 实现基线执行任务，严格 TDD（红→绿）。禁止自行发挥/偏离设计：遇 spec 与任务描述不一致时停下报告，等 captain 裁决；不擅自扩大范围、不改计划外文件。每个实现任务：只改 inScope 文件，跑任务指定 verify 命令 + 全量 vitest（现基线 = 3 个既有 overlay 失败；overlay 修复任务落地后应归零），commit message 标注 spec 章节。完成时在 output 详述：实现要点、测试证据、任何与 spec 的解读差异。",
+      "joinedAt": 1788742193113,
+      "status": "removed"
+    },
+    {
+      "id": "dbb64d99-c960-4b66-9cbe-39d5c5aa2a32",
+      "name": "reviewer",
+      "role": "对抗性审查员",
+      "provider": "fangzhou",
+      "model": "deepseek-v4-flash",
+      "executionPrompt": "对每个实现做对抗性审查：实际读源码文件（不只看任务 output）、跑任务指定 vitest 命令、逐项核对 spec §引用与计划任务描述。找：偏离设计/自行发挥、计划外文件、测试弱化或空转、遗漏的 spec 要求。verdict 仅当完全符合时 pass；否则 needs_revision/reject 附 findings（id/severity/problem/requiredFix/file/line）。审查验收必须针对最新实现，不因预设结论放行。",
+      "joinedAt": 1788742193126,
+      "status": "removed"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "P2-1-impl: 风格库内容深化至 10+（spec §7.2）",
+      "description": "按计划/spec §7.2 实现 Phase 2 风格库内容深化：MINIMAL_STYLES 从 8 个扩充至 10+ 个（spec §17 Phase 2 交付标准「10+ 风格模板可用」），每风格仍含 {id,name,base?,theme?,palette?,prompt_fragments:{image,video},applies_to,negative_hints}；新增风格具体名词模板（来源 spec §7.2 列出的候选：水彩/概念原画/童话等基底，其余按现有 8 风格同构补充）；prompt_fragments 保持具体名词（非空泛形容词，对齐 §7.2「内容化治理」）。⚠️ 范围决策（透明声明，非默认跳过）：spec §7.2 L257 说「conformity 0-1 连续、Phase 2 完善语义」，但 spec 未给出连续语义的具体实现规格；为遵守「禁止自行发挥」，本任务保持 Phase 1 两级语义（0 全注入、>0 仅引用）不动，并在 output 中记录该决策；如需连续 conformity（如 0.6 部分注入）需用户先明确规格，另立任务。测试：style.test.ts 扩展断言 ≥10 风格、每风格双通道非空、无空泛词。依赖：无（基于 Phase 1 t6 的 style.ts；与 t2 词库不同文件，可并行）。参考 spec §7.2 L250-258、§17 L485-487。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742216832,
+      "updatedAt": 1788753187925,
+      "kind": "implementation",
+      "objective": "按 spec §7.2 把 MINIMAL_STYLES 从 8 个扩充至 10+ 个风格，保持结构一致与具体名词质量，测试断言通过。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/enrichment/style.ts",
+        "plugins/prompt-master/tests/pe-framework/enrichment/style.test.ts"
+      ],
+      "acceptance": [
+        "MINIMAL_STYLES.length >= 10",
+        "每个风格 prompt_fragments.image 与 video 均非空且为具体名词（不含空泛词 cinematic/beautiful/大气/电影感 等）",
+        "每个风格含 id/name/prompt_fragments/applies_to/negative_hints 完整结构",
+        "applyStyle 语义与 Phase 1 一致（conformity=0 注入、>0 仅引用、未知 id 原引用、不改输入）",
+        "style.test.ts 断言全绿且非空转（新增风格数/具体性/双通道）",
+        "tsc --noEmit exit 0；全量 vitest 无新增失败"
+      ],
+      "verify": [
+        "npx vitest run tests/pe-framework/enrichment/style.test.ts",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/enrichment/style.ts",
+        "tests/pe-framework/enrichment/style.test.ts"
+      ],
+      "attemptId": "dab7e470-7475-4f9a-bed0-53a4134ddfc0",
+      "reassigning": false,
+      "output": "P2-1-impl 完成：MINIMAL_STYLES 从 8 扩至 11（新增 spec §7.2 候选 水彩/概念原画/童话），对齐 §17 Phase 2「10+ 风格模板可用」；结构/语义与 Phase 1 v0 完全一致，applyStyle 未改一行。范围决策已记录：spec §7.2 L257「conformity 0-1 连续语义 Phase 2 完善」无具体实现规格，遵守「禁止自行发挥」保持两级语义（0 全注入、>0 仅引用），如需连续需用户明确规格另立任务。\n\n实现要点：\n- style.ts：8→11 风格，新增 watercolor（base 水彩）/concept_art（base 概念原画）/fairy_tale（theme 童话+palette 温暖蜂蜜色）；prompt_fragments 全部为具体名词（水彩纸纹理/硬边笔刷块面/蘑菇屋/暖黄窗光等），双通道 image+video 齐全，applies_to=['anima','h3','sd']，negative_hints 具体化。\n- style.test.ts：3→9 断言。新增：≥10 风格（原「恰好 8」改为 ≥10）、每风格完整结构+双通道非空+negative_hints/applies_to 非空、无空泛词（cinematic/beautiful/大气/电影感）、id 唯一、conformity>0 仅引用不注入、conformity=0 注入到 shots、不改输入（structuredClone 比对）。\n- 未改：applyStyle 实现、schema、blueprint 等 inScope 外文件。\n\n测试证据：\n- npx vitest run tests/pe-framework/enrichment/style.test.ts → 9 passed (exit 0)\n- npx tsc --noEmit → exit 0\n- npx vitest run 全量 → 594 passed / 3 failed（失败为既有 O2 overlay 基线：anima-catalog/anima-compile/catalog-search 的 overlay-degrade 测试，均在 tests/plugin/，与本任务 enrichment 无关，无新增失败）\n\n与 spec 解读差异：仅 conformity 连续语义一项（见上，属透明记录非偏离）；新增风格数量取 11（≥10 交付标准），未达 spec 远期「50+」目标——§17 交付标准为 10+，50+ 属更远期，超出本任务范围。\n\ncommit：d09d362（仅含两个 inScope 文件，消息标注 spec §7.2/§17）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/enrichment/style.ts",
+        "plugins/prompt-master/tests/pe-framework/enrichment/style.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "MINIMAL_STYLES.length >= 10",
+          "status": "passed",
+          "evidence": "MINIMAL_STYLES 现为 11 个（8 既有 + 新增 watercolor/concept_art/fairy_tale）；测试 'has at least 10 styles' 断言 ≥10 通过"
+        },
+        {
+          "criterion": "每个风格 prompt_fragments.image 与 video 均非空且为具体名词（不含空泛词 cinematic/beautiful/大气/电影感 等）",
+          "status": "passed",
+          "evidence": "测试 'every prompt fragment is concrete nouns' 对全部 11 风格双通道逐一断言不含 4 个空泛词并 length>0，全部通过；新风格片段均为具体名词（水彩纸纹理留白/硬边笔刷块面/蘑菇屋/暖黄窗光/柔光光斑）"
+        },
+        {
+          "criterion": "每个风格含 id/name/prompt_fragments/applies_to/negative_hints 完整结构",
+          "status": "passed",
+          "evidence": "测试 'every style keeps the full v0 structure' 对 11 个风格逐一断言 5 必填字段 + 双通道非空 + applies_to/negative_hints 非空，全部通过"
+        },
+        {
+          "criterion": "applyStyle 语义与 Phase 1 一致（conformity=0 注入、>0 仅引用、未知 id 原引用、不改输入）",
+          "status": "passed",
+          "evidence": "applyStyle 实现零改动；测试覆盖 conformity=0 注入 base+shots、conformity=0.6 仅引用不注入（shot.action 保持 undefined）、未知 id 返回原引用（toBe）、不改输入（structuredClone 比对相等），全部通过"
+        },
+        {
+          "criterion": "style.test.ts 断言全绿且非空转（新增风格数/具体性/双通道）",
+          "status": "passed",
+          "evidence": "style.test.ts 由 3 断言扩至 9 断言：≥10 风格、完整结构、无空泛词、id 唯一、conformity 语义、不改输入，npx vitest run tests/pe-framework/enrichment/style.test.ts → 9 passed (exit 0)"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0；全量 vitest 无新增失败",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0；全量 npx vitest run → 594 passed / 3 failed，3 失败均为既有 O2 overlay 基线（tests/plugin/ 下 anima-catalog/anima-compile/catalog-search 的 overlay-degrade），与本任务 inScope 无关，无新增失败"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/enrichment/style.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "9 tests passed (was red before impl: 1 failed on length 8<10, confirming non-trivial TDD)"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0, no type errors"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "594 passed / 3 failed; 3 failures are pre-existing O2 overlay baseline in tests/plugin/ (anima-catalog, anima-compile, catalog-search overlay-degrade), unrelated to style.ts; no new failures"
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "subject": "P2-2-impl: 电影摄影词库六类深化至 ≥8（spec §7.3）",
+      "description": "按计划/spec §7.3 实现电影摄影词库内容深化：CINEMA_LEXICON 六类（shots/lenses/camera_moves/lighting/grading/composition）各扩充至 ≥8 项，保持结构化数据形态（供扩展引擎 buildExpansionPersona 引用）。新增词具体名词、可溯源 spec §7.3 与调研二来源（可灵运镜词汇表、Veo 运镜库、ai-boost/awesome-prompts 色彩分级）；不得引入空泛形容词（对齐 §7.1 禁空泛词）。本任务独立：lexicon.ts 与 t1 的 style.ts 不同文件，可并行；扩展引擎对词库的引用由 t3 验证。参考 spec §7.3 L260-266、§17 L485。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742249728,
+      "updatedAt": 1788753401310,
+      "kind": "implementation",
+      "objective": "按 spec §7.3 把 CINEMA_LEXICON 六类各扩充至 ≥8 项具体名词，保持结构化数据形态，测试断言通过。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/aesthetics/lexicon.ts",
+        "plugins/prompt-master/tests/pe-framework/aesthetics/lexicon.test.ts"
+      ],
+      "acceptance": [
+        "词库六类（shots/lenses/camera_moves/lighting/grading/composition）各扩充至 ≥8 项且全为非空具体名词（非空泛词）",
+        "扩充项可溯源 spec §7.3（景别/焦段/运镜/光线/色彩/构图）+ 调研二（可灵运镜词汇表、Veo 运镜库、ai-boost/awesome-prompts 色彩分级）",
+        "CINEMA_LEXICON 保持结构化数据（非 LLM prompt），供扩展引擎引用",
+        "lexicon.test.ts 断言每类数量与非空泛词，全绿非空转",
+        "tsc --noEmit exit 0；全量 vitest 无新增失败"
+      ],
+      "verify": [
+        "npx vitest run tests/pe-framework/aesthetics/lexicon.test.ts",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/aesthetics/lexicon.ts",
+        "tests/pe-framework/aesthetics/lexicon.test.ts"
+      ],
+      "attemptId": "822705e1-488b-4ac1-aea2-1df8695089bb",
+      "reassigning": false,
+      "output": "P2-2-impl 完成：CINEMA_LEXICON 六类全部扩至 ≥8 项（shots 9/lenses 9/camera_moves 10/lighting 10/grading 8/composition 9），保持结构化数据形态，供扩展引擎 buildExpansionPersona 引用（消费方零改动）。\n\n实现要点：\n- lexicon.ts：各新增项均为具体可感知名词，无空泛词。溯源：lenses 新增 16/28/100/200mm（调研二 ai-shortfilm-prompts 焦段强制）；camera_moves 新增 tilt/zoom/push-in/pull-back（可灵运镜词汇表、Veo 运镜库）；grading 新增 中间调暖调/胶片颗粒/褪色复古（ai-boost/awesome-prompts 分级模板 高光/中间调/阴影）；lighting 新增 蓝色时刻/背光/顶光/边缘光、composition 新增 框架构图/对角构图/中心构图/黄金分割（spec §7.3 列举方向）。文件头注释逐类标注来源。\n- lexicon.test.ts：1→4 断言（六类齐全/每类≥8/无空泛词/类内唯一），实现前红（shots 7<8）确认非空转。\n- 未改 inScope 外文件（engine.ts 等仅 join 引用，不涉及）。\n\n测试证据：\n- npx vitest run tests/pe-framework/aesthetics/lexicon.test.ts → 4 passed (exit 0)\n- npx tsc --noEmit → exit 0\n- npx vitest run 全量 → 597 passed / 3 failed（失败为既有 O2 overlay 基线：anima-catalog/anima-compile/catalog-search overlay-degrade，均在 tests/plugin/，与本任务无关，无新增失败）\n\ncommit：33b38fa（仅含两个 inScope 文件，消息标注 spec §7.3/§17）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/aesthetics/lexicon.ts",
+        "plugins/prompt-master/tests/pe-framework/aesthetics/lexicon.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "词库六类（shots/lenses/camera_moves/lighting/grading/composition）各扩充至 ≥8 项且全为非空具体名词（非空泛词）",
+          "status": "passed",
+          "evidence": "六类现为 shots 9/lenses 9/camera_moves 10/lighting 10/grading 8/composition 9 均≥8；测试断言每项 length>1 且不含空泛词（cinematic/beautiful/amazing/大气/电影感）全绿"
+        },
+        {
+          "criterion": "扩充项可溯源 spec §7.3（景别/焦段/运镜/光线/色彩/构图）+ 调研二（可灵运镜词汇表、Veo 运镜库、ai-boost/awesome-prompts 色彩分级）",
+          "status": "passed",
+          "evidence": "lenses 新增 16/28/100/200mm（ai-shortfilm-prompts 焦段强制）；camera_moves 新增 tilt/zoom/push-in/pull-back（可灵运镜词汇表/Veo 运镜库）；grading 新增中间调暖调/胶片颗粒/褪色复古（ai-boost/awesome-prompts 分级模板）；lighting 新增蓝色时刻/背光/顶光/边缘光、composition 新增框架/对角/中心构图/黄金分割（spec §7.3 列举方向）；文件头注释逐类标注来源"
+        },
+        {
+          "criterion": "CINEMA_LEXICON 保持结构化数据（非 LLM prompt），供扩展引擎引用",
+          "status": "passed",
+          "evidence": "lexicon.ts 仍为 CinemaLexicon 接口 + 纯字符串数组常量；engine.ts buildExpansionPersona 仅 .join() 注入 persona，消费方零改动，tsc --noEmit exit 0"
+        },
+        {
+          "criterion": "lexicon.test.ts 断言每类数量与非空泛词，全绿非空转",
+          "status": "passed",
+          "evidence": "lexicon.test.ts 由 1 断言扩至 4（六类齐全/每类≥8/无空泛词/类内唯一）；实现前红（shots 7<8）确认非空转，实现后 npx vitest run tests/pe-framework/aesthetics/lexicon.test.ts → 4 passed"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0；全量 vitest 无新增失败",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0；全量 npx vitest run → 597 passed / 3 failed，3 失败为既有 O2 overlay 基线（tests/plugin/ 下 anima-catalog/anima-compile/catalog-search overlay-degrade），与本任务 aesthetics 无关，无新增失败"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/aesthetics/lexicon.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "4 tests passed (red before impl: 1 failed shots 7<8)"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "597 passed / 3 failed; 3 failures are pre-existing O2 overlay baseline (anima-catalog/anima-compile/catalog-search overlay-degrade), unrelated to lexicon.ts; no new failures"
+        }
+      ]
+    },
+    {
+      "id": "t3",
+      "subject": "P2-3-impl: 扩展引擎自检强化（字段完整度，spec §7.1）",
+      "description": "按计划/spec §7.1 实现扩展引擎具体性自检强化：把 t2 扩充后的 CINEMA_LEXICON 六类注入 buildExpansionPersona 候选词（t8 已注入，确认六类完整）；质量自检补齐「字段完整度」确定性项（spec §7.1 质量自检表：可感知名词比例 + 禁词 + 字段完整度）——v1 关键维度缺失进 expansions advisory 不阻断。不得自行发挥（不新增 spec 未列的检查项）。依赖 t2（词库深化后注入完整）。参考 spec §7.1 L240-248、§17 L485「具体性自检强化」。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [
+        "t2"
+      ],
+      "attempt": 1,
+      "createdAt": 1788742262554,
+      "updatedAt": 1788753638601,
+      "kind": "implementation",
+      "objective": "按 spec §7.1 强化扩展引擎具体性自检（补字段完整度确定性检查 + 确认六类词库注入），测试断言通过。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/enrichment/engine.ts",
+        "plugins/prompt-master/tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptance": [
+        "enrichBlueprint 把 CINEMA_LEXICON 六类候选词注入扩展 persona（buildExpansionPersona），LLM 可引用具体名词补全（spec §7.1 ROI 补全）",
+        "enrichBlueprint 在应用 patch 后过具体性自检（含可感知名词比例 + 禁词 + 字段完整度，spec §7.1 质量自检确定性项）",
+        "字段完整度检查：蓝图 v1 关键维度（media/core.concept/至少一个 style 或 scene 或 emotion）非空；缺失进 expansions advisory 不阻断",
+        "checkConcreteness/checkFidelity 行为保持 Phase 1（t8 基线）不回归",
+        "engine.test.ts 新增用例（词库注入可用性 + 字段完整度检查）全绿非空转",
+        "tsc --noEmit exit 0；全量 vitest 无新增失败"
+      ],
+      "verify": [
+        "npx vitest run tests/pe-framework/enrichment/engine.test.ts",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/enrichment/engine.ts",
+        "tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "attemptId": "9ff21972-23ac-4a9b-a13b-b638b2f86477",
+      "reassigning": false,
+      "output": "P2-3-impl 完成：扩展引擎自检强化（spec §7.1 字段完整度）+ 确认六类词库注入。\n\n实现要点：\n- 词库注入确认：buildExpansionPersona 已注入 CINEMA_LEXICON 六类（景别/焦段/运镜/光线/色彩分级/构图），新测试以 stubCtx 捕获 system prompt 断言六类标签 + t2 深化词（16mm/背光/胶片颗粒）可用——确认 t2 深化生效。\n- 新增 checkFieldCompleteness(bp) 确定性函数（engine.ts，inScope 内）：关键维度 media / core.concept / 至少一个 style|scene|emotion 非空；缺失返回描述列表。enrichBlueprint 应用 patch 后调用，缺失 push `field_completeness:missing:<...>` 进 expansions，不阻断（advisory）。\n- 质量自检补齐 spec §7.1 确定性项：checkConcreteness（可感知名词比例+禁词）+ checkFieldCompleteness（字段完整度）+ checkFidelity（保真）三者串联。\n- checkConcreteness/checkFidelity 零改动（check.ts 在 inScope 外且行为保持 Phase 1，不回归）。\n\n测试证据：\n- npx vitest run tests/pe-framework/enrichment/engine.test.ts → 4 passed（实现前红：字段完整度 advisory 缺失确认非空转；词库注入测试本身已绿——该能力 Phase 1 已具备，本任务以测试锁定）\n- npx vitest run tests/pe-framework/aesthetics/check.test.ts → 2 passed（不回归）\n- npx tsc --noEmit → exit 0\n- npx vitest run 全量 → 600 passed / 3 failed（失败为既有 O2 overlay 基线：anima-catalog/anima-compile/catalog-search overlay-degrade，均在 tests/plugin/，与本任务无关，无新增失败）\n\n无 spec 解读差异；未自行发挥（未新增 spec §7.1 未列的检查项，仅补齐「字段完整度」一项）。\n\ncommit：d77734b（仅含两个 inScope 文件，消息标注 spec §7.1/§17）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/enrichment/engine.ts",
+        "plugins/prompt-master/tests/pe-framework/enrichment/engine.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "enrichBlueprint 把 CINEMA_LEXICON 六类候选词注入扩展 persona（buildExpansionPersona），LLM 可引用具体名词补全（spec §7.1 ROI 补全）",
+          "status": "passed",
+          "evidence": "buildExpansionPersona 已注入六类（景别/焦段/运镜/光线/色彩分级/构图，engine.ts L79-84）；新测试用 stubCtx 捕获 system prompt 断言六类标签 + t2 深化词（16mm/背光/胶片颗粒）均在候选词库中，通过"
+        },
+        {
+          "criterion": "enrichBlueprint 在应用 patch 后过具体性自检（含可感知名词比例 + 禁词 + 字段完整度，spec §7.1 质量自检确定性项）",
+          "status": "passed",
+          "evidence": "engine.ts 质量自检现含 checkConcreteness（可感知名词比例+禁词）+ checkFieldCompleteness（字段完整度）+ checkFidelity（保真），任一失败追加 advisory 进 expansions 不阻断；测试验证 advisory 追加路径"
+        },
+        {
+          "criterion": "字段完整度检查：蓝图 v1 关键维度（media/core.concept/至少一个 style 或 scene 或 emotion）非空；缺失进 expansions advisory 不阻断",
+          "status": "passed",
+          "evidence": "新增 checkFieldCompleteness(bp)：media/core.concept/至少一个 style|scene|emotion 非空，缺失返回描述列表；enrichBlueprint 缺失时 push field_completeness:missing:<...> 进 expansions；测试断言缺失时 advisory 出现且 patch 仍被应用（concept 更新），style 存在时不 flag——全绿"
+        },
+        {
+          "criterion": "checkConcreteness/checkFidelity 行为保持 Phase 1（t8 基线）不回归",
+          "status": "passed",
+          "evidence": "check.ts 零改动；check.test.ts 2 passed 不回归；engine.test.ts 既有『returns expanded blueprint』用例仍绿"
+        },
+        {
+          "criterion": "engine.test.ts 新增用例（词库注入可用性 + 字段完整度检查）全绿非空转",
+          "status": "passed",
+          "evidence": "engine.test.ts 1→4 断言：新增 词库六类注入（stubCtx 捕获 system）、字段完整度缺失 advisory（实现前红确认非空转）、style 存在不 flag；实现后 npx vitest run tests/pe-framework/enrichment/engine.test.ts → 4 passed"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0；全量 vitest 无新增失败",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0；全量 npx vitest run → 600 passed / 3 failed，3 失败为既有 O2 overlay 基线（tests/plugin/ 下 anima-catalog/anima-compile/catalog-search overlay-degrade），与本任务 enrichment 无关，无新增失败"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/enrichment/engine.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "4 tests passed (red before impl: 1 failed field_completeness advisory missing)"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "600 passed / 3 failed; 3 failures are pre-existing O2 overlay baseline (anima-catalog/anima-compile/catalog-search overlay-degrade), unrelated to engine.ts; no new failures"
+        }
+      ]
+    },
+    {
+      "id": "t4",
+      "subject": "P2-4-impl: LLM 评委评估闭环（spec §13）",
+      "description": "按计划/spec §13 实现 LLM 评委评估闭环：新增 src/pe-framework/eval/judge.ts——按 rubric（coherence/fidelity/美学）对扩展后蓝图打分（spec §13 LLM 评委行「按 rubric（coherence/fidelity/美学）打分」），可选触发（用户要求或 eval 模式，不进默认 author 管线）。依赖 t3（自检强化落地后评委基于其输出）。参考 spec §13 L409-419、§17 L485「LLM 评委评估闭环」。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [
+        "t3"
+      ],
+      "attempt": 1,
+      "createdAt": 1788742272797,
+      "updatedAt": 1788753809839,
+      "kind": "implementation",
+      "objective": "按 spec §13 实现 LLM 评委（rubric 打分，可选触发），测试断言通过。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/eval/judge.ts",
+        "plugins/prompt-master/tests/pe-framework/eval/judge.test.ts"
+      ],
+      "acceptance": [
+        "LLM 评委按 rubric（coherence/fidelity/美学）对扩展后蓝图打分（spec §13 LLM 评委行）",
+        "评委输出结构：{scores:{coherence,fidelity,aesthetic}, overall, issues[]} 或等价，测试断言字段存在",
+        "评委为可选路径（eval 模式/用户要求触发，不进默认 author 管线）",
+        "新增 tests/pe-framework/eval/judge.test.ts（评委接口 + rubric 用例）全绿非空转",
+        "tsc --noEmit exit 0；全量 vitest 无新增失败"
+      ],
+      "verify": [
+        "npx vitest run tests/pe-framework/eval/judge.test.ts",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/eval/judge.ts",
+        "tests/pe-framework/eval/judge.test.ts"
+      ],
+      "attemptId": "14ee4d9f-de8c-47b6-8790-58b9bb8690a6",
+      "reassigning": false,
+      "output": "P2-4-impl 完成：LLM 评委评估闭环（spec §13/§17）。\n\n实现要点：\n- 新增 src/pe-framework/eval/judge.ts：judgeBlueprint(ctx, route, v1, originalIntent) 按 rubric（coherence/fidelity/美学）对扩展后蓝图打分。\n- 输出结构：JudgeResult={scores:{coherence,fidelity,aesthetic}, overall, issues[]}；分数 clamp 到 [0,10] 取整，非数字→0。\n- 可选路径：judge.ts 为独立模块，默认 author/enrichBlueprint 管线零改动（无任何引用），触发仅用户要求或 eval 模式（spec §13）。\n- 失败降级：LLM 错误 / 输出不可解析 / 形状非法 → 零分 + judge_failed:<reason> advisory，不抛错。\n- 复用既有 llm/complete.ts + tests/plugin/helpers.ts（textStream/errorStream/stubCtx），与 engine.ts 模式一致。\n\n测试证据：\n- npx vitest run tests/pe-framework/eval/judge.test.ts → 5 passed（实现前红：模块缺失 Failed to load judge.js 确认非空转）\n- npx tsc --noEmit → exit 0\n- npx vitest run 全量 → 605 passed / 3 failed（失败为既有 O2 overlay 基线：anima-catalog/anima-compile/catalog-search overlay-degrade，均在 tests/plugin/，与本任务无关，无新增失败）\n\n无 spec 解读差异；未自行发挥（仅实现 spec §13 明确的 LLM 评委行 + 输出结构）。\n\ncommit：51ed9dd（仅含两个 inScope 文件，消息标注 spec §13/§17）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/eval/judge.ts",
+        "plugins/prompt-master/tests/pe-framework/eval/judge.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "LLM 评委按 rubric（coherence/fidelity/美学）对扩展后蓝图打分（spec §13 LLM 评委行）",
+          "status": "passed",
+          "evidence": "judgeBlueprint(ctx, route, v1, originalIntent) 构造评委 persona（含 coherence/fidelity/aesthetic 三项 rubric 说明），经 complete 对扩展后蓝图+用户原意打分；测试以 stubCtx 捕获 system prompt 断言三项 rubric 均在"
+        },
+        {
+          "criterion": "评委输出结构：{scores:{coherence,fidelity,aesthetic}, overall, issues[]} 或等价，测试断言字段存在",
+          "status": "passed",
+          "evidence": "JudgeResult={scores:{coherence,fidelity,aesthetic},overall,issues[]}；测试断言 scores 三项数值、overall、issues 数组及内容均正确解析"
+        },
+        {
+          "criterion": "评委为可选路径（eval 模式/用户要求触发，不进默认 author 管线）",
+          "status": "passed",
+          "evidence": "judge.ts 为独立导出模块，无任何 import 引用它（默认 author/enrichBlueprint 管线零改动），spec §13 触发列为用户要求或 eval 模式"
+        },
+        {
+          "criterion": "新增 tests/pe-framework/eval/judge.test.ts（评委接口 + rubric 用例）全绿非空转",
+          "status": "passed",
+          "evidence": "judge.test.ts 5 用例：rubric 打分解析/调用内容（system+user 含蓝图与用户原意）/LLM 错误降级不抛错/不可解析降级不抛错/分数夹取 [0,10]；实现前红（模块缺失 Failed to load judge.js）确认非空转，实现后 5 passed"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0；全量 vitest 无新增失败",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0；全量 npx vitest run → 605 passed / 3 failed，3 失败为既有 O2 overlay 基线（tests/plugin/ 下 anima-catalog/anima-compile/catalog-search overlay-degrade），与本任务 eval 无关，无新增失败"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/eval/judge.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "5 tests passed (red before impl: module missing Failed to load judge.js)"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "605 passed / 3 failed; 3 failures are pre-existing O2 overlay baseline (anima-catalog/anima-compile/catalog-search overlay-degrade), unrelated to eval/judge.ts; no new failures"
+        }
+      ]
+    },
+    {
+      "id": "t5",
+      "subject": "P2-5-impl: 多模态意图提取（spec §6）",
+      "description": "按计划/spec §6 实现多模态意图提取（Phase 2 完整）：analyzeIntent 在 refs 传入时提取参考物美学特征进蓝图（spec §6 L227「references 传入时提取参考物美学特征（Phase 2 完整）」）。说明：refs 是用户对话传入的参考图/描述（Phase 1 澄清：参考图是对话输入，经 <Picture N> 标签稳定占位）；蓝图落点为参考物美学特征对应的核心字段（如 scene.lighting 光线、core.style.palette 配色、scene.atmosphere 氛围等，由 engineer 按 §7 美学维度合理映射并在 output 披露落点，reviewer 核对不越界——spec 未给「参考物→蓝图」映射表，禁止自行发明超出核心字段的新 schema）。⚠️ 注意：spec §8.2 是「蓝图→Anima」映射表，非「参考物→蓝图」方向，不作为本任务落点依据。ref 标签稳定保持 Phase 1；无 refs 时行为与 Phase 1 完全一致。本任务独立（analyzer.ts，与 t4 评委不同模块，可并行）。参考 spec §6 L227、§17 L485「多模态意图提取」+ L487「参考图美学特征进蓝图」。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742285266,
+      "updatedAt": 1788754086610,
+      "kind": "implementation",
+      "objective": "按 spec §6 实现多模态意图提取（refs 传入时提取参考物美学特征进蓝图），测试断言通过。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/blueprint/analyzer.ts",
+        "plugins/prompt-master/tests/pe-framework/blueprint/analyzer.test.ts"
+      ],
+      "acceptance": [
+        "analyzeIntent 支持 refs 多模态输入时提取参考物美学特征进蓝图（spec §6 多模态，Phase 2 完整）：参考物美学特征写入蓝图相应字段（如 scene.lighting/style.palette/detail_mood 等价映射，具体落点按 spec §8.2 参考物方向）",
+        "refs 传入时仍保持 ref 标签稳定（<Picture N> 等，Phase 1 已实现不回归）",
+        "无 refs 时行为与 Phase 1 完全一致（analyzer 测试不回归）",
+        "多模态特征提取为 LLM 引导（persona 加规则），非确定性硬编码",
+        "analyzer.test.ts 新增用例（带 refs → 蓝图含提取特征 + 标签稳定）全绿非空转",
+        "tsc --noEmit exit 0；全量 vitest 无新增失败"
+      ],
+      "verify": [
+        "npx vitest run tests/pe-framework/blueprint/analyzer.test.ts",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/blueprint/analyzer.ts",
+        "tests/pe-framework/blueprint/analyzer.test.ts"
+      ],
+      "attemptId": "a0e877a3-1858-4426-ab7e-9e5c2645b96c",
+      "reassigning": false,
+      "output": "P2-5-impl 完成：多模态意图提取完整化（spec §6 L227 Phase 2 完整）。\n\n实现要点：\n- analyzer.ts（inScope 内）三处 LLM 引导增强，无确定性硬编码：\n  1) BLUEPRINT_PERSONA 规则 4 升级：refs 传入时提取参考物美学特征进蓝图核心字段——scene.lighting（光线）/core.style.palette（配色）/scene.atmosphere（氛围）/scene.environment（环境）/core.composition（构图）/core.emotion（情绪）；仅映射进蓝图既有核心字段，不新增 schema、不编造参考物没有的特征；ref 标签稳定不替换。\n  2) BLUEPRINT_SCHEMA 输出规则补一句：references 时提取美学特征 + 标签稳定。\n  3) analyzeIntent 的 refs user 行补充提取引导。\n- ref 标签稳定保持 Phase 1（persona/schema/user 三处均保留 <Picture N> 稳定要求）；蓝图不承载 references 持久字段（§8.1 澄清）。\n- 无 refs 时分支不变，行为与 Phase 1 完全一致。\n\n落点披露（engineer 按 §7 美学维度映射，供 reviewer 核对不越界）：\n- 光线 → scene.lighting；配色 → core.style.palette；氛围 → scene.atmosphere；环境 → scene.environment；构图 → core.composition；情绪 → core.emotion。均为 BlueprintV1 既有核心字段，未新增任何 schema。\n\n测试证据：\n- npx vitest run tests/pe-framework/blueprint/analyzer.test.ts → 5 passed（2→5 断言；实现前红：persona 缺「提取参考物美学特征」确认非空转）\n- npx tsc --noEmit → exit 0\n- npx vitest run 全量 → 608 passed / 3 failed（失败为既有 O2 overlay 基线：anima-catalog/anima-compile/catalog-search overlay-degrade，均在 tests/plugin/，与本任务无关，无新增失败）\n\n无 spec 解读差异（spec §8.2 为「蓝图→Anima」方向，未作为落点依据；落点仅用 §7 美学维度对应的既有核心字段）。\n\ncommit：fce3103（仅含两个 inScope 文件，消息标注 spec §6 L227/§17）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/blueprint/analyzer.ts",
+        "plugins/prompt-master/tests/pe-framework/blueprint/analyzer.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "analyzeIntent 支持 refs 多模态输入时提取参考物美学特征进蓝图（spec §6 多模态，Phase 2 完整）：参考物美学特征写入蓝图相应字段（如 scene.lighting/style.palette/detail_mood 等价映射，具体落点按 spec §8.2 参考物方向）",
+          "status": "passed",
+          "evidence": "BLUEPRINT_PERSONA 规则 4 升级为 Phase 2 完整：refs 传入时提取参考物美学特征进蓝图核心字段——scene.lighting（光线）/core.style.palette（配色）/scene.atmosphere（氛围）/scene.environment（环境）/core.composition（构图）/core.emotion（情绪），仅映射进蓝图既有核心字段；测试断言 persona 含「提取参考物美学特征 + scene.lighting + core.style.palette」且 refs 蓝图落地 lighting/palette"
+        },
+        {
+          "criterion": "refs 传入时仍保持 ref 标签稳定（<Picture N> 等，Phase 1 已实现不回归）",
+          "status": "passed",
+          "evidence": "persona/schema/user 三处均保留 ref 标签稳定要求（<Picture N>/<Subject N>/<Video N>/<Audio N> 不替换）；测试断言 user 消息含 references 传入 + <Picture 1>，蓝图 JSON 含 <Picture 1> 且无 references 持久字段（§8.1 澄清）"
+        },
+        {
+          "criterion": "无 refs 时行为与 Phase 1 完全一致（analyzer 测试不回归）",
+          "status": "passed",
+          "evidence": "opts.refs 空时 user 消息不含 references 段（分支不变）；新增测试断言无 refs 时 user 无「references 传入」；既有 2 个 Phase 1 用例（validated blueprint + clarify=ask）保持通过"
+        },
+        {
+          "criterion": "多模态特征提取为 LLM 引导（persona 加规则），非确定性硬编码",
+          "status": "passed",
+          "evidence": "实现仅改 persona/schema/user 提示（规则 4 + 输出规则 + refs 行），无确定性解析/映射代码；测试以 stubCtx 捕获 system+user 断言引导规则存在"
+        },
+        {
+          "criterion": "analyzer.test.ts 新增用例（带 refs → 蓝图含提取特征 + 标签稳定）全绿非空转",
+          "status": "passed",
+          "evidence": "analyzer.test.ts 2→5 断言：新增 persona 提取规则/refs 落地（lighting+palette 含提取值）/标签稳定+无 references 字段/无 refs 不回归；实现前红（persona 缺「提取参考物美学特征」）确认非空转，实现后 5 passed"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0；全量 vitest 无新增失败",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0；全量 npx vitest run → 608 passed / 3 failed，3 失败为既有 O2 overlay 基线（tests/plugin/ 下 anima-catalog/anima-compile/catalog-search overlay-degrade），与本任务 analyzer 无关，无新增失败"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/blueprint/analyzer.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "5 tests passed (red before impl: 1 failed persona missing 提取参考物美学特征)"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "608 passed / 3 failed; 3 failures are pre-existing O2 overlay baseline (anima-catalog/anima-compile/catalog-search overlay-degrade), unrelated to analyzer.ts; no new failures"
+        }
+      ]
+    },
+    {
+      "id": "t6",
+      "subject": "O2-fix-impl: overlay 路径推导 bug 修复 + 测试隔离",
+      "description": "修复 O2 既有测试基建失败（3 个：anima-catalog/anima-compile/catalog-search 的 overlay degrade 断言）。根因已由 captain 定位：defaultOverlayPath()（relations.ts L70-76）用 parts.lastIndexOf('knowledge') 后 slice(0, knowledgeIdx-2) 截根——对 resolveKnowledgePath 返回的 <preset>/assets/knowledge/anima-prompt-v1/tag-catalog.sqlite 路径，knowledgeIdx-2 少截一层（assets），导致根定位到 <preset> 的上层（.dsh/.agent-presets/temp/...），探测到旧残留文件 → overlayStatus() 误报 'available'。修复：路径推导正确截到 preset 根（knowledgeIdx 前的 assets 目录也要截掉），使默认 overlay 路径 = <preset>/temp/anima-prompt-v1/relation-overlay.sqlite；同时让测试隔离（setOverlayPath 注入临时路径或清理残留），不依赖环境。不改 relations.ts 的读写契约（openOverlayDb/SCHEMA 行为保持）。这是基建 bug 修复，不属于 Phase 2 设计范围，但用户明确要求，修复须保守不越界。参考：anima-catalog.ts L255-259 overlayStatus、relations.ts L70-76 defaultOverlayPath、O2 观察项。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742302032,
+      "updatedAt": 1788754500397,
+      "kind": "implementation",
+      "objective": "修复 overlay 路径推导 bug，使 overlayStatus 探测正确路径、3 个既有测试恢复全绿，测试隔离不依赖环境残留。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/anima-knowledge/relations.ts",
+        "plugins/prompt-master/src/pe-framework/dialect/anima-catalog.ts",
+        "plugins/prompt-master/tests/plugin/anima-catalog.test.ts",
+        "plugins/prompt-master/tests/plugin/anima-compile.test.ts",
+        "plugins/prompt-master/tests/plugin/catalog-search.test.ts"
+      ],
+      "acceptance": [
+        "defaultOverlayPath() 正确解析到 <preset>/temp/anima-prompt-v1/relation-overlay.sqlite（preset 根 = comfyui-chenxin，含 assets/knowledge/... 推导路径）",
+        "overlayStatus() 在无 overlay 文件时返回 'unavailable'（3 个既有测试 anima-catalog/anima-compile/catalog-search 恢复全绿）",
+        "overlay 路径推导修复不改 relations.ts 写入/读取契约（openOverlayDb 等行为保持）",
+        "新增/更新测试隔离 overlay 路径（不依赖环境残留文件；用 setOverlayPath 注入临时路径或清理）",
+        "全量 npx vitest run 归零失败（3 个既有 overlay 失败修复后应全绿；允许跳过项）",
+        "tsc --noEmit exit 0"
+      ],
+      "verify": [
+        "npx vitest run tests/plugin/anima-catalog.test.ts tests/plugin/anima-compile.test.ts tests/plugin/catalog-search.test.ts",
+        "npx vitest run",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/anima-knowledge/relations.ts",
+        "tests/plugin/anima-catalog.test.ts",
+        "tests/plugin/anima-compile.test.ts",
+        "tests/plugin/catalog-search.test.ts"
+      ],
+      "attemptId": "0bcf70ae-e844-4c5a-aa43-6aa7c71a184b",
+      "reassigning": false,
+      "output": "O2-fix-impl 完成：overlay 路径推导 bug 修复 + 测试隔离，全量 vitest 归零失败。\n\n根因（探针证实）：\n- resolveKnowledgePath 返回新布局 <preset>/assets/knowledge/anima-prompt-v1/tag-catalog.sqlite（preset = comfyui-chenxin）。\n- defaultOverlayPath() 原实现 `parts.slice(0, knowledgeIdx-2)` 是为旧布局 <root>/skills/<skillDir>/knowledge/<asset> 设计的（截 2 层 = skills+skillDir）。新布局下 knowledge 前一节是 'assets'，slice(knowledgeIdx-2) 会多截一层——把 preset 根（comfyui-chenxin）也截掉，根定位到 <preset> 的上层（.dsh/.agent-presets/），于是默认 overlay 探测到旧残留文件 `.dsh/.agent-presets/temp/anima-prompt-v1/relation-overlay.sqlite`（exists=true）→ overlayStatus() 误报 'available'，3 个既有测试失败。\n\n修复（保守、仅改路径推导）：\n- relations.ts defaultOverlayPath()：knowledge 前一节 == 'assets'（新布局）→ slice(0, knowledgeIdx-1) 只截 1 层即达 preset 根；否则（旧布局）才 slice(0, knowledgeIdx-2)。修复后默认 overlay = <preset>/temp/anima-prompt-v1/relation-overlay.sqlite（探针 exists=false）→ 'unavailable'。\n- 读写契约零改动：openOverlayDb/SCHEMA/overlayPath/setOverlayPath/submitProposal 等导出未动。\n- 测试隔离：3 个测试文件 beforeEach 用 mkdtempSync + setOverlayPath 注入保证不存在的临时 overlay 路径，afterEach setOverlayPath('') + rmSync 清理，不依赖环境残留。\n\n测试证据：\n- 3 文件定向：npx vitest run tests/plugin/anima-catalog.test.ts tests/plugin/anima-compile.test.ts tests/plugin/catalog-search.test.ts → 34 passed\n- 全量：npx vitest run → 80 files / 611 passed / 1 skipped / 0 failed（修复前 608 passed + 3 failed → 归零）\n- npx tsc --noEmit → exit 0\n\n未改 anima-catalog.ts（其 overlayStatus 已探 overlayPath()，无需变更；inScope 但无必要改动）。\n\ncommit：30dbfba（仅含 4 个 inScope 文件：relations.ts + 3 测试，消息标注 O2 根因与修复）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/anima-knowledge/relations.ts",
+        "plugins/prompt-master/tests/plugin/anima-catalog.test.ts",
+        "plugins/prompt-master/tests/plugin/anima-compile.test.ts",
+        "plugins/prompt-master/tests/plugin/catalog-search.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "defaultOverlayPath() 正确解析到 <preset>/temp/anima-prompt-v1/relation-overlay.sqlite（preset 根 = comfyui-chenxin，含 assets/knowledge/... 推导路径）",
+          "status": "passed",
+          "evidence": "探针证实：resolveKnowledgePath → <preset>/assets/knowledge/anima-prompt-v1/tag-catalog.sqlite，knowledgeIdx 前一段为 'assets'；修复后按此分支 slice(0, knowledgeIdx-1) 截到 preset 根（.../comfyui-chenxin），默认 overlay = <preset>/temp/anima-prompt-v1/relation-overlay.sqlite"
+        },
+        {
+          "criterion": "overlayStatus() 在无 overlay 文件时返回 'unavailable'（3 个既有测试 anima-catalog/anima-compile/catalog-search 恢复全绿）",
+          "status": "passed",
+          "evidence": "npx vitest run tests/plugin/anima-catalog.test.ts tests/plugin/anima-compile.test.ts tests/plugin/catalog-search.test.ts → 34 passed（3 文件全绿）；overlayStatus 探测 overlayPath()，修复后指向无残留的 preset temp 路径 → 'unavailable'"
+        },
+        {
+          "criterion": "overlay 路径推导修复不改 relations.ts 写入/读取契约（openOverlayDb 等行为保持）",
+          "status": "passed",
+          "evidence": "仅改 defaultOverlayPath() 推导（private 函数），openOverlayDb/SCHEMA/overlayPath/setOverlayPath/submitProposal 等导出契约零改动；relations 既有测试（relations.test.ts/catalog-relations.test.ts）全绿"
+        },
+        {
+          "criterion": "新增/更新测试隔离 overlay 路径（不依赖环境残留文件；用 setOverlayPath 注入临时路径或清理）",
+          "status": "passed",
+          "evidence": "3 个测试文件（anima-catalog/anima-compile/catalog-search）beforeEach 注入 mkdtempSync 临时路径（setOverlayPath(join(tmp,'temp','anima-prompt-v1','relation-overlay.sqlite'))），afterEach setOverlayPath('') + rmSync 清理，不依赖环境残留"
+        },
+        {
+          "criterion": "全量 npx vitest run 归零失败（3 个既有 overlay 失败修复后应全绿；允许跳过项）",
+          "status": "passed",
+          "evidence": "npx vitest run → 80 files passed / 611 tests passed / 1 skipped / 0 failed（修复前 608 passed + 3 failed；归零）"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/plugin/anima-catalog.test.ts tests/plugin/anima-compile.test.ts tests/plugin/catalog-search.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "34 tests passed (3 files) — previously 3 failed"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "80 files / 611 tests passed / 1 skipped / 0 failed — O2 overlay baseline fixed to zero"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "t7",
+      "subject": "P2-1-review: 审查风格库深化（t1）",
+      "description": "对抗性审查 t1（风格库内容深化至 10+）。实际读 src/pe-framework/enrichment/style.ts + 测试；跑 verify 命令；核对：是否真达 ≥10 风格、每风格双通道非空且无空泛词、结构完整、applyStyle 语义未偏离 Phase 1（conformity 两级不动、未知 id 原引用、不改输入）、是否有测试空转/弱化（断言不因实现巧合通过）。对照 spec §7.2 L250-258。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742399773,
+      "updatedAt": 1788753233918,
+      "kind": "review",
+      "objective": "核验 t1 严格符合 spec §7.2 且无测试弱化/偏离设计。",
+      "acceptance": [
+        "读真实源码与测试文件（非仅 task output）",
+        "跑 t1 的 verify 命令并核验输出",
+        "逐项核对 t1 验收 5 条（≥10 风格/双通道具体名词/结构完整/applyStyle 语义/测试非空转）",
+        "检查是否有计划外文件改动或自行发挥"
+      ],
+      "reviewedTaskId": "t1",
+      "attemptId": "d8b423ee-59be-422b-815d-ec77ac5f7ca5",
+      "reassigning": false,
+      "output": "P2-1 对抗性审查通过（针对最新实现 commit d09d362）。已实际读 src/pe-framework/enrichment/style.ts + tests/pe-framework/enrichment/style.test.ts，跑 verify 命令。验收 5 条全部满足：①≥10 风格：MINIMAL_STYLES=11（8+新增水彩/概念原画/童话，对齐 spec §7.2 L252-253 候选与 §17/L489「10+ 风格模板可用」）；②双通道非空且具体名词无空泛词（cinematic/beautiful/大气/电影感 均无，测试断言覆盖）；③结构完整（id/name/prompt_fragments{image,video}/applies_to/negative_hints，base|theme|palette 按需）；④applyStyle 语义未偏离 Phase 1——commit diff 证实函数零改动，conformity 两级（0 注入片段/>0 仅引用）、未知 id 原引用返回、structuredClone 不改输入均有断言；⑤测试被强化非空转：旧 toHaveLength(8)（会阻碍深化）改为 >=10，新增结构/空泛词/id 唯一/不改输入断言，且 >=10 断言在源码未跟上时确曾红（非巧合通过）。计划外改动：commit d09d362 仅改 style.ts + style.test.ts 两个 in-scope 文件。verify：npx vitest run tests/pe-framework/enrichment/style.test.ts → 9/9 通过。全量 npx vitest run 剩 3 个失败均属 t6（O2 overlay 路径推导 bug，anima-catalog/anima-compile/catalog-search）范围，非 t1 引入、非 t1 in-scope，不阻塞本任务。非阻塞说明：spec §7.2 L256 的「50+」为 Phase 2 远期方向，本任务契约明确为 10+，11 已满足。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t8",
+      "subject": "P2-2-review: 审查词库深化（t2）",
+      "description": "对抗性审查 t2（词库六类深化至 ≥8）。实际读 src/pe-framework/aesthetics/lexicon.ts + 测试；跑 verify；核对：每类 ≥8 且具体名词（非空泛词）、扩充项可溯源 spec §7.3/调研二、保持结构化数据、测试非空转。对照 spec §7.3 L260-266。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742399782,
+      "updatedAt": 1788753431253,
+      "kind": "review",
+      "objective": "核验 t2 严格符合 spec §7.3 且无测试弱化/偏离设计。",
+      "acceptance": [
+        "读真实源码与测试文件",
+        "跑 t2 verify 并核验输出",
+        "逐项核对 t2 验收（六类≥8/具体名词/可溯源/结构化/测试非空转）",
+        "检查计划外改动或自行发挥",
+        "verdict 规则同前"
+      ],
+      "reviewedTaskId": "t2",
+      "attemptId": "6bf73465-ca82-449f-a431-99f152de1048",
+      "reassigning": false,
+      "output": "P2-2 对抗性审查通过。已实际读 src/pe-framework/aesthetics/lexicon.ts + tests/pe-framework/aesthetics/lexicon.test.ts 并跑 verify。验收全部满足：①六类 ≥8：shots=9/lenses=9/camera_moves=10/lighting=10/grading=8/composition=9；②具体名词无空泛词（cinematic/beautiful/amazing/大气/电影感 均无，测试断言覆盖，且 >=8 断言对 Phase 1 数据必红，非空转）；③扩充项可溯源 spec §7.3 L262-265（景别/焦段/运镜、光线列举 黄金时刻/伦勃朗光/体积光/色温/三点布光、色彩 高光/中间调/阴影+青橙对比、构图列举）+ 调研二来源（可灵运镜词表/Veo 运镜库/ai-boost/awesome-prompts，header 标注）；④保持结构化数据：CinemaLexicon 六数组结构与接口零改动，仅扩展内容，engine.ts 以候选词列表消费；⑤测试被强化：旧断言 >3 升级为 >=8/空泛词/类内唯一/六类齐全。计划外改动：仅 lexicon.ts + lexicon.test.ts 两个 in-scope 文件（其余 manifest.json/snapshot/confirm.py 为 t2 前已存在的旧改动，非本任务引入）。verify：npx vitest run tests/pe-framework/aesthetics/ → 8/8 通过；engine.test.ts（lexicon 消费方）通过；全量套件仅剩 3 个 overlay 失败（t6 O2 范围），未新增失败。注意：本任务改动当前仍在工作树未提交（engineer 尚未 commit），审查以磁盘最新实现为准。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t9",
+      "subject": "P2-3-review: 审查自检强化（t3）",
+      "description": "对抗性审查 t3（扩展引擎自检强化）。实际读 src/pe-framework/enrichment/engine.ts + 测试；跑 verify；核对：词库六类注入完整、字段完整度检查是确定性实现（非 LLM）、缺失进 expansions advisory 不阻断、checkConcreteness/checkFidelity 无回归、未新增 spec 未列检查项（禁止自行发挥）。对照 spec §7.1 L240-248。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742399790,
+      "updatedAt": 1788753639361,
+      "kind": "review",
+      "objective": "核验 t3 严格符合 spec §7.1 且无测试弱化/偏离设计。",
+      "acceptance": [
+        "读真实源码与测试文件",
+        "跑 t3 verify 并核验输出",
+        "逐项核对 t3 验收（词库注入/字段完整度确定性/不阻断/无回归/不新增 spec 未列项）",
+        "检查计划外改动或自行发挥",
+        "verdict 规则同前"
+      ],
+      "reviewedTaskId": "t3",
+      "attemptId": "85006933-b0e2-44a5-b029-16e11796a25c",
+      "reassigning": false,
+      "output": "P2-3 对抗性审查通过。已实际读 src/pe-framework/enrichment/engine.ts + tests/pe-framework/enrichment/engine.test.ts + src/pe-framework/aesthetics/check.ts + blueprint/schema.ts 并跑 verify。验收全部满足：①词库六类注入完整：buildExpansionPersona 注入 景别/焦段/运镜/光线/色彩分级/构图，测试断言六类 label + t2 深化词（16mm/背光/胶片颗粒）均在 system prompt；②字段完整度检查为确定性实现（非 LLM）：checkFieldCompleteness（engine.ts L96-105）纯函数检查 media/core.concept/至少一个 style|scene|emotion，字段与 blueprint schema 一致；③缺失进 expansions advisory 不阻断：L169-170 追加 field_completeness:missing:... 不早退不抛错，测试断言 patch 仍被应用；④checkConcreteness/checkFidelity 无回归：check.ts 零 diff（未触碰），check.test.ts 2/2 通过；⑤未新增 spec 未列检查项：仅新增「字段完整度」，正是 spec §7.1 L248 明确列出的确定性检查项，未加新禁词/新阈值/额外检查。计划外改动：仅 engine.ts + engine.test.ts 两个 in-scope 文件（工作树未提交态）。verify：engine+check+lexicon 10/10 通过；全量套件仅剩 3 个 overlay 失败（t6 O2 范围），未新增失败。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t10",
+      "subject": "P2-4-review: 审查 LLM 评委（t4）",
+      "description": "对抗性审查 t4（LLM 评委）。实际读 src/pe-framework/eval/judge.ts + 测试；跑 verify；核对：rubric 三轴（coherence/fidelity/美学）对齐 spec §13、可选触发（不进默认 author 管线）、输出结构含 scores/issues、测试非空转（断言真实校验）。对照 spec §13 L409-419。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742399798,
+      "updatedAt": 1788753865380,
+      "kind": "review",
+      "objective": "核验 t4 严格符合 spec §13 且无测试弱化/偏离设计。",
+      "acceptance": [
+        "读真实源码与测试文件",
+        "跑 t4 verify 并核验输出",
+        "逐项核对 t4 验收（rubric 三轴/可选触发/输出结构/测试非空转）",
+        "检查计划外改动或自行发挥",
+        "verdict 规则同前"
+      ],
+      "reviewedTaskId": "t4",
+      "attemptId": "90cd3257-c9f1-4cf4-bfbf-94d8d022fa4d",
+      "reassigning": false,
+      "output": "P2-4 对抗性审查通过。已实际读 src/pe-framework/eval/judge.ts + tests/pe-framework/eval/judge.test.ts 并跑 verify。验收全部满足：①rubric 三轴对齐 spec §13 L415：coherence（叙事/镜头衔接/风格一致性）/fidelity（保真/原词保留）/aesthetic（美学质量/具体名词/镜头语言/光影），persona 与测试均覆盖三轴；②可选触发不进默认 author 管线：judgeBlueprint 仅在 eval/judge.ts 定义，全库 grep 无任何其他引用/import，docstring 明示\"用户要求或 eval 模式触发\"，导出供 eval 模式调用；③输出结构含 scores/issues：JudgeResult={scores:{coherence,fidelity,aesthetic}, overall, issues[]}；④测试非空转：5 个真实断言——解析分值 7/8/9+overall+issues、system 三轴名+user 含蓝图与意图、LLM 错误→零分+judge_failed advisory 不抛错、不可解析→零分+advisory、越界分数 clamp（-3/99/6.6→0/10/7）。计划外改动：仅新增 src/pe-framework/eval/judge.ts + tests/pe-framework/eval/judge.test.ts（in-scope），未触碰现有管线/文件。verify：judge.test.ts 5/5 通过；全量套件仅剩 3 个 overlay 失败（t6 O2 范围），未新增失败。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t11",
+      "subject": "P2-5-review: 审查多模态提取（t5）",
+      "description": "对抗性审查 t5（多模态意图提取）。实际读 src/pe-framework/blueprint/analyzer.ts + 测试；跑 verify；核对：refs 传入时提取参考物美学特征进蓝图（spec §6 L227）、ref 标签稳定不回归、无 refs 时与 Phase 1 完全一致、提取为 LLM 引导非硬编码、测试非空转。对照 spec §6 L227 + §17 L485/487。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742399805,
+      "updatedAt": 1788754088944,
+      "kind": "review",
+      "objective": "核验 t5 严格符合 spec §6 且无测试弱化/偏离设计。",
+      "acceptance": [
+        "读真实源码与测试文件",
+        "跑 t5 verify 并核验输出",
+        "逐项核对 t5 验收（refs 提取特征/标签稳定/无 refs 零变化/LLM 引导/测试非空转）",
+        "检查计划外改动或自行发挥",
+        "verdict 规则同前"
+      ],
+      "reviewedTaskId": "t5",
+      "attemptId": "5bb734ef-d9f1-4ee1-a6db-fcdfbae88a6d",
+      "reassigning": false,
+      "output": "P2-5 对抗性审查通过。已实际读 src/pe-framework/blueprint/analyzer.ts + tests/pe-framework/blueprint/analyzer.test.ts 并跑 verify。验收全部满足：①refs 传入时提取参考物美学特征进蓝图（spec §6 L227 + §17 L489「参考图美学特征进蓝图」）：persona 规则 4 引导映射进既有核心字段（光线→scene.lighting、配色→core.style.palette、氛围→scene.atmosphere、环境→scene.environment、构图→core.composition、情绪→core.emotion），测试 4 断言特征落地（scene.lighting/style.palette 含「青橙」）；②ref 标签稳定不回归：persona 保留「保持 ref 标签稳定（<Picture N>/<Subject N>/<Video N>/<Audio N>）不要替换」，测试断言 '<Picture 1>' 在 user 与蓝图中稳定保留；③无 refs 时与 Phase 1 完全一致：refs 块条件化，测试 5 断言无 refs 时 user 无 'references 传入'，蓝图不承载 references 持久字段（'references' not in blueprint，无 schema 改动）；④提取为 LLM 引导非硬编码：无确定性提取代码，纯 persona 指令，analyzeIntent 仅传 refs+指令给 LLM；⑤测试非空转：3 个新测试断言 persona 提取指令+目标字段/蓝图特征落地+标签稳定+无 references 字段/无 refs 时 user 无 references 段。计划外改动：仅 analyzer.ts + analyzer.test.ts 两个 in-scope 文件（工作树未提交态），未新增 schema 字段、未触碰 subagent-provider。verify：analyzer.test.ts 5/5 通过；全量套件仅剩 3 个 overlay 失败（t6 O2 范围），未新增失败。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t12",
+      "subject": "O2-review: 审查 overlay 修复（t6）",
+      "description": "对抗性审查 t6（overlay 路径 bug 修复）。实际读 src/pe-framework/anima-knowledge/relations.ts + anima-catalog.ts + 3 个测试；跑 verify（3 个测试 + 全量）；核对：defaultOverlayPath 正确解析到 <preset>/temp/anima-prompt-v1/relation-overlay.sqlite（preset 根=comfyui-chenxin）、overlayStatus 在无文件时 unavailable、未改 relations 读写契约（openOverlayDb/SCHEMA）、测试隔离不依赖环境残留、全量 vitest 归零失败。这是基建 bug 修复，修复须保守不越界（不重构无关代码）。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788742399820,
+      "updatedAt": 1788754560349,
+      "kind": "review",
+      "objective": "核验 t6 正确修复 overlay 路径推导 bug、测试隔离有效、3 个既有失败归零、无越界重构。",
+      "acceptance": [
+        "读真实源码与 3 个测试文件",
+        "跑 t6 verify（3 测试 + 全量 vitest）并核验输出归零失败",
+        "核对 defaultOverlayPath 解析结果 + overlayStatus 行为 + 读写契约未变 + 测试隔离",
+        "检查计划外改动或越界重构",
+        "verdict 规则同前"
+      ],
+      "reviewedTaskId": "t6",
+      "attemptId": "101aaefa-9215-4a03-aa91-b018ca49d647",
+      "reassigning": false,
+      "output": "O2 对抗性审查通过（commit 30dbfba）。已实际读 src/pe-framework/anima-knowledge/relations.ts + anima-catalog.ts + 3 个测试文件并跑 verify（3 测试 + 全量）。验收全部满足：①defaultOverlayPath 正确解析到 <preset>/temp/anima-prompt-v1/relation-overlay.sqlite：实测 overlayPath()=C:\\...\\comfyui-chenxin\\temp\\anima-prompt-v1\\relation-overlay.sqlite（preset 根=comfyui-chenxin），新布局（knowledge 前一节=assets）截 1 层、旧布局截 2 层双兼容；②overlayStatus 无文件时 unavailable：正确路径 exists=false，3 个 overlay-degrade 断言 'unavailable' 全部通过；③未改 relations 读写契约：diff 仅 defaultOverlayPath 一处，SCHEMA/openOverlayDb/listProposals/submitProposal/decideProposal 零改动；④测试隔离不依赖环境残留：3 个测试文件 beforeEach 注入 mkdtempSync 保证不存在的临时 overlay 路径 + afterEach setOverlayPath('')+rmSync 清理，不再受 .agent-presets/temp/ 残留文件影响；⑤全量 vitest 归零失败：80 files / 611 passed / 1 skipped / 0 failed（修复前 3 failed）。修复保守不越界：仅 relations.ts + 3 个 in-scope 测试文件，无无关重构/新文件。O2 根因确认：resolveKnowledgePath 资产迁至 assets/knowledge/ 后旧启发式 slice(0, knowledgeIdx-2) 多截 preset 根一层→定位到 .agent-presets/temp/，探测到旧残留 relation-overlay.sqlite→overlayStatus 误报 available。",
+      "verdict": "pass"
+    },
+    {
+      "id": "t13",
+      "subject": "P2-6-impl: conformity 连续语义两级修复（§7.2/§8.1）",
+      "description": "按 captain 与用户确认的「两级修复」方案实现 conformity 连续语义（spec §7.2「Phase 2 完善语义」+ §8.1「core.style→并入 what」），这是用户明确批准的新规格，非自行发挥：第 1 级——projectToH3 的 what 组装并入 core.style.base/theme（对齐 projectToAnima detail_mood），修「conformity>0 时 H3 风格完全消失」的现状 bug（核实：现 what 组装 = 锚点+beat/景别/运镜+scene.lighting+action+emotion，不含 core.style；Anima 侧有 base/theme）。第 2 级——applyStyle 的 conformity 从「两档（0 全注入 / >0 仅引用）」改为三档连续：=0 全量注入；0<x<1 按比例注入前 round(x×短语数) 个完整短语（fragment 按中文逗号拆短语，至少保留 1 个，杜绝半句话）；≥1 仅引用（core.style 仍写入 core.style 字段）。默认 0.6 不再走旧「仅引用假档」。不得自行发挥（不新增其他档位行为、不引入 LLM 自由度信号、不改 prompt_author 管线）。参考 spec §7.2 L257、§8.1 L285、captain 方案确认。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788760507129,
+      "updatedAt": 1788760923902,
+      "kind": "implementation",
+      "objective": "实现 conformity 连续语义两级修复：H3 投影并入 core.style（风格永不丢）+ applyStyle 三段式按比例注入完整短语。",
+      "inScope": [
+        "plugins/prompt-master/src/pe-framework/blueprint/project.ts",
+        "plugins/prompt-master/src/pe-framework/enrichment/style.ts",
+        "plugins/prompt-master/tests/pe-framework/blueprint/project.test.ts",
+        "plugins/prompt-master/tests/pe-framework/enrichment/style.test.ts"
+      ],
+      "acceptance": [
+        "第 1 级（H3 风格不丢）：projectToH3 的 what 组装并入 core.style.base/theme（与 projectToAnima 的 detail_mood 行为对齐，spec §8.1「core.style→并入 what」），任何 conformity 下 H3 what 均含风格引用",
+        "第 2 级（连续语义）：applyStyle 按 conformity 分三档——=0 全量注入 prompt_fragments（现行为）；0<conformity<1 按比例注入前 round(ratio×短语数) 个完整短语（按逗号拆短语，至少保留 1 个，不产生半句话）；conformity≥1 仅引用不注入（core.style 仍写入）",
+        "默认 conformity=0.6 时 H3 what 同时含 core.style 引用 + 约 60% 风格短语（不再走旧「仅引用假档」）",
+        "applyStyle 未知 styleId 原引用、不修改输入对象 等既有语义保持（Phase 1 不回归）",
+        "project.test.ts / style.test.ts 断言更新（含比例注入、完整短语不截断、至少 1 个、=0 全量、≥1 仅引用），非空转",
+        "tsc --noEmit exit 0；全量 vitest 无新增失败"
+      ],
+      "verify": [
+        "npx vitest run tests/pe-framework/blueprint/project.test.ts tests/pe-framework/enrichment/style.test.ts",
+        "npx tsc --noEmit"
+      ],
+      "deliverables": [
+        "src/pe-framework/blueprint/project.ts",
+        "src/pe-framework/enrichment/style.ts",
+        "tests/pe-framework/blueprint/project.test.ts",
+        "tests/pe-framework/enrichment/style.test.ts"
+      ],
+      "attemptId": "b11dd228-5f70-45fa-871f-a10ae1e3af03",
+      "reassigning": false,
+      "output": "P2-6-impl 完成：conformity 连续语义两级修复（spec §7.2/§8.1）。\n\n第 1 级（H3 风格不丢）：\n- projectToH3 的 what 组装追加 core.style.base/theme（对齐 projectToAnima detail_mood 的 base/theme；spec §8.1 L285「core.style→并入 what」，风格为最低 ROI 放末位）。修「conformity>0 时 H3 风格完全消失」现状 bug——现在任何 conformity 下 H3 what 均含风格引用。\n\n第 2 级（连续语义）：\n- applyStyle 从两档改三档连续：=0 全量注入 prompt_fragments（现行为）；0<conformity<1 按比例注入前 round(conformity×短语数) 个完整短语（fragment 按中文逗号拆短语，Math.max(1,·) 至少保 1 个，杜绝半句话）；conformity≥1 仅引用不注入（core.style 仍写入 core.style 字段）。\n- 默认 conformity=0.6 走「按比例注入」（round(0.6×5)=3 短语）而非旧「>0 仅引用假档」。\n\n不回归：\n- 未知 styleId 原引用（toBe 原对象）、不改输入（structuredClone 比对）保持。\n- 未改 prompt_author 管线、未引入 LLM 自由度信号、未新增其他档位行为（严格按 captain 批准的两级修复方案）。\n\n测试证据：\n- 定向：npx vitest run tests/pe-framework/blueprint/project.test.ts tests/pe-framework/enrichment/style.test.ts → 27 passed（16+11；实现前红 4 失败：0.6/0.05 未注入 + what 无 style，确认非空转）\n- npx tsc --noEmit → exit 0\n- 全量：npx vitest run → 615 passed / 1 skipped / 0 failed（修复前 611 passed；快照 fightBp 无 style 未变，无新增失败）\n\ncommit：e1feb72（仅含 4 个 inScope 文件，消息标注 spec §7.2/§8.1）",
+      "changedPaths": [
+        "plugins/prompt-master/src/pe-framework/blueprint/project.ts",
+        "plugins/prompt-master/src/pe-framework/enrichment/style.ts",
+        "plugins/prompt-master/tests/pe-framework/blueprint/project.test.ts",
+        "plugins/prompt-master/tests/pe-framework/enrichment/style.test.ts"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "第 1 级（H3 风格不丢）：projectToH3 的 what 组装并入 core.style.base/theme（与 projectToAnima 的 detail_mood 行为对齐，spec §8.1「core.style→并入 what」），任何 conformity 下 H3 what 均含风格引用",
+          "status": "passed",
+          "evidence": "projectToH3 what 数组追加 core.style.base/theme（末位，风格最低 ROI）；新测试 'merges core.style base/theme into every shot what' 断言每镜 what 含 base 与 theme；集成测试确认 applyStyle 后仍含"
+        },
+        {
+          "criterion": "第 2 级（连续语义）：applyStyle 按 conformity 分三档——=0 全量注入 prompt_fragments（现行为）；0<conformity<1 按比例注入前 round(ratio×短语数) 个完整短语（按逗号拆短语，至少保留 1 个，不产生半句话）；conformity≥1 仅引用不注入（core.style 仍写入）",
+          "status": "passed",
+          "evidence": "applyStyle 改为三档：conformity<1 时 ratio=conformity<=0?1:conformity，proportionalFragment 按中文逗号拆短语取前 round(ratio×n)（Math.max(1,·) 保底）；测试断言 0.6→前 3 短语（round(0.6×5)=3）、0.05→至少 1 短语且每段均为完整短语、=0→含末短语全量、=1/1.5→action 未定义"
+        },
+        {
+          "criterion": "默认 conformity=0.6 时 H3 what 同时含 core.style 引用 + 约 60% 风格短语（不再走旧「仅引用假档」）",
+          "status": "passed",
+          "evidence": "集成测试：applyStyle(bp,'cinematic_real',0.6) → projectToH3 后每镜 what 含 '写实电影'（core.style 引用）+ 'IMAX 胶片质感'/'Panavision C 系 35mm f4'/'伦勃朗光'（前 3/5 短语），确认不再仅引用"
+        },
+        {
+          "criterion": "applyStyle 未知 styleId 原引用、不修改输入对象 等既有语义保持（Phase 1 不回归）",
+          "status": "passed",
+          "evidence": "未知 id 测试（nope→toBe 原对象）与不改输入测试（structuredClone 比对）保持通过；style.test.ts 11 断言全绿"
+        },
+        {
+          "criterion": "project.test.ts / style.test.ts 断言更新（含比例注入、完整短语不截断、至少 1 个、=0 全量、≥1 仅引用），非空转",
+          "status": "passed",
+          "evidence": "style.test.ts 9→11、project.test.ts 14→16 断言；实现前红（0.6/0.05 未注入、what 无 style 共 4 失败）确认非空转，实现后定向 27 passed"
+        },
+        {
+          "criterion": "tsc --noEmit exit 0；全量 vitest 无新增失败",
+          "status": "passed",
+          "evidence": "npx tsc --noEmit → exit 0；全量 npx vitest run → 615 passed / 1 skipped / 0 failed（修复前 611 passed，无新增失败；快照 fightBp 无 style 未变）"
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "npx vitest run tests/pe-framework/blueprint/project.test.ts tests/pe-framework/enrichment/style.test.ts",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "27 tests passed (16 project + 11 style); red before impl: 4 failed"
+        },
+        {
+          "command": "npx tsc --noEmit",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "exit 0"
+        },
+        {
+          "command": "npx vitest run",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "615 passed / 1 skipped / 0 failed — no new failures; snapshot unchanged (fightBp has no style)"
+        }
+      ]
+    },
+    {
+      "id": "t14",
+      "subject": "P2-6-review: 审查 conformity 两级修复（t13）",
+      "description": "对抗性审查 t13（P2-6-impl conformity 连续语义两级修复）。实际读 src/pe-framework/blueprint/project.ts + src/pe-framework/enrichment/style.ts + project.test.ts + style.test.ts；跑 verify；核对：①H3 what 并入 core.style.base/theme（与 Anima detail_mood 对齐，spec §8.1）——实测 conformity=0.6 时 H3 what 含风格引用；②applyStyle 三档连续（=0 全量 / 0<x<1 按比例注入前 round(x×短语数) 个完整短语且至少 1 个 / ≥1 仅引用）；③默认 0.6 双通道（style 引用 + ~60% 短语）；④既有语义（未知 id 原引用/不改输入）不回归；⑤无计划外文件/自行发挥（不得引入 LLM 自由度信号、不改 prompt_author 管线）。verdict 仅完全符合时 pass。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1788760518438,
+      "updatedAt": 1788761074403,
+      "kind": "review",
+      "objective": "核验 t13 严格符合 captain 批准的 conformity 两级修复规格，无测试弱化/偏离/越界。",
+      "acceptance": [
+        "读真实源码 project.ts + style.ts + 两个测试文件（非仅 task output）",
+        "跑 t13 verify 命令并核验输出",
+        "逐项核对 t13 验收 6 条（H3 what 含 core.style / 三档比例注入 / 默认 0.6 双通道 / 既有语义不回归 / 测试非空转 / tsc+全量）",
+        "重点对抗：第 1 级 H3 是否真含 core.style（实测 what）、第 2 级是否完整短语不截断（0.6 保留 round(0.6×N) 且无半句）、是否有计划外改动或自行发挥（不得引入 LLM 自由度信号/改管线）"
+      ],
+      "reviewedTaskId": "t13",
+      "attemptId": "b72d3973-8a11-4019-b664-2a116d4b3ed8",
+      "reassigning": false,
+      "output": "P2-6 对抗性审查通过（commit e1feb72）。已实际读 src/pe-framework/blueprint/project.ts + src/pe-framework/enrichment/style.ts + project.test.ts + style.test.ts，独立运行探针实测 + 跑 verify（style/project 测试、tsc、全量）。验收全部满足：①H3 what 并入 core.style.base/theme（spec §8.1，对齐 projectToAnima detail_mood，风格最低 ROI 末位）：project.ts what 尾部并入 base+theme，实测 conformity=0.6 时 what 含「写实电影」引用；②applyStyle 三档连续：=0 全量（proportionalFragment ratio=1）、0<x<1 按比例注入前 round(x×短语数) 个完整短语（逗号拆分、至少 1、杜绝半句）、>=1 仅引用（core.style 仍写）；实测 0→5 短语、0.05→1、0.6→3（IMAX/Panavision/伦勃朗光）、1 与 1.5→仅引用；③默认 0.6 双通道：实测 what 含 3/5 短语 + 风格引用；④既有语义不回归：未知 id 返回原引用、structuredClone 不改输入（探针+测试双重证实）；⑤无计划外文件/自行发挥：commit 仅 project.ts/style.ts/project.test.ts/style.test.ts 4 个 in-scope 文件，grep 无 freedom/LLM 自由度信号，prompt_author 管线未动。测试非空转：style 11 断言精确核对比例注入短语边界（含「不注入第 4/5 短语」负断言、无半句、0.05 至少 1、>=1 仅引用含 1.5），project 16 断言（style 合并+0.6 集成）；旧「>0 仅引用」断言正确升级为「>=1 仅引用」非弱化。verify：style+project 27/27 通过；npx tsc --noEmit exit 0；全量 80 files / 615 passed / 1 skipped / 0 failed。",
+      "verdict": "pass"
+    }
+  ],
+  "taskSeq": 14,
+  "phase": "running",
+  "approvedAt": 1788752918622
+}

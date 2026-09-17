@@ -1,4 +1,4 @@
-﻿# H3 Agentic 短剧导演管线实施计划
+# H3 Agentic 短剧导演管线实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -140,8 +140,14 @@ tests/plugin/h3-directing.e2e.test.ts  # 端到端 mock（Task 7）
 - [ ] anima 零触碰核验：`git diff --stat` 确认 `compositing/**`（Task 6 新文件除外）与 `dialect/anima*` 无改动
 - [ ] 活体终验清单移交用户：DSH 重载 dist 后真实 prompt_author(h3, script) 端到端（五子代理链/envelope 键/工程三件套落盘）
 
-- Task 4: 完成，commit cec6669。directing/prompts.ts：五槽位 persona + buildXxxPrompt + parseXxxOutput。27 用例全绿，tsc 0，build OK。
-- Task 3: 完成，commit 6554165。`directing/continuity-check.ts`：12 机器门（G-schema/purpose/duration/intents/refbinding/dialogue-official/prop/handoff/shotcard/sound/signature/unit）；G-duration 双层（tag 区间=important、Beat 总时长 H3 [4,15]=critical——playbook 打包模型）；G-refbinding 五 stage 角色+数量矩阵；N11 strict 双模。DirectingShot 增 what/dialogue 字段。14 用例全绿（RED→GREEN），tsc 0 / eslint 0 / 158 files / 1375 passed。
+- Task 6: 完成，commit 316d69f。`directing/orchestrate.ts` 五段编排器 + `engineering/emit.ts` 三件套幂等落盘。161 files / 1422 passed。
+- Task 5: 完成（同 commit）。emit 3 用例全绿。
+- Task 4: 完成，commit cec6669。prompts.ts：五槽位 persona + buildXxxPrompt + parseXxxOutput。27 用例全绿。
+- Task 3: 完成，commit 6554165。12 机检门全绿。
+- Task 2: 完成，commit cb46992。dialect 对白契约 + golden 再生级联。
+- Task 1: 完成，commit 04a29f6。DirectingIR schema。
+- **Task 7: 待实施（需新上下文续行）**——prompt-author.ts（1835 行）h3 分支路由切换：加 script/project/await_user_approval 参数、移除 h3-rating-gate（D-U4）、路由到 directing 编排器、旧 shots 路径移除。设计接口 spec §3 已定案。
+- **Task 8: 待实施（依赖 Task 7）**——收尾门（全量回归 + anima 零触碰核验 + 活体终验清单移交）。
 - Task 1: 完成，commit 04a29f6。`directing/ir-schema.ts`：DirectingIr/ScriptIr 类型 + validateDirectingIr（9 违规用例全绿）+ PURPOSE_TAGS/STAGES/DURATION_RANGES 常量；unit 可选、ScriptIr.appearance_lock 可缺（校验器报）。12/12 绿，tsc 0，build OK。
 - Task 2: 完成，commit cb46992。schema/h3-shots.ts dialogue 对象三布尔 + dialect collectSpeakerIds/buildDialogue 四种发射形态 + aesthetics/check.ts 消费点加固；golden 再生级联（t2va-baker 81→89 tokens、tokenizer golden 76→84 raw、fixture 同步；非对白 golden 逐字节不变）。157 files / 1349 passed。
 （后续任务完成即回填）

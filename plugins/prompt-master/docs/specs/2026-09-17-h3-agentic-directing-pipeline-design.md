@@ -8,14 +8,15 @@
 
 ## 0. 用户裁决记录
 
-| #    | 裁决 | 内容                                                                                                                                                         |
-| ---- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| D-U1 | 范围 | **B：直接上多镜头短剧工程**——剧本 → Beat 拆分 → 逐镜提示词 → storyboard/refs/质检台账                                                                        |
-| D-U2 | 槽位 | **五槽位对齐 anima**（leos 六部门合并映射，见 §5）                                                                                                           |
-| D-U3 | 边界 | **只做提示词工程**——产出物可被 camera-video 执行，执行/抽帧质检/选择性重试不在本管线（后续 spec）                                                            |
-| D-U4 | NSFW | **不设防**——管线内不做分级拦截/改写；`rating` 作为元数据透传。本地 ComfyUI H3 权重推理无云端内容过滤，本地执行语境自洽；推理端实际行为不可控，风险由用户承担 |
-| D-U5 | 架构 | **方案 1：独立 directing 编排器 + 方言解耦**——anima（compositing/）零触碰                                                                                    |
-| D-U6 | 增量 | **Δ1-Δ8 全部吸收**（三参照项目文件级深度分析的 spec 增量，见 §4/§5/§6 各标注）                                                                               |
+| #    | 裁决    | 内容                                                                                                                                                                                                |
+| ---- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-U1 | 范围    | **B：直接上多镜头短剧工程**——剧本 → Beat 拆分 → 逐镜提示词 → storyboard/refs/质检台账                                                                                                               |
+| D-U2 | 槽位    | **五槽位对齐 anima**（leos 六部门合并映射，见 §5）                                                                                                                                                  |
+| D-U3 | 边界    | **只做提示词工程**——产出物可被 camera-video 执行，执行/抽帧质检/选择性重试不在本管线（后续 spec）                                                                                                   |
+| D-U4 | NSFW    | **不设防**——管线内不做分级拦截/改写；`rating` 作为元数据透传。本地 ComfyUI H3 权重推理无云端内容过滤，本地执行语境自洽；推理端实际行为不可控，风险由用户承担                                        |
+| D-U5 | 架构    | **方案 1：独立 directing 编排器 + 方言解耦**——anima（compositing/）零触碰                                                                                                                           |
+| D-U6 | 增量    | **Δ1-Δ8 全部吸收**（三参照项目文件级深度分析的 spec 增量，见 §4/§5/§6 各标注）                                                                                                                      |
+| D-U7 | dialect | **动 dialect（R7 裁决）**：对白发射层按官方契约增强——speaker 稳定 ID `(S1)` 分配、voiceover 固定短语+闭嘴声明、`<scenetrans>`/`<cutoff>` 标记（§6.1）；含对白 golden 再生，非对白 golden 逐字节不变 |
 
 ## 1. 现状痛点（会话压缩包 68c427f3 实证）
 
@@ -170,7 +171,7 @@ LLM 轨 `pm-continuity-auditor` **QC 八维矩阵**（Δ5，每镜逐维 verdict
 - **G-unit**（N6）：climax_segment 起始位于全片 60-80%；相邻单元 ≥1 种对比；首末单元意象 echo（默认 warning，strict 模式拒绝）
 - **G-intents**（Δ1）：shot_intent 数 = shots 数；每镜 new_information 非空；对白 Beat ≥1 contains_reaction
 - **G-refbinding**（R1 修正为官方 5 stages）：**stage ↔ 角色绑定**——t2va：reference_plan 必空；i2va：Picture 1（首帧）；fl2va：Picture 1+2（首/尾帧）；l2va：Picture 1（末帧）；ref2va：identity/location/prop_subject（Subject N）；**引用 stage 不支持的角色 = critical**（"提示词不得引用到不了模型的参考"）
-- **G-dialogue-official**（R3 官方契约）：对白跨切用 `<scenetrans>` 两处标注；片尾截断用 `<cutoff>`；voiceover 用固定短语 `says in an off-screen voiceover` + 闭嘴声明；speaker ID 跨镜稳定（机检 + S3 persona 承载；**dialect 发射层为增强候选 R7，需用户裁决后动 dialect**）
+- **G-dialogue-official**（R3 官方契约，**R7 已裁决由 dialect 发射层实现**，详见 §6.1）：对白跨切用 `<scenetrans>` 两处标注；片尾截断用 `<cutoff>`；voiceover 用固定短语 `says in an off-screen voiceover` + 闭嘴声明；speaker ID 跨镜稳定（dialect 发射 + 机检对账双保险）
 - **G-cameramotion / G-cutgrammar**（R4 官方语法）：运镜 = motion type × amplitude × speed 自然英语（禁标签堆叠）；首镜无时间戳、切点 mm:ss.mmm 严格递增且在时长内、cut 必须引入新信息（仅距离/角度变化 → 优先运镜）
 - **G-dialogue**（Δ4）：`<d>[语言]...</d>` 标签内文本与 script 台词逐字相等（source_script_hash 对账）；标签内禁角色名/冒号；speaker_id ∈ characters
 - **G-prop**（Δ8）：props.state_by_beat 覆盖该 prop 出现的全部 Beat；状态三态（初态→触发→末态）结构完整
@@ -178,6 +179,34 @@ LLM 轨 `pm-continuity-auditor` **QC 八维矩阵**（Δ5，每镜逐维 verdict
 - **G-budget**：官方 tokenizer 精确计数（现行机制复用，t2va/i2va/ref2va 各档预算）
 - 其余 `rules-h3.ts` 既有机检（镜头信息增量/cut 时间戳）复用不修改
 - **N11 双模开关**：`meta.strict_prompt_validation` 默认 false（G-unit/G-signature 类结构项降为 warning）；true 时机检不合格直接拒绝——沿 director-suite
+
+### 6.1 dialect 对白契约增强（R7，用户裁决 2026-09-17：动 dialect）
+
+不变式修订：`dialect/h3.ts` 编译契约的**对白发射层按官方契约增强**（本节）；其余编译行为零改动。影响面 = `buildDialogue` + `schema/h3-shots.ts` 输入契约 + 含对白的 golden 基线再生。
+
+**① 输入契约扩展**（`schema/h3-shots.ts` parseH3Shot）：`dialogue` 对象形态增三个可选布尔——`voiceover`（画外音）、`continues_across_cut`（台词跨本镜出口切点延续）、`truncated`（被片尾截断）；`<d>` 标签禁入输入的既有校验保留。
+
+**② speaker ID 分配算法**（编译作用域内确定性）：
+
+```
+按 shots 顺序扫描；含 dialogue 的 shot：
+  key = shot.who ?? `__anon_${shotIndex}`    // 无 who 的发声者按出现次序独立编号
+  首次出现 → 分配 S1、S2、…（递增）；同 key 跨镜保持同 ID
+```
+
+DirectingIR 管线：`characters[].id`（S1…）直接作为 speaker ID 源注入（工程级跨单元稳定，满足官方"同一说话人跨镜同 ID"）。
+
+**③ 发射格式**（`buildDialogue(shot, speakerId)`）：
+
+- 常规：`The speaker (S1) says: <d>[lang] text</d>`；`who` 存在时用 `${who} (S1) says: ...`
+- voiceover：`The speaker (S1) says in an off-screen voiceover: <d>[lang] text</d> while their lips remain completely closed.`（闭嘴声明用性别中性 their——与官方示例 his 的差异记为确定性选择，golden 锁定）
+- `continues_across_cut: true`：`<d>` 块后追加 `<scenetrans> the dialogue continues across the cut.`（官方要求切点两处标注——下一镜由其自身 dialogue 的入口语义承接）
+- `truncated: true`（仅末镜合法，机检校验）：`<d>[lang] text</d><cutoff>` 紧跟标签后
+- 无 dialogue 的 shot 发射不变；非对白编译路径（三字段/六段式的非 dialogue 部分）零改动
+
+**④ golden 再生策略**：仅含 dialogue 的 golden 基线按官方契约再生（提交信息注明 R7 裁决）；非对白 golden 逐字节不变。回归门 = 全量 vitest + dialect golden 双跑。
+
+**⑤ 下游影响**：`rules-h3.ts` 台词比对、camera-video 工作流、envelope——均消费编译后文本，格式增强向后兼容（新增标记为官方语法，非破坏）。
 
 ## 7. 递进修复与版本状态机
 
@@ -206,7 +235,7 @@ LLM 轨 `pm-continuity-auditor` **QC 八维矩阵**（Δ5，每镜逐维 verdict
 
 - 纯函数 TDD：DirectingIR schema 校验、G-purpose/G-duration/G-intents/G-refbinding/G-dialogue/G-prop/G-handoff 各机检谓词、tokenizer 预算边界、连续性台账匹配
 - 编排器全 mock（沿 compositing 模式）：happy path（3-Beat 迷你剧本 golden）/ 单镜失败不阻塞 / 修复循环 / S4 降级 / 两段式确认挂起与续跑 / 递进放宽触发
-- **不变式**：anima 全量测试零改动零失败；`dialect/h3.ts` 编译契约零改动；rules-h3 复用不修改；`camera-video` 三 stage 工具为下游消费者不改动
+- **不变式**：anima 全量测试零改动零失败；`dialect/h3.ts` 编译契约**除 §6.1 对白发射层增强（D-U7）外零改动**；rules-h3 复用不修改；`camera-video` 三 stage 工具为下游消费者不改动
 
 ## 10. 明确不做（本轮）
 

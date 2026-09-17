@@ -77,6 +77,11 @@ export interface DirectingShot {
   who?: string;
   shot_size: string;
   camera: string;
+  /** 导演级可选字段（h3-director-depth，编译时确定性投影进 what 文本） */
+  action?: string;
+  micro?: string;
+  carry?: string;
+  ambient?: string;
   /** 镜头内容描述（G-prop 出现覆盖判定用） */
   what: string;
   /** shot 级对白（D-U7 官方对白契约：dialect 发射层消费） */

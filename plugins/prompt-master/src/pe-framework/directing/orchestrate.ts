@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import type { ScriptIr, DirectingIr, DirectingBeat } from './ir-schema.js';
 import { validateScriptIr } from './ir-schema.js';
 import { checkDirectingIr } from './continuity-check.js';
+import { compileH3 } from '../dialect/h3.js';
 import {
   buildScriptAnalystPrompt, parseScriptIrOutput,
   buildBeatDirectorPrompt, parseBeatDirectorOutput,
@@ -165,6 +166,34 @@ export async function orchestrateDirecting(
     }
   }
   trace.push({ name: 'shot_loop', ms: performance.now() - tLoop });
+
+  // ── dialect 编译（spec §3：DirectingIR → dialect → 官方格式文本）──
+  // S3 填充 H3Shot 兼容内容字段 → compileH3 逐镜编译为分 stage 官方格式
+  for (const beat of ir.beats) {
+    for (const shot of beat.shots) {
+      try {
+        const h3Input = {
+          duration_seconds: shot.duration_seconds,
+          shots: [{
+            what: shot.what,
+            who: shot.who,
+            duration: shot.duration_seconds,
+            camera: shot.camera,
+            action: shot.action,
+            micro: shot.micro,
+            carry: shot.carry,
+            ambient: shot.ambient,
+            dialogue: shot.dialogue,
+          }],
+        };
+        const compiled = compileH3(h3Input, { stage: shot.stage });
+        shot.prompt = { text: compiled.text, token_count: 0 };
+      } catch (e) {
+        advisories.push(`compile_failed:${shot.id}:${(e as Error).message.slice(0, 120)}`);
+        shot.prompt = null;
+      }
+    }
+  }
 
   // 最终机器门（全工程）
   allGates = checkDirectingIr(ir, { strict: ir.meta.strict_prompt_validation === true });

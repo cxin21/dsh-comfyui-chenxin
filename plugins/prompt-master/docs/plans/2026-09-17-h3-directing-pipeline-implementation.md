@@ -147,7 +147,7 @@ tests/plugin/h3-directing.e2e.test.ts  # 端到端 mock（Task 7）
 - Task 2: 完成，commit cb46992。dialect 对白契约 + golden 再生级联。
 - Task 1: 完成，commit 04a29f6。DirectingIR schema。
 - **Task 7: 待实施（需新上下文续行）**——prompt-author.ts（1835 行）h3 分支路由切换：加 script/project/await_user_approval 参数、移除 h3-rating-gate（D-U4）、路由到 directing 编排器、旧 shots 路径移除。设计接口 spec §3 已定案。
-- **Task 8: 待实施（依赖 Task 7）**——收尾门（全量回归 + anima 零触碰核验 + 活体终验清单移交）。
+- Task 8: 完成，commit 4566e55。12 个过渡测试全部更新到新管线契约（author-loop 4/Level 3/judge 2/h3 full chain/eval fight CG/blueprint_id 归位）；orchestrate loop_exhausted 语义 + quality 计 S3 失败；**161 files / 1422 passed / 0 failed（基线持平）**，tsc 0 / eslint 0 / build OK / anima 零触碰。剩余用户待办：DSH 重载 dist 后真实 prompt_author(h3, script) 活体终验（五子代理链/envelope 键/工程三件套落盘）。
 - Task 1: 完成，commit 04a29f6。`directing/ir-schema.ts`：DirectingIr/ScriptIr 类型 + validateDirectingIr（9 违规用例全绿）+ PURPOSE_TAGS/STAGES/DURATION_RANGES 常量；unit 可选、ScriptIr.appearance_lock 可缺（校验器报）。12/12 绿，tsc 0，build OK。
 - Task 2: 完成，commit cb46992。schema/h3-shots.ts dialogue 对象三布尔 + dialect collectSpeakerIds/buildDialogue 四种发射形态 + aesthetics/check.ts 消费点加固；golden 再生级联（t2va-baker 81→89 tokens、tokenizer golden 76→84 raw、fixture 同步；非对白 golden 逐字节不变）。157 files / 1349 passed。
 （后续任务完成即回填）

@@ -3,7 +3,7 @@
   "texts": [
     {
       "id": "golden_t2va_baker",
-      "text": "integrated_multimodal_description: [Shot 1] A baker opens the shutters at sunrise. <d>[English] First batch of the morning.</d> [Shot 2] At 00:04.000, the camera cuts to Steam rises from sliced bread.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A"
+      "text": "integrated_multimodal_description: [Shot 1] A baker opens the shutters at sunrise. The speaker (S1) says: <d>[English] First batch of the morning.</d> [Shot 2] At 00:04.000, the camera cuts to Steam rises from sliced bread.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A"
     },
     {
       "id": "golden_t2va_sword",
@@ -25,15 +25,33 @@
       "id": "golden_ref2va_mei",
       "text": "subject_definitions: <Subject 1> is Neko from <Picture 1>.\n<Subject 2> is Mei from <Picture 2>.\n<Subject 3> is Rooftop from <Picture 3>.\n\nsummary: [reference generation] Neko (<Picture 1>), Mei (<Picture 2>), Rooftop (<Picture 3>) appear in a 8-second, 1-shot video with synchronized audio.\n\nretention_analysis: <Subject 1> from <Picture 1> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n<Subject 2> from <Picture 2> remains fully_preserved: identity, face, outfit, and styling unchanged across all shots.\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A"
     },
-    { "id": "golden_fl2va_multishot", "text": "N/A" },
-    { "id": "edge_zh", "text": "整合多模态描述: 一只猫坐在窗台上，看着夕阳。" },
-    { "id": "edge_ja", "text": "【ショット1】猫が屋上で風に髪をなびかせて立っている。" },
+    {
+      "id": "golden_fl2va_multishot",
+      "text": "N/A"
+    },
+    {
+      "id": "edge_zh",
+      "text": "整合多模态描述: 一只猫坐在窗台上，看着夕阳。"
+    },
+    {
+      "id": "edge_ja",
+      "text": "【ショット1】猫が屋上で風に髪をなびかせて立っている。"
+    },
     {
       "id": "edge_en_dialogue",
       "text": "[Shot 1] A cat stretches. <d>[English] Hello there!</d> [Shot 2] At 00:02.000, the camera cuts to The cat yawns."
     },
-    { "id": "edge_emoji_punct", "text": "masterpiece, best quality: a cat 🐱!!  (parentheses) — em dash…" },
-    { "id": "edge_spaces_empty", "text": "one  two   three" },
-    { "id": "edge_empty", "text": "" }
+    {
+      "id": "edge_emoji_punct",
+      "text": "masterpiece, best quality: a cat 🐱!!  (parentheses) — em dash…"
+    },
+    {
+      "id": "edge_spaces_empty",
+      "text": "one  two   three"
+    },
+    {
+      "id": "edge_empty",
+      "text": ""
+    }
   ]
 }

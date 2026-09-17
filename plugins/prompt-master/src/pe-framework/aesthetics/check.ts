@@ -79,8 +79,9 @@ function collectText(bp: BlueprintV1): string {
       if (s.action) parts.push(s.action);
       if (s.camera) parts.push(s.camera);
       if (s.shot_size) parts.push(s.shot_size);
-      const dlg = s.dialogue;
-      if (dlg != null && dlg.trim().length > 0) parts.push(dlg);
+      const dlg: unknown = s.dialogue;
+      const dlgText = dlg == null ? undefined : typeof dlg === 'object' && 'text' in dlg ? String((dlg as { text: unknown }).text) : String(dlg);
+      if (dlgText != null && dlgText.trim().length > 0) parts.push(dlgText);
       if (s.audio_focus) parts.push(s.audio_focus);
       if (s.music) parts.push(s.music);
       if (s.remark) parts.push(s.remark);

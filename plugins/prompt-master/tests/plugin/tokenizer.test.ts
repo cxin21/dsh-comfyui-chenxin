@@ -1,4 +1,4 @@
-import { describe, expect, it, afterAll } from 'vitest';
+﻿import { describe, expect, it, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -30,9 +30,9 @@ describe('H3 tokenizer (BPE, practitioner-verified against venv Python backend)'
     expect(countTokensH3(countOf('edge_empty')).tokens).toBe(5);
   });
 
-  it('golden t2va-baker framed count matches official budget.text_tokens (81)', () => {
-    expect(countTokensH3(countOf('golden_t2va_baker')).tokens).toBe(81);
-    expect(h3Tokenizer().count(countOf('golden_t2va_baker'))).toBe(76); // raw
+  it('golden t2va-baker framed count matches official budget.text_tokens (89, D-U7 speaker emission)', () => {
+    expect(countTokensH3(countOf('golden_t2va_baker')).tokens).toBe(89);
+    expect(h3Tokenizer().count(countOf('golden_t2va_baker'))).toBe(84); // raw
   });
 
   it('goldens: sword 155 / i2va 77 / fl2va 104', () => {

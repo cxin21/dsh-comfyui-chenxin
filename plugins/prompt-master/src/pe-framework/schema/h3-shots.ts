@@ -48,7 +48,16 @@ export interface H3Shot {
   carry?: string;
   ambient?: string;
   music?: string;
-  dialogue?: string | { text: string; language?: string };
+  /** 对白：字符串简式，或对象式（D-U7 官方对白契约：voiceover/continues_across_cut/truncated
+   *  三布尔由 dialect 发射层转换为官方标记——speaker 稳定 ID/voiceover 短语+闭嘴声明/<scenetrans>/<cutoff>）。
+   *  输入禁含 <d> 标记（标记由 dialect 发射，不由输入携带）。 */
+  dialogue?: string | {
+    text: string;
+    language?: string;
+    voiceover?: boolean;
+    continues_across_cut?: boolean;
+    truncated?: boolean;
+  };
   language?: string;
 }
 
@@ -159,17 +168,31 @@ function coerceShot(raw: unknown, index: number): H3Shot {
   }
   const music = musicVal != null ? (musicVal as string) : undefined;
   const dialogueRaw = r['dialogue'];
-  let dialogue: string | undefined;
+  let dialogue: string | { text: string; language?: string; voiceover?: boolean; continues_across_cut?: boolean; truncated?: boolean } | undefined;
   let language: string | undefined;
   if (dialogueRaw != null) {
     if (typeof dialogueRaw === 'object' && !Array.isArray(dialogueRaw)) {
       const d = dialogueRaw as Record<string, unknown>;
-      dialogue = stringOf(d['text'], `${label}.dialogue.text`);
+      const text = stringOf(d['text'], `${label}.dialogue.text`);
       language = d['language'] != null ? stringOf(d['language'], `${label}.dialogue.language`) : undefined;
+      const flag = (v: unknown, name: string): boolean => {
+        if (v != null && typeof v !== 'boolean') {
+          throw new ContractError(`${label}.dialogue.${name} must be a boolean`);
+        }
+        return v === true;
+      };
+      dialogue = {
+        text,
+        ...(language !== undefined ? { language } : {}),
+        ...(flag(d['voiceover'], 'voiceover') ? { voiceover: true } : {}),
+        ...(flag(d['continues_across_cut'], 'continues_across_cut') ? { continues_across_cut: true } : {}),
+        ...(flag(d['truncated'], 'truncated') ? { truncated: true } : {}),
+      };
     } else {
       dialogue = stringOf(dialogueRaw, `${label}.dialogue`);
     }
-    if (dialogue.includes('<d>') || dialogue.includes('</d>')) {
+    const dialogueText = typeof dialogue === 'string' ? dialogue : dialogue.text;
+    if (dialogueText.includes('<d>') || dialogueText.includes('</d>')) {
       throw new ContractError(`${label}.dialogue must not contain <d> markup`);
     }
   }

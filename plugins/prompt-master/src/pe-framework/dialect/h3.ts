@@ -12,6 +12,9 @@ import {
   MAX_PROMPT_CHARS,
   MAX_SHOT_FORMULA,
 } from '../schema/h3-shots.js';
+
+/** 对白契约发射的 shot 形状（D-U7）：即 H3Shot——dialogue 对象式携带三布尔由 buildDialogue 消费 */
+export type DialogueShot = H3Shot;
 import { registerDialect } from './registry.js';
 import type { DialectContract, DialectLicense } from './contract.js';
 import { contractGatesH3, auditH3Full } from '../audit/rules-h3.js';
@@ -93,12 +96,35 @@ function applySubjectLabels(text: string, shot: H3Shot, labels: Map<string, numb
   return text;
 }
 
-function buildDialogue(shot: H3Shot): string {
+/** 官方对白契约 speaker 分配（spec §6.1 / D-U7；源：h3-prompt-writing base-en.txt §4.4）：
+ *  含 dialogue 的 shot 按序分配稳定 ID——key = who ?? `__anon_{数组下标}`（无 who 的发声者按出现次序独立编号）；
+ *  同 key 跨镜保持同 ID（官方："A speaker keeps the same ID across shots"）。 */
+export function collectSpeakerIds(shots: H3Shot[]): Map<string, string> {
+  const m = new Map<string, string>();
+  let n = 1;
+  shots.forEach((s, i) => {
+    if (!s.dialogue) return;
+    const key = s.who ?? `__anon_${i}`;
+    if (!m.has(key)) m.set(key, `S${n++}`);
+  });
+  return m;
+}
+
+export function buildDialogue(shot: H3Shot, speakerId?: string): string {
   const raw = shot.dialogue;
   if (!raw) return '';
   const text = typeof raw === 'string' ? raw : raw.text;
   const lang = shot.language || (typeof raw === 'object' && raw.language) || detectLanguage(text);
-  return ` <d>[${lang}] ${text}</d>`;
+  const id = speakerId ?? 'S1';
+  const who = shot.who?.trim();
+  const identity = who ? `${who} (${id})` : `The speaker (${id})`;
+  const flags = typeof raw === 'object' ? raw : undefined;
+  const verb = flags?.voiceover ? 'says in an off-screen voiceover:' : 'says:';
+  let out = ` ${identity} ${verb} <d>[${lang}] ${text}</d>`;
+  if (flags?.truncated) return `${out}<cutoff>`;
+  if (flags?.continues_across_cut) out += ' <scenetrans> the dialogue continues across the cut.';
+  if (flags?.voiceover) out += ' while their lips remain completely closed.';
+  return out;
 }
 
 /** Phase 5：导演级可选字段确定性投影（存在才投影；引导词固定，语义由 persona 契约约束） */
@@ -111,7 +137,7 @@ function projectDirectorFields(shot: H3Shot): string {
   return parts.length > 0 ? ` ${parts.join(' ')}` : '';
 }
 
-export function buildShotLines(request: StoryRequest, subjectLabelsMap?: Map<string, number>): string[] {
+export function buildShotLines(request: StoryRequest, subjectLabelsMap?: Map<string, number>, speakerIds?: Map<string, string>): string[] {
   const labels = subjectLabelsMap ?? new Map<string, number>();
   const times = shotCutTimesFromShots(request.shots) ?? shotCutTimes(request.duration_seconds, request.shots.length);
   const lines: string[] = [];
@@ -126,7 +152,7 @@ export function buildShotLines(request: StoryRequest, subjectLabelsMap?: Map<str
     } else {
       body = `[Shot ${index}] At ${formatTimestamp(cut)}, the camera cuts to ${what}.`;
     }
-    lines.push(body + projectDirectorFields(shot) + buildDialogue(shot));
+    lines.push(body + projectDirectorFields(shot) + buildDialogue(shot, speakerIds?.get(shot.who ?? `__anon_${i}`)));
   });
   return lines;
 }
@@ -141,8 +167,8 @@ function musicOf(shots: H3Shot[]): string {
   return parts.length ? parts.join('; ') : 'N/A';
 }
 
-export function buildThreeFieldBody(request: StoryRequest): string {
-  const description = buildShotLines(request).join(' ');
+export function buildThreeFieldBody(request: StoryRequest, speakerIds?: Map<string, string>): string {
+  const description = buildShotLines(request, undefined, speakerIds).join(' ');
   return [
     `integrated_multimodal_description: ${description}`,
     '',
@@ -178,13 +204,13 @@ export function alignmentPreamble(stage: string, request: StoryRequest): string 
   return '';
 }
 
-export function buildKeyframeText(stage: string, request: StoryRequest): string {
+export function buildKeyframeText(stage: string, request: StoryRequest, speakerIds?: Map<string, string>): string {
   const preamble = alignmentPreamble(stage, request);
-  const body = buildThreeFieldBody(request);
+  const body = buildThreeFieldBody(request, speakerIds);
   return preamble ? `${preamble}\n\n${body}` : body;
 }
 
-export function buildRef2vaText(request: StoryRequest, depth?: 'quick' | 'director'): string {
+export function buildRef2vaText(request: StoryRequest, depth?: 'quick' | 'director', speakerIds?: Map<string, string>): string {
   const labels = subjectLabels(request.references);
   // Phase 3（h3-director-depth）：ref.description（可选）承载主体设计规范（身份/服装/材质/风格签名）——生命核落位
   const subjectDefinitions = request.references
@@ -221,7 +247,7 @@ export function buildRef2vaText(request: StoryRequest, depth?: 'quick' | 'direct
       );
     })
     .join('\n');
-  const detailed = buildShotLines(request, labels).join(' ');
+  const detailed = buildShotLines(request, labels, speakerIds).join(' ');
   return [
     `subject_definitions: ${subjectDefinitions}`,
     '',
@@ -238,9 +264,10 @@ export function buildRef2vaText(request: StoryRequest, depth?: 'quick' | 'direct
 }
 
 export function buildText(stage: string, request: StoryRequest, depth?: 'quick' | 'director'): string {
-  if (stage === 't2va') return buildThreeFieldBody(request);
-  if (KEYFRAME_STAGES.has(stage)) return buildKeyframeText(stage, request);
-  if (stage === 'ref2va') return buildRef2vaText(request, depth);
+  const speakerIds = collectSpeakerIds(request.shots);
+  if (stage === 't2va') return buildThreeFieldBody(request, speakerIds);
+  if (KEYFRAME_STAGES.has(stage)) return buildKeyframeText(stage, request, speakerIds);
+  if (stage === 'ref2va') return buildRef2vaText(request, depth, speakerIds);
   throw new Error(`unknown stage: ${JSON.stringify(stage)}`);
 }
 

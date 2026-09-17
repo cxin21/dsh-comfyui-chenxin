@@ -1,4 +1,4 @@
-# H3 Agentic 短剧导演管线实施计划
+﻿# H3 Agentic 短剧导演管线实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -140,7 +140,7 @@ tests/plugin/h3-directing.e2e.test.ts  # 端到端 mock（Task 7）
 - [ ] anima 零触碰核验：`git diff --stat` 确认 `compositing/**`（Task 6 新文件除外）与 `dialect/anima*` 无改动
 - [ ] 活体终验清单移交用户：DSH 重载 dist 后真实 prompt_author(h3, script) 端到端（五子代理链/envelope 键/工程三件套落盘）
 
-- Task 6: 完成，commit 316d69f。`directing/orchestrate.ts` 五段编排器 + `engineering/emit.ts` 三件套幂等落盘。161 files / 1422 passed。
+- Task 6+compile: 完成，commit 316d69f + 7bb8029（orchestrate.ts 加 compileH3 逐镜编译步骤）。`directing/orchestrate.ts` 五段编排器 + `engineering/emit.ts` 三件套幂等落盘。161 files / 1422 passed。
 - Task 5: 完成（同 commit）。emit 3 用例全绿。
 - Task 4: 完成，commit cec6669。prompts.ts：五槽位 persona + buildXxxPrompt + parseXxxOutput。27 用例全绿。
 - Task 3: 完成，commit 6554165。12 机检门全绿。

@@ -75,6 +75,10 @@ export interface DirectingShot {
   duration_seconds: number;
   shot_size: string;
   camera: string;
+  /** 镜头内容描述（G-prop 出现覆盖判定用） */
+  what: string;
+  /** shot 级对白（D-U7 官方对白契约：dialect 发射层消费） */
+  dialogue?: string | { text: string; language?: string; voiceover?: boolean; continues_across_cut?: boolean; truncated?: boolean };
   transition?: string;
   technique?: string | null;
   tags?: string[];

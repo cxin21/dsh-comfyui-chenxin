@@ -197,14 +197,26 @@ export interface ShotWriterInput {
   locations: Array<{ id: string; name: string; spatial_landmarks: string }>;
 }
 
+/** #29-6：S3 prompt 逐镜重调成本——同一 beat 对象 + 相同 characters/locations 引用只序列化一次
+ *  （WeakMap 随编排轮次对象回收；引用组任一变更即失效，不做跨对象假设） */
+const shotWriterBodyCache = new WeakMap<object, { body: string; c: unknown; l: unknown }>();
+
 export function buildShotWriterPrompt(
   beat: DirectingBeat,
   characters: Array<{ id: string; name: string; appearance_lock: string }>,
   locations: Array<{ id: string; name: string; spatial_landmarks: string }>,
 ): string {
+  const hit = shotWriterBodyCache.get(beat);
+  let body: string;
+  if (hit && hit.c === characters && hit.l === locations) {
+    body = hit.body;
+  } else {
+    body = JSON.stringify({ beat, characters, locations }, null, 2);
+    shotWriterBodyCache.set(beat, { body, c: characters, l: locations });
+  }
   return buildTaskText([
     { tag: 'task_persona', body: SHOT_WRITER_PERSONA },
-    { tag: 'blueprint_v1', body: JSON.stringify({ beat, characters, locations }, null, 2) },
+    { tag: 'blueprint_v1', body },
     {
       tag: 'output_contract',
       body: '仅输出一个 JSON 对象（裸 JSON）：{"shots":[{"what":"…","who":"<原样回抄 blueprint_v1.beat.shots[].who>","duration_seconds":<4-15 整数>,"camera":"…","action":"…","micro":"…","carry":"…","ambient":"…","dialogue":{"text":"…","language":"English"}}]}——shots 必须与 blueprint_v1.beat.shots 一一对应、顺序一致（P1-3 对齐依据），who 不许改名。',

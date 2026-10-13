@@ -194,11 +194,11 @@ describe('checkDirectingIr（spec §6：12 机器门）', () => {
       ir.beats[0].shots[1].dialogue = { text: '太安静了:你听', language: 'Chinese' }
     })
     expect(byRule(colonAscii, 'G-dialogue').some((g) => g.detail.includes('冒号'))).toBe(true)
-    // 标签内角色名 → critical
+    // 标签内身份短语前缀（名+说/名 (Sx)/名 says）→ critical（#29-3：自然提及人名不再判死）
     const nameIn = gatesFor((ir) => {
       ir.beats[0].shots[1].dialogue = { text: '御姐说太安静了', language: 'Chinese' }
     })
-    expect(byRule(nameIn, 'G-dialogue').some((g) => g.detail.includes('角色名'))).toBe(true)
+    expect(byRule(nameIn, 'G-dialogue').some((g) => g.detail.includes('身份短语'))).toBe(true)
   })
 
   it('R5（G-cameramotion）：camera 缺失/无运动语汇 → critical', () => {
@@ -320,5 +320,67 @@ describe('checkDirectingIr（spec §6：12 机器门）', () => {
       { strict: true },
     )
     expect(byRule(strictEcho, 'G-unit').find((g) => g.detail.includes('echo'))?.severity).toBe('critical')
+  })
+})
+
+describe('#29（A 路 P2 余项）：门谓词打磨', () => {
+  it('#29-1 G-duration：duration_seconds 缺失 → important 门（不再 NaN 静默过门）', () => {
+    const gates = gatesFor((ir) => {
+      delete (ir.beats[0].shots[0] as unknown as Record<string, unknown>).duration_seconds
+    })
+    const g = byRule(gates, 'G-duration').filter((x) => x.detail.includes('B01-S1'))
+    expect(g.length).toBe(1)
+    expect(g[0].severity).toBe('important')
+    expect(g[0].detail).toContain('缺失')
+  })
+
+  it('#29-3 G-dialogue：台词自然提及人名合法；身份短语前缀仍禁', () => {
+    // 合法：自然口语含角色名（原 includes 子串判死误伤）
+    const ir = buildGoodIr()
+    const named = ir.characters.find((c) => c.name && c.name.trim() !== '')!
+    const name = named.name
+    const line = `喂，${name}，站住。`
+    const shot = ir.beats[1].shots[1]
+    // 逐字对账面 = 全 Beat 台词；双保险对账 = d.line 与发射文本一致
+    const priorLines = ir.beats[1].shots
+      .flatMap((s) => (s.direction?.dialogue?.line ? [s.direction.dialogue.line] : []))
+    shot.dialogue = { text: line, truncated: false } as never
+    shot.direction = { ...shot.direction, dialogue: { speaker_id: named.id, line, addressee_id: null } } as never
+    const script = `前文。${[...new Set([...priorLines, line])].join(' ')} 后文。`
+    const ok = checkDirectingIr(ir, { scriptText: script })
+    // 靶断言：自然提及人名不触发身份短语门（旧 includes 子串判死会触发「禁角色名」）
+    expect(byRule(ok, 'G-dialogue').some((g) => g.detail.includes('身份短语'))).toBe(false)
+    // 非法：身份短语前缀走私（Name (Sx) says: …）
+    const ir2 = buildGoodIr()
+    const name2 = ir2.characters.find((c) => c.name && c.name.trim() !== '')!.name
+    const line2 = `${name2} (S1) says: hello there`
+    const shot2 = ir2.beats[1].shots[1]
+    shot2.dialogue = { text: line2, truncated: false } as never
+    const bad = checkDirectingIr(ir2, { scriptText: `x ${line2} y` })
+    expect(byRule(bad, 'G-dialogue').some((g) => g.detail.includes('身份短语'))).toBe(true)
+  })
+
+  it('#29-4 G-sound：N/A 注记形态合法', () => {
+    const ok = gatesFor((ir) => {
+      ir.meta.sound_events = ['1 开场基底 城市底噪', 'N/A（无高频锚点）', '3 仪式启动音 门铃']
+    })
+    expect(byRule(ok, 'G-sound')).toEqual([])
+    const ok2 = gatesFor((ir) => {
+      ir.meta.sound_events = ['1 开场基底 城市底噪', '2 N/A - ambient only', '3 仪式启动音 门铃']
+    })
+    expect(byRule(ok2, 'G-sound')).toEqual([])
+  })
+
+  it('#29-5 G-unit echo：首末 motif 词元重叠 = echo 在场，不判缺失', () => {
+    const gates = gatesFor((ir) => {
+      ir.beats[0].unit = { dramatic_task: '开场立威', visual_motif: 'neon gate in rain', hook: 'h1' }
+      ir.beats[1].unit = { dramatic_task: '终局收束', visual_motif: 'the same neon gate, now dry', hook: 'h2' }
+    })
+    expect(byRule(gates, 'G-unit').filter((g) => g.detail.includes('echo')).length).toBe(0)
+    const gatesCjk = gatesFor((ir) => {
+      ir.beats[0].unit = { dramatic_task: '开场', visual_motif: '雨中霓虹', hook: 'h1' }
+      ir.beats[1].unit = { dramatic_task: '终局', visual_motif: '霓虹熄灭时', hook: 'h2' }
+    })
+    expect(byRule(gatesCjk, 'G-unit').filter((g) => g.detail.includes('echo')).length).toBe(0)
   })
 })

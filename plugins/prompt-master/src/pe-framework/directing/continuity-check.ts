@@ -66,6 +66,20 @@ function themeWordCount(theme: string): number {
   return ascii + Math.ceil(cjk / 2);
 }
 
+/** #29-3：正则元字符转义（角色名来自 LLM/用户产出，可含元字符） */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** #29-5：motif 词元 = ASCII 词（小写）+ CJK 二元组（echo 重叠豁免用） */
+function motifTokens(motif: string): string[] {
+  const words = motif.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const cjk = motif.match(/[\u4e00-\u9fff]/g) ?? [];
+  const bigrams: string[] = [];
+  for (let i = 0; i + 1 < cjk.length; i++) bigrams.push(`${cjk[i]}${cjk[i + 1]}`);
+  return [...words, ...bigrams];
+}
+
 export function checkDirectingIr(ir: DirectingIr, opts?: CheckOpts): DirectingGate[] {
   const gates: DirectingGate[] = [];
   const strict = opts?.strict ?? false;
@@ -89,6 +103,11 @@ export function checkDirectingIr(ir: DirectingIr, opts?: CheckOpts): DirectingGa
   for (const { shot } of allShots) {
     const range = DURATION_RANGES[shot.purpose_tag as PurposeTag];
     const d = shot.duration_seconds;
+    // #29-1（A 路 P2）：缺/非数值不再静默过门——undefined 参与 < 比较 = NaN 恒 false 的语言陷阱
+    if (typeof d !== 'number' || !Number.isFinite(d)) {
+      push('G-duration', 'important', `shots[${shot.id}] duration_seconds 缺失或非数值（各 stage 必填，硬约束 [${H3_MIN_DURATION},${H3_MAX_DURATION}]s）`);
+      continue;
+    }
     if (range && (d < range[0] || d > range[1])) {
       push(
         'G-duration',
@@ -199,9 +218,11 @@ export function checkDirectingIr(ir: DirectingIr, opts?: CheckOpts): DirectingGa
     if (text.includes(':') || text.includes('：')) {
       push('G-dialogue', 'critical', `shots[${shot.id}] <d> 标签内禁冒号（口语原文 only）: "${text.slice(0, 40)}"`);
     }
-    const nameHit = charNames.find((n) => text.includes(n));
+    // #29-3（A 路 P2，R4 谓词收窄）：禁的是「身份短语走私进 <d>」（Name 前缀接 (Sx)/says/said 形态），
+    // 不是台词自然提及人名（「侦探，你终于来了」合法）——原 includes 子串判死误伤合法台词。
+    const nameHit = charNames.find((n) => n && new RegExp(`^\\s*${escapeRegExp(n)}\\s*(\\(|says\\b|said\\b|说)`, 'i').test(text));
     if (nameHit) {
-      push('G-dialogue', 'critical', `shots[${shot.id}] <d> 标签内禁角色名 "${nameHit}"（身份短语在标签外）`);
+      push('G-dialogue', 'critical', `shots[${shot.id}] <d> 标签内禁身份短语前缀 "${nameHit}"（身份短语在标签外）`);
     }
     if (opts?.scriptText != null && !opts.scriptText.includes(text)) {
       push('G-dialogue', 'critical', `shots[${shot.id}] <d> 文本与 script 台词不逐字（source_script_hash 对账失败）: "${text.slice(0, 40)}"`);
@@ -290,8 +311,8 @@ export function checkDirectingIr(ir: DirectingIr, opts?: CheckOpts): DirectingGa
         push('G-sound', 'critical', `sound_events[${i}] 空条目（无对应写 N/A，禁跳号）`);
         return;
       }
-      // N/A 占位合法（spec §4「无对应写 N/A」；允许「N N/A」带序号形态）
-      if (/^n\/?a$/i.test(entry.replace(/^\d+\s*/, ''))) return;
+      // N/A 占位合法（spec §4「无对应写 N/A」；#29-4 容注记形态：「N/A（无合唱）」「2 N/A - ambient only」）
+      if (/^n\/?a(?![a-z])/i.test(entry.replace(/^\d+\s*/, ''))) return;
       const ordinal = entry.match(/^(\d+)\s*/);
       if (!ordinal) {
         push('G-sound', 'critical', `sound_events[${i}] 缺序号前缀（每项含 time/event，格式「${i + 1} 槽名 事件」）: "${entry.slice(0, 30)}"`);
@@ -384,11 +405,20 @@ export function checkDirectingIr(ir: DirectingIr, opts?: CheckOpts): DirectingGa
   const lastUnit = ir.beats[ir.beats.length - 1]?.unit;
   const firstMotif = String(firstUnit?.visual_motif ?? '').trim();
   const lastMotif = String(lastUnit?.visual_motif ?? '').trim();
-  if (ir.beats.length > 1 && firstMotif !== '' && lastMotif !== '' && norm(firstMotif) !== norm(lastMotif)) {
+  // #29-5（A 路 P2「echo 门过强」）：echo 判定从全等放宽为词元重叠豁免——首末 motif 共享任一
+  // ASCII 词或 CJK 二元组即视为 echo 在场（「neon gate」→「the same neon gate, now dry」不判缺失），
+  // 只对词元完全不相交的意象判 echo 缺失（「红伞」vs「蓝灯」仍判）。
+  if (
+    ir.beats.length > 1 &&
+    firstMotif !== '' &&
+    lastMotif !== '' &&
+    norm(firstMotif) !== norm(lastMotif) &&
+    motifTokens(firstMotif).filter((t) => motifTokens(lastMotif).includes(t)).length === 0
+  ) {
     push(
       'G-unit',
       strict ? 'critical' : 'warning',
-      `首末单元意象 echo 缺失: visual_motif "${firstMotif}" ≠ "${lastMotif}"（N6 首末 echo）`,
+      `首末单元意象 echo 缺失: visual_motif "${firstMotif}" ≠ "${lastMotif}"（N6 首末 echo；词元零重叠）`,
     );
   }
 

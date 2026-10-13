@@ -220,6 +220,8 @@ DirectingIR 管线：`characters[].id`（S1…）直接作为 speaker ID 源注�
 版本登记：每次 S3/S5 产出记入 continuity_ledger（版本/上游 hash/变化摘要）
 ```
 
+> **注记（#29-2 裁决，2026-10-13）**：「仅受影响镜头」的射程 = 门 detail 点名本 shot.id **或本 beat.id** 的镜——meta 级 gate 不入射程；beat 级 gate 点名时该 Beat 全部镜入修复射程是**有意设计**（R10 裁决：Beat 级问题逐镜修，不按「预算误摊」处理）。S5 复审为机器门复审（确定性零成本），LLM 复审仍属 S4 每镜一次（见 §11 第 8 条）。
+
 ## 8. 错误处理与降级
 
 | 失败点              | 语义                                                                             |

@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { registerAuthorTool, setAuthorIntentProvider, setAuthorJudgeDeps, setDirectingDeps } from '../../src/tools/prompt-author.js';
 import { createBlueprintRepo } from '../../src/pe-framework/blueprint/repo.js';
 import { stubCtx, runTool, textStream, dDeps, dBeat, dShot } from './helpers.js';
@@ -137,7 +137,7 @@ describe('prompt_author blueprint Level 3 (t22 F1/F3 回归锁, directing)', () 
     const v = JSON.parse(String(await runTool(ctx, def, { target: 'h3', input: '8镜打斗', judge_mode: 'off' })));
     expect(v.next_action).toBe('manual');
     expect(v.advisories).toContain('loop_exhausted:true');
-    expect(v.observability.corrections).toBe(2);
+    expect(v.observability.corrections).toBe(4); // P0-1（A 路审查）：≤2 轮/镜——2 镜 × 2 轮 = 4
     setDirectingDeps(null);
   });
 });

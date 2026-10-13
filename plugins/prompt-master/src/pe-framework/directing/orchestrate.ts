@@ -54,7 +54,7 @@ export interface DirectingOutcome {
   corrections: number;
   /** S5 修复轮耗尽且仍有关键门（spec §7 loop_exhausted 语义） */
   loopExhausted: boolean;
-  auditor?: { verdict: string; findings: unknown[] };
+  auditor?: { verdict: string; findings: unknown[]; shot_id?: string };
   trace: Array<{ name: string; ms: number }>;
 }
 
@@ -62,7 +62,21 @@ const SHOTS_PER_REPAIR = 2;
 
 /** P2-4c（对抗审查）：门 detail 点名镜/Beat 用词边界匹配——B01-S1 不得误伤 B01-S10（includes 子串陷阱） */
 function mentionsId(detail: string, id: string): boolean {
-  return new RegExp(`(?<![A-Za-z0-9_-])${id}(?![A-Za-z0-9_-])`).test(detail);
+  // P1-4（A 路审查）：id 来自 LLM 产出，可能含正则元字符——未转义会 SyntaxError 崩链
+  const safe = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![A-Za-z0-9_-])${safe}(?![A-Za-z0-9_-])`).test(detail);
+}
+
+/**
+ * P0-1 伴生（A 路审查 P2#9）：修复产物只允许写回 prompt 层内容键——蓝图键（id/stage/
+ * reference_plan/continuity_handoff/direction/shot_intent）被 LLM 幻觉带出时直接丢弃（蓝图冻结）。
+ */
+const REPAIRABLE_KEYS = new Set([
+  'what', 'who', 'duration_seconds', 'shot_size', 'camera', 'transition', 'technique',
+  'action', 'micro', 'carry', 'ambient', 'sound', 'music', 'dialogue',
+]);
+function pickRepairable(repaired: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(repaired).filter(([k]) => REPAIRABLE_KEYS.has(k)));
 }
 
 export async function orchestrateDirecting(
@@ -90,6 +104,9 @@ export async function orchestrateDirecting(
     const resumeCheck = validateDirectingIr(resume);
     if (!resumeCheck.ok) throw new Error(`resumeStoryboard 校验失败: ${resumeCheck.missing.join('; ')}`);
     advisories.push('resume_approved_plan');
+    // P1-1（A 路审查）：resume 与 await_user_approval 同传 → 忽略挂起（挂起只属新鲜请求，D-U7）——
+    // 旧实现照挂 = 已带批准稿还等第二次批准，永久死锁。advisory 可观测。
+    if (input.awaitUserApproval) advisories.push('await_user_approval_ignored_resume');
   }
 
   // S1/S2 产物提升到函数作用域：fresh 路径填充；resume 路径由 resumeStoryboard 承载（下方 ir 二选一装配）
@@ -120,10 +137,12 @@ export async function orchestrateDirecting(
     ? resume.meta.source_script_hash
     : createHash('sha256').update(scriptText).digest('hex');
 
-  // 组装 DirectingIR（S3 填充 prompt，S4 填充 audit）；resume 原样承载（ledger 拷贝防外部突变）
+  // 组装 DirectingIR（S3 填充 prompt，S4 填充 audit）
+  // P1-5（A 路审查）：resume 深拷贝——浅拷贝与调用方共享 beats/shots 引用，S3/S5 的 Object.assign
+  // 回填会突变调用方对象（同稿重跑携带脏状态）。structuredClone 断开全部共享。
   let ir: DirectingIr;
   if (resume) {
-    ir = { ...resume, continuity_ledger: [...resume.continuity_ledger] };
+    ir = structuredClone(resume);
   } else {
     ir = {
       meta: {
@@ -148,7 +167,15 @@ export async function orchestrateDirecting(
         }
         return merged;
       })(),
-      beats: beats as DirectingIr['beats'],
+      // P1-2（A 路审查）：S2 幻觉 prompt 不得击穿 R13 skip——新鲜装配只接受蓝图层字段，
+      // prompt/audit 一律剥除（只能由编排内 S3/S4 生产），否则 LLM 幻觉稿会当「已批准稿」跳过 S3/S4/S5 且 quality=passed。
+      beats: (beats as DirectingIr['beats']).map((b) => ({
+        ...b,
+        shots: b.shots.map((s) => {
+          const { prompt: _stripPrompt, audit: _stripAudit, ...rest } = s as unknown as Record<string, unknown>;
+          return rest as unknown as DirectingBeat['shots'][number];
+        }),
+      })),
       continuity_ledger: [],
     };
 
@@ -183,7 +210,8 @@ export async function orchestrateDirecting(
       scriptTextForGates = undefined;
     }
   }
-  if (input.awaitUserApproval) {
+  // P1-1（A 路审查）：挂起只属新鲜请求——resume 已带批准稿，再挂起 = 永久死锁
+  if (input.awaitUserApproval && !resume) {
     if (deps.emit) deps.emit(ir);
     return {
       ok: true, status: 'awaiting_approval', quality: 'degraded',
@@ -198,6 +226,9 @@ export async function orchestrateDirecting(
   const compiledGates: Array<{ rule: string; severity: string; detail: string; source: string }> = [];
   // envelope 投影用最近一次审计裁决（R10：修复触发改用镜内局部变量，杜绝跨镜泄漏）
   let lastAuditorResult: { verdict: string; findings: Array<{ severity: string; dimension: string; problem: string; requiredFix: string }> } | undefined;
+  let lastAuditorShotId: string | undefined; // P2#2（A 路审查）：投影标注来源镜——R13 跳过镜不再滞留前镜裁决
+  // P0-1（A 路审查）：按镜修复预算台账——终局耗尽判定用（镜烧满 2 轮仍被门点名 → loop_exhausted）
+  const repairStats = new Map<string, { beatId: string; rounds: number }>();
 
   for (const beat of ir.beats) {
     for (const shot of beat.shots) {
@@ -217,18 +248,29 @@ export async function orchestrateDirecting(
           buildShotWriterPrompt(beat, ir.characters, ir.locations),
         );
         const content = parseShotWriterOutput(raw);
-        // 将 S3 产出按 shot id 匹配回填
-        const match = content.find((c: Record<string, unknown>) => c.who === shot.who || (beat.shots.indexOf(shot) === 0 && !c.who));
+        // P1-3（A 路审查）：who 三态矛盾（契约 who:"S1" / S2 用名 / S2 缺省 null）使 who 匹配脆弱——
+        // 三级对齐：who 精确匹配 → 产出数=镜数按序对齐 → 单产出直取；仍不中 = 显式失败
+        //（advisory + prompt:null + writerFailures，quality 降级），不再静默丢弃且台账照登 prompt_v1 撒谎。
+        const idx = beat.shots.indexOf(shot);
+        let match: Record<string, unknown> | undefined = content.find(
+          (c: Record<string, unknown>) => typeof c.who === 'string' && c.who !== '' && shot.who != null && c.who === shot.who,
+        );
+        if (!match && content.length === beat.shots.length && beat.shots.length > 1) match = content[idx];
+        if (!match && content.length === 1) match = content[0];
         if (match && typeof match === 'object') {
           Object.assign(shot, match);
+          // R11（spec §5/§7 版本登记）：S3 产出登记进 continuity_ledger（版本/上游设计 hash）
+          ir.continuity_ledger.push({
+            check: 'shot_prompt_version',
+            beat_span: shot.id,
+            status: 'ok',
+            note: `prompt_v1 @ ${sourceScriptHash.slice(0, 8)}`,
+          });
+        } else {
+          advisories.push(`shot_writer_unmatched:${shot.id}:产出 ${content.length} 项无法对齐本镜（who=${String(shot.who ?? '')}）`);
+          shot.prompt = null;
+          writerFailures++;
         }
-        // R11（spec §5/§7 版本登记）：S3 产出登记进 continuity_ledger（版本/上游设计 hash）
-        ir.continuity_ledger.push({
-          check: 'shot_prompt_version',
-          beat_span: shot.id,
-          status: 'ok',
-          note: `prompt_v1 @ ${sourceScriptHash.slice(0, 8)}`,
-        });
       } catch (e) {
         if (e instanceof CallerCancelledError) throw e; // P2-5：取消不得被吞成 advisory（zombie 防线）
         advisories.push(`shot_writer_failed:${shot.id}:${(e as Error).message.slice(0, 120)}`);
@@ -251,25 +293,31 @@ export async function orchestrateDirecting(
         const audit = parseContinuityAuditorOutput(auditRaw);
         shotAuditor = audit;
         lastAuditorResult = audit;
+        lastAuditorShotId = shot.id;
         shot.audit = { gates, findings: audit.findings, verdict: audit.verdict };
       } catch (e) {
         if (e instanceof CallerCancelledError) throw e; // P2-5：取消不得被吞成 advisory（zombie 防线）
         advisories.push(`auditor_skipped:${shot.id}:${(e as Error).message.slice(0, 120)}`);
       }
 
-      // S5 修复（R10，spec §5「仅受影响镜头」/§7 修订记录：每镜 1 次机会 + 全局 SHOTS_PER_REPAIR=2）：
-      // 触发 = critical/important gate 明细点名本 shot 或本 beat（镜面违规），
-      // 或本镜审计 needs_revision；meta 级 gate（sound/signature/unit 等）不在镜修复射程
-      // （蓝图冻结——S5 只修 prompt 层），不得触发。
-      const affectedByGates = gates.some(
-        (g) =>
-          (g.severity === 'critical' || g.severity === 'important') &&
-          (mentionsId(g.detail, shot.id) || mentionsId(g.detail, beat.id)),
-      );
-      const needsRevision = shotAuditor?.verdict === 'needs_revision';
-      if ((affectedByGates || needsRevision) && deps.repairerRunner && corrections < SHOTS_PER_REPAIR) {
+      // S5 修复（R10，spec §5「仅受影响镜头」/§7「复审 → ≤2 轮/镜」）：
+      // P0-1（A 路审查）修正三处失真：① 预算按镜计数（旧实现全局共 2 次、每镜至多 1 次）；
+      // ② 每轮修复后机器门复审（确定性零成本）——门未清才进下一轮（LLM 复审仍属 S4 每镜一次）；
+      // ③ 耗尽判定移到终局门（下方 loopExhausted）：烧满 2 轮仍被 critical/important 点名 →
+      //    loop_exhausted（ok=false），不再出现「单镜 1 次 < 全局预算 2 → 修不掉的 critical 以 ok=true 放行」。
+      const shotAffected = (gs: Array<{ rule: string; severity: string; detail: string; source: string }>) =>
+        gs.some(
+          (g) =>
+            (g.severity === 'critical' || g.severity === 'important') &&
+            (mentionsId(g.detail, shot.id) || mentionsId(g.detail, beat.id)),
+        );
+      let shotGates = gates;
+      let shotRounds = 0;
+      let needsRevision = shotAuditor?.verdict === 'needs_revision';
+      while ((shotAffected(shotGates) || needsRevision) && deps.repairerRunner && shotRounds < SHOTS_PER_REPAIR) {
+        shotRounds++;
         corrections++;
-        const gateViolations = gates
+        const gateViolations = shotGates
           .filter((g) => (g.severity === 'critical' || g.severity === 'important') && (mentionsId(g.detail, shot.id) || mentionsId(g.detail, beat.id)))
           .map((g) => `${g.rule}(${g.severity}): ${g.detail}`);
         const auditorFixes = (shotAuditor?.findings ?? []).map((f) => `[${f.severity}] ${f.requiredFix}`);
@@ -278,7 +326,7 @@ export async function orchestrateDirecting(
             buildRepairerPrompt(shot, gateViolations, auditorFixes),
           );
           const repaired = parseRepairerOutput(repairRaw);
-          Object.assign(shot, repaired);
+          Object.assign(shot, pickRepairable(repaired as unknown as Record<string, unknown>));
           // R11（spec §5/§7 版本登记）：S5 产出登记进 continuity_ledger
           ir.continuity_ledger.push({
             check: 'shot_prompt_version',
@@ -289,8 +337,14 @@ export async function orchestrateDirecting(
         } catch (e) {
           if (e instanceof CallerCancelledError) throw e; // P2-5：取消不得被吞成 advisory（zombie 防线）
           advisories.push(`repair_failed:${shot.id}:${(e as Error).message.slice(0, 120)}`);
+          break;
         }
+        // 复审（机器门，确定性零成本）：整 IR 重算后只看本镜是否仍被点名；审计裁决本轮已消费
+        shotGates = checkDirectingIr(ir, { strict: ir.meta.strict_prompt_validation === true, scriptText: scriptTextForGates });
+        needsRevision = false;
+        if (!shotAffected(shotGates)) break;
       }
+      repairStats.set(shot.id, { beatId: beat.id, rounds: shotRounds });
     }
   }
   trace.push({ name: 'shot_loop', ms: performance.now() - tLoop });
@@ -395,7 +449,7 @@ export async function orchestrateDirecting(
               rule: 'G-budget',
               severity: 'critical',
               detail: `shots[${shot.id}] 超预算: text_tokens=${budget.textTokens} effective_cap=${budget.effectiveCap} char=${budget.charCount}/${budget.charLimit}${budget.tokenOver ? ' (token_over)' : ''}${budget.charOver ? ' (char_over)' : ''}`,
-              source: 'directing/check',
+              source: 'directing/budget', // P2#1（A 路审查）：来源归因修正（旧值 directing/check 误导）
             });
           }
           shot.prompt = { text: compiled.text, token_count: budget.textTokens };
@@ -417,8 +471,18 @@ export async function orchestrateDirecting(
     ...compiledGates,
   ];
   const hasCritical = allGates.some((g) => g.severity === 'critical');
-  // S5 耗尽语义（spec §7）：修复轮用尽且仍有关键门 → loop_exhausted（storyboard 仍是有效 JSON）
-  const loopExhausted = corrections >= SHOTS_PER_REPAIR && hasCritical;
+  // S5 耗尽语义（spec §7，P0-1 重构）：按镜预算烧满 2 轮的镜，在终局门（含 R6/R7 编译步门）
+  // 仍被 critical/important 点名 → loop_exhausted（storyboard 仍是有效 JSON，next_action=manual）
+  const exhaustedShots = [...repairStats.entries()].filter(([, s]) => s.rounds >= SHOTS_PER_REPAIR);
+  const loopExhausted =
+    exhaustedShots.length > 0 &&
+    exhaustedShots.some(([id, s]) =>
+      allGates.some(
+        (g) =>
+          (g.severity === 'critical' || g.severity === 'important') &&
+          (mentionsId(g.detail, id) || mentionsId(g.detail, s.beatId)),
+      ),
+    );
   if (loopExhausted) advisories.push('loop_exhausted:true');
   // ok=false 仅在修复耗尽（闭环无法收敛）；部分失败（S3 单镜/S4 降级）→ ok=true + quality=degraded
   const ok = !loopExhausted;
@@ -437,7 +501,7 @@ export async function orchestrateDirecting(
     advisories,
     corrections,
     loopExhausted,
-    ...(lastAuditorResult !== undefined ? { auditor: lastAuditorResult } : {}),
+    ...(lastAuditorResult !== undefined ? { auditor: { ...lastAuditorResult, shot_id: lastAuditorShotId } } : {}),
     trace,
   };
 }

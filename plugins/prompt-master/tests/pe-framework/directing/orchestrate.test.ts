@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { orchestrateDirecting, type DirectingDeps } from '../../../src/pe-framework/directing/orchestrate.js'
+import { checkDirectingIr } from '../../../src/pe-framework/directing/continuity-check.js'
 import type { ScriptIr } from '../../../src/pe-framework/directing/ir-schema.js'
 import { CallerCancelledError } from '../../../src/pe-framework/llm/cancel.js'
 
@@ -240,6 +241,112 @@ describe('P2-4/P2-5（对抗审查修复）：resume 对账 / 词边界 / 取消
         baseDeps({ shotWriterRunner: async () => { throw new CallerCancelledError('已被调用方取消') } }),
       ),
     ).rejects.toThrow(/已被调用方取消/)
+  })
+})
+
+describe('A 路对抗审查回归：P0×2 / P1×5 / P2 投影', () => {
+  it('P0-1a：单镜违规一轮修复复审通过 → repairer 恰 1 次，loopExhausted=false', async () => {
+    let repairs = 0
+    const r = await orchestrateDirecting(
+      { script: 'x' },
+      baseDeps({
+        beatDirectorRunner: async () =>
+          JSON.stringify({ beats: [{ ...BEATS[0], shots: [{ ...BEATS[0].shots[0], sound: '' }] }] }),
+        repairerRunner: async () => {
+          repairs++
+          return JSON.stringify({ what: 'wide shot', who: null, sound: 'rain on glass' })
+        },
+      }),
+    )
+    expect(repairs).toBe(1)
+    expect(r.ok).toBe(true)
+    expect(r.loopExhausted).toBe(false)
+  })
+
+  it('P0-1b：结构性修不掉 → 每镜烧满 2 轮 → loopExhausted=true、ok=false（旧实现 1 次即止且 ok=true）', async () => {
+    let repairs = 0
+    const r = await orchestrateDirecting(
+      { script: 'x' },
+      baseDeps({
+        beatDirectorRunner: async () =>
+          JSON.stringify({ beats: [{ ...BEATS[0], shots: [{ ...BEATS[0].shots[0], sound: '' }] }] }),
+        repairerRunner: async () => {
+          repairs++
+          return JSON.stringify({ what: 'still broken' })
+        },
+      }),
+    )
+    expect(repairs).toBe(2)
+    expect(r.ok).toBe(false)
+    expect(r.loopExhausted).toBe(true)
+    expect(r.advisories.some((a) => a.startsWith('loop_exhausted'))).toBe(true)
+  })
+
+  it('P0-2：非首 Beat 缺 continuity_handoff → 记 G-handoff 门而非 TypeError 崩链', async () => {
+    const done = await orchestrateDirecting({ script: 'x' }, baseDeps())
+    const ir = done.storyboard
+    const b2 = JSON.parse(JSON.stringify(ir.beats[0]))
+    b2.id = 'B02'
+    b2.shots = b2.shots.map((s: { id: string }) => ({ ...s, id: 'B02-S1', continuity_handoff: undefined }))
+    ir.beats.push(b2)
+    const gates = checkDirectingIr(ir, { strict: false })
+    expect(gates.some((g) => g.rule === 'G-handoff' && g.detail.includes('B02-S1'))).toBe(true)
+  })
+
+  it('P1-1：resume + await_user_approval 同传 → 忽略挂起（advisory 可观测），不永久死锁', async () => {
+    const pending = await orchestrateDirecting({ script: 'x', awaitUserApproval: true }, baseDeps())
+    const r = await orchestrateDirecting(
+      { script: 'x', awaitUserApproval: true, resumeStoryboard: pending.storyboard },
+      baseDeps({
+        scriptAnalystRunner: async () => { throw new Error('S1 不应重跑') },
+        beatDirectorRunner: async () => { throw new Error('S2 不应重跑') },
+        shotWriterRunner: async () => { throw new Error('S3 不应重跑（已批准稿）') },
+      }),
+    )
+    expect(r.status).toBe('completed')
+    expect(r.advisories).toContain('await_user_approval_ignored_resume')
+  })
+
+  it('P1-2：S2 幻觉 prompt 不得击穿 R13 skip——新鲜装配剥除 prompt/audit', async () => {
+    let writerCalls = 0
+    const hallucinated = JSON.parse(BEAT_DIRECTOR_OUT)
+    ;(hallucinated.beats[0].shots[0] as Record<string, unknown>).prompt = { text: '幻觉稿', token_count: 1 }
+    const r = await orchestrateDirecting(
+      { script: 'x' },
+      baseDeps({
+        beatDirectorRunner: async () => JSON.stringify(hallucinated),
+        shotWriterRunner: async () => {
+          writerCalls++
+          return SHOT_WRITER_OUT
+        },
+      }),
+    )
+    expect(writerCalls).toBe(1)
+    expect(r.storyboard.beats[0].shots[0].prompt?.text).not.toBe('幻觉稿')
+  })
+
+  it('P1-3：S3 产出 who 对不上 → 单产出回退直取，不静默丢弃', async () => {
+    const r = await orchestrateDirecting(
+      { script: 'x' },
+      baseDeps({
+        shotWriterRunner: async () =>
+          JSON.stringify({ shots: [{ what: 'aligned by fallback', who: '完全无关的名字', duration: 5 }] }),
+      }),
+    )
+    expect(r.advisories.some((a) => a.startsWith('shot_writer_unmatched'))).toBe(false)
+    expect(r.storyboard.beats[0].shots[0].what).toBe('aligned by fallback')
+  })
+
+  it('P1-5：resumeStoryboard 深拷贝——编排不突变调用方对象', async () => {
+    const pending = await orchestrateDirecting({ script: 'x', awaitUserApproval: true }, baseDeps())
+    const snapshot = JSON.stringify(pending.storyboard)
+    await orchestrateDirecting({ resumeStoryboard: pending.storyboard }, baseDeps())
+    expect(JSON.stringify(pending.storyboard)).toBe(snapshot)
+  })
+
+  it('P2#2：envelope auditor 投影标注来源镜', async () => {
+    const r = await orchestrateDirecting({ script: 'x' }, baseDeps())
+    expect((r.auditor as { shot_id?: string } | undefined)?.shot_id).toBe('B01-S1')
   })
 })
 

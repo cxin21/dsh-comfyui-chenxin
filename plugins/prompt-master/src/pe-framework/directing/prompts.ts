@@ -207,7 +207,7 @@ export function buildShotWriterPrompt(
     { tag: 'blueprint_v1', body: JSON.stringify({ beat, characters, locations }, null, 2) },
     {
       tag: 'output_contract',
-      body: '仅输出一个 JSON 对象（裸 JSON）：{"shots":[{"what":"…","who":"S1","duration":3,"camera":"…","action":"…","micro":"…","carry":"…","ambient":"…","dialogue":{"text":"…","language":"English"}}]}——每 shot 一项。',
+      body: '仅输出一个 JSON 对象（裸 JSON）：{"shots":[{"what":"…","who":"<原样回抄 blueprint_v1.beat.shots[].who>","duration_seconds":<4-15 整数>,"camera":"…","action":"…","micro":"…","carry":"…","ambient":"…","dialogue":{"text":"…","language":"English"}}]}——shots 必须与 blueprint_v1.beat.shots 一一对应、顺序一致（P1-3 对齐依据），who 不许改名。',
     },
   ]);
 }
@@ -317,7 +317,7 @@ export function buildRepairerPrompt(
     },
     {
       tag: 'output_contract',
-      body: '仅输出一个 JSON 对象（裸 JSON）：{"what":"…","who":"…","duration":…,"camera":"…","action":"…","micro":"…","carry":"…","ambient":"…","dialogue":{…}}',
+      body: '仅输出一个 JSON 对象（裸 JSON）：{"what":"…","who":"<原样回抄，不许改名>","duration_seconds":<4-15 整数，时长类违规必须产出该键并改到合法区间>,"camera":"…","action":"…","micro":"…","carry":"…","ambient":"…","sound":"…","dialogue":{…}}（P0-1 修复：duration_seconds 是可修维度，缺该键时长类违规永远修不掉）',
     },
   ]);
 }

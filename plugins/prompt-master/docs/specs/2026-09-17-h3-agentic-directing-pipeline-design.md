@@ -255,3 +255,12 @@ directing remediation 批次落地时的实施裁决与语义精化（全量回�
 5. **§3 方言解耦（R24 裁决）**：新增 `directing/compile.ts` 单一 seam（现委托 compileH3，`Parameters<>` 投影零重复）；registry 包待第二方言接入时再建（Speculative Generality 防御）。
 6. **§6 G-cameramotion 投影注记**：机检只验结构面（camera 非空 + 含双语运镜语汇，severity critical）；「自然英语三维语法」属 S3 persona 纪律面——机检不装懂语义。
 7. **时间连续门加固**：`parseTimeToSeconds` 对缺字段/非 `MM:SS` 返 null（不可判定跳过）——S2 产出 IR 缺 `time` 不再崩整条链。
+8. **A 路对抗审查修复批（2026-10-13 第二轮）**：
+   - **§7 S5 修复语义重构（P0-1）**：修复预算按镜计数（≤2 轮/镜，`SHOTS_PER_REPAIR` 语义从「全局共 2 次」改为「每镜 2 轮」）；每轮修复后机器门复审（确定性零成本，LLM 复审仍属 S4 每镜一次）；耗尽判定移到终局门——烧满 2 轮仍被 critical/important 点名的镜 → `loop_exhausted`（ok=false，next_action=manual）。修复产出经键白名单写回（prompt 层内容键；蓝图键幻觉丢弃）。repairer output_contract 补 `duration_seconds`（时长类违规的可修维度）。回归锁同步：author-loop/author-judge/author-blueprint 三处「2 镜不可修复」用例的调用数断言 2→4（旧断言锁定的是被判定为 P0 的旧错误语义）。
+   - **§6 G-handoff 缺对象守卫（P0-2）**：非首 Beat 镜缺 `continuity_handoff`（LLM 常态）→ 记四通道全缺门，不再 TypeError 崩链。
+   - **§5/§7 挂起语义（P1-1）**：resume + `await_user_approval` 同传 → 忽略挂起（advisory `await_user_approval_ignored_resume`）——挂起只属新鲜请求，旧实现照挂 = 永久死锁。
+   - **§4/§5 新鲜装配净化（P1-2）**：S2 产出的 prompt/audit 字段在装配 DirectingIR 时剥除——LLM 幻觉稿不得借 R13 skip 通道绕过 S3/S4/S5。
+   - **§5 S3 对齐（P1-3）**：S3 产出三级对齐（who 精确 → 数量一致按序 → 单产出直取）；不中 = 显式失败（advisory `shot_writer_unmatched` + prompt:null），不再静默丢弃且台账照登 prompt_v1。S3 output_contract 同步改为「shots 与 beat.shots 一一对应、who 原样回抄」。
+   - **§6 id 转义（P1-4）**：词边界正则对 id 做元字符转义（LLM id 可含正则元字符，未转义 SyntaxError）。
+   - **§5/§7 续跑隔离（P1-5）**：resumeStoryboard 深拷贝（structuredClone）——编排回填不突变调用方对象。
+   - 投影/归因小修：G-budget gate `source='directing/budget'`（旧值误导归因）；envelope `auditor` 投影带 `shot_id`（R13 跳过镜不再滞留前镜裁决）。

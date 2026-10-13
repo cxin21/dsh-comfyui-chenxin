@@ -190,7 +190,7 @@ describe('规格7 (directing) 规则 critical 驱动闭环：judge critic 零调
     expect(critic.calls).toBe(0);
     expect(raw.advisories).not.toContain('judge_skipped');
     expect(raw.advisories).toContain('loop_exhausted:true');
-    expect(raw.observability.corrections).toBe(2);
+    expect(raw.observability.corrections).toBe(4); // P0-1（A 路审查）：≤2 轮/镜——2 镜 × 2 轮 = 4
     expect(raw.generation_id).toMatch(/^gen_\d+_[0-9a-z]+$/);
     setDirectingDeps(null);
   });

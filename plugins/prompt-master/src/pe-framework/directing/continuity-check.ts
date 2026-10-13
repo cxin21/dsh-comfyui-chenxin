@@ -240,7 +240,8 @@ export function checkDirectingIr(ir: DirectingIr, opts?: CheckOpts): DirectingGa
     for (const s of beat.shots) {
       const h = s.continuity_handoff;
       for (const f of ['positions', 'emotion', 'props', 'audio'] as const) {
-        if (!h[f] || h[f].trim() === '') {
+        // P0-2（A 路审查）：S2 少吐 continuity_handoff（LLM 常态）不得 TypeError 崩链——缺对象 = 四通道全缺
+        if (!h || !h[f] || h[f].trim() === '') {
           push('G-handoff', 'critical', `beats[${beat.id}].shots[${s.id}].continuity_handoff.${f} 非空缺失（非首 Beat 四通道必填）`);
         }
       }

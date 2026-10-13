@@ -77,5 +77,18 @@ src 改动提交前 build；单任务单提交标注 spec 章节；回归门全�
 **对抗审查收口（并行双审查员）**：
 
 - B 路（工程/回归）：0×P0 / 0×P1 / 8×P2 **全部处理**——P2-1 测试库隔离（vitest setupFiles → tests/setup-global.ts，tracked feedback.sqlite 不再被污染）；P2-2/P2-3 变异杀手里程碑补齐（severity critical 断言 + ASCII 冒号）；P2-4 resume 三坑（编译覆盖/hash 对账/includes 误伤）；P2-5 取消穿透（CallerCancelledError rethrow，取消≠fail-open）；P2-6 afterEach 复位；P2-7 `.codegraph/` 入 ignore；P2-8 两项确认注记入 spec §11。
-- A 路（directing 语义）：回报未达（子代理静默退出），不影响本批验收门；后续回报如成立新发现，另开条目处置。
+- A 路（directing 语义）：回报晚到（14:35 快照 + 探针实证），独立成第二轮批次处置（见下节）；其 P2×9 中 3 项随批修复，余项立票移交。
 - 附带修复：`styles/registry.ts` 缓存按解析目录键控——根除「测试通过与否取决于 worker 文件分组」的顺序脆弱性；同目录「写入后重启才可见」钉死语义不变（spec §13 测试仍绿）。
+
+### 2026-10-13 第二轮批次：A 路 P0×2 / P1×5 修复（探针实证 → RED 回归锁 → 修复）
+
+**验收门（全部实测通过）**：vitest 全量 164 files / **1465 passed / 1 skipped / 0 failed**；tsc --noEmit 0 错；`npm run build` exit 0；eslint 触碰文件 0 error；dist 直连集成 **8/8**（新 dist）。
+
+**修复面**（P0/P1 全清，spec §11 修订记录第 8 条同步）：
+
+- **P0-1 S5 修复语义重构**：预算按镜 ≤2 轮/镜（旧「全局共 2 次、每镜 1 次」废）；每轮修复后机器门复审；耗尽判定移终局门（烧满 2 轮仍被点名 → loop_exhausted, ok=false）；修复产出键白名单（蓝图键幻觉丢弃）；repairer 契约补 `duration_seconds`。三处回归锁同步 2→4（旧断言锁定的正是被判 P0 的旧语义）。
+- **P0-2 G-handoff 缺对象守卫**：`continuity_handoff` 缺失记四通道全缺门，不 TypeError 崩链。
+- **P1-1** resume+await_user_approval 同传 → 忽略挂起（advisory），不死锁；**P1-2** 新鲜装配剥除 S2 幻觉 prompt/audit（R13 skip 通道不再被击穿）；**P1-3** S3 三级对齐 + 不中显式失败（不再静默丢弃+台账撒谎）；**P1-4** mentionsId 元字符转义；**P1-5** resume structuredClone 深拷贝。
+- **P2 随批修复 3 项**：G-budget source 归因、auditor 投影带 shot_id、修复产出键白名单（即 Object.assign 无键白名单）。
+
+**遗留移交**：A 路 P2 余项（G-duration 缺字段静默过门 / beat 级 gate 修复预算摊派（裁决=保留 spec R10 行为+注记）/ R4 谓词过严 / N/A 正则不容注记 / echo 门过强 / S3 prompt 逐镜重调成本）→ 票务板立票移交，不阻塞本批验收。

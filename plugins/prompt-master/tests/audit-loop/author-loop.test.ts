@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, afterAll } from 'vitest';
+import { describe, expect, it, afterAll } from 'vitest';
 import {
   registerAuthorTool,
   setAuthorIntentProvider,
@@ -46,7 +46,7 @@ describe('prompt_author directing loop (P4, spec §7)', () => {
       repairerRunner: async () => { repairs++; return JSON.stringify({ what: 'still bad' }); },
     }));
     const raw = await runH3();
-    expect(repairs).toBe(2); // round0 + 修复（每镜一次，共 2 = SHOTS_PER_REPAIR）
+    expect(repairs).toBe(4); // P0-1（A 路审查）：按镜预算 ≤2 轮/镜——2 镜 × 2 轮 = 4（旧「全局共 2 次」语义已废）
     expect(raw.ok).toBe(false);
     expect(raw.advisories).toContain('loop_exhausted:true');
     expect(raw.next_action).toBe('manual');

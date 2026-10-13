@@ -6,14 +6,19 @@ import { SubagentHostCtx } from './host-ctx.js'
  * （createSubagentCriticProvider）同款三方可见。一次 one-shot 纯生成：
  * 架构级禁工具（toolFilter allow:[]）、parent 线穿、超时 AbortController——
  * 模式对齐 eval/critic.ts createSubagentCriticProvider（2026-09-12 P0 先例）。
+ *
+ * #16 T-01：新增可选外部取消信号（opts.signal）——与内部超时做 OR 合并（cancel.ts）：
+ * 预中止快速失败（不发起 start）；进行中 abort 联动内部 controller 并以 CallerCancelledError
+ * 结算；不传 signal 行为与历史版本完全一致。
  */
 import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js';
+import { bindExternalAbort, CallerCancelledError } from './cancel.js';
 
 export type SubagentTextRunner = (taskText: string) => Promise<string>;
 
 export function createSubagentTextRunner(
   ownerCtx: SubagentHostCtx,
-  opts?: { labelPrefix?: string; timeoutMs?: number; parent?: unknown },
+  opts?: { labelPrefix?: string; timeoutMs?: number; parent?: unknown; signal?: AbortSignal },
 ): SubagentTextRunner {
   const envTimeout = Number(process.env.PM_SUBAGENT_TIMEOUT_MS ?? '');
   const timeoutMs =
@@ -32,7 +37,9 @@ export function createSubagentTextRunner(
         'SubagentTextRunner 需要调用 Agent 上下文（opts.parent / ownerCtx.agent 均不可用）：请从 Agent 会话内调用',
       );
     }
+    if (opts?.signal?.aborted) throw new CallerCancelledError('SubagentTextRunner');
     const controller = new AbortController();
+    const extAbort = bindExternalAbort(controller, opts?.signal, 'SubagentTextRunner');
     const timeoutError = new Error(`SubagentTextRunner 超时：未在 ${timeoutMs}ms 内收到结果`);
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -41,48 +48,63 @@ export function createSubagentTextRunner(
       dispose: () => Promise<void> | void;
     };
     try {
-      run = await ownerCtx.subagents.start('spawn', {
-        label: `${labelPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        prompt: [{ type: 'text', text: taskText }],
-        parent,
-        toolFilter: { allow: [] },
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) throw timeoutError;
-      throw error;
-    }
-
-    try {
-      const result = await Promise.race([
-        run.result,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            controller.abort(timeoutError);
-            reject(timeoutError);
-          }, timeoutMs);
-        }),
-      ]).finally(() => {
-        if (timer !== undefined) clearTimeout(timer);
-      });
-      if (result.stopReason !== 'completed') {
-        const detail = result.diagnostic === undefined ? '' : `；diagnostic: ${result.diagnostic}`;
-        throw new Error(`SubagentTextRunner 子代理未完成：stopReason=${result.stopReason}${detail}`);
-      }
-      const text = (result.output ?? [])
-        .filter((b) => b?.type === 'text')
-        .map((b) => b.text ?? '')
-        .join('');
-      if (text.trim().length === 0) {
-        throw new Error('SubagentTextRunner 子代理未产出 assistant 文本');
-      }
-      return text;
-    } finally {
       try {
-        await run.dispose();
-      } catch {
-        /* 吞掉 dispose 异常 */
+        run = await ownerCtx.subagents.start('spawn', {
+          label: `${labelPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          prompt: [{ type: 'text', text: taskText }],
+          parent,
+          toolFilter: { allow: [] },
+          signal: controller.signal,
+        });
+      } catch (error) {
+        // 取消与超时区分：外部 signal 已中止 → 取消错误（可机检）；仅内部超时 → 维持超时语义
+        if (opts?.signal?.aborted) throw new CallerCancelledError('SubagentTextRunner');
+        if (controller.signal.aborted) throw timeoutError;
+        throw error;
       }
+
+      try {
+        const result = await Promise.race([
+          run.result,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              controller.abort(timeoutError);
+              reject(timeoutError);
+            }, timeoutMs);
+          }),
+          extAbort.gate,
+        ]).finally(() => {
+          if (timer !== undefined) clearTimeout(timer);
+        });
+        if (result.stopReason !== 'completed') {
+          const detail = result.diagnostic === undefined ? '' : `；diagnostic: ${result.diagnostic}`;
+          throw new Error(`SubagentTextRunner 子代理未完成：stopReason=${result.stopReason}${detail}`);
+        }
+        const text = (result.output ?? [])
+          .filter((b) => b?.type === 'text')
+          .map((b) => b.text ?? '')
+          .join('');
+        if (text.trim().length === 0) {
+          throw new Error('SubagentTextRunner 子代理未产出 assistant 文本');
+        }
+        return text;
+      } finally {
+        try {
+          // #16 P2-6（对抗审查）：dispose 有界等待——host 对已中止子代理的 dispose 若挂起，
+          // 不得阻塞外层 finally 的监听器清理（否则 exec.signal 监听按调用累积）。
+          await Promise.race([
+            run.dispose(),
+            new Promise<void>((resolve) => {
+              const t: ReturnType<typeof setTimeout> = setTimeout(resolve, 5000);
+              (t as unknown as { unref?: () => void }).unref?.();
+            }),
+          ]);
+        } catch {
+          /* 吞掉 dispose 异常 */
+        }
+      }
+    } finally {
+      extAbort.cleanup(); // 移除外部 signal 监听，防跨调用泄漏
     }
   };
 }

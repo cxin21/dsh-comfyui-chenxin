@@ -179,7 +179,6 @@ export function validateDirectingIr(ir: DirectingIr): { ok: boolean; missing: st
   }
   checkPropStates(ir, missing);
 
-  let hasDialogueBeat = false;
   (ir.beats ?? []).forEach((beat, bi) => {
     const path = `beats[${beat.id ?? bi}]`;
     checkCreativeIntent(beat.creative_intent, path, missing);
@@ -188,7 +187,6 @@ export function validateDirectingIr(ir: DirectingIr): { ok: boolean; missing: st
       missing.push(`${path}.shots 空`);
       return;
     }
-    if (beat.shots.some((s) => (s.direction?.dialogue?.line ?? '').trim() !== '')) hasDialogueBeat = true;
 
     if (beat.shots.length !== beat.shots.filter((s) => isObj(s.shot_intent)).length) {
       missing.push(`${path}.shot_intent 数与 shots 数不一致`);
@@ -208,12 +206,15 @@ export function validateDirectingIr(ir: DirectingIr): { ok: boolean; missing: st
       }
       const d = s.direction?.dialogue;
       if (d && (!isStr(d.speaker_id) || !isStr(d.line))) missing.push(`${path}.shots[${s.id}].direction.dialogue 缺 speaker_id/line`);
-      const h = s.continuity_handoff;
-      if (!isObj(h)) {
-        missing.push(`${path}.shots[${s.id}].continuity_handoff 缺失`);
-      } else {
-        for (const f of ['positions', 'emotion', 'props', 'audio'] as const) {
-          if (!isStr(h[f])) missing.push(`${path}.shots[${s.id}].continuity_handoff.${f} 非空缺失`);
+      // spec §6 G-handoff：handoff 四通道仅对非首 Beat 强制（首 Beat 是起点，无上游可交接）
+      if (bi > 0) {
+        const h = s.continuity_handoff;
+        if (!isObj(h)) {
+          missing.push(`${path}.shots[${s.id}].continuity_handoff 缺失`);
+        } else {
+          for (const f of ['positions', 'emotion', 'props', 'audio'] as const) {
+            if (!isStr(h[f])) missing.push(`${path}.shots[${s.id}].continuity_handoff.${f} 非空缺失（非首 Beat 四通道必填）`);
+          }
         }
       }
       if (s.prompt != null && (!isObj(s.prompt) || !isStr(s.prompt.text))) {
@@ -221,10 +222,6 @@ export function validateDirectingIr(ir: DirectingIr): { ok: boolean; missing: st
       }
     }
   });
-  if ((ir.beats ?? []).length > 1 && !hasDialogueBeat) {
-    // 对白 Beat 契约：多 Beat 工程至少一个含台词 Beat（对白驱动短剧的领域约束）
-    // 逐镜 contains_reaction 检查在下方逐镜循环内对含台词 Beat 执行
-  }
   // 对白 Beat ≥1 contains_reaction（逐 Beat）
   for (const beat of ir.beats ?? []) {
     const hasDialogue = beat.shots.some((s) => s.direction?.dialogue != null);
@@ -233,18 +230,6 @@ export function validateDirectingIr(ir: DirectingIr): { ok: boolean; missing: st
       missing.push(`beats[${beat.id}] 对白 Beat 缺 contains_reaction: true 的镜头`);
     }
   }
-  // 非首 Beat handoff 四通道非空
-  (ir.beats ?? []).forEach((beat, bi) => {
-    if (bi === 0) return;
-    for (const s of beat.shots) {
-      const h = s.continuity_handoff;
-      if (isObj(h)) {
-        for (const f of ['positions', 'emotion', 'props', 'audio'] as const) {
-          if (!isStr(h[f])) missing.push(`beats[${beat.id}].shots[${s.id}].continuity_handoff.${f} 非空缺失（非首 Beat 四通道必填）`);
-        }
-      }
-    }
-  });
   return { ok: missing.length === 0, missing };
 }
 

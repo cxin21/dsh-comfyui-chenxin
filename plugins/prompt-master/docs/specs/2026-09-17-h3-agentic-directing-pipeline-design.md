@@ -243,3 +243,15 @@ DirectingIR 管线：`characters[].id`（S1…）直接作为 speaker ID 源注�
 - 剧本从零生成（输入 = 已有剧本）
 - 向量库重建（anima 侧遗留，独立计划）
 - composition_picture/motion_video/audio_reference 的执行绑定（director-suite 亦为 schema-only——机检按 G-refbinding 拒绝其进入 prompt 引用，待 runner 支持后解锁）
+
+## 11. 实施对齐修订记录（R26 回填，2026-10-13）
+
+directing remediation 批次落地时的实施裁决与语义精化（全量回归绿 + dist 直连集成 8/8 后回填）：
+
+1. **§3 入口签名**：`script` 降为可选——`resumeStoryboard` 续跑可省（省略时逐字对账与 hash 对账自然跳过）；新鲜请求缺 script → 编排器 fail-fast（`directing 缺 script 文本：新鲜请求必填，续跑可省`）。「剧本文本|文件路径」的文件形态仍由工具层读取后传入。
+2. **§5/§7 续跑对账**：resume 时若同时提供 script，按 `source_script_hash`（sha256）对账；不一致 → advisory `resume_script_mismatch` + 逐字对账（G-dialogue 的 scriptText）跳过。已批准镜永不被确定性重编译回退（编译循环顶 `shot.prompt != null` → continue）。
+3. **§6 门点名词边界**：gate detail 对 shot/beat id 的匹配改词边界正则（`(?<![A-Za-z0-9_-])ID(?![A-Za-z0-9_-])`），废除 includes 子串语义——修复「B01-S1 ⊂ B01-S10 误伤」这一类假阳性路由（S5 只修真正被点名的镜）。
+4. **§7/§8 取消语义**：编排器全程尊重调用方取消——`CallerCancelledError` 从 S3/S4/S5/编译各 catch 穿透，不被吞成 advisory 降级。**D7 fail-open 不适用于取消**：取消 = 停止烧钱，不是降级出稿。
+5. **§3 方言解耦（R24 裁决）**：新增 `directing/compile.ts` 单一 seam（现委托 compileH3，`Parameters<>` 投影零重复）；registry 包待第二方言接入时再建（Speculative Generality 防御）。
+6. **§6 G-cameramotion 投影注记**：机检只验结构面（camera 非空 + 含双语运镜语汇，severity critical）；「自然英语三维语法」属 S3 persona 纪律面——机检不装懂语义。
+7. **时间连续门加固**：`parseTimeToSeconds` 对缺字段/非 `MM:SS` 返 null（不可判定跳过）——S2 产出 IR 缺 `time` 不再崩整条链。

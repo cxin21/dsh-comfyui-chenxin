@@ -101,7 +101,7 @@ export function dShot(id: string, duration: number, extra: Record<string, unknow
     what: 'wide establishing shot',
     who: 'S1',
     shot_size: '全景',
-    camera: 'wide',
+    camera: 'wide slow push in', // R5 G-cameramotion：需含运动语汇
     stage: 't2va',
     route_reason: 'text only',
     sound: 'hum',

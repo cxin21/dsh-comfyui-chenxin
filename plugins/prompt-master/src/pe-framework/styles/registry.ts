@@ -32,6 +32,9 @@ export function assertAppliesToElements(preset: StylePresetV2, file: string): vo
 
 let _cache: { presets: StylePresetV2[]; advisories: string[] } | undefined;
 let _byId: Map<string, StylePresetV2> | undefined;
+/** 缓存键=解析后的预设目录：目录切换（setPresetRoot/环境注入）必须重载；
+ * 同目录内仍保持「写入后缓存不失效、重启进程才可见」的钉死语义（spec §13 测试） */
+let _cacheDir: string | undefined;
 
 /** 风格预设目录：跟随 resolve.ts 的根路径解析链；style-presets 位于插件目录（非 preset 根） */
 function stylePresetsDir(): string {
@@ -54,8 +57,8 @@ function stylePresetsDir(): string {
 }
 
 export function loadStylePresets(): { presets: StylePresetV2[]; advisories: string[] } {
-  if (_cache && _byId) return _cache;
   const dir = stylePresetsDir();
+  if (_cache && _byId && _cacheDir === dir) return _cache;
   const advisories: string[] = [];
   const presets: StylePresetV2[] = [];
   const seen = new Map<string, number>();
@@ -84,6 +87,7 @@ export function loadStylePresets(): { presets: StylePresetV2[]; advisories: stri
   }
   _cache = { presets, advisories };
   _byId = byId;
+  _cacheDir = dir;
   return _cache;
 }
 

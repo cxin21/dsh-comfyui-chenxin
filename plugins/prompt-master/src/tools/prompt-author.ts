@@ -1,4 +1,4 @@
-﻿import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
+import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools';
 import { TARGETS, type Target } from '../pe-framework/index.js';
 import { serializeReport } from '../pe-framework/audit/index.js';
 import type { AnimaSlots } from '../pe-framework/dialect/anima.js';
@@ -15,6 +15,7 @@ import {
 } from '../pe-framework/pipeline/judge-assembly.js';
 import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js';
 import { createSubagentToolRunner } from '../pe-framework/llm/subagent-tool-runner.js';
+import { createCancelGuard } from '../pe-framework/llm/cancel.js';
 import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js';
 // audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
 import { getSharedBgeOverlapSim } from '../pe-framework/compositing/vector-sim.js';
@@ -34,6 +35,9 @@ import z from '@deepseek-ai/schemastery';
 import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { registerOrReuseNamespace } from '../pe-framework/profiles/storage-v2.js';
 import { orchestrateDirecting } from '../pe-framework/directing/orchestrate.js';
+import { emitEngineering } from '../pe-framework/directing/engineering/emit.js';
+import type { DirectingIr } from '../pe-framework/directing/ir-schema.js';
+import { getPresetRoot } from '../pe-framework/resources/resolve.js';
 import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js';
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js';
 import type { Config } from '../plugin/config.js';
@@ -42,7 +46,6 @@ import { complete } from '../llm/complete.js';
 import { resolveRoute, type ExecLike } from '../llm/route.js';
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js';
 import { recordGeneration } from '../pe-framework/feedback/store.js';
-import { runEnrich, type EnrichTarget } from '../pe-framework/enrich/engine.js';
 import { validateArtDirectionSpec } from '../pe-framework/enrich/art-direction.js';
 // 2026-09-16 定稿：catalogCandidatesForText（B7 前置召回）随 legacy slots 路径移除——
 // anima 词表证据唯一由 compositing S2.5 检索包承载（retrieval-pack.ts）
@@ -62,7 +65,7 @@ import {
 import { getStylePreset } from '../pe-framework/styles/registry.js';
 import type { Rating } from '../pe-framework/types.js';
 import { tokensOf } from '../pe-framework/tokens.js';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -93,6 +96,9 @@ export interface AuthorArgs {
   project?: string;
   /** D-U1：两段式确认——S2 方案产出后挂起等用户授权 */
   await_user_approval?: boolean;
+  /** R12（spec §5/§7 两段式确认续跑）：已批准方案（挂起态 envelope result.storyboard 原样回传）→
+   *  跳过 S1/S2 续跑 S3-S5，增量语义=只重跑 null/违规镜（spec §4/§8） */
+  resume_storyboard?: Record<string, unknown>;
   profile?: string;
   variant?: string;
   stage?: string;
@@ -179,6 +185,25 @@ let _directingDeps: import('../pe-framework/directing/orchestrate.js').Directing
 /** 测试 seam：注入 directing 五槽位 runner mock（与 setAuthorIntentProvider 同型；h3 routing 消费） */
 export function setDirectingDeps(deps: import('../pe-framework/directing/orchestrate.js').DirectingDeps | null): void {
   _directingDeps = deps;
+}
+
+/** R15 测试 seam：覆盖工程落盘目录；undefined=默认解析（<presetRoot>/temp/prompt-master/<project>），null=显式禁用落盘 */
+let _directingEmitDir: string | null | undefined;
+export function setDirectingEmitDir(dir: string | null | undefined): void {
+  _directingEmitDir = dir;
+}
+
+/** R15（spec §4 工程输出物）：落盘目录解析——project 名白名单化防路径逃逸；root 不可解析 → undefined（fail-open + advisory） */
+export function resolveDirectingEmitDir(project?: string): string | undefined {
+  const raw = String(project ?? '').trim();
+  const cleaned = raw.replace(/[^\w.-]+/g, '-').replace(/^[.\-]+|[.\-]+$/g, '');
+  const safeProject = cleaned || 'untitled';
+  if (_directingEmitDir !== undefined) return _directingEmitDir ?? undefined;
+  const root =
+    getPresetRoot()?.replace(/[\\/]+$/, '') ??
+    process.env.DSH_COMFYUI_PRESET_ROOT?.replace(/[\\/]+$/, '');
+  if (!root) return undefined;
+  return join(root, 'temp', 'prompt-master', safeProject);
 }
 
 export function getAuthorIntentProvider(): AuthorIntentFn | null {
@@ -349,19 +374,8 @@ export function setAuthorEnrichProvider(p: CriticProvider | null): void {
   _enrichProvider = p;
 }
 
-/** nameAnchors 硬上限（T5 carry③，接线层强制）：条目 ≤10、单条 original/anchored ≤100 字符 */
-const NAME_ANCHORS_MAX = 10;
-const NAME_ANCHOR_LEN_MAX = 100;
-
-/** 超限条目直接丢弃（不截断文本），发生丢弃 → trimmed=true（调用方标 advisory name_anchors_trimmed） */
-function trimNameAnchors(brief: EnrichedBrief): boolean {
-  const kept = brief.nameAnchors
-    .filter((a) => a.original.length <= NAME_ANCHOR_LEN_MAX && a.anchored.length <= NAME_ANCHOR_LEN_MAX)
-    .slice(0, NAME_ANCHORS_MAX);
-  const trimmed = kept.length !== brief.nameAnchors.length;
-  brief.nameAnchors = kept;
-  return trimmed;
-}
+/* R17（修复计划）：runEnrich brief 面随 h3 直译路径移除——nameAnchors 截断常量随之退役
+ * （NAME_ANCHORS_MAX=10 / NAME_ANCHOR_LEN_MAX=100，历史见 T5 carry③）。 */
 
 const BRIEF_DIMENSIONS = ['subject', 'scene', 'composition', 'lighting', 'color', 'style', 'mood'] as const;
 
@@ -1010,13 +1024,20 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
     name: 'prompt_author',
     description:
       '统一提示词工程主入口（全链路编排）：输入创作意图 → intent（LLM 拆结构）→ schema → dialect（compileAnima/compileH3）→ audit → Envelope + target_slot_hint；audit 未过且有 Critical 时自动修正重跑（max 2 次，仍失败置 loop_exhausted）。' +
-      '创作蓝图流水线：分析意图→美学扩展→方言投影→审计；h3 的 duration_seconds 指视频总时长（如 3 个 5 秒分镜请传总时长 15，shots 数 ≤ max_shots）。可选 style_id/conformity/clarify/rating（safe/sensitive/explicit，缺省 safe——任何 LLM 前预检定档，硬边界违规 0 token 抛错）。失败时读取 next_action 决定重试/人工。' +
+      'anima：compositing 五段（意图蓝图→扩写→成文→审核→修复）。' +
+      'h3（D-U1 directing 管线，spec 2026-09-17）：target=h3 + script（剧本文本或文件路径）+ project → 五槽位导演管线（剧本分析→Beat 方案→逐镜成文→双轨审核→递进修复），产出分 stage 官方格式提示词 + storyboard 工程三件套；await_user_approval 两段式确认挂起，resume_storyboard 续跑；rating 按 D-U4 只透传不拦截。' +
+      'blueprint_id+h3 保留 shots 增量路径（该面 duration_seconds 指视频总时长，如 3 个 5 秒分镜传 15，shots 数 ≤ max_shots）。' +
+      '可选 style_id/conformity/clarify/rating（safe/sensitive/explicit，缺省 safe——任何 LLM 前预检定档，硬边界违规 0 token 抛错）。失败时读取 next_action 决定重试/人工。' +
       '当前归化状态：' +
       TARGETS.map((t) => `${t}=${isDialectReady(t) ? 'ready' : 'pending'}`).join(' ') +
       '；sd/generic 报 DIALECT_NOT_AVAILABLE。',
     parameters: {
       target: { type: 'string', description: '目标方言：anima | h3 | sd | generic', default: 'anima' },
-      input: { type: 'string', description: '创作意图（一句话/图描述/分镜素材）' },
+      input: { type: 'string', description: '创作意图（一句话/图描述/分镜素材）；target=h3 时作为剧本文本（可用 script 传文件路径或更长的剧本）' },
+      script: { type: 'string', default: '', description: 'D-U1/spec §3：短剧工程剧本（剧本文本或 ≤1MB 文本文件路径）；target=h3 新鲜请求必填（input 可兜底）' },
+      project: { type: 'string', default: '', description: 'D-U1/spec §3：工程名（三件套落盘目录 temp/prompt-master/<project>，缺省 untitled；白名单 [A-Za-z0-9._-]）' },
+      await_user_approval: { type: 'boolean', default: false, description: 'spec §5 两段式确认：true 时 S2 方案产出后挂起（envelope status=awaiting_approval），携带 result.storyboard 传回 resume_storyboard 续跑 S3-S5' },
+      resume_storyboard: { type: 'object', additionalProperties: true, description: 'spec §5/§7 续跑入口：挂起态 envelope 的 result.storyboard 原样传入（已批准方案），跳过 S1/S2；增量语义=只重跑 null/违规镜（spec §4/§8）' },
       variant: { type: 'string', default: 'base', description: 'anima variant：base/aesthetic/turbo' },
       stage: { type: 'string', default: '', description: 'h3 stage（t2va/ref2va…；缺省按 references/场景推断）' },
       scenario_id: { type: 'string', default: '', description: 'h3 场景 id（如 full_reference；可配合 form_fields）' },
@@ -1031,7 +1052,7 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         enum: ['safe', 'sensitive', 'explicit'],
         default: 'safe',
         description:
-          '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错；target=h3 仅支持 safe（MiniMax 政策，spec §5.5），非 safe 拒收不降级',
+          '内容分级（spec §5.2）：safe|sensitive|explicit；显式声明优先不升级，缺省时按 input 关键词定档（自 safe 提升时出 rating_escalated advisory）；违反硬边界（未成年/非自愿/兽奸）在任何 LLM 调用前 0 token 抛错。D-U4 裁决（2026-09-17）：h3 不设分级闸门，rating 作为元数据透传进 storyboard.meta（rating/original_rating），不做拒收不降级',
       },
       style_id: { type: 'string', default: '', description: '风格预设 id（style_list 可查，82 条）' },
       conformity: {
@@ -1112,6 +1133,11 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
       exec: ToolRunContext,
     ) {
       const a = args as unknown as AuthorArgs;
+      // #16 T-04：execute 级取消 guard——exec.signal 中止即以 CallerCancelledError 结算（≤1s），
+      // 优先于 D7 fail-open 兜底（取消 ≠ 失败回退，不得换路径继续出稿）；长等待统一经 rx race。
+      // 声明在 try 外：finally 的 dispose 需要跨块可见（try 内 const 对 catch/finally 不可见）。
+      const cancel = createCancelGuard(exec.signal, 'prompt_author');
+      const rx = <T>(p: Promise<T>): Promise<T> => cancel.race(p);
       try {
         // M5-DIAG2：诊断包裹——CRASH stack 落盘后原样 rethrow（行为零变化，仅证据采集）
         const target = String(a.target || 'anima') as Target;
@@ -1199,9 +1225,9 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // 二期 T9（spec §2.1/§2.4/§4/§11.3）：enrich 扩写接线，缺省 true（显式 false 关闭）。
         // blueprint_id 路径跳过 enrich（自带 enrichBlueprint 扩展层）。
         // 降级铁律：runEnrich 永不抛出；skipped → intent 吃原始输入 + advisory enrich_skipped，照常出稿。
-        let intentInput = input;
+        const intentInput = input;
         const enrichAdvisories: string[] = [];
-        let enrichFlag: 0 | 1 = 0;
+        const enrichFlag: 0 | 1 = 0;
         let enrichmentTop: Record<string, unknown> | undefined;
         const traceExtra: Array<{ name: string; ms: number }> = []; // F5：enrich/intent/catalog 耗时子条目
         // 2026-09-12 P1：调用方显式指定艺术指导卡——fail-fast 校验（不烧 LLM）；不消费的路径补 advisory（参数被忽略必须可观测）
@@ -1227,42 +1253,21 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         const asLlm =
           (runner: ReturnType<typeof createSubagentTextRunner>) => (req: { system: string; user: string }) =>
             runner(`${req.system}\n\n${req.user}`);
+        // #16 T-02（对抗审查 P1-3）：caller signal 透传进全部 11 处 runner 工厂——取消时
+        // bindExternalAbort 联动内部 controller，host 真正中止在途子代理（T-01 能力的生产消费面）。
         const enrichLlm = subagentsReady
-          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent }))
+          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent, signal: exec.signal }))
           : undefined;
         const blueprintLlm = subagentsReady
-          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent }))
+          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent, signal: exec.signal }))
           : undefined;
-        // runEnrich（brief 扩写）仅服务 h3（未迁移方言）；anima 的美学扩展在 compositing 编排层
-        // runSemanticEnrich（spec §4）。降级铁律不变：runEnrich 永不抛出。
-        if (a.enrich !== false && !a.blueprint_id && target === 'h3') {
-          const tEnrich0 = performance.now();
-          const enrichProvider = _enrichProvider ?? createProductionCriticProvider(ctx, { parent: criticParent });
-          const eRes = await runEnrich({
-            target: target as EnrichTarget,
-            userInput: input,
-            outputLang: a.outputLang,
-            provider: enrichProvider,
-            rating: resolved.rating, // Task 14 ④：预检定档透传（Task 12 persona 【内容分级】块）
-            recommendations: recommendedCards, // Task 14 ④：推荐器输出 →【推荐先验】（Task 12 P2，LLM 终决）
-          });
-          if ('brief' in eRes) {
-            const brief = eRes.brief;
-            if (trimNameAnchors(brief)) enrichAdvisories.push('name_anchors_trimmed'); // T5 carry③：条目 ≤10、单条 ≤100 字符
-            intentInput = briefToIntentText(brief);
-            enrichFlag = 1;
-            enrichmentTop = { brief };
-          } else {
-            enrichAdvisories.push('enrich_skipped');
-            // 审计 #1（2026-09-12，spec §7 L223 降级语义原文）：enrich 在 explicit 档被 LLM 拒绝 →
-            // 现有故障语义回退不变（enrich_skipped + user brief 直拆照常出稿），增发档位可观测
-            // advisory——兼容/拒绝路径的静默降级必须可见。safe/sensitive 档不打（spec 仅明文 explicit）。
-            if (resolved.rating === 'explicit') enrichAdvisories.push('enrich_refused_at_rating:explicit');
-            enrichFlag = 0;
-            enrichmentTop = { skipped: true, reason: eRes.reason };
-          }
-          traceExtra.push({ name: 'enrich', ms: performance.now() - tEnrich0 });
-        } else if (a.enrich === true && a.blueprint_id) {
+        // R17（修复计划 R17）：runEnrich brief 层随 h3 直译路径移除而退出——h3 新鲜请求一律 routing
+        // 到 directing 编排器（§3），不消费七维 brief；此处保留调用 = 每次出稿白烧 1 次 LLM 且产物被
+        // 弃用。enrich 参数对 h3 已无消费面；显式 outputLang 亦无消费面 → advisory 可观测。
+        if (a.outputLang !== undefined && target === 'h3' && !a.blueprint_id) {
+          enrichAdvisories.push('output_lang_ignored_directing');
+        }
+        if (a.enrich === true && a.blueprint_id) {
           // Round7 T6：blueprint 路径忽略 enrich 参数（blueprint 分支自带 enrichBlueprint 扩展层）。
           // 显式 enrich=true 补 advisory 消除静默忽略（与 judge_mode 忽略口径一致：参数被忽略必须可观测）。
           // M5-T2（D4）：默认蓝图形态同样适用（runEnrich 已被 swap 掉）
@@ -1295,24 +1300,61 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // blueprint_id + h3 → 保留旧增量路径（Round7 T6，fall through 到下方 blueprint 分支）
         // D-U4 不设防：rating 作为元数据透传，无分级拦截
         if (target === 'h3' && !a.blueprint_id) {
-          const script = String(a.script ?? a.input ?? '');
+          // R25（spec §3「剧本文本|文件路径」）：短无换行输入按存在路径探测读取（≤1MB），否则原文
+          let script = String(a.script ?? a.input ?? '');
+          const scriptLooksLikePath = Boolean(a.script) && !script.includes('\n') && script.length <= 512;
+          if (scriptLooksLikePath) {
+            try {
+              const st = statSync(script);
+              if (st.isFile() && st.size <= 1024 * 1024) script = readFileSync(script, 'utf8');
+            } catch {
+              /* 非文件路径 → 按剧本文本原样使用 */
+            }
+          }
           if (!script.trim()) throw new Error('target=h3 requires non-empty input or script (spec §3)');
-          const saRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-script-analyst', parent: criticParent }) : undefined;
-          const bdRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-beat-director', parent: criticParent }) : undefined;
-          const swRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-writer', parent: criticParent }) : undefined;
-          const caRunner = subagentsReady && judgeMode !== 'off' ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-continuity-auditor', parent: criticParent }) : undefined;
-          const srRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-repairer', parent: criticParent }) : undefined;
+          const saRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-script-analyst', parent: criticParent, signal: exec.signal }) : undefined;
+          const bdRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-beat-director', parent: criticParent, signal: exec.signal }) : undefined;
+          const swRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-writer', parent: criticParent, signal: exec.signal }) : undefined;
+          const caRunner = subagentsReady && judgeMode !== 'off' ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-continuity-auditor', parent: criticParent, signal: exec.signal }) : undefined;
+          const srRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-repairer', parent: criticParent, signal: exec.signal }) : undefined;
+          // R15（spec §4 工程输出物）：三件套落盘接线——目录不可解析 → advisory 可观测，fail-open 不阻塞出稿
+          const emitDir = resolveDirectingEmitDir(a.project);
+          const emitFailures: string[] = [];
+          if (!emitDir) emitFailures.push('engineering_emit_unavailable:preset_root 未解析，三件套未落盘');
           const subagentDeps = {
             ...(saRunner ? { scriptAnalystRunner: saRunner } : {}),
             ...(bdRunner ? { beatDirectorRunner: bdRunner } : {}),
             ...(swRunner ? { shotWriterRunner: swRunner } : {}),
             ...(caRunner ? { auditorRunner: caRunner } : {}),
             ...(srRunner ? { repairerRunner: srRunner } : {}),
+            ...(emitDir
+              ? {
+                  emit: (ir: DirectingIr) => {
+                    try {
+                      return emitEngineering(emitDir, ir);
+                    } catch (e) {
+                      emitFailures.push(`engineering_emit_failed:${(e as Error).message.slice(0, 80)}`);
+                      return undefined;
+                    }
+                  },
+                }
+              : {}),
           };
-          const outcome = await orchestrateDirecting(
-            { script, project: a.project, awaitUserApproval: a.await_user_approval === true, rating: resolved.rating },
-            _directingDeps ?? subagentDeps,
+          // R12（spec §5/§7 两段式确认）：resume_storyboard = 已批准方案，跳过 S1/S2 续跑 S3-S5（增量语义 R13）
+          const resumeStoryboard = (a.resume_storyboard ?? undefined) as DirectingIr | undefined;
+          const outcome = await rx(
+            orchestrateDirecting(
+              {
+                script,
+                project: a.project,
+                awaitUserApproval: a.await_user_approval === true,
+                rating: resolved.rating,
+                ...(resumeStoryboard !== undefined ? { resumeStoryboard } : {}),
+              },
+              _directingDeps ?? subagentDeps,
+            ),
           );
+          const finalAdvisories = [...outcome.advisories, ...emitFailures];
           const stage: StageResult = {
             ok: outcome.ok,
             result: {
@@ -1320,7 +1362,7 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
               storyboard: outcome.storyboard,
             },
             gates: outcome.gates as StageResult['gates'],
-            advisories: outcome.advisories,
+            advisories: finalAdvisories,
             assumptions: [],
             targetSlotHint: 't2v.prompt',
             judgeFeedback: [],
@@ -1333,12 +1375,29 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           const h3TopLevel: Record<string, unknown> = {
             generation_id: generationId,
             quality: outcome.quality,
+            // R14（spec §5）：两段式确认挂起态以顶层 status 键显式返回
+            status: outcome.status,
             ...(outcome.auditor !== undefined ? { auditor: outcome.auditor } : {}),
           };
           const h3NextAction = {
             next_action: (outcome.status === 'awaiting_approval' || outcome.loopExhausted ? 'manual' : 'ok') as 'manual' | 'ok',
           };
-          return assembleEnvelope(stage, outcome.advisories, h3Observability, h3TopLevel, h3NextAction);
+          // R17：generation 落库（completed 态；挂起态方案未定稿不落库）
+          if (outcome.status === 'completed') {
+            recordGenerationSafe({
+              id: generationId,
+              target,
+              variant: a.variant,
+              judgeMode,
+              input,
+              stage,
+              repairRounds: outcome.corrections,
+              advisories: finalAdvisories,
+              enrich: 0,
+              rating: resolved.rating,
+            });
+          }
+          return assembleEnvelope(stage, finalAdvisories, h3Observability, h3TopLevel, h3NextAction);
         }
 
         let judgeOpts: JudgeStageOpts | undefined;
@@ -1390,30 +1449,37 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           const oldBp = repo.load(a.blueprint_id);
           if (!oldBp) throw new Error(`blueprint 不存在: ${a.blueprint_id}`);
           draft = {
-            blueprint: await analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, {
-              llm: blueprintLlm,
-            }),
+            blueprint: await rx(
+              analyzeBlueprintIncremental(ctx, resolveRoute(exec as ExecLike), oldBp, input, {
+                llm: blueprintLlm,
+              }),
+            ),
           };
         } else if (target === 'anima') {
           // 2026-09-15 管线重设计（spec §3）：compositing S1——语义蓝图产出；
           // 校验/tag_in_blueprint 失败单次反馈重试（沿蓝图形态 D5c 语义，计 1 次 correction）
           try {
-            draft = await provider({ ...intentBase, round: 0 }, exec);
+            draft = await rx(provider({ ...intentBase, round: 0 }, exec));
           } catch (error) {
+            // #16 P1-2（对抗审查）：取消优先于重试——CallerCancelledError 不得被当作校验失败
+            // 进入第二轮 LLM 重试（僵尸烧 token）；throwIfCancelled 立即以取消错误结算。
+            cancel.throwIfCancelled();
             blueprintRepairRetried = true;
             preflightAdvisories.push('blueprint_repair_retry');
             const message = error instanceof Error ? error.message : String(error);
-            draft = await provider(
-              {
-                ...intentBase,
-                round: 1,
-                feedback: `上一轮语义蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence、任何字段不得出现 tag 形式词）。`,
-              },
-              exec,
+            draft = await rx(
+              provider(
+                {
+                  ...intentBase,
+                  round: 1,
+                  feedback: `上一轮语义蓝图产出未通过校验（错误：${message}）。请修复校验错误后重新输出完整蓝图 JSON（media 固定 image、裸 JSON 无 fence、任何字段不得出现 tag 形式词）。`,
+                },
+                exec,
+              ),
             );
           }
         } else {
-          draft = await provider({ ...intentBase, round: 0 }, exec);
+          draft = await rx(provider({ ...intentBase, round: 0 }, exec));
         }
         // Task 14 ③：core.rating 确定性注入（安全数据不信任 LLM 产物，t7 交接）——两条蓝图来源统一
         // M5-T2（D5b）：统一 helper 承载（修复轮同 helper 重注入，缺口#2）
@@ -1436,18 +1502,18 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // S5 修复(pm-repairer)；检索层已废除（A1）。编排细节在 compositing/orchestrate.ts。
         if (target === 'anima' && draft.semantic) {
           const enrichRunner = subagentsReady
-            ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent })
+            ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent, signal: exec.signal })
             : undefined;
           // A2：成文/审计/修复三个 LLM 均开放 catalog_search 工具（toolFilter allow）
           const writerRunner = subagentsReady
-            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent })
+            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent, signal: exec.signal })
             : undefined;
           const auditorRunner =
             subagentsReady && judgeMode !== 'off'
-              ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-auditor', parent: criticParent })
+              ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-auditor', parent: criticParent, signal: exec.signal })
               : undefined;
           const repairRunner = subagentsReady
-            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-repairer', parent: criticParent })
+            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-repairer', parent: criticParent, signal: exec.signal })
             : undefined;
           // A5：机审 fabricated_tag 直查 catalog（canonical/alias/artist 同步级联，毫秒级）
           const verifyTag = (tag: string): boolean => searchCatalogSync(tag, { mode: 'auto', limit: 5 }).length > 0;
@@ -1456,20 +1522,22 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           // audit P1：bge 余弦注入 nl_tag_overlap（嵌入在审计前经 vectorPrewarm 预热进进程缓存）
           const overlapSim = getSharedBgeOverlapSim();
           const tOrch0 = performance.now();
-          const outcome = await orchestrateCompositing(
-            draft.semantic,
-            resolved.rating,
-            {
-              ...(enrichRunner ? { enrichRunner } : {}),
-              ...(writerRunner ? { writerRunner } : {}),
-              ...(auditorRunner ? { auditorRunner } : {}),
-              ...(repairRunner ? { repairRunner } : {}),
-              verifyTag,
-              search: fallbackSearch,
-              vectorSim: overlapSim.sim,
-              vectorPrewarm: overlapSim.prewarm,
-            },
-            { maxCorrections: MAX_CORRECTIONS },
+          const outcome = await rx(
+            orchestrateCompositing(
+              draft.semantic,
+              resolved.rating,
+              {
+                ...(enrichRunner ? { enrichRunner } : {}),
+                ...(writerRunner ? { writerRunner } : {}),
+                ...(auditorRunner ? { auditorRunner } : {}),
+                ...(repairRunner ? { repairRunner } : {}),
+                verifyTag,
+                search: fallbackSearch,
+                vectorSim: overlapSim.sim,
+                vectorPrewarm: overlapSim.prewarm,
+              },
+              { maxCorrections: MAX_CORRECTIONS },
+            ),
           );
           traceExtra.push({ name: 'compositing_orchestrate', ms: performance.now() - tOrch0 });
 
@@ -1583,11 +1651,13 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
 
           const tBlueprintEnrich0 = performance.now();
           trace('enrich_start', { coreRating: bpForEnrich.core?.rating ?? null, media: bpForEnrich.media });
-          const e0 = await enrichBlueprint(ctx, route, bpForEnrich, {
-            ...enrichOpts,
-            ...(recommendations.length > 0 ? { recommendations } : {}),
-            llm: enrichLlm,
-          });
+          const e0 = await rx(
+            enrichBlueprint(ctx, route, bpForEnrich, {
+              ...enrichOpts,
+              ...(recommendations.length > 0 ? { recommendations } : {}),
+              llm: enrichLlm,
+            }),
+          );
           trace('enrich_done', {
             expansions: e0.expansions.length,
             advisories: e0.advisories?.length ?? 0,
@@ -1605,7 +1675,7 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             repairs.push(...l1.repairs);
           }
           let bp = l1.bp;
-          let stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts);
+          let stage = await rx(runDraftThroughStage(target, { blueprint: bp }, runOpts, judgeOpts));
           trace('stage_done', {
             ok: stage.ok,
             gates: stage.gates.length,
@@ -1637,22 +1707,24 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             });
             // M5-T2（D5a/V6）：修复轮携带增量锚定（当前蓝图 → <old_blueprint>，禁整图重解释）；
             // V5：intentBase 携带 blueprintMode（D1）→ provider 蓝图形态返回——修复轮死路修复
-            const d2 = await provider({ ...intentBase, round: corrections, feedback }, exec);
+            const d2 = await rx(provider({ ...intentBase, round: corrections, feedback }, exec));
             if (!d2.blueprint) break; // provider 未返回蓝图 → 保留当前 stage，走 Level 3
             injectBlueprintCoreRating(d2, resolved.rating); // M5-T2（D5b）缺口#2：修复轮重注入
             const tE2 = performance.now();
-            const e2 = await enrichBlueprint(ctx, route, d2.blueprint, {
-              ...enrichOpts,
-              ...(recommendations.length > 0 ? { recommendations } : {}),
-              llm: enrichLlm,
-            });
+            const e2 = await rx(
+              enrichBlueprint(ctx, route, d2.blueprint, {
+                ...enrichOpts,
+                ...(recommendations.length > 0 ? { recommendations } : {}),
+                llm: enrichLlm,
+              }),
+            );
             traceExtra.push({ name: 'blueprint_enrich', ms: performance.now() - tE2 }); // D4 增量②：修复轮同计
             expansions.push(...e2.expansions);
             for (const sa of e2.advisories ?? []) styleAdvisories.add(sa);
             const l2 = preflightRepair(e2.blueprint);
             repairs.push(...l2.repairs);
             bp = l2.bp;
-            stage = await runDraftThroughStage(target, { blueprint: bp }, runOpts, repairJudgeOpts);
+            stage = await rx(runDraftThroughStage(target, { blueprint: bp }, runOpts, repairJudgeOpts));
             if (repairJudgeOpts) lastJudged = stage;
             if (target === 'anima')
               joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered;
@@ -1788,7 +1860,7 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         }
 
         // 旧 slots/shots 直传路径（向后兼容——AuthorDraft.blueprint 缺省时走原逻辑）
-        let stage = await runDraftThroughStage(target, draft, runOpts, judgeOpts);
+        let stage = await rx(runDraftThroughStage(target, draft, runOpts, judgeOpts));
         // T4（A12）：judgeRepair=false 时修正轮不带评审——投影保留最近一轮带评审的结果
         let lastJudged: StageResult | undefined = judgeOpts ? stage : undefined;
         let joyExtraFiltered = false;
@@ -1812,7 +1884,7 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             ...(stage.judgeFeedback ?? []),
           ].join('\n');
           const prevDraft = draft;
-          draft = await provider({ ...intentBase, round: corrections, feedback }, exec);
+          draft = await rx(provider({ ...intentBase, round: corrections, feedback }, exec));
           // P2：未点名槽回滚（两轮真实样本中修复 LLM 均越权删除 artist 槽）
           if (target === 'anima' && draft.slots) {
             const merged = mergeRepairSlots(prevDraft?.slots, draft.slots, feedback) ?? draft.slots;
@@ -1821,7 +1893,7 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             merged.rating = resolved.rating;
             draft.slots = merged;
           }
-          stage = await runDraftThroughStage(target, draft, runOpts, repairJudgeOpts);
+          stage = await rx(runDraftThroughStage(target, draft, runOpts, repairJudgeOpts));
           if (repairJudgeOpts) lastJudged = stage;
           if (target === 'anima') joyExtraFiltered = applyAnimaJoyExtraFilter(stage, a.form_fields) || joyExtraFiltered;
         }
@@ -1886,8 +1958,13 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           },
         );
       } catch (err) {
-        trace('CRASH', err instanceof Error ? (err.stack ?? err.message) : String(err));
+        // #16 P2（对抗审查）：取消 ≠ 崩溃——CallerCancelledError 记 CANCELLED，
+        // 避免 CRASH 证据盘积累取消噪音。
+        const cancelled = err instanceof Error && err.name === 'CallerCancelledError';
+        trace(cancelled ? 'CANCELLED' : 'CRASH', err instanceof Error ? (err.stack ?? err.message) : String(err));
         throw err;
+      } finally {
+        cancel.dispose();
       }
     },
   });

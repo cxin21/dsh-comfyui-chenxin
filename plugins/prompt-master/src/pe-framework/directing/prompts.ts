@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 五槽位 persona + prompt 装配 + 契约解析（spec 2026-09-17-h3-agentic-directing-pipeline-design §5）：
  * S1 pm-script-analyst / S2 pm-beat-director / S3 pm-shot-writer / S4 pm-continuity-auditor / S5 pm-shot-repairer。
  * 提示词格式沿用统一模板（task-text）+ 自动反注入。S2/S3/S4/S5 开放 catalog_search 工具。
@@ -92,6 +92,23 @@ Ref2VA 请求的结束状态会泄漏进前帧——相反状态道具优先用 
 【WenWu 八条生命通道（逐 Beat 自查）】
 形（身份材质）｜场（空间关系）｜视（摄影机注意力）｜力（动作因果）｜念（未说出口的目的）｜息（呼吸先于台词）｜言（台词三阶段）｜续（跨镜锚点传递）。
 
+【四种生镜形态（逐 Beat 选型）】
+关系燃烧（双人关系升温/破裂的贴身对切）｜动力对抗（追逐/对抗的力量交换）｜九态视觉谱（九状态格推进的静态连环）｜精准改造（同主体逐镜精修的状态迁移）。
+
+【单元结构（N6，逐 Beat 可选产出 unit）】
+unit = { dramatic_task(25-60字), visual_motif(3-6字，来自签名), hook }；
+相邻单元至少 1 种对比（任务/意象/钩子任一不同）；首末单元意象 echo（visual_motif 呼应）。
+
+【工程级产出 meta（与 beats 同级，必须产出）】
+- climax_segment：高潮 Beat id（其起始须落全片时长 60-80% 窗口）
+- sound_events：≤12 项，格式「N 槽名 事件」；槽名按固定顺序：开场基底/第一个高频锚点/仪式启动音/第一次撞击/中频群/关键V.O./第一次静默/静默回归/主题动作音/高潮余震/全片唯一/结尾尾音；无对应写「N N/A」，禁跳号
+- audiovisual_signature（8 字段齐全）：medium / aspect / color_ids（≤6，每角色一色相，禁漏色重色）/ texture（质感词数组）/ core_theme（必须可拍：主语+比喻动词+宾语）/ master_dna（≤3）/ genre_formula（opening/turn/climax/ending）
+- world_anchors（可选）：{ origin, equipment, energy, rule, support }，每条带出处
+
+【道具三态台账（与 beats 同级产出 props）】
+props = [{"id":"P1","name":"…","state_by_beat":{"B01":"初态→触发→末态"}}]——
+道具出现的每个 Beat 都必须有登记（缺登记会被机检 G-prop 判 critical）；状态按「初态→触发→末态」三段式写。
+
 【stage 路由】
 每 shot 标注 stage（t2va/i2va/fl2va/l2va/ref2va）+ route_reason。路由优先级：有 identity/location/prop 参考 → ref2va；有首帧图 → i2va；有首+尾帧 → fl2va；有末帧 → l2va；纯文本 → t2va。
 
@@ -105,16 +122,40 @@ export function buildBeatDirectorPrompt(scriptIr: ScriptIr): string {
     { tag: 'blueprint_v1', body: JSON.stringify(scriptIr, null, 2) },
     {
       tag: 'output_contract',
-      body: '仅输出一个 JSON 对象（裸 JSON）：{"beats":[<DirectingBeat 结构,不含 prompt/audit>]}。',
+      body: '仅输出一个 JSON 对象（裸 JSON）：{"beats":[<DirectingBeat 结构,不含 prompt/audit>],"meta":{"climax_segment":"…","sound_events":["1 开场基底 …",…],"audiovisual_signature":{…}},"props":[{"id":"P1","name":"…","state_by_beat":{"B01":"初态→触发→末态"}}]}——meta 与 props 必产出（道具未出现时 props 为空数组）。',
     },
   ]);
 }
 
-export function parseBeatDirectorOutput(raw: string): Partial<DirectingBeat>[] {
+export interface BeatDirectorMeta {
+  climax_segment?: string;
+  sound_events?: string[];
+  audiovisual_signature?: Record<string, unknown>;
+  world_anchors?: Record<string, string> | null;
+}
+
+export interface BeatDirectorPropLedger {
+  id: string;
+  name: string;
+  state_by_beat: Record<string, string>;
+}
+
+export interface BeatDirectorOutput {
+  beats: Partial<DirectingBeat>[];
+  meta?: BeatDirectorMeta;
+  props?: BeatDirectorPropLedger[];
+}
+
+export function parseBeatDirectorOutput(raw: string): BeatDirectorOutput {
   const body = extractFirstJsonObject(raw);
   const parsed = JSON.parse(body) as Record<string, unknown>;
   if (!Array.isArray(parsed.beats)) throw new Error('beat-director 契约违规: beats 必须为数组');
-  return parsed.beats as Partial<DirectingBeat>[];
+  const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+  return {
+    beats: parsed.beats as Partial<DirectingBeat>[],
+    ...(isObj(parsed.meta) ? { meta: parsed.meta as BeatDirectorMeta } : {}),
+    ...(Array.isArray(parsed.props) ? { props: parsed.props as BeatDirectorPropLedger[] } : {}),
+  };
 }
 
 // ─── S3 pm-shot-writer ──────────────────────────────────────────────

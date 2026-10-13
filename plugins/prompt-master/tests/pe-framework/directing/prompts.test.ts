@@ -100,10 +100,19 @@ describe('parse 函数契约校验', () => {
     }))
     expect(r.characters).toHaveLength(1)
   })
-  it('S2 parseBeatDirectorOutput: 返回 beats 数组', () => {
-    const r = parseBeatDirectorOutput(JSON.stringify({ beats: [{ id: 'B01', purpose: 'p', creative_intent: { state_before: 'a', trigger: 'b', state_after: 'c', audience_takeaway: 'd' }, location_id: 'L1', character_ids: ['S1'], shots: [] }] }))
-    expect(r).toHaveLength(1)
-    expect(r[0].id).toBe('B01')
+  it('S2 parseBeatDirectorOutput: 返回 beats + meta/props 契约（R8/R9）', () => {
+    const r = parseBeatDirectorOutput(JSON.stringify({
+      beats: [{ id: 'B01', purpose: 'p', creative_intent: { state_before: 'a', trigger: 'b', state_after: 'c', audience_takeaway: 'd' }, location_id: 'L1', character_ids: ['S1'], shots: [] }],
+      meta: { climax_segment: 'B01', sound_events: ['1 开场基底 底噪'] },
+      props: [{ id: 'P1', name: 'phone', state_by_beat: { B01: '黑屏→亮屏→黑屏' } }],
+    }))
+    expect(r.beats).toHaveLength(1)
+    expect(r.beats[0].id).toBe('B01')
+    expect(r.meta?.climax_segment).toBe('B01')
+    expect(r.props?.[0].state_by_beat.B01).toContain('→')
+    const bare = parseBeatDirectorOutput(JSON.stringify({ beats: [] }))
+    expect(bare.beats).toEqual([])
+    expect(bare.meta).toBeUndefined()
   })
   it('S3 parseShotWriterOutput: 返回 H3Shot 兼容字段', () => {
     const r = parseShotWriterOutput(JSON.stringify({ shots: [{ what: 'x', who: 'S1' }] }))

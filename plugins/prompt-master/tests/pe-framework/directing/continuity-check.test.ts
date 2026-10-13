@@ -1,12 +1,12 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { checkDirectingIr } from '../../../src/pe-framework/directing/continuity-check.js'
 import { type DirectingIr } from '../../../src/pe-framework/directing/ir-schema.js'
 import { buildGoodIr } from './ir-schema.test.js'
 
-function gatesFor(mutate?: (ir: DirectingIr) => void, opts?: { strict?: boolean }) {
+function gatesFor(mutate?: (ir: DirectingIr) => void, opts?: { strict?: boolean; scriptText?: string }) {
   const ir = buildGoodIr()
   if (mutate) mutate(ir)
-  return checkDirectingIr(ir, { strict: opts?.strict ?? false })
+  return checkDirectingIr(ir, { strict: opts?.strict ?? false, ...(opts?.scriptText !== undefined ? { scriptText: opts.scriptText } : {}) })
 }
 const byRule = (gates: ReturnType<typeof checkDirectingIr>, rule: string) => gates.filter((g) => g.rule === rule)
 
@@ -175,5 +175,150 @@ describe('checkDirectingIr（spec §6：12 机器门）', () => {
       ir.meta.climax_segment = 'B01'
     }, { strict: true })
     expect(gates.filter((g) => g.severity === 'warning')).toEqual([])
+  })
+
+  it('R4（G-dialogue Δ4）：<d> 文本逐字对账 + 禁冒号/角色名', () => {
+    // scriptText 含台词 → 零违规
+    const ok = gatesFor(undefined, { scriptText: '剧本 她说 太安静了。 他说 嗯。' })
+    expect(byRule(ok, 'G-dialogue')).toEqual([])
+    // scriptText 不含台词 → 逐字对账失败 critical
+    const drift = gatesFor(undefined, { scriptText: '完全无关的剧本' })
+    expect(byRule(drift, 'G-dialogue').some((g) => g.severity === 'critical' && g.detail.includes('不逐字'))).toBe(true)
+    // 标签内冒号 → critical
+    const colon = gatesFor((ir) => {
+      ir.beats[0].shots[1].dialogue = { text: '太安静了：你听', language: 'Chinese' }
+    })
+    expect(byRule(colon, 'G-dialogue').some((g) => g.detail.includes('冒号'))).toBe(true)
+    // 标签内 ASCII 冒号 → critical（P2-3 对抗审查：只测全角会放过「删 ASCII ':' 检查」变异）
+    const colonAscii = gatesFor((ir) => {
+      ir.beats[0].shots[1].dialogue = { text: '太安静了:你听', language: 'Chinese' }
+    })
+    expect(byRule(colonAscii, 'G-dialogue').some((g) => g.detail.includes('冒号'))).toBe(true)
+    // 标签内角色名 → critical
+    const nameIn = gatesFor((ir) => {
+      ir.beats[0].shots[1].dialogue = { text: '御姐说太安静了', language: 'Chinese' }
+    })
+    expect(byRule(nameIn, 'G-dialogue').some((g) => g.detail.includes('角色名'))).toBe(true)
+  })
+
+  it('R5（G-cameramotion）：camera 缺失/无运动语汇 → critical', () => {
+    const empty = gatesFor((ir) => {
+      ;(ir.beats[0].shots[0] as unknown as Record<string, unknown>).camera = ''
+    })
+    // P2-2（对抗审查 mutation 缺口）：severity 降级必须变红——两分支都钉 critical
+    expect(byRule(empty, 'G-cameramotion').some((g) => g.detail.includes('必填') && g.severity === 'critical')).toBe(true)
+    const noMotion = gatesFor((ir) => {
+      ir.beats[0].shots[0].camera = '广角'
+    })
+    expect(byRule(noMotion, 'G-cameramotion').length).toBe(1)
+    expect(byRule(noMotion, 'G-cameramotion')[0].severity).toBe('critical')
+  })
+
+  it('R19（G-shotcard）：时间不连续升 critical（spec 全 critical 除非注明）', () => {
+    const gates = gatesFor((ir) => {
+      ir.beats[0].shots[1].time = '00:10' // 前镜出口 00:03，本镜入口 00:10 → 不连续
+    })
+    const g = byRule(gates, 'G-shotcard').filter((x) => x.detail.includes('不连续'))
+    expect(g.length).toBe(1)
+    expect(g[0].severity).toBe('critical')
+  })
+
+  it('R20（G-refbinding）：l2va 多于 1 张 Picture → critical', () => {
+    const gates = gatesFor((ir) => {
+      ir.beats[1].shots[2].reference_plan = [
+        { role: 'composition_picture', target: 'L1', h3_label: 'Picture 1' },
+        { role: 'composition_picture', target: 'L1', h3_label: 'Picture 2' },
+      ]
+    })
+    expect(byRule(gates, 'G-refbinding').some((g) => g.detail.includes('l2va'))).toBe(true)
+  })
+
+  it('R21（G-signature）：core_theme 双语词数 + 字段齐全 + 漏色重色', () => {
+    const gates = gatesFor((ir) => {
+      ir.meta.audiovisual_signature = {
+        medium: '实拍',
+        aspect: '16:9',
+        color_ids: { S1: '绯红' },
+        texture: ['霓虹'],
+        core_theme: '她将珍珠掷入怒海', // 8 CJK 字 → 4 折算词 ≥3 ✓
+        master_dna: ['a'],
+        genre_formula: { opening: 'o', turn: 't', climax: 'c', ending: 'e' },
+      }
+    })
+    // GOOD：S1 有色相、字段齐全、中文 core_theme 达标 → 零 G-signature
+    expect(byRule(gates, 'G-signature')).toEqual([])
+    const zhTooShort = gatesFor((ir) => {
+      ir.meta.audiovisual_signature = {
+        medium: '实拍',
+        aspect: '16:9',
+        color_ids: { S1: '绯红' },
+        texture: ['霓虹'],
+        core_theme: '大海',
+        master_dna: ['a'],
+        genre_formula: { opening: 'o', turn: 't', climax: 'c', ending: 'e' },
+      }
+    })
+    expect(byRule(zhTooShort, 'G-signature').some((g) => g.detail.includes('core_theme'))).toBe(true)
+    const missingField = gatesFor((ir) => {
+      ir.meta.audiovisual_signature = {
+        medium: '实拍',
+        color_ids: { S1: '绯红' },
+        texture: ['霓虹'],
+        core_theme: '她将珍珠掷入怒海',
+        master_dna: ['a'],
+        genre_formula: { opening: 'o', turn: 't', climax: 'c', ending: 'e' },
+      } as never // 缺 aspect → 字段齐全 critical
+    })
+    expect(byRule(missingField, 'G-signature').some((g) => g.detail.includes('aspect'))).toBe(true)
+    const dupHue = gatesFor((ir) => {
+      ir.meta.audiovisual_signature = {
+        medium: '实拍',
+        aspect: '16:9',
+        color_ids: { S1: '绯红', S2: '绯红' },
+        texture: ['霓虹'],
+        core_theme: '她将珍珠掷入怒海',
+        master_dna: ['a'],
+        genre_formula: { opening: 'o', turn: 't', climax: 'c', ending: 'e' },
+      }
+    })
+    expect(byRule(dupHue, 'G-signature').some((g) => g.detail.includes('重色'))).toBe(true)
+  })
+
+  it('R23（G-sound）：12-slot 序号禁跳号 + 规范槽名 + N/A 占位', () => {
+    const ok = gatesFor((ir) => {
+      ir.meta.sound_events = ['1 开场基底 城市底噪', 'N/A', '3 仪式启动音 门铃']
+    })
+    expect(byRule(ok, 'G-sound')).toEqual([])
+    const skip = gatesFor((ir) => {
+      ir.meta.sound_events = ['1 开场基底 城市底噪', '3 第一次撞击 撞门']
+    })
+    expect(byRule(skip, 'G-sound').some((g) => g.detail.includes('跳号'))).toBe(true)
+    const badName = gatesFor((ir) => {
+      ir.meta.sound_events = ['1 随便什么音效 响了']
+    })
+    expect(byRule(badName, 'G-sound').some((g) => g.detail.includes('规范名'))).toBe(true)
+  })
+
+  it('D17/D18（G-unit N6）：相邻单元零对比 critical；首末 echo 缺失 warning→strict critical', () => {
+    const zeroContrast = gatesFor((ir) => {
+      ir.beats[0].unit = { dramatic_task: 'same', visual_motif: 'same', hook: 'same' }
+      ir.beats[1].unit = { dramatic_task: 'same', visual_motif: 'same', hook: 'same' }
+    })
+    expect(byRule(zeroContrast, 'G-unit').some((g) => g.severity === 'critical' && g.detail.includes('三字段全同'))).toBe(true)
+    const noEcho = gatesFor((ir) => {
+      ir.beats[0].unit = { dramatic_task: 'a', visual_motif: '红伞', hook: 'h1' }
+      ir.beats[1].unit = { dramatic_task: 'b', visual_motif: '蓝灯', hook: 'h2' }
+    })
+    const echo = byRule(noEcho, 'G-unit').filter((g) => g.detail.includes('echo'))
+    expect(echo.length).toBe(1)
+    expect(echo[0].severity).toBe('warning')
+    const strictEcho = gatesFor(
+      (ir) => {
+        ir.beats[0].unit = { dramatic_task: 'a', visual_motif: '红伞', hook: 'h1' }
+        ir.beats[1].unit = { dramatic_task: 'b', visual_motif: '蓝灯', hook: 'h2' }
+      },
+      { strict: true },
+    )
+    expect(byRule(strictEcho, 'G-unit').find((g) => g.detail.includes('echo'))?.severity).toBe('critical')
   })
 })

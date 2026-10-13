@@ -263,8 +263,11 @@ export function buildRef2vaText(request: StoryRequest, depth?: 'quick' | 'direct
   ].join('\n');
 }
 
-export function buildText(stage: string, request: StoryRequest, depth?: 'quick' | 'director'): string {
-  const speakerIds = collectSpeakerIds(request.shots);
+export function buildText(stage: string, request: StoryRequest, depth?: 'quick' | 'director', speakerIdsOverride?: Map<string, string>): string {
+  // R2（spec §6.1② DirectingIR 管线）：characters[].id 直接作为 speaker ID 源注入——
+  // 逐镜编译作用域内 collectSpeakerIds 只见单镜，跨镜稳定 ID 必须由编排器显式注入覆盖；
+  // 缺省（未注入）保持现行 collectSpeakerIds 行为（多镜编译/prompt_compile 路径逐字节不变）。
+  const speakerIds = speakerIdsOverride ?? collectSpeakerIds(request.shots);
   if (stage === 't2va') return buildThreeFieldBody(request, speakerIds);
   if (KEYFRAME_STAGES.has(stage)) return buildKeyframeText(stage, request, speakerIds);
   if (stage === 'ref2va') return buildRef2vaText(request, depth, speakerIds);
@@ -332,17 +335,19 @@ export function withConstraints(text: string, constraints?: string): string {
 export function buildTextPair(
   stage: string,
   request: StoryRequest,
-  opts?: { depth?: 'quick' | 'director'; constraints?: string },
+  opts?: { depth?: 'quick' | 'director'; constraints?: string; speakerIds?: Map<string, string> },
 ): { text: string; textZh: string } {
-  const textEn = withConstraints(buildText(stage, request, opts?.depth), opts?.constraints);
+  const textEn = withConstraints(buildText(stage, request, opts?.depth, opts?.speakerIds), opts?.constraints);
   return { text: textEn, textZh: buildTextZh(textEn) };
 }
 
 /** 供 T7/E2E 消费（brief 接口）：输入扁平 story → {text, text_zh}（Task 6 键桥接：result 键直接匹配 golden text_zh）
- *  depth：'quick'（缺省）=golden 兼容口径；'director'=启用导演级投影（Phase 3 起：retention 外观镜号等）。 */
+ *  depth：'quick'（缺省）=golden 兼容口径；'director'=启用导演级投影（Phase 3 起：retention 外观镜号等）。
+ *  speakerIds（R2，spec §6.1②）：directing 编排器注入的跨镜稳定 speaker ID 覆盖（key=shot.who → value=characters[].id）；
+ *  缺省 undefined = 现行 collectSpeakerIds 编译作用域分配（golden 逐字节不变）。 */
 export function compileH3(
   input: { duration_seconds: number; shots: H3Shot[]; references?: unknown[]; constraints?: string },
-  opts?: { stage?: string; depth?: 'quick' | 'director' },
+  opts?: { stage?: string; depth?: 'quick' | 'director'; speakerIds?: Map<string, string> },
 ): { text: string; text_zh: string } {
   const stage = opts?.stage ?? 't2va';
   // F2：shot 结构前置校验——非法字段（如把 content 当 what 传）给可读错误，而不是 trimPunct(undefined) 裸崩溃
@@ -388,7 +393,7 @@ export function compileH3(
     videos: [],
     audios: [],
   };
-  const pair = buildTextPair(stage, request, { depth: opts?.depth, constraints: input.constraints });
+  const pair = buildTextPair(stage, request, { depth: opts?.depth, constraints: input.constraints, speakerIds: opts?.speakerIds });
   return { text: pair.text, text_zh: pair.textZh };
 }
 

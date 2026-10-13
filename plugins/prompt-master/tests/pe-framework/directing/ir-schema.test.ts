@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   validateDirectingIr,
   validateScriptIr,
@@ -234,6 +234,17 @@ describe('validateDirectingIr（spec §4 契约）', () => {
     const r = validateDirectingIr(ir)
     expect(r.ok).toBe(false)
     expect(r.missing.some((m) => m.includes('continuity_handoff'))).toBe(true)
+  })
+
+  it('首 Beat handoff 空通道 → 合法（spec §6 G-handoff 限定非首 Beat）', () => {
+    const ir = withViolation((ir) => {
+      for (const s of ir.beats[0].shots) {
+        s.continuity_handoff = { positions: '', emotion: '', props: '', audio: '' }
+      }
+    })
+    const r = validateDirectingIr(ir)
+    expect(r.ok).toBe(true)
+    expect(r.missing).toEqual([])
   })
 })
 

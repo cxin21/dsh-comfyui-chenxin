@@ -34,3 +34,7 @@ assets/knowledge/minimax-h3-prompt/tokenizer.json
 
 # Codegraph local index (plugin artifact, never ship)
 .codegraph/
+
+# Internal agent/session artifacts (never ship)
+.agent-teams/
+.superpowers/

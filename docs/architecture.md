@@ -8,10 +8,9 @@ Five DSH skills + three shared Python packages let the agent author prompts for 
 
 ```
 skills/                                  runtime/
-├── anima-prompt-v1/    (Anima prompt compiler)       ├── comfyui_http/    (stdlib HTTP)
-├── minimax-h3-prompt/  (MiniMax H3 prompt compiler)  ├── comfyui_mcp/     (stdio JSON-RPC client)
-├── camera-image/       (Anima camera workflow)       └── chenxin_runtime/ (P1 envelope + camera engine)
-├── camera-video/       (MiniMax H3 video workflow)
+├── camera-image/       (Anima camera workflow)         ├── comfyui_http/    (stdlib HTTP)
+├── camera-video/       (MiniMax H3 video workflow)     ├── comfyui_mcp/     (stdio JSON-RPC client)
+├── camera-multiview/   (Multi-view character workflow) └── chenxin_runtime/ (P1 envelope + camera engine)
 └── camera-multiview/   (Flux2-Klein character sheet)
 ```
 
@@ -48,7 +47,7 @@ Exit codes by category:
 | `runtime` | 5 |
 | `unexpected` | 70 |
 
-Note: `anima-prompt-v1 author` without `--json` switches to a two-block text format (POSITIVE / NEGATIVE). All other CLIs always emit JSON.
+Note: All CLIs always emit JSON.
 
 **Design rule: the LLM writes content; the code writes structure.** No skill requires the LLM to produce storage shapes, widget indices, node IDs, or provenance metadata. The LLM supplies subject / prompt / camera semantic / paths — the code turns those into node wiring and graph validation.
 
@@ -58,8 +57,6 @@ Each skill accepts exactly one flat JSON object via `--request`. Authoritative s
 
 | Skill | Request fields (full schema in SKILL.md) |
 |---|---|
-| `anima-prompt-v1 author` | `{variant, subject, slots, narrative?, exclusions?, quality_prefix?, explicit?}` |
-| `minimax-h3-prompt author` | `--stage` flag + `{duration_seconds, shots[{what, who?, ambient?, music?, dialogue?}], references?[], videos?[], audios?[]}` (stage ∈ t2va/i2va/fl2va/l2va/ref2va; or `--plan plan.json` for ≥10s multishot) |
 | `camera-image run` | `{prompt.{positive,negative}, evidence?, profile_id?, preset?, seed?, image_size?, camera?, camera_extra?, lora?, sampling?, groups?, reference_image?, controlnet_image?, red/green/blue_prompt?, red/green/blue_image?, signature_image?}` (stage: t2i/i2i) |
 | `camera-video run` | `{prompt, duration, references[]}` (stage: t2v/i2v/multi-i2v) |
 | `camera-multiview run` | `{full_body_image, face_image}` |
@@ -108,7 +105,6 @@ skills/<name>/
 | Fresh install / repair | `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1` |
 | Re-write local packages only | `<preset>\.venv\Scripts\python.exe scripts/install_local.py` |
 | Verify SKILL.md contracts | `<preset>\.venv\Scripts\python.exe scripts/check_contracts.py` |
-| Rebuild Anima catalog | `anima-prompt-v1 catalog build --source knowledge/source --output knowledge` |
-| Verify Anima catalog | `anima-prompt-v1 catalog verify --database knowledge/tag-catalog.sqlite --manifest knowledge/manifest.json` |
+| Rebuild Anima catalog | prompt-master `catalog_build` DSH tool |
 | Verify camera assets | `<camera-cli> assets verify --stage <stage>` |
-| Reset tokenizer snapshot (h3 only) | Re-run `setup.ps1` (install_local doesn't touch PyPI wheels) |
+| Reset tokenizer snapshot (h3) | Re-download from GitHub Releases into `assets/knowledge/minimax-h3-prompt/` |

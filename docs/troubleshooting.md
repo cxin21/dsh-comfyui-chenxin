@@ -7,7 +7,7 @@
 ### 症状
 
 ```
-The term 'anima-prompt-v1' is not recognized as the name of a cmdlet, function, script file, or operable program.
+The term 'camera-image' is not recognized as the name of a cmdlet, function, script file, or operable program.
 ```
 
 或裸 `python`：
@@ -21,7 +21,7 @@ ModuleNotFoundError: No module named 'chenxin_runtime'
 `scripts/setup.ps1` 没跑，或者跑的时候 venv 没创建完整。检查：
 
 ```powershell
-Test-Path "<preset>\.venv\Scripts\anima-prompt-v1.exe"   # 应该是 True
+Test-Path "<preset>\.venv\Scripts\camera-image.exe"   # 应该是 True
 Test-Path "<preset>\.venv\Scripts\python.exe"           # 应该是 True
 ```
 
@@ -41,16 +41,14 @@ powershell -ExecutionPolicy Bypass -File <preset>\scripts\setup.ps1
 
 ### 症状
 
-- DSH agent 报 "no tool named `minimax_h3_prompt`"
+- DSH agent 报 "no tool named `camera_image`"
 - loader 控制台日志：`[comfyui-chenxin] .venv not found — CLI wrapper tools will be skipped.`
 
 ### 诊断
 
-`loader.js` 的 `resolveVenvScripts()` 要求 `<preset>/.venv/Scripts/` 里**全部 5 个** console-script `.exe` 都存在，缺一个就跳过整个 CLI tool 注册。
+`loader.js` 的 `resolveVenvScripts()` 要求 `<preset>/.venv/Scripts/` 里**全部 3 个** console-script `.exe` 都存在，缺一个就跳过整个 CLI tool 注册。
 
 ```powershell
-<preset>\.venv\Scripts\anima-prompt-v1.exe --list-actions
-<preset>\.venv\Scripts\minimax-h3-prompt.exe --list-actions
 <preset>\.venv\Scripts\camera-image.exe --list-actions
 <preset>\.venv\Scripts\camera-video.exe --list-actions
 <preset>\.venv\Scripts\camera-multiview.exe --list-actions
@@ -82,7 +80,7 @@ powershell -ExecutionPolicy Bypass -File <preset>\scripts\setup.ps1
 
 1. 看 `<preset>/scripts/install_local.py` 顶部 `PACKAGES` 表，`cli` 字段要等于 `(cli_name, cli_target)`：
    ```python
-   "cli": ("anima-prompt-v1", "anima_prompt_v1.cli:main")
+   "cli": ("camera-image", "camera_image.cli:main")
    ```
 2. 看对应 skill 的 `cli.py`，确认 `main()` 里有 `--list-actions` 路由（裸 `if "--list-actions" in sys.argv[1:]: print(...)` 或 `main_entry`/`Subcommand` 内部自动处理）
 3. 手动跑 install_local 看输出：
@@ -159,6 +157,8 @@ camera-image run --stage t2i --request req.json --output-dir temp/camera-image/ 
 
 `code` 是真错误，`advisories` 是非阻塞警告。先看 `errors`，再看 `advisories`。
 
+> 2026-08-31 起 anima / h3 提示词编译 CLI 已并入 prompt-master 插件（`prompt_author` / `prompt_audit`）。以下六个小节（`brief_validation_failed` / `catalog_read_failed` / `h3_audit_failed` / `budget_exceeded` / `tokenizer_integrity_failed` / `official_envelope_violated`）描述的报错主体（原 CLI）已移除；审计规则与 stage 预算语义由 prompt-master 承载（`h3_audit_failed` 现以 advisory 形式存在于 prompt-master 编排链）；`tokenizer.json` 现为 GitHub Releases 资产（`assets/knowledge/minimax-h3-prompt/`），损坏时重新下载解压。
+
 ### `brief_validation_failed`（anima）
 
 brief 字段拼错。常见：
@@ -207,7 +207,7 @@ anima-prompt-v1 catalog verify --database knowledge/tag-catalog.sqlite --manifes
 
 ### `tokenizer_integrity_failed`（h3）
 
-`<preset>/skills/minimax-h3-prompt/knowledge/tokenizer.json` 或 `manifest.json` 被改过 / 损坏。恢复：
+`assets/knowledge/minimax-h3-prompt/tokenizer.json`（GitHub Releases 资产 `tokenizer.json.gz`）被改过 / 损坏。恢复：重新下载 release 资产解压即可；重跑 `setup.ps1` 只会重装 PyPI `tokenizers` 库，不会恢复该快照数据。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File <preset>\scripts\setup.ps1
@@ -298,7 +298,7 @@ ComfyUI 拒收 API graph（通常因为节点缺模型、显存不够）。看 e
 
 ```powershell
 # 5 个 CLI 都能跑吗？
-@('anima-prompt-v1','minimax-h3-prompt','camera-image','camera-video','camera-multiview') | ForEach-Object {
+@('camera-image','camera-video','camera-multiview') | ForEach-Object {
     $r = & "<preset>\.venv\Scripts\$_.exe" --list-actions 2>&1 | Out-String
     Write-Host "$_ : $($r.Split("`n").Count) actions"
 }

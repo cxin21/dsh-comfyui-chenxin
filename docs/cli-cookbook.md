@@ -3,228 +3,13 @@
 每个 CLI 的完整使用手册。`--list-actions` 是权威动作列表（loader 也用它发现 host tool），实际可用的 flag 在每个 action 的 `--help` 里：
 
 ```bash
-<preset>\.venv\Scripts\anima-prompt-v1.exe author --help
+<preset>\.venv\Scripts\camera-image.exe run --help
 ```
 
-**约定**：所有 CLI 都接受 `--json`（loader 自动加）；`anima-prompt-v1 author` 没 `--json` 时切换纯文本。
+**约定**：所有 CLI 都接受 `--json`（loader 自动加）。
 
 ---
 
-## `anima-prompt-v1` — Anima 提示词编译器
-
-### Actions
-
-| Action | 干什么 |
-|---|---|
-| `author` | brief → Anima positive/negative 单行 prompt |
-| `catalog.search` | 按 query 查 tag catalog（支持 alias / fuzzy） |
-| `catalog.browse` | 不带 query 浏览 catalog |
-| `catalog.stats` | catalog 统计 |
-| `catalog.build` | 从源码重建 SQLite catalog |
-| `catalog.verify` | 校验 SQLite 与 manifest 一致 |
-| `relation.submit` | 把 LLM 学到的新 relation 提交到 overlay |
-| `relation.list` | 列出 overlay 里的 proposals |
-| `relation.accept` | 接受 proposal（更新 base relation） |
-| `relation.reject` | 拒掉 proposal |
-
-详细 schema 看 `skills/anima-prompt-v1/SKILL.md`。
-
-### Example 1: 写一个 solo portrait
-
-```bash
-# 写 brief.json
-cat > brief.json <<'JSON'
-{
-  "variant": "base",
-  "subject": "smiling girl portrait",
-  "slots": {
-    "count_gender": ["1girl", "solo"],
-    "appearance":   ["long hair", "blue eyes", "smile", "blush"],
-    "expression":   ["smile"],
-    "camera":       ["close-up", "looking at viewer"]
-  }
-}
-JSON
-
-# 调 author（用 --json 拿 envelope；不带就是纯文本）
-<preset>\.venv\Scripts\anima-prompt-v1.exe author --request brief.json --json
-```
-
-期望 `result.positive`：`masterpiece, best quality, score_7, safe, 1girl, solo, long hair, blue eyes, smile, blush, smile, close-up, looking at viewer`
-
-### Example 2: 用 stdin 喂 brief
-
-```bash
-cat brief.json | <preset>\.venv\Scripts\anima-prompt-v1.exe author --stdin --json
-```
-
-`--request` 和 `--stdin` 互斥，必选其一。
-
-### Example 3: 查 catalog
-
-```bash
-# 精确 / 别名 / 模糊 三种模式
-<preset>\.venv\Scripts\anima-prompt-v1.exe catalog.search "long hair" --mode auto --limit 10 --json
-<preset>\.venv\Scripts\anima-prompt-v1.exe catalog.search "lon hair" --mode fuzzy --limit 5 --json
-
-# 按 category / source 过滤
-<preset>\.venv\Scripts\anima-prompt-v1.exe catalog.browse --category appearance --source danbooru --limit 20 --json
-
-# 统计
-<preset>\.venv\Scripts\anima-prompt-v1.exe catalog.stats --json
-```
-
-### Example 4: 重建 / 校验 catalog
-
-```bash
-# 从 knowledge/source/ 重建 SQLite
-<preset>\.venv\Scripts\anima-prompt-v1.exe catalog.build \
-    --source <preset>/skills/anima-prompt-v1/knowledge/source \
-    --output <preset>/skills/anima-prompt-v1/knowledge \
-    --manifest <preset>/skills/anima-prompt-v1/knowledge/manifest.json
-
-# 校验
-<preset>\.venv\Scripts\anima-prompt-v1.exe catalog.verify \
-    --database <preset>/skills/anima-prompt-v1/knowledge/tag-catalog.sqlite \
-    --manifest <preset>/skills/anima-prompt-v1/knowledge/manifest.json
-```
-
-### Example 5: 提交 relation proposal
-
-```bash
-# payload.json: {record_id, surface_form, category, ...}
-<preset>\.venv\Scripts\anima-prompt-v1.exe relation.submit \
-    --database <preset>/skills/anima-prompt-v1/knowledge/tag-catalog.sqlite \
-    --overlay <preset>/skills/anima-prompt-v1/knowledge/relation-overlay.sqlite \
-    --payload payload.json \
-    --model current-llm \
-    --source llm \
-    --json
-
-# 列出 candidate（默认 all）
-<preset>\.venv\Scripts\anima-prompt-v1.exe relation.list \
-    --overlay <preset>/skills/anima-prompt-v1/knowledge/relation-overlay.sqlite \
-    --status candidate --limit 50 --json
-
-# 接受 / 拒
-<preset>\.venv\Scripts\anima-prompt-v1.exe relation.accept \
-    --overlay <preset>/skills/anima-prompt-v1/knowledge/relation-overlay.sqlite \
-    <proposal-id> --json
-
-<preset>\.venv\Scripts\anima-prompt-v1.exe relation.reject \
-    --overlay <preset>/skills/anima-prompt-v1/knowledge/relation-overlay.sqlite \
-    <proposal-id> --json
-```
-
----
-
-## `minimax-h3-prompt` — H3 视频提示词编译器
-
-### Actions
-
-| Action | 干什么 |
-|---|---|
-| `author` | story → 官方 H3 dialect（含 token 预算 + 审计） |
-
-5 个 stage（`t2va` / `i2va` / `fl2va` / `l2va` / `ref2va`）由 `--stage` flag 选，不在 request JSON 里。
-
-详细 schema + 多 shot 计划 (`--plan`) 看 `skills/minimax-h3-prompt/SKILL.md`。
-
-### Example 1: 文生视频 (T2VA)
-
-```bash
-cat > story.json <<'JSON'
-{
-  "duration_seconds": 6,
-  "shots": [
-    {
-      "what": "A woman walks through neon Tokyo at dusk.",
-      "ambient": "city hum, distant traffic",
-      "music": "low melancholic strings"
-    }
-  ]
-}
-JSON
-
-<preset>\.venv\Scripts\minimax-h3-prompt.exe author \
-    --stage t2va \
-    --request story.json \
-    --tokenizer-dir <preset>/skills/minimax-h3-prompt/knowledge
-```
-
-返回 `result.text`（可执行的英文 prompt）+ `result.text_zh`（结构词翻译的中文骨架，正文英文）。`result.budget` 报告 token / 字符用量。
-
-### Example 2: 多 shot 计划 (FL2VA / Ref2VA / 多镜头推荐)
-
-12s 视频、4 镜头（含首尾帧）：
-
-```bash
-cat > story.json <<'JSON'
-{ "duration_seconds": 12, "shots": [{"what": "ignored when --plan is used"}] }
-JSON
-
-cat > plan.json <<'JSON'
-{
-  "total_duration": 12.0,
-  "shot_count": 4,
-  "edit_rhythm": "establishing to release",
-  "continuity_strategy": "single subject, fixed rooftop",
-  "shots": [
-    {"shot": 1, "start": 0.0, "end": 3.0,
-     "content": "Neko lands on the rooftop at dusk.",
-     "camera": "static shot", "transition": "opening",
-     "sound_focus": "city hum"},
-    {"shot": 2, "start": 3.0, "end": 6.0,
-     "content": "Neko walks toward the antenna.",
-     "camera": "truck right with small amplitude at slow speed",
-     "transition": "cut", "sound_focus": "footsteps, wind"},
-    {"shot": 3, "start": 6.0, "end": 9.0,
-     "content": "Neko reaches for the antenna.",
-     "camera": "push in with large amplitude",
-     "transition": "cut", "sound_focus": "wind"},
-    {"shot": 4, "start": 9.0, "end": 12.0,
-     "content": "Neko looks over the skyline.",
-     "camera": "tilt up", "transition": "cut",
-     "sound_focus": "city hum, distant traffic"}
-  ],
-  "continuity_ledger": {
-    "identity": "Neko",
-    "wardrobe_and_props": "black hoodie, silver antenna"
-  }
-}
-JSON
-
-<preset>\.venv\Scripts\minimax-h3-prompt.exe author \
-    --stage fl2va \
-    --request story.json \
-    --plan plan.json \
-    --tokenizer-dir <preset>/skills/minimax-h3-prompt/knowledge
-```
-
-`--plan` 给出时，`request.shots` 被忽略；`duration_seconds` / stage / references 仍从 request 拿。
-
-### Example 3: Ref2VA with 参考图
-
-```bash
-cat > story.json <<'JSON'
-{
-  "duration_seconds": 8,
-  "shots": [{"what": "Neko stands on the rooftop at dusk, wind in her hair.", "who": "Neko"}],
-  "references": [
-    {"kind": "picture", "who": "Neko", "image": "C:/refs/neko.png", "width": 1024, "height": 1024}
-  ]
-}
-JSON
-
-<preset>\.venv\Scripts\minimax-h3-prompt.exe author \
-    --stage ref2va \
-    --request story.json \
-    --tokenizer-dir <preset>/skills/minimax-h3-prompt/knowledge
-```
-
-`who` 必须匹配 `references[].who`。
-
----
 
 ## `camera-image` — Anima camera workflow（t2i / i2i）
 
@@ -562,8 +347,6 @@ temp/camera-multiview/multiview-1/
 ### 直接通过 venv python 调（不进 venv 也行）
 
 ```bash
-<preset>\.venv\Scripts\python.exe -m anima_prompt_v1.cli author --request brief.json --json
-<preset>\.venv\Scripts\python.exe -m h3_prompt.cli author --stage t2va --request story.json --tokenizer-dir <preset>/skills/minimax-h3-prompt/knowledge
 <preset>\.venv\Scripts\python.exe -m camera_image.cli run --stage t2i --request req.json --output-dir temp/camera-image/ --yes
 <preset>\.venv\Scripts\python.exe -m camera_video.cli run --stage t2v --request req.json --output-dir temp/camera-image/
 <preset>\.venv\Scripts\python.exe -m camera_multiview.cli run --request req.json --output-dir temp/camera-image/
@@ -572,8 +355,6 @@ temp/camera-multiview/multiview-1/
 ### `--list-actions`（loader 也用这个）
 
 ```bash
-<preset>\.venv\Scripts\anima-prompt-v1.exe --list-actions
-<preset>\.venv\Scripts\minimax-h3-prompt.exe --list-actions
 <preset>\.venv\Scripts\camera-image.exe --list-actions
 <preset>\.venv\Scripts\camera-video.exe --list-actions
 <preset>\.venv\Scripts\camera-multiview.exe --list-actions
@@ -582,7 +363,6 @@ temp/camera-multiview/multiview-1/
 ### `--help`
 
 ```bash
-<preset>\.venv\Scripts\anima-prompt-v1.exe author --help
 <preset>\.venv\Scripts\camera-image.exe run --help
 ```
 
@@ -592,12 +372,11 @@ temp/camera-multiview/multiview-1/
 |---|---|---|
 | success | 0 | `ok=true` |
 | `request` | 2 | `invalid_request`, `input_file_missing`, `group_confirmation_aborted` |
-| `validation` | 3 | `validation_failed`, `brief_validation_failed`, `h3_audit_failed` |
-| `integrity` | 4 | `fixed_workflow_invalid`, `AssetError`, `catalog_read_failed`, `tokenizer_integrity_failed` |
+| `validation` | 3 | `validation_failed` |
+| `integrity` | 4 | `fixed_workflow_invalid`, `AssetError` |
 | `runtime` | 5 | `comfyui_runtime_error`, `comfyui_mcp_error` |
 | `unexpected` | 70 | `unexpected_error` |
 
-`h3` 例外：`budget_exceeded` 走 exit 3，`official_envelope_violated` 也走 exit 3（但 code 是 `validation` 类）。
 
 ---
 

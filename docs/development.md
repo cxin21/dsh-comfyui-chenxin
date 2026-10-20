@@ -26,7 +26,7 @@
 2. **建 venv**：复用现有的，没就 `python -m venv .venv`
 3. **装第三方依赖**：`pip install tokenizers==0.22.2`（h3 prompt 唯一需要的 PyPI 包）
 4. **装本地包**：调 `install_local.py` —— **绕开 `pip install -e`**（原因见 `architecture.md`）
-5. **自检 5 个 CLI**：每个跑 `--list-actions`，必须返回非空
+5. **自检 3 个 CLI**：每个跑 `--list-actions`，必须返回非空
 6. **提示 Node.js**：`npx` 没找到就 warn（camera 执行需要，但 prompt 编写不需要）
 
 ### 跑法
@@ -41,7 +41,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 ### 退出码
 
-- `0`：全部完成，5 个 CLI 都能跑
+- `0`：全部完成，3 个 CLI 都能跑
 - `1`：自检失败 —— 看最后 5 行，哪个 CLI 的 `--list-actions` 失败 / 没返回 actions
 
 ### 幂等性
@@ -59,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 - 改了 `runtime/*` 或 `skills/*` 的代码想 reload（虽然 venv 是源树直引，reload 通常不需要）
 - 看到 `chenxin_runtime` 在 venv python 里 import 失败
 - 在别的机器上复制了 preset
-- `loader.js` 抱怨 `resolveVenvScripts` 返回 null（5 个 `.exe` 缺失）
+- `loader.js` 抱怨 `resolveVenvScripts` 返回 null（3 个 `.exe` 缺失）
 
 ### 故障排除
 
@@ -122,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 # scripts/install_local.py 第 59 行附近
 PACKAGES = [
     {"name": "comfyui-http-runtime", "version": "1.0.0", ...},
-    {"name": "anima-prompt-v1",      "version": "3.0.0", ...},   # ← pyproject 改了这里也要改
+    {"name": "camera-image", "version": "...", ...},   # ← pyproject 改了这里也要改
     ...
 ]
 ```
@@ -167,19 +167,17 @@ python scripts/check_contracts.py
 
 ### 它检查什么
 
-5 个 SKILL.md × 各 1 个 jsonc 例子：
+3 个 SKILL.md × 各 1 个 jsonc 例子：
 
 | SKILL.md | 示例被解析成什么 |
 |---|---|
-| `skills/anima-prompt-v1/SKILL.md` | `UserBrief`（看 `anima_prompt_v1.cli._coerce_brief`） |
-| `skills/minimax-h3-prompt/SKILL.md` | `StoryRequest`（看 `h3_prompt.contracts.parse_request`，按第一个 jsonc 块的 stage 字段；缺则用 t2va） |
 | `skills/camera-image/SKILL.md` | `RunConfig`（看 `camera_image.runtime.request.parse_request`，按 stage 字段） |
 | `skills/camera-video/SKILL.md` | `RunConfig`（按 stage 字段） |
 | `skills/camera-multiview/SKILL.md` | `RunConfig`（看 `camera_multiview.config.RunConfig.from_envelope`） |
 
 ### 退出码
 
-- `0`：5 个契约全过
+- `0`：3 个契约全过
 - `1`：至少一个 SKILL.md 的例子被 parser 拒收
 
 ### 什么时候跑
@@ -206,7 +204,7 @@ setup.ps1
   ├── 创建/复用 .venv
   ├── pip install tokenizers
   ├── python .venv/Scripts/python.exe scripts/install_local.py
-  └── 自检 5 个 .exe
+  └── 自检 3 个 .exe
 
 install_local.py
   ├── pip._vendor.distlib.scripts.ScriptMaker   ← Python 自带
@@ -214,12 +212,12 @@ install_local.py
   └── 不依赖 pip install
 
 check_contracts.py
-  ├── import 5 个 skill 的运行时
+  ├── import 3 个 skill 的运行时
   ├── strip_jsonc()                            ← 自实现的 JSONC 注释剥离
   └── 每个 skill 的 parse_request()             ← 用 skill 自己的 parser
 ```
 
-`check_contracts.py` 用 `sys.path.insert(...)` 把 5 个 skill 目录加进去（因为它们是 source-tree package，importable 不需要 pip install）。前提是 venv 已经 setup 好了。
+`check_contracts.py` 用 `sys.path.insert(...)` 把 3 个 skill 目录加进去（因为它们是 source-tree package，importable 不需要 pip install）。前提是 venv 已经 setup 好了。
 
 ---
 

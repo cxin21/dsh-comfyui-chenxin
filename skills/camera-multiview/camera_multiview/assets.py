@@ -1,31 +1,28 @@
 """Load and verify the bundled multiview assets.
 
-Fail-closed: any drift raises AssetError. Pure local I/O — no network, no
-engine coupling. The invariants checked here:
+Thin adapter over :mod:`chenxin_runtime.fixed_asset` (issue #32). Trust
+roots (grilled decision, fail-closed — both must agree):
 
-1. The workflow JSON file exists and its SHA-256 matches EXPECTED_WORKFLOW_SHA256.
-2. The manifest is valid JSON; manifest.workflow.sha256 matches the file.
-3. manifest.workflow.node_count matches EXPECTED_WORKFLOW_NODE_COUNT.
-4. Each of the 13 pose PNGs exists and its SHA-256 matches the manifest.
-5. The workflow JSON has the expected node count and every LoadImage node
-   (2 user image + 13 pose) carries the expected title and image input.
+* **primary**: ``manifest.json`` ships next to the assets;
+* **redundant**: the hard-coded ``spec.EXPECTED_WORKFLOW_SHA256`` /
+  ``EXPECTED_WORKFLOW_NODE_COUNT`` constants stay as an extra check.
 
-Call verify_assets() once at the top of any code path that touches the
-fixed assets. load_workflow() does not re-check the topology to keep the
-hot path fast.
+Verified reads hash the exact bytes returned, so ``load_workflow()`` no
+longer has a TOCTOU window; topology assertions stay here — they are this
+skill's knowledge.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
+
+from chenxin_runtime import ArtifactPin, FixedAsset, FixedAssetError
 
 from . import spec
 
 
-class AssetError(ValueError):
+class AssetError(FixedAssetError):
     """A fixed asset is missing, altered, or its manifest disagrees with the file."""
 
 
@@ -41,25 +38,14 @@ class AssetIdentity:
 
 # --- Internal helpers -------------------------------------------------------
 
-def _sha256(path: Path) -> str:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError as exc:
-        raise AssetError(f"fixed asset is unreadable: {path}") from exc
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise AssetError(f"fixed asset is invalid JSON: {path}") from exc
-    if not isinstance(value, dict) or not value:
-        raise AssetError(f"fixed asset must be a non-empty JSON object: {path}")
-    return value
-
-
 def _load_manifest() -> dict[str, Any]:
-    return _load_json(spec.manifest_path())
+    try:
+        value = json.loads(spec.manifest_path().read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise AssetError(f"fixed asset is invalid JSON: {spec.manifest_path()}") from exc
+    if not isinstance(value, dict) or not value:
+        raise AssetError(f"fixed asset must be a non-empty JSON object: {spec.manifest_path()}")
+    return value
 
 
 def _node_title(node: dict) -> str:
@@ -67,14 +53,45 @@ def _node_title(node: dict) -> str:
     return str(meta.get("title", "")) if isinstance(meta, dict) else ""
 
 
+def _pins(manifest: dict[str, Any]) -> tuple[ArtifactPin, ...]:
+    manifest_wf = manifest.get("workflow")
+    if not isinstance(manifest_wf, dict):
+        raise AssetError("manifest.workflow must be an object")
+    # Dual trust root: the spec constant and the manifest must agree.
+    if manifest_wf.get("sha256") != spec.EXPECTED_WORKFLOW_SHA256:
+        raise AssetError(
+            "manifest.workflow.sha256 does not match the spec constant: "
+            f"expected {spec.EXPECTED_WORKFLOW_SHA256}, got {manifest_wf.get('sha256')}"
+        )
+    if manifest_wf.get("node_count") != spec.EXPECTED_WORKFLOW_NODE_COUNT:
+        raise AssetError(
+            "manifest.workflow.node_count changed: "
+            f"expected {spec.EXPECTED_WORKFLOW_NODE_COUNT}, "
+            f"got {manifest_wf.get('node_count')}"
+        )
+    pins = [ArtifactPin("workflow", spec.workflow_path(), spec.EXPECTED_WORKFLOW_SHA256)]
+    for item in manifest.get("poses", []):
+        if isinstance(item, dict) and isinstance(item.get("filename"), str):
+            pins.append(
+                ArtifactPin(
+                    f"pose:{item['filename']}",
+                    spec.pose_path(item["filename"]),
+                    str(item.get("sha256", "")),
+                )
+            )
+    return tuple(pins)
+
+
+def _asset() -> FixedAsset:
+    return FixedAsset(_pins(_load_manifest()), label="fixed multiview asset")
+
+
 def _check_workflow_topology(workflow: dict[str, Any]) -> None:
     """Every user image / pose node is a LoadImage with the expected title and image input."""
     for s in spec.USER_IMAGES:
         node = workflow.get(s.node_id)
         if not isinstance(node, dict) or node.get("class_type") != "LoadImage":
-            raise AssetError(
-                f"user image node {s.node_id} is missing or not LoadImage"
-            )
+            raise AssetError(f"user image node {s.node_id} is missing or not LoadImage")
         title = _node_title(node)
         if title != s.node_title:
             raise AssetError(
@@ -105,61 +122,27 @@ def _check_workflow_topology(workflow: dict[str, Any]) -> None:
 
 def verify_assets() -> AssetIdentity:
     """Run every fail-closed invariant. Raises AssetError on the first failure."""
-    wf_path = spec.workflow_path()
-    if not wf_path.is_file():
-        raise AssetError(f"fixed workflow is missing: {wf_path}")
-
-    actual_wf_hash = _sha256(wf_path)
-    if actual_wf_hash != spec.EXPECTED_WORKFLOW_SHA256:
-        raise AssetError(
-            f"fixed workflow SHA-256 changed: "
-            f"expected {spec.EXPECTED_WORKFLOW_SHA256}, got {actual_wf_hash}"
-        )
-
     manifest = _load_manifest()
-    manifest_wf = manifest.get("workflow")
-    if not isinstance(manifest_wf, dict):
-        raise AssetError("manifest.workflow must be an object")
-    if manifest_wf.get("sha256") != actual_wf_hash:
-        raise AssetError("manifest.workflow.sha256 does not match the file")
-    if manifest_wf.get("node_count") != spec.EXPECTED_WORKFLOW_NODE_COUNT:
-        raise AssetError(
-            f"manifest.workflow.node_count changed: "
-            f"expected {spec.EXPECTED_WORKFLOW_NODE_COUNT}, "
-            f"got {manifest_wf.get('node_count')}"
-        )
-
-    expected_pose_hashes: dict[str, str] = {
-        item.get("filename"): item.get("sha256")
-        for item in manifest.get("poses", [])
-        if isinstance(item, dict)
-    }
+    digests = _asset().verify()
 
     pose_records: list[tuple[str, str]] = []
     for pose in spec.POSES:
-        path = spec.pose_path(pose.filename)
-        if not path.is_file():
-            raise AssetError(f"fixed pose asset missing: {path}")
-        actual_pose_hash = _sha256(path)
-        expected = expected_pose_hashes.get(pose.filename)
-        if expected != actual_pose_hash:
-            raise AssetError(
-                f"fixed pose SHA-256 changed: {pose.filename} "
-                f"expected {expected}, got {actual_pose_hash}"
-            )
+        actual_pose_hash = digests.get(f"pose:{pose.filename}")
+        if not actual_pose_hash:
+            raise AssetError(f"fixed pose asset missing from manifest: {pose.filename}")
         pose_records.append((pose.filename, actual_pose_hash))
 
-    workflow = _load_json(wf_path)
+    workflow = _asset().load_json("workflow")
     if len(workflow) != spec.EXPECTED_WORKFLOW_NODE_COUNT:
         raise AssetError(
-            f"workflow node count changed: "
+            "workflow node count changed: "
             f"expected {spec.EXPECTED_WORKFLOW_NODE_COUNT}, got {len(workflow)}"
         )
     _check_workflow_topology(workflow)
 
     return AssetIdentity(
         workflow_filename=spec.WORKFLOW_FILENAME,
-        workflow_sha256=actual_wf_hash,
+        workflow_sha256=digests["workflow"],
         workflow_node_count=spec.EXPECTED_WORKFLOW_NODE_COUNT,
         pose_count=len(pose_records),
         poses=tuple(pose_records),
@@ -167,9 +150,16 @@ def verify_assets() -> AssetIdentity:
 
 
 def load_workflow() -> dict[str, Any]:
-    """Parse the workflow JSON. Caller must have run verify_assets() first.
+    """Verified read + parse of the fixed workflow.
 
-    The hot path does not re-check titles or hashes — verify_assets() is
-    the gate.
+    Hashes the exact bytes it parses (no TOCTOU window) and asserts the
+    expected node count; call ``verify_assets()`` additionally when the
+    full topology check is required.
     """
-    return _load_json(spec.workflow_path())
+    workflow = _asset().load_json("workflow")
+    if len(workflow) != spec.EXPECTED_WORKFLOW_NODE_COUNT:
+        raise AssetError(
+            "workflow node count changed: "
+            f"expected {spec.EXPECTED_WORKFLOW_NODE_COUNT}, got {len(workflow)}"
+        )
+    return workflow

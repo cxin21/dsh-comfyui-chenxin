@@ -1,27 +1,28 @@
-"""Load and verify the three bundled MiniMax H3 API workflows."""
+"""Load and verify the three bundled MiniMax H3 API workflows.
+
+Thin adapter over :mod:`chenxin_runtime.fixed_asset` (issue #32): the
+per-stage manifest entry (``scenes[stage].sha256``) is the trust root;
+verified reads live in the shared module. Stage-specific topology
+assertions (prompt / duration / image nodes) stay here — they are this
+skill's knowledge.
+"""
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+from chenxin_runtime import ArtifactPin, FixedAsset, FixedAssetError
 
-class AssetError(ValueError):
+
+class AssetError(FixedAssetError):
     """Raised when a fixed video workflow is missing or altered."""
 
 
 ASSET_ROOT = Path(__file__).with_name("workflow_assets")
 MANIFEST_PATH = ASSET_ROOT / "manifest.json"
 STAGES = ("t2v", "i2v", "multi-i2v")
-
-
-def _sha256(path: Path) -> str:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError as exc:
-        raise AssetError(f"fixed video asset is unreadable: {path}") from exc
 
 
 def _load_manifest() -> dict[str, Any]:
@@ -60,17 +61,12 @@ def _node(workflow: dict[str, Any], node_id: str, class_type: str, title: str) -
 def load_fixed_workflow(stage: str) -> dict[str, Any]:
     """Load one immutable API graph and verify its configurable node topology."""
     spec = scene_spec(stage)
-    path = ASSET_ROOT / str(spec["workflow"])
-    if not path.is_file():
-        raise AssetError(f"fixed video workflow is missing: {path}")
-    actual_hash = _sha256(path)
-    if actual_hash != spec.get("sha256"):
-        raise AssetError(f"fixed video workflow hash changed for {stage}")
-    try:
-        workflow = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise AssetError(f"fixed API workflow is invalid: {path}") from exc
-    if not isinstance(workflow, dict) or len(workflow) != spec.get("node_count"):
+    asset = FixedAsset(
+        [ArtifactPin(f"workflow:{stage}", ASSET_ROOT / str(spec["workflow"]), str(spec.get("sha256", "")))],
+        label=f"fixed video asset ({stage})",
+    )
+    workflow = asset.load_json(f"workflow:{stage}")
+    if len(workflow) != spec.get("node_count"):
         raise AssetError(f"fixed API workflow node count changed for {stage}")
     if any(
         not isinstance(node, dict)

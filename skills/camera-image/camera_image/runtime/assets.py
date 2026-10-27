@@ -1,16 +1,25 @@
-"""Load and verify the fixed Anima UI asset against its manifest."""
+"""Load and verify the fixed Anima UI asset against its manifest.
+
+Thin adapter over :mod:`chenxin_runtime.fixed_asset` (issue #32): the
+manifest is the trust root; hashing, verified reads, and the structural
+fingerprint live in the shared module.
+"""
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from chenxin_runtime import canonical_json, content_hash
+from chenxin_runtime import (
+    ArtifactPin,
+    FixedAsset,
+    FixedAssetError,
+    structure_fingerprint,
+)
 
 
-class WorkflowAssetError(ValueError):
+class WorkflowAssetError(FixedAssetError):
     """Raised when the fixed workflow asset is missing or altered."""
 
 
@@ -28,6 +37,14 @@ def _manifest() -> dict:
     return value
 
 
+def _asset() -> FixedAsset:
+    manifest = _manifest()
+    return FixedAsset(
+        [ArtifactPin("workflow", ASSET_ROOT / manifest["asset"], manifest["asset_sha256"])],
+        label="fixed workflow asset",
+    )
+
+
 def asset_identity() -> dict[str, Any]:
     manifest = _manifest()
     return {
@@ -38,71 +55,13 @@ def asset_identity() -> dict[str, Any]:
     }
 
 
-def _require_workflow_nodes(workflow: object) -> list[dict]:
-    if not isinstance(workflow, dict) or not isinstance(workflow.get("nodes"), list):
-        raise WorkflowAssetError("workflow requires a nodes list")
-    nodes = workflow["nodes"]
-    seen_ids: set[int] = set()
-    for node in nodes:
-        if not isinstance(node, dict):
-            raise WorkflowAssetError("workflow nodes must be objects")
-        node_id = node.get("id")
-        if not isinstance(node_id, int) or isinstance(node_id, bool):
-            raise WorkflowAssetError("workflow nodes require integer ids")
-        if node_id in seen_ids:
-            raise WorkflowAssetError(f"workflow node id {node_id} is ambiguous")
-        seen_ids.add(node_id)
-    return nodes
-
-
-def structure_fingerprint(workflow: dict) -> str:
-    """Stable identity hash: nodes + links + groups, excluding widget state."""
-    nodes = [
-        {
-            "id": node["id"],
-            "type": node.get("type", ""),
-            "title": node.get("title", ""),
-            "inputs": [
-                {"name": item.get("name"), "type": item.get("type"), "link": item.get("link")}
-                for item in node.get("inputs", [])
-            ],
-            "outputs": [
-                {"name": item.get("name"), "type": item.get("type"), "links": item.get("links") or []}
-                for item in node.get("outputs", [])
-            ],
-        }
-        for node in _require_workflow_nodes(workflow)
-    ]
-    groups = [
-        {"id": group.get("id"), "title": group.get("title", "")}
-        for group in workflow.get("groups", [])
-    ]
-    payload = {
-        "nodes": sorted(nodes, key=lambda item: str(item["id"])),
-        "groups": sorted(groups, key=lambda item: str(item["id"])),
-        "links": sorted(workflow.get("links", []), key=canonical_json),
-    }
-    return content_hash(payload)
-
-
 def load_fixed_ui() -> dict[str, Any]:
     manifest = _manifest()
-    asset_name = manifest["asset"]
-    path = (ASSET_ROOT / asset_name).resolve()
-    if not path.is_file() or not path.is_relative_to(ASSET_ROOT.resolve()):
-        raise WorkflowAssetError(f"fixed workflow asset is missing: {asset_name}")
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    if digest != manifest["asset_sha256"]:
-        raise WorkflowAssetError(f"fixed workflow asset hash mismatch: {asset_name}")
-    try:
-        workflow = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise WorkflowAssetError(f"fixed workflow asset is invalid JSON: {asset_name}") from exc
-    if not isinstance(workflow, dict) or not isinstance(workflow.get("nodes"), list):
-        raise WorkflowAssetError("fixed workflow asset is not a ComfyUI UI workflow")
-    if structure_fingerprint(workflow) != manifest["workflow_fingerprint"]:
-        raise WorkflowAssetError("fixed workflow structure fingerprint mismatch")
-    return workflow
+    return _asset().load_json(
+        "workflow",
+        structure=structure_fingerprint,
+        expected_fingerprint=manifest["workflow_fingerprint"],
+    )
 
 
 def load_groups(stage: str) -> dict[str, Any]:

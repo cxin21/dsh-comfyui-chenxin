@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -270,6 +271,92 @@ class ExecutionSession:
         """
         return self._server().resolve_missing_models(api_graph)
 
+    def list_local_models(self) -> Any:
+        """List models installed on the server (public accessor for
+        graph-patching adapters; CLI code must not touch ``_server``)."""
+        return self._server().list_local_models
+
+    # -- deep execution seam (issue #31) -----------------------------------
+
+    def run_graph(
+        self,
+        api_graph: dict[str, Any],
+        *,
+        output_dir: Path,
+        strip_notes: str = "",
+        summary_extra: dict[str, Any] | None = None,
+    ) -> RunOutcome:
+        """Enqueue, wait, download sanitized artifacts, write summary.
+
+        This is the one execution seam a skill CLI needs: everything
+        about polling, partial success, and artifact naming lives here.
+
+        On wait timeout with the prompt still queued/running, returns a
+        ``still_running`` outcome (no error raised) — callers map it to
+        a failure envelope with ``comfyui_runtime_error``.
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        prompt_id = self.enqueue(api_graph)
+        graph_sha = hash_graph(api_graph)
+        uploads = tuple(self._uploads)
+
+        try:
+            record = self.http.wait_for_completion(
+                prompt_id, timeout=self.timeout, poll_interval=self.poll_interval
+            )
+        except Exception:
+            status = self._queue_snapshot(prompt_id)
+            if _prompt_is_active(status, prompt_id):
+                report = ExecutionReport(
+                    prompt_id=prompt_id,
+                    api_graph_sha256=graph_sha,
+                    artifacts=(),
+                    uploads=uploads,
+                    strip_notes=strip_notes,
+                    queue_status=status,
+                )
+                summary = write_summary(output_dir, report, summary_extra)
+                return RunOutcome(
+                    status="still_running",
+                    prompt_id=prompt_id,
+                    api_graph_sha256=graph_sha,
+                    artifacts=(),
+                    uploads=uploads,
+                    queue_status=status,
+                    summary=summary,
+                )
+            raise
+
+        saved: list[SavedArtifact] = []
+        for filename, subfolder, artifact_type in iter_output_files(record):
+            artifact: Artifact = self.http.get_artifact(filename, subfolder, artifact_type)
+            target = output_dir / safe_artifact_name(artifact.filename)
+            target.write_bytes(artifact.bytes)
+            saved.append(SavedArtifact(filename=target.name, sha256=artifact.sha256))
+        if not saved:
+            raise McpClientError(
+                f"prompt {prompt_id!r} succeeded but produced no saved outputs"
+            )
+        report = ExecutionReport(
+            prompt_id=prompt_id,
+            api_graph_sha256=graph_sha,
+            artifacts=tuple(saved),
+            uploads=uploads,
+            strip_notes=strip_notes,
+            queue_status=None,
+        )
+        summary = write_summary(output_dir, report, summary_extra)
+        return RunOutcome(
+            status="completed",
+            prompt_id=prompt_id,
+            api_graph_sha256=graph_sha,
+            artifacts=tuple(saved),
+            uploads=uploads,
+            queue_status=None,
+            summary=summary,
+        )
+
     # -- end-to-end --------------------------------------------------------
 
     def execute(
@@ -358,6 +445,45 @@ def _prompt_is_active(status: dict[str, Any], prompt_id: str) -> bool:
             if isinstance(entry, dict) and entry.get("prompt_id") == prompt_id:
                 return True
     return False
+
+
+# -- deep execution seam (issue #31) ------------------------------------------
+
+_SAFE_ARTIFACT = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def safe_artifact_name(filename: str) -> str:
+    """Whitelist an artifact filename before it ever touches the filesystem.
+
+    Mirrors the multiview executor's ``_artifact_name`` rule: anything
+    outside ``[A-Za-z0-9._-]`` collapses to ``_`` so a hostile
+    ``filename`` from ``GET /view`` cannot escape ``output_dir``.
+    """
+    cleaned = _SAFE_ARTIFACT.sub("_", filename).strip("._")
+    return cleaned or "artifact.bin"
+
+
+@dataclass(frozen=True)
+class RunOutcome:
+    """One ``run_graph`` result.
+
+    ``status``:
+
+    * ``"completed"`` — verified completion; artifacts saved and
+      ``summary.json`` written (its content is in ``summary``).
+    * ``"still_running"`` — wait budget expired but the prompt is still
+      queued/running on the server; no artifacts, ``queue_status`` set.
+      Callers must surface this as a failure envelope, never as a
+      successful run.
+    """
+
+    status: str
+    prompt_id: str
+    api_graph_sha256: str
+    artifacts: tuple[SavedArtifact, ...]
+    uploads: tuple[str, ...]
+    queue_status: dict[str, Any] | None
+    summary: dict[str, Any] | None
 
 
 def write_summary(

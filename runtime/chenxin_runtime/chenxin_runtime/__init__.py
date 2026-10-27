@@ -18,11 +18,13 @@ from .camera import (
     ExecutionReport,
     ExecutionSession,
     McpClientError,
+    RunOutcome,
     SavedArtifact,
     cache_workflow,
     hash_graph,
     iter_output_files,
     preset_root,
+    safe_artifact_name,
     temp_dir,
     write_summary,
 )
@@ -36,6 +38,7 @@ from .comfyui import (
     ComfyUIInvalidResponseError,
     ComfyUITimeoutError,
 )
+from .fixed_asset import ArtifactPin, FixedAsset, FixedAssetError, structure_fingerprint
 from .protocol import (
     EXIT_CODES,
     RequestInputError,
@@ -58,6 +61,7 @@ class TokenizerIntegrityError(ValueError):
 __all__ = [
     "Arg",
     "Artifact",
+    "ArtifactPin",
     "ComfyUIClient",
     "ComfyUIConnectionError",
     "ComfyUIExecutionError",
@@ -67,8 +71,11 @@ __all__ = [
     "EXIT_CODES",
     "ExecutionReport",
     "ExecutionSession",
+    "FixedAsset",
+    "FixedAssetError",
     "McpClientError",
     "RequestInputError",
+    "RunOutcome",
     "SavedArtifact",
     "Subcommand",
     "TokenizerIntegrityError",
@@ -85,6 +92,8 @@ __all__ = [
     "main_entry",
     "preset_root",
     "run_cli",
+    "safe_artifact_name",
+    "structure_fingerprint",
     "temp_dir",
     "write_json",
     "write_summary",

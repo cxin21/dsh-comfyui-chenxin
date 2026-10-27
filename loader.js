@@ -501,7 +501,11 @@ function registerCliTools(ctx, presetRoot, venvScripts) {
       },
       async execute(args) {
         const extra = Array.isArray(args.args) ? args.args.slice() : []
-        const argv = [scriptExe, args.action]
+        // Nested actions arrive as "parent.child" (from --list-actions);
+        // split them back into real argv segments, e.g. assets.verify →
+        // ["assets", "verify"], so argparse sees the nested subcommand.
+        const actionArgv = String(args.action).split('.').filter(Boolean)
+        const argv = [scriptExe, ...actionArgv]
         if (args.stage) argv.push('--stage', args.stage)
         if (args.request_file) argv.push('--request', args.request_file)
         for (const a of extra) argv.push(String(a))

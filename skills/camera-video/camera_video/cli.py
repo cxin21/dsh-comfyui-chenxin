@@ -20,11 +20,12 @@ from chenxin_runtime import (
     Subcommand,
     arg,
     cache_workflow,
+    emit_failure,
     emit_success,
+    exit_code_for_error,
     load_json_request,
     main_entry,
     temp_dir,
-    write_summary,
 )
 
 from .runtime.assets import STAGES, load_fixed_workflow, scene_spec
@@ -96,9 +97,29 @@ def cmd_run(args: argparse.Namespace) -> tuple[dict, int]:
             reference_names=reference_names,
         )
         cache_workflow(f"camera-video-{args.stage}", graph)
-        report = session.execute(graph, output_dir=output_dir)
-    summary = write_summary(output_dir, report, {"stage": args.stage})
-    return emit_success("run", args.stage, summary), 0
+        outcome = session.run_graph(
+            graph, output_dir=output_dir, summary_extra={"stage": args.stage}
+        )
+
+    if outcome.status == "still_running":
+        # Issue #31: a still-running prompt is a failure envelope, never
+        # an ok=true run with zero artifacts.
+        return emit_failure(
+            "run", args.stage,
+            [{
+                "code": "comfyui_runtime_error",
+                "message": (
+                    f"prompt {outcome.prompt_id} still queued/running after "
+                    "--timeout; inspect the ComfyUI queue"
+                ),
+                "details": {
+                    "prompt_id": outcome.prompt_id,
+                    "queue_status": outcome.queue_status,
+                    "summary_path": str((output_dir / "summary.json")),
+                },
+            }],
+        ), exit_code_for_error("runtime")
+    return emit_success("run", args.stage, outcome.summary), 0
 
 
 def main() -> None:
@@ -138,7 +159,7 @@ def main() -> None:
             ),
         ],
         extra_error_handlers=(
-            (McpClientError, "comfyui_mcp_error", "integrity", None),
+            (McpClientError, "comfyui_mcp_error", "runtime", None),  # ADR-0001
             (ComfyUIHTTPError, "comfyui_runtime_error", "runtime", None),
             (FileNotFoundError, "input_file_missing", "request", None),
         ),

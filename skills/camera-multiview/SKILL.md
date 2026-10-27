@@ -139,25 +139,29 @@ What this skill does **not** expose: prompts, samplers, LoRAs, ControlNet, dimen
 | `--mcp-timeout` | no | float (sec) | `60` | Per-MCP-call timeout |
 | `--json` | no | flag | `false` | Universal flag; wire format is always P1 |
 
-Console output during a successful run:
+A successful run emits the shared P1 envelope on stdout; the
+human-readable report (formerly plain console text) lives in
+`result.summary`:
 
-```text
-[camera-multiview] stage: multiview
-[camera-multiview] comfyui: http://127.0.0.1:8188
-[camera-multiview] output: .../temp/camera-multiview/run1
-[camera-multiview] full_body: .../temp/camera-multiview/full_body_input.png
-[camera-multiview] face:      .../temp/camera-multiview/face_input.png
-[camera-multiview] prompt_id:   82527df3-28f1-4783-820e-e9f494465e76
-[camera-multiview] graph_sha256: 33584a54b6587914...
-[camera-multiview] status:      success
-[camera-multiview] elapsed:     473.9s
-[camera-multiview] uploads:     15
-[camera-multiview] artifacts:   12
-  - zove_00020_.png  4965064 bytes  (node 201)
-  - face_00005_.png  1126995 bytes  (node 524)
-  - z_00005_.png     1346012 bytes  (node 498)
-  - ...
-[camera-multiview] summary: .../temp/camera-multiview/run1/summary.json
+```json
+{
+  "ok": true,
+  "command": "run",
+  "stage": "multiview",
+  "result": {
+    "summary": "[camera-multiview] stage: multiview\n[camera-multiview] comfyui: http://127.0.0.1:8188\n[camera-multiview] output: .../temp/camera-multiview/run1\n[camera-multiview] prompt_id:   82527df3-28f1-4783-820e-e9f494465e76\n[camera-multiview] status:      success\n[camera-multiview] elapsed:     473.9s\n[camera-multiview] uploads:     15\n[camera-multiview] artifacts:   12\n  - zove_00020_.png  4965064 bytes  (node 201)\n  - ...\n[camera-multiview] summary: .../temp/camera-multiview/run1/summary.json",
+    "prompt_id": "82527df3-28f1-4783-820e-e9f494465e76",
+    "graph_sha256": "33584a54...",
+    "status": "success",
+    "elapsed_seconds": 473.9,
+    "uploads": ["... 15 entries ..."],
+    "artifacts": [{"filename": "zove_00020_.png", "bytes": 4965064, "node_id": 201}, "..."],
+    "output_dir": ".../temp/camera-multiview/run1",
+    "summary_path": ".../temp/camera-multiview/run1/summary.json"
+  },
+  "errors": [],
+  "advisories": []
+}
 ```
 
 ### `assets verify`
@@ -234,8 +238,8 @@ Only `SaveImage` outputs are downloaded. `PreviewImage` outputs (temp files Comf
 |---|---|---|---|
 | `invalid_request` | 2 | `--request` missing/malformed; unknown field | Only `full_body_image` + `face_image` are accepted |
 | `input_file_missing` | 2 | `full_body_image` or `face_image` doesn't exist on disk | Verify the path; the skill does not auto-create |
-| `AssetError` | 4 | Fixed asset drifted: workflow SHA-256 changed, pose node renamed, manifest mismatch | Revert the asset, or run `assets verify`; the file or `spec.py` is out of sync |
-| `comfyui_mcp_error` | 4 | npx / comfyui-mcp install path broken, MCP subprocess failed | Check `npx` + `comfyui-mcp` |
+| `asset_integrity_error` | 4 | Fixed asset drifted: workflow SHA-256 changed, pose node renamed, manifest mismatch | Revert the asset, or run `assets verify`; the file or `spec.py` is out of sync |
+| `comfyui_mcp_error` (ADR-0001) | 5 | npx / comfyui-mcp install path broken, MCP subprocess failed | Check `npx` + `comfyui-mcp` |
 | `McpError` (Method not found) | 5 | ComfyUI server doesn't have a needed custom node | Install the missing node |
 | `McpError` (timed out) | 5 | ComfyUI execution exceeded `--timeout` | Increase `--timeout` (default 1800s) or check the queue |
 | `McpError` (`status="error"`) | 5 | ComfyUI ran the graph but reported an error | Read `error_messages[]` in `summary.json` (usually a missing model file or LoRA on the server) |

@@ -20,11 +20,12 @@ from chenxin_runtime import (
     Subcommand,
     arg,
     cache_workflow,
+    emit_failure,
     emit_success,
+    exit_code_for_error,
     load_json_request,
     main_entry,
     temp_dir,
-    write_summary,
 )
 
 from .runtime.assets import asset_identity, load_fixed_ui
@@ -130,7 +131,7 @@ def cmd_run(args: argparse.Namespace) -> tuple[dict, int]:
             load_fixed_ui(),
             config,
             stage=args.stage,
-            mcp_list_loras=session._server().list_local_models,
+            mcp_list_loras=session.list_local_models,
             uploaded_names=uploaded_names,
         )
         cache_workflow(f"camera-image-{args.stage}", ui)
@@ -139,28 +140,42 @@ def cmd_run(args: argparse.Namespace) -> tuple[dict, int]:
         # __lm_widget_ids-driven widget values from node 26, leaving
         # `text` missing (required) → cascades as "Output will be ignored"
         # for 35/490/550. Re-write the dropped inputs directly.
-        api_graph = patch_api_lora(
-            api_graph, config, session._server().list_local_models
-        )
+        api_graph = patch_api_lora(api_graph, config, session.list_local_models())
         validate_api_graph(api_graph)
-        report = session.execute(
-            api_graph, output_dir=output_dir, strip_notes=strip_notes
+        outcome = session.run_graph(
+            api_graph,
+            output_dir=output_dir,
+            strip_notes=strip_notes,
+            summary_extra={
+                "stage": args.stage,
+                "preset": config.preset,
+                "seed": config.seed,
+                "uploads": [
+                    {"field": field, "comfyui_name": name}
+                    for field, name in uploaded_names.items()
+                ],
+            },
         )
 
-    summary = write_summary(
-        output_dir,
-        report,
-        {
-            "stage": args.stage,
-            "preset": config.preset,
-            "seed": config.seed,
-            "uploads": [
-                {"field": field, "comfyui_name": name}
-                for field, name in uploaded_names.items()
-            ],
-        },
-    )
-    return emit_success("run", args.stage, summary), 0
+    if outcome.status == "still_running":
+        # Issue #31: a still-running prompt is a failure envelope, never
+        # an ok=true run with zero artifacts.
+        return emit_failure(
+            "run", args.stage,
+            [{
+                "code": "comfyui_runtime_error",
+                "message": (
+                    f"prompt {outcome.prompt_id} still queued/running after "
+                    "--timeout; inspect the ComfyUI queue"
+                ),
+                "details": {
+                    "prompt_id": outcome.prompt_id,
+                    "queue_status": outcome.queue_status,
+                    "summary_path": str((output_dir / "summary.json")),
+                },
+            }],
+        ), exit_code_for_error("runtime")
+    return emit_success("run", args.stage, outcome.summary), 0
 
 
 def main() -> None:
@@ -203,7 +218,7 @@ def main() -> None:
             ),
         ],
         extra_error_handlers=(
-            (McpClientError, "comfyui_mcp_error", "integrity", None),
+            (McpClientError, "comfyui_mcp_error", "runtime", None),  # ADR-0001
             (ComfyUIHTTPError, "comfyui_runtime_error", "runtime", None),
             (FileNotFoundError, "input_file_missing", "request", None),
             (GroupConfirmationAborted, "group_confirmation_aborted", "request", None),

@@ -127,3 +127,17 @@ temp/<skill>/<task>/
 ```
 
 每次想看完整示例就看 `docs/cli-cookbook.md`。
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`cxin21/dsh-comfyui-chenxin`), operated with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role triage label vocabulary (`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: one root `GLOSSARY.md` shared by the whole repo, architecture decisions in `docs/adr/`. See `docs/agents/domain.md`.

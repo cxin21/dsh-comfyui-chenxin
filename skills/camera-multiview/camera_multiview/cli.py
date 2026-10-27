@@ -6,17 +6,25 @@ Three subcommands over the comfyui-mcp stdio bridge:
 * ``run`` — validate, upload, patch, validate, enqueue, wait, download.
 * ``assets verify`` — bundled asset + pose integrity check.
 
-Modeled after camera-image/cli.py: thin argparse handlers that delegate to
-runtime modules. No external `chenxin_runtime` / `comfyui_chenxin_mcp`
-dependency — we own the JSON-RPC client (see `mcp_session.py`).
+This CLI speaks the shared ``chenxin_runtime`` seam: one P1 JSON envelope
+on stdout, fixed error-category exit codes, and ``--list-actions`` action
+discovery (nested actions printed as ``parent.child``). See ADR-0001 for
+the ``comfyui_mcp_error → runtime (exit 5)`` classification.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
+
+from chenxin_runtime import (
+    Subcommand,
+    arg,
+    emit_success,
+    load_json_request,
+    main_entry,
+)
 
 from . import assets, spec
 from .config_schema import RunConfig
@@ -51,7 +59,7 @@ def _descriptor() -> dict:
     }
 
 
-def cmd_describe(args: argparse.Namespace) -> int:
+def cmd_describe(args: argparse.Namespace) -> tuple[dict, int]:
     desc = _descriptor()
     if args.summary:
         payload = {
@@ -69,141 +77,122 @@ def cmd_describe(args: argparse.Namespace) -> int:
         }
     else:
         payload = {"stage": spec.STAGE, **desc}
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
+    return emit_success("describe", spec.STAGE, payload), 0
 
 
-def cmd_assets_verify(args: argparse.Namespace) -> int:
+def cmd_assets_verify(args: argparse.Namespace) -> tuple[dict, int]:
     identity = assets.verify_assets()
-    print(json.dumps({
-        "verified": True,
-        "stage": spec.STAGE,
-        "asset_workflow_name": identity.workflow_filename,
-        "asset_sha256": identity.workflow_sha256,
-        "workflow_node_count": identity.workflow_node_count,
-        "pose_count": identity.pose_count,
-        "poses": [{"filename": f, "sha256": h} for f, h in identity.poses],
-    }, ensure_ascii=False, indent=2))
-    return 0
+    return emit_success(
+        "assets verify", spec.STAGE,
+        {
+            "verified": True,
+            "stage": spec.STAGE,
+            "asset_workflow_name": identity.workflow_filename,
+            "asset_sha256": identity.workflow_sha256,
+            "workflow_node_count": identity.workflow_node_count,
+            "pose_count": identity.pose_count,
+            "poses": [{"filename": f, "sha256": h} for f, h in identity.poses],
+        },
+    ), 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    request_path = Path(args.request)
-    if not request_path.is_file():
-        print(f"ERROR: request file missing: {request_path}", file=sys.stderr)
-        return 2
-    try:
-        payload = json.loads(request_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: invalid JSON in {request_path}: {exc}", file=sys.stderr)
-        return 2
-
-    try:
-        config = RunConfig.from_envelope({}, **payload)
-    except (TypeError, ValueError) as exc:
-        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 2
+def cmd_run(args: argparse.Namespace) -> tuple[dict, int]:
+    payload = load_json_request(request_path=args.request)
+    config = RunConfig.from_envelope({}, **payload)
 
     output_dir = Path(args.output_dir) if args.output_dir else _temp_dir()
-    print(f"[camera-multiview] stage: {spec.STAGE}")
-    print(f"[camera-multiview] comfyui: {args.comfyui_url}")
-    print(f"[camera-multiview] output: {output_dir.resolve()}")
-    print(f"[camera-multiview] full_body: {config.full_body_image}")
-    print(f"[camera-multiview] face:      {config.face_image}")
 
-    try:
-        with McpSession(
-            comfyui_url=args.comfyui_url,
-            request_timeout=args.mcp_timeout,
+    with McpSession(
+        comfyui_url=args.comfyui_url,
+        request_timeout=args.mcp_timeout,
+        poll_interval=args.poll_interval,
+        total_timeout=args.timeout,
+    ) as session:
+        result = run(
+            session,
+            config,
+            output_dir=output_dir,
             poll_interval=args.poll_interval,
             total_timeout=args.timeout,
-        ) as session:
-            result = run(
-                session,
-                config,
-                output_dir=output_dir,
-                poll_interval=args.poll_interval,
-                total_timeout=args.timeout,
-            )
-    except McpError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 5
-    except (assets.AssetError,) as exc:
-        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 4
-    except (ValueError, FileNotFoundError) as exc:
-        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 2
+        )
 
-    print(f"\n[camera-multiview] prompt_id:   {result.prompt_id}")
-    print(f"[camera-multiview] graph_sha256: {result.api_graph_sha256[:16]}...")
-    print(f"[camera-multiview] status:      {result.status}")
-    print(f"[camera-multiview] elapsed:     {result.elapsed_seconds:.1f}s")
-    print(f"[camera-multiview] uploads:     {len(result.uploads)}")
     if result.status == "error":
-        for msg in result.error_messages:
-            print(f"  [error] {msg}")
-        print(f"\n[camera-multiview] summary: {(output_dir / 'summary.json').resolve()}")
-        return 5
+        raise McpError("; ".join(result.error_messages) or "ComfyUI reported an error status")
 
-    print(f"[camera-multiview] artifacts:   {len(result.artifacts)}")
+    lines = [
+        f"[camera-multiview] stage: {spec.STAGE}",
+        f"[camera-multiview] comfyui: {args.comfyui_url}",
+        f"[camera-multiview] output: {output_dir.resolve()}",
+        f"[camera-multiview] prompt_id: {result.prompt_id}",
+        f"[camera-multiview] status: {result.status}",
+        f"[camera-multiview] elapsed: {result.elapsed_seconds:.1f}s",
+        f"[camera-multiview] uploads: {len(result.uploads)}",
+        f"[camera-multiview] artifacts: {len(result.artifacts)}",
+        f"[camera-multiview] summary: {(output_dir / 'summary.json').resolve()}",
+    ]
     for art in result.artifacts:
         if "error" in art:
-            print(f"  - [ERROR] {art.get('remote_filename')} ({art.get('error')})")
+            lines.append(f"  - [ERROR] {art.get('remote_filename')} ({art.get('error')})")
         else:
-            print(f"  - {art['filename']}  {art['bytes']} bytes  (node {art['node_id']})")
+            lines.append(f"  - {art['filename']}  {art['bytes']} bytes  (node {art['node_id']})")
 
-    summary_path = output_dir / "summary.json"
-    print(f"\n[camera-multiview] summary: {summary_path.resolve()}")
-    return 0
+    return emit_success("run", spec.STAGE, {
+        "summary": "\n".join(lines),
+        "prompt_id": result.prompt_id,
+        "graph_sha256": result.api_graph_sha256,
+        "status": result.status,
+        "elapsed_seconds": result.elapsed_seconds,
+        "uploads": result.uploads,
+        "artifacts": result.artifacts,
+        "output_dir": str(output_dir.resolve()),
+        "summary_path": str((output_dir / "summary.json").resolve()),
+    }), 0
 
 
-def main() -> int:
-    # Virgin contract: --list-actions prints the canonical action set so the
-    # DSH loader's loader.js introspectActions() can register the right
-    # subcommands in the Host Tool description. Keep this in sync with the
-    # subparsers below.
-    if "--list-actions" in sys.argv[1:]:
-        for action in ("describe", "assets", "run"):
-            print(action)
-        return 0
-
-    parser = argparse.ArgumentParser(
+def main() -> None:
+    main_entry(
         prog="camera-multiview",
         description="Fixed Flux2-Klein character multiview workflow skill.",
+        subcommands=[
+            Subcommand(
+                "describe", "Request contract. --summary for the LLM-facing shape.",
+                handler=cmd_describe,
+                args=(arg("--summary", action="store_true", default=False),),
+            ),
+            Subcommand(
+                "assets", "Bundled asset operations.",
+                subcommands=(
+                    Subcommand("verify", "Verify workflow + pose digests.",
+                               handler=cmd_assets_verify),
+                ),
+            ),
+            Subcommand(
+                "run", "Validate, upload, patch, enqueue, wait, download.",
+                handler=cmd_run,
+                args=(
+                    arg("--request", required=True, type=Path,
+                        help="Path to a JSON request file with full_body_image + face_image."),
+                    arg("--output-dir", required=False, type=Path, default=None,
+                        help="Where the multi-view sheets land. "
+                             "Defaults to <preset>/temp/camera-multiview/."),
+                    arg("--comfyui-url", default="http://127.0.0.1:8188",
+                        help="ComfyUI server base URL."),
+                    arg("--timeout", type=float, default=1800.0,
+                        help="Total wait-for-completion timeout (sec)."),
+                    arg("--poll-interval", type=float, default=2.0,
+                        help="History poll interval (sec)."),
+                    arg("--mcp-timeout", type=float, default=60.0,
+                        help="Per-MCP-call timeout (sec)."),
+                ),
+            ),
+        ],
+        extra_error_handlers=(
+            (McpError, "comfyui_mcp_error", "runtime", None),          # ADR-0001
+            (assets.AssetError, "asset_integrity_error", "integrity", None),
+            (FileNotFoundError, "input_file_missing", "request", None),
+        ),
     )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p_describe = sub.add_parser("describe", help="Request contract.")
-    p_describe.add_argument("--summary", action="store_true",
-                            help="Add the request fields + example.")
-    p_describe.set_defaults(func=cmd_describe)
-
-    p_verify = sub.add_parser("assets", help="Bundled asset operations.")
-    p_verify_sub = p_verify.add_subparsers(dest="assets_command", required=True)
-    p_verify_verify = p_verify_sub.add_parser("verify",
-                                              help="Verify workflow + pose digests.")
-    p_verify_verify.set_defaults(func=cmd_assets_verify)
-
-    p_run = sub.add_parser("run", help="Validate, upload, patch, enqueue, wait, download.")
-    p_run.add_argument("--request", required=True, type=Path,
-                       help="Path to a JSON request file with full_body_image + face_image.")
-    p_run.add_argument("--output-dir", required=False, type=Path,
-                       help="Where the multi-view sheets land. "
-                            "Defaults to <preset>/temp/camera-multiview/.")
-    p_run.add_argument("--comfyui-url", default="http://127.0.0.1:8188",
-                       help="ComfyUI server base URL.")
-    p_run.add_argument("--timeout", type=float, default=1800.0,
-                       help="Total wait-for-completion timeout (sec).")
-    p_run.add_argument("--poll-interval", type=float, default=2.0,
-                       help="History poll interval (sec).")
-    p_run.add_argument("--mcp-timeout", type=float, default=60.0,
-                       help="Per-MCP-call timeout (sec).")
-    p_run.set_defaults(func=cmd_run)
-
-    args = parser.parse_args()
-    return args.func(args)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

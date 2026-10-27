@@ -1,7 +1,11 @@
 # CLI Subcommands
 
 Three top-level actions: `describe`, `run`, `assets verify`. All
-output is JSON on stdout (or human-readable for `run`).
+output is the shared P1 JSON envelope on stdout (`{"ok", "command",
+"stage", "result", "errors", "advisories"}`); the human-readable run
+report lives in `result.summary`. `--json` is accepted on every
+subcommand (the host tool appends it; the wire format is always the
+envelope).
 
 ```bash
 python -m camera_multiview.cli <subcommand> [args]
@@ -101,9 +105,8 @@ Drift:
 ```bash
 $ python -m camera_multiview.cli assets verify
 # (after editing the workflow JSON)
-ERROR: ValueError: fixed workflow SHA-256 changed:
-  expected 33584a54b6587914fce078cdcddbab7915e7d834ca741ded06a44a3ba484252e,
-  got <new hash>
+{"ok":false,"command":"assets verify","stage":"multiview","result":null,
+ "errors":[{"code":"asset_integrity_error","message":"ValueError: fixed workflow SHA-256 changed: expected 33584a..., got <new hash>","details":{}}],"advisories":[]}
 # exit code: 4
 ```
 
@@ -153,33 +156,28 @@ $ python -m camera_multiview.cli run \
     --poll-interval  3
 ```
 
-```text
-[camera-multiview] stage: multiview
-[camera-multiview] comfyui: http://127.0.0.1:8188
-[camera-multiview] output: /.../temp/camera-multiview/run1
-[camera-multiview] full_body: /.../full_body_input.png
-[camera-multiview] face:      /.../face_input.png
-[camera-multiview] prompt_id:   82527df3-28f1-4783-820e-e9f494465e76
-[camera-multiview] graph_sha256: 33584a54b6587914...
-[camera-multiview] status:      success
-[camera-multiview] elapsed:     473.9s
-[camera-multiview] uploads:     15
-[camera-multiview] artifacts:   12
-  - zove_00020_.png  4965064 bytes  (node 201)
-  - face_00005_.png  1126995 bytes  (node 524)
-  - z_00005_.png     1346012 bytes  (node 498)
-  - zhen up_00005_.png 1102419 bytes  (node 663)
-  - side up2_00013_.png 1106204 bytes  (node 565)
-  - side up2_00014_.png 1090697 bytes  (node 570.0.0.3.0.0.565)
-  - zove _00009_.png  1101872 bytes  (node 224)
-  - zove _00010_.png  1123645 bytes  (node 224)
-  - zove_00017_.png   1310703 bytes  (node 338)
-  - zove_00018_.png   1181986 bytes  (node 338)
-  - zove_00019_.png   1121228 bytes  (node 338)
-  - side up2_00015_.png 940670 bytes  (node 609)
-  - 45_00005_.png      739586 bytes  (node 761)
-[camera-multiview] summary: /.../temp/camera-multiview/run1/summary.json
-# exit code: 0
+```jsonc
+{
+  "ok": true,
+  "command": "run",
+  "stage": "multiview",
+  "result": {
+    "summary": "[camera-multiview] stage: multiview\n... (human-readable report)",
+    "prompt_id": "82527df3-28f1-4783-820e-e9f494465e76",
+    "graph_sha256": "33584a54b6587914...",
+    "status": "success",
+    "elapsed_seconds": 473.9,
+    "uploads": ["...15 uploaded names..."],
+    "artifacts": [
+      {"filename": "zove_00020_.png", "bytes": 4965064, "node_id": 201},
+      "... (12 artifacts) ..."
+    ],
+    "output_dir": ".../temp/camera-multiview/run1",
+    "summary_path": ".../temp/camera-multiview/run1/summary.json"
+  },
+  "errors": [],
+  "advisories": []
+}
 ```
 
 The output dir contains:
@@ -197,10 +195,10 @@ temp/camera-multiview/run1/
 
 | Code | Cause | Recovery |
 |---|---|---|
-| 0 | success | Check `<output-dir>/summary.json` |
-| 2 | `input_file_missing` / `invalid_request` / `ValueError` | Fix the request; ensure paths exist on disk |
-| 4 | `AssetError` — fixed asset drifted | Run `assets verify`; the file or `spec.py` is out of sync |
-| 5 | `McpError` — comfyui-mcp JSON-RPC failed, **or** workflow ran but returned `status="error"` | Read `error_messages[]` in summary.json |
+| 0 | success | Check `result.summary_path` / `<output-dir>/summary.json` |
+| 2 | `invalid_request` (missing/invalid request file) · `input_file_missing` · `validation_failed` (schema) | Fix the request; ensure paths exist on disk |
+| 4 | `asset_integrity_error` — fixed asset drifted | Run `assets verify`; the file or `spec.py` is out of sync |
+| 5 | `comfyui_mcp_error` — comfyui-mcp JSON-RPC failed, **or** workflow ran but returned `status="error"` (ADR-0001: MCP 故障归 runtime) | Read `result`/`summary.json` |
 
 ## Where output goes
 

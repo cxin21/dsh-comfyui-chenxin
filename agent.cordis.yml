@@ -50,9 +50,11 @@
       CLI calls return P1 JSON Envelope responses; surface advisories to the user
       verbatim. If the CLI Tools are NOT registered, follow the SKILL.md
       instructions using your own reasoning and the bundled references/.
-    # An omitted/empty suffix shadows the deployment default away, so restate
-    # the working-directory line the shipped standard preset carries.
-    suffix: Your working directory is {{cwd}}.
+    # `{{cwd}}` is NOT a registered prompt variable in the deployment's
+    # persona-suffix section (registered: provider, model, aurabot_*). The
+    # working directory is already injected by the host runtime context, so
+    # the suffix is omitted entirely.
+    suffix: null
     complete: false
 
 # ── Global instructions (host-provided) ──────────────────────────────────

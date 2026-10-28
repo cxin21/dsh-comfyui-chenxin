@@ -140,7 +140,7 @@ def cmd_run(args: argparse.Namespace) -> tuple[dict, int]:
         # __lm_widget_ids-driven widget values from node 26, leaving
         # `text` missing (required) → cascades as "Output will be ignored"
         # for 35/490/550. Re-write the dropped inputs directly.
-        api_graph = patch_api_lora(api_graph, config, session.list_local_models())
+        api_graph = patch_api_lora(api_graph, config, session.list_local_models)
         validate_api_graph(api_graph)
         outcome = session.run_graph(
             api_graph,

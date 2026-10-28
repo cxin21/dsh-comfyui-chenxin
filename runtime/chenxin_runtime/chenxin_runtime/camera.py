@@ -274,7 +274,7 @@ class ExecutionSession:
     def list_local_models(self) -> Any:
         """List models installed on the server (public accessor for
         graph-patching adapters; CLI code must not touch ``_server``)."""
-        return self._server().list_local_models
+        return self._server().list_local_models()
 
     # -- deep execution seam (issue #31) -----------------------------------
 

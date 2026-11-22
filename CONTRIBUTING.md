@@ -27,7 +27,7 @@
 
 - `python scripts/check_contracts.py` —— SKILL.md 契约 gate（前提：`.venv` 已 setup）
 - `node scripts/check_loader.mjs` —— loader 接线 gate（不需要 venv；验证坏 SKILL.md 不拖垮 CLI 工具、缺 skills 服务不拖垮工具）
-- `python scripts/check_lockstep.py` —— 装配清单 gate（不需要 venv 里的本地包，但需要 PyYAML；断言 `cordis.patch.yml` 与 `agent.cordis.yml` 逐条相同、两份都不含机器相关路径、每个 `./` 入口文件真实存在、`preset.yml` 的 name/description 与 patch 一致）
+- `python scripts/check_lockstep.py` —— 装配清单 gate（不需要 venv 里的本地包，但需要 PyYAML；断言 `cordis.patch.yml` 与 `agent.cordis.yml` 逐条相同、两份都不含机器相关路径（`./` 相对路径也不合规）、每个入口文件真实存在、`preset.yml` 的 name/description 与 patch 一致）
 - `cd plugins/prompt-forge` 后跑测试（`npm ci` 按 `package-lock.json` 安装，再 `npm test`）—— 全绿才算完成
 
 ## 提交约定

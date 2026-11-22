@@ -32,6 +32,7 @@ Exit:   0 = both files agree and are portable, 1 = drift or a broken entry point
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -48,19 +49,43 @@ PRESET_YML = ROOT / "preset.yml"
 
 PRESET_ENTRY_ID = "preset-comfyui-chenxin"
 
+# Plugin `name` values are subpath specifiers of this package, resolved by Node
+# through the profile's node_modules entry (a `link:` to this checkout). The
+# package name is read from package.json so a rename only has to happen once.
+try:
+    PACKAGE_NAME: str = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["name"]
+except (OSError, KeyError, ValueError) as error:  # pragma: no cover - environment guard
+    print(f"FAIL: cannot read package name from package.json ({error})", file=sys.stderr)
+    raise SystemExit(1)
+
 # The two files must be byte-equivalent in meaning: cordis.patch.yml is what
 # dsh actually loads, agent.cordis.yml is the human-readable twin. There is
 # deliberately NO allowed-difference set.
 #
 # This used to allow three deployment rewrites (loader.js / prompt-forge names
-# -> file:/// absolute URLs, presetRoot null -> pinned checkout). dsh-app-boot
-# resolves `./`-relative plugin names against the patch's own directory, and
-# Node resolves a symlinked module to its realpath, so loader.js's __dirname
-# fallback already lands on the checkout. Pinning those paths was redundant and
-# made the published patch machine-coupled; it is gone, and the gate now
-# rejects any difference at all.
+# -> file:/// absolute URLs, presetRoot null -> pinned checkout). Those are
+# gone: the patch now uses package subpaths, which are machine-independent, so
+# the gate rejects any difference at all.
 ABSOLUTE_PATH_ENTRIES: set[str] = set()
 PINNED_ROOT_KEYS: set[tuple[str, str]] = set()
+
+
+def is_package_subpath(name: str) -> bool:
+    """True for ``@local/dsh-comfyui-chenxin-preset/...`` style specifiers.
+
+    These carry no machine path: Node resolves them via the profile's
+    node_modules entry, wherever the checkout happens to live.
+    """
+    return name == PACKAGE_NAME or name.startswith(PACKAGE_NAME + "/")
+
+
+def package_subpath(name: str) -> str | None:
+    """``<pkg>/a/b`` -> ``a/b``; ``<pkg>`` -> ``""``; otherwise None."""
+    if name == PACKAGE_NAME:
+        return ""
+    if name.startswith(PACKAGE_NAME + "/"):
+        return name[len(PACKAGE_NAME) + 1 :]
+    return None
 
 
 def load_plugins(path: Path) -> list[dict]:
@@ -102,19 +127,30 @@ def check_portable(plugins: list[dict]) -> list[str]:
     This is the assertion that would have caught the original defect: the
     curated patch shipped ``file:///D:/DSH/...`` names and a pinned
     ``presetRoot``, so every clone outside this machine loaded the wrong code
-    (or nothing). Both files must stay relative so the bundle works wherever it
-    is installed.
+    (or nothing).
+
+    Package subpath specifiers (``@local/dsh-comfyui-chenxin-preset/...``) are
+    machine-independent: Node resolves them through the profile's node_modules
+    entry, which is a ``link:`` to the checkout — so they are allowed. A
+    ``file:`` URL or an absolute path is not.
     """
     problems: list[str] = []
     for entry in plugins:
         eid = entry.get("id")
         name = entry.get("name")
-        if isinstance(name, str) and (
-            name.startswith("file:") or Path(name).is_absolute()
-        ):
-            problems.append(
-                f"{eid}.name is machine-specific ({name!r}); use a ./relative path"
-            )
+        if isinstance(name, str) and not is_package_subpath(name):
+            if name.startswith("file:") or Path(name).is_absolute():
+                problems.append(
+                    f"{eid}.name is machine-specific ({name!r}); "
+                    f"use a {PACKAGE_NAME}/<subpath> specifier"
+                )
+            elif name.startswith("./") or name.startswith("../"):
+                problems.append(
+                    f"{eid}.name is ./-relative ({name!r}); dsh-app-boot only "
+                    f"anchors ./ names for group entries with an array config, so "
+                    f"this resolves against the PROFILE directory at load time and "
+                    f"fails. Use a {PACKAGE_NAME}/<subpath> specifier"
+                )
         cfg = entry.get("config")
         if isinstance(cfg, dict):
             for key, value in cfg.items():
@@ -199,7 +235,7 @@ def check_preset_metadata(source_plugins: list[dict]) -> list[str]:
 
 
 def check_entry_points(plugins: list[dict]) -> list[str]:
-    """Every ./relative plugin entry must exist on disk.
+    """Every plugin entry must point at something that exists in this checkout.
 
     ``plugins/prompt-forge/dist/`` is gitignored (build output), so a fresh
     clone has the patch but not the file it points at. dsh-app-boot wraps each
@@ -207,20 +243,32 @@ def check_entry_points(plugins: list[dict]) -> list[str]:
     without printing anything — so a missing build shows up as "the plugin
     silently did nothing", not as an error. This turns that silence into a
     failing check.
+
+    Package subpaths are mapped back onto this checkout (``<pkg>/a/b`` ->
+    ``<ROOT>/a/b``); ``./``-relative names are resolved against ROOT as well.
+    Bare package specifiers are left to node_modules and skipped.
     """
     problems: list[str] = []
     for entry in plugins:
         name = entry.get("name")
-        if not isinstance(name, str) or not (
-            name.startswith("./") or name.startswith("../")
-        ):
+        if not isinstance(name, str):
             continue
-        target = (ROOT / name).resolve()
-        if not target.is_file():
+
+        subpath = package_subpath(name)
+        if subpath is not None:
+            target = ROOT / subpath if subpath else ROOT
+        elif name.startswith("./") or name.startswith("../"):
+            target = ROOT / name
+        else:
+            continue  # bare package specifier — resolved from node_modules
+
+        if not target.exists():
             hint = ""
-            if "plugins/prompt-forge/dist/" in name.replace("\\", "/"):
+            if "plugins/prompt-forge/dist" in name.replace("\\", "/"):
                 hint = " — run: cd plugins/prompt-forge && npm ci && npm run build"
-            problems.append(f"{entry.get('id')}.name points at a missing file: {name}{hint}")
+            problems.append(
+                f"{entry.get('id')}.name points at a missing file: {name}{hint}"
+            )
     return problems
 
 
@@ -241,8 +289,10 @@ def main() -> int:
         print(
             "\nThe two assembly files must agree exactly, and neither may carry a"
             "\nmachine-specific path. Fix both files:"
-            "\n  - a plugin name is a ./relative path (dsh-app-boot anchors it to"
-            "\n    the patch's own directory at load time)"
+            f"\n  - a plugin name is a {PACKAGE_NAME}/<subpath> specifier (resolved"
+            "\n    through the profile's node_modules link), NOT ./relative and NOT"
+            "\n    an absolute path — dsh-app-boot only anchors ./ names for group"
+            "\n    entries, so a nested ./ name resolves against the profile dir"
             "\n  - comfyui-loader.config.presetRoot stays null (loader.js falls back"
             "\n    to its own __dirname, which Node realpaths through the profile"
             "\n    symlink); put per-machine overrides in the profile's own"
@@ -252,7 +302,7 @@ def main() -> int:
 
     print(f"OK   lockstep — {len(source)} entries, files agree exactly")
     print("OK   portability — no machine-specific paths in either file")
-    print("OK   entry points — every ./relative plugin entry exists on disk")
+    print("OK   entry points — every plugin entry exists in this checkout")
     print("OK   preset.yml name/description match the patch entry")
     return 0
 

@@ -485,21 +485,15 @@ means documented behavior with no code change required.
   They were introduced when the preset was migrated off the legacy directory
   form, on the assumption that the patch had to name its entry points by
   absolute URL. It does not.
-- **Why the assumption was wrong** (three independent facts):
-  1. `dsh-app-boot`'s `anchorInsertedPluginNames` rewrites any insert `name`
-     that is absolute **or** starts with `./`/`../` into
-     `pathToFileURL(resolve(dirname(patchFile), name))`. A `./`-relative name
-     is therefore already resolved against the patch's own directory — the
-     absolute form adds nothing.
-  2. `bundlePatchPaths(packageDir, bundle)` anchors bundle patches at the
-     installed package directory, so `./` always means "inside whichever
-     checkout is installed".
-  3. `loader.js`'s `resolvePresetRoot` ends with
-     `if (!presetRoot) presetRoot = PRESET_DIR` where `PRESET_DIR = __dirname`
-     — and Node resolves a symlinked module to its realpath, so the profile's
-     `link:` symlink still yields the checkout directory. Verified directly:
-     `require.resolve('<profile>/node_modules/@local/dsh-comfyui-chenxin-preset/loader.js')`
-     returns `D:\DSH\projects\dsh-comfyui-chenxin\loader.js`.
+- **Why the absolute paths were unnecessary**: `loader.js`'s
+  `resolvePresetRoot` ends with `if (!presetRoot) presetRoot = PRESET_DIR` where
+  `PRESET_DIR = __dirname` — and Node resolves a symlinked module to its
+  realpath, so the profile's `link:` symlink still yields the checkout
+  directory. Verified directly:
+  `require.resolve('<profile>/node_modules/@local/dsh-comfyui-chenxin-preset/loader.js')`
+  returns `D:\DSH\projects\dsh-comfyui-chenxin\loader.js`. The entry points
+  themselves only need a specifier Node can resolve — see #28 for why that
+  turned out **not** to be `./`.
 - **Impact**: the patch was already pushed to
   `github.com/cxin21/dsh-comfyui-chenxin`, so every clone outside this machine
   either failed to load the preset or — worse, if that path happened to exist —
@@ -507,25 +501,30 @@ means documented behavior with no code change required.
   `dsh-app-boot` wraps bundle loading in try/catch and files failures into
   `skippedBundles` without printing anything, so the symptom is "the preset is
   there but nothing works".
-- **Fix**: both files now carry `./loader.js`,
-  `./plugins/prompt-forge/dist/src/plugin/index.js` and `presetRoot: null`.
+- **Fix**: both files now name their entry points with this package's subpaths —
+  `@local/dsh-comfyui-chenxin-preset/loader.js` and
+  `@local/dsh-comfyui-chenxin-preset/plugins/prompt-forge/dist/src/plugin/index.js`
+  — with `presetRoot: null`.
   `check_lockstep.py` dropped its `ABSOLUTE_PATH_ENTRIES` / `PINNED_ROOT_KEYS`
   allowance (now empty sets, so the two files must be identical) and gained a
-  `check_portable()` assertion that fails on any `file:`-prefixed or absolute
-  plugin name or config value. Per-machine overrides belong in the profile's
-  own user-layer `cordis.patch.yml`, documented in `README.md`.
+  `check_portable()` assertion that fails on any `file:`-prefixed, absolute, or
+  `./`-relative plugin name or config value. Per-machine overrides belong in the
+  profile's own user-layer `cordis.patch.yml`, documented in `README.md`.
   The three published values were also the only reason the two files differed
   at all; with them gone, #13's "allowed difference set" is now empty.
+  The intermediate fix (rewriting the names to `./loader.js`) was itself broken
+  and shipped as `2afcf09`; see #28.
 
 ## 27. `plugins/prompt-forge/dist/` is gitignored — a fresh clone booted with no tools `[FIXED]`
 
 - **Where**: `plugins/prompt-forge/.gitignore` (`dist/`), `cordis.patch.yml` (`prompt-forge.name`), `scripts/setup.ps1`, `scripts/setup.sh`.
 - **What**: the patch points `prompt-forge` at
-  `./plugins/prompt-forge/dist/src/plugin/index.js`, which is TypeScript build
-  output and is not committed (`git ls-tree -r HEAD | grep -c 'prompt-forge/dist/'`
-  = 0; the directory is ~7.6 MB / 1252 files on a built machine). Neither setup
-  script built it — `grep -n npm scripts/setup.ps1 scripts/setup.sh` returned
-  nothing before this fix.
+  `@local/dsh-comfyui-chenxin-preset/plugins/prompt-forge/dist/src/plugin/index.js`,
+  which is TypeScript build output and is not committed
+  (`git ls-tree -r HEAD | grep -c 'prompt-forge/dist/'` = 0; the directory is
+  ~7.6 MB / 1252 files on a built machine). Neither setup script built it —
+  `grep -n npm scripts/setup.ps1 scripts/setup.sh` returned nothing before this
+  fix.
 - **Impact**: on a fresh clone, `scripts/setup.ps1` installed all six Python
   packages, reported success, and the preset then loaded with **no
   prompt-forge tools at all and no error message** (see #26 for why it is
@@ -537,13 +536,56 @@ means documented behavior with no code change required.
      exists, otherwise `npm ci` (falling back to `npm install`) then
      `npm run build`, with an explicit warning listing the manual command when
      `npm` is not on `PATH` or the build fails. Later steps renumbered.
-  2. `check_lockstep.py` gained `check_entry_points()`: every `./`-relative
-     plugin `name` in the patch must resolve to a file that actually exists,
-     and a missing `plugins/prompt-forge/dist/…` entry is reported together
-     with the exact command that builds it. This turns the silent
-     `skippedBundles` failure into a red gate.
+  2. `check_lockstep.py` gained `check_entry_points()`: every plugin `name` in
+     the patch must resolve to something that actually exists in this checkout
+     (package subpaths and `./`-relative names alike), and a missing
+     `plugins/prompt-forge/dist/…` entry is reported together with the exact
+     command that builds it. This turns the silent `skippedBundles` failure into
+     a red gate.
   3. `README.md` documents the situation in a callout under the install
      section.
+
+---
+
+## 28. `./`-relative plugin names don't work inside a preset — the fix for #26 broke boot `[FIXED]`
+
+- **Where**: `cordis.patch.yml` / `agent.cordis.yml` (the `preset-comfyui-chenxin`
+  row's nested `plugins` list), `scripts/check_lockstep.py`
+  (`check_portable`, `check_entry_points`).
+- **What**: the first fix for #26 rewrote the three absolute values to
+  `./loader.js`, `./plugins/prompt-forge/dist/src/plugin/index.js` and
+  `presetRoot: null`, shipped as `2afcf09`. After a restart the preset was
+  **gone from the menu entirely**.
+- **Why**: `dsh-app-boot`'s `anchorInsertedPluginNames`
+  (`src/index.ts:570-581`) does rewrite `./`-prefixed insert names into file
+  URLs — but it only descends into an entry's `config` when
+  `entry.group && Array.isArray(entry.config)`. The one insert in this patch is
+  the preset row, whose `config` is a plain object, so the two nested `./` names
+  were handed to the Loader **verbatim**. The preset registry then mounts them
+  against the profile's `baseUrl` (`dsh-app-boot/src/index.ts:1245` sets
+  `ctx.baseUrl = pathToFileURL(dirname(configPath))`), i.e. the profile
+  directory — where those files do not exist. Verified: with
+  `createRequire('<profile>/cordis.yml')`,
+  `require.resolve('./loader.js')` fails `MODULE_NOT_FOUND` while
+  `require.resolve('@local/dsh-comfyui-chenxin-preset/loader.js')` succeeds.
+  Mount failure lands in `record.broken` and the roster row carries it; the UI
+  treats a broken preset as absent.
+- **Impact**: the preset never mounted, so the 3 skills and 3 CLI tools were
+  also unavailable. Published in `2afcf09` before the symptom appeared.
+- **Fix**: both entry points are now **this package's subpath specifiers** —
+  `@local/dsh-comfyui-chenxin-preset/loader.js` and
+  `@local/dsh-comfyui-chenxin-preset/plugins/prompt-forge/dist/src/plugin/index.js`.
+  Node resolves them through the profile's `node_modules` entry (a `link:` to
+  the checkout), so they are machine-independent *and* do not rely on the
+  anchoring recursion that does not apply here. Verified with a real ESM
+  `import()` from the profile directory: loader exports
+  `default`/`module.exports`, prompt-forge exports
+  `Config`/`apply`/`inject`/`name`.
+  `check_lockstep.py` now rejects `./`-relative plugin names outright
+  (`check_portable`) with a message naming the anchoring limitation, and
+  `check_entry_points` maps package subpaths back onto the checkout instead of
+  concatenating `ROOT / name`. Both directions are covered by the gate:
+  `./` names and absolute names each fail.
 
 ---
 

@@ -236,11 +236,11 @@ check_lockstep.py                              ← python scripts/check_lockstep
 `check_lockstep.py` 只需要 PyYAML（`requirements.lock` 里已有 `PyYAML`），不需要 venv 里的本地包。它断言四件事：
 
 1. **entry 列表逐条相同** —— `cordis.patch.yml` 与 `agent.cordis.yml` 没有任何允许差异
-2. **两份都不含机器相关路径** —— 不允许 `file:///...` 或绝对路径；`./` 相对路径由 dsh-app-boot 在加载时锚定到 patch 所在目录
-3. **每个 `./` 入口文件真实存在** —— 抓「全新 clone 没有 `dist/`」这类静默失败
+2. **两份都不含机器相关路径** —— 不允许 `file:///...`、绝对路径，**也不允许 `./` 相对路径**；plugin `name` 必须写成本包子路径 `@local/dsh-comfyui-chenxin-preset/<subpath>`（Node 经 profile 的 `node_modules` 链接解析，checkout 位置无关）
+3. **每个入口文件真实存在** —— 包内子路径映射回本 checkout 后检查；抓「全新 clone 没有 `dist/`」这类静默失败
 4. **`preset.yml` 的 name/description 与 patch 一致**
 
-第 2 条和第 3 条各对应一个真实缺陷。第 2 条：patch 曾经把 `loader.js` / `prompt-forge` 的 name 和 `presetRoot` 钉成本机 `D:/DSH/...` 绝对路径，入库后任何别的机器 clone 都加载失败；`presetRoot: null` 是安全的，因为 loader.js 会回落到自己的 `__dirname`，而 Node 会把 symlink 模块解析到 realpath。第 3 条：`plugins/prompt-forge/dist/` 是 gitignore 的构建产物，全新 clone 里它不存在，而 dsh-app-boot 会把 bundle 加载失败静默吞进 `skippedBundles`，表现为「预设起来了但没有 prompt-forge 工具」；两个 setup 脚本现在会自动构建。
+第 2 条和第 3 条各对应一个真实缺陷，第 2 条还额外踩过一次回归。绝对路径那次：patch 曾把 `loader.js` / `prompt-forge` 的 name 和 `presetRoot` 钉成本机 `D:/DSH/...`，入库后任何别的机器 clone 都加载失败。而改成 `./loader.js` **修错了方向**：dsh-app-boot 的 `anchorInsertedPluginNames` 只在 `entry.group && Array.isArray(entry.config)` 时才递归进 config，本 preset 行是普通 object config，于是嵌套的 `./` 名字以字面量落到 loader 手上、再按 profile 目录解析 → preset 静默挂不上，预设在菜单里直接消失。用包内子路径是因为它走 Node 的模块解析（profile 的 `link:` 指向 checkout），不依赖锚定递归。见 `docs/KNOWN-ISSUES.md` #28。第 3 条：`plugins/prompt-forge/dist/` 是 gitignore 的构建产物，全新 clone 里它不存在，而 dsh-app-boot 会把 bundle 加载失败静默吞进 `skippedBundles`，表现为「预设起来了但没有 prompt-forge 工具」；两个 setup 脚本现在会自动构建。
 
 为什么需要这个门：patch 才是 DSH 真正加载的那份，source 是人编辑的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。`KNOWN-ISSUES.md` #13 只加了 SYNC OBLIGATION 注释——注释不会失败，这个 gate 会。
 

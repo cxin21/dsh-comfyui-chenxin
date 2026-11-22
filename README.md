@@ -49,7 +49,13 @@ DSH 只通过 **bundle** 装载预设（`plugin_manager` 装一个声明了 `dsh
 | `cordis.patch.yml` | **DSH 真正加载的**那份（`insert` 一条 `preset-comfyui-chenxin`） |
 | `agent.cordis.yml` | 同一份 entry 列表的可移植形态，供人阅读与评审 |
 
-`agent.cordis.yml` 和 `cordis.patch.yml` 的 entry 列表**逐条完全相同，没有任何允许差异**——两份文件都不含机器相关路径。`./` 开头的 plugin `name` 由 dsh-app-boot 在加载时锚定到 patch 文件所在目录，`comfyui-loader.presetRoot` 保持 `null` 让 loader.js 回落到自己的 `__dirname`（Node 会把 symlink 模块解析到 realpath，所以 profile 里的链接照样指向 checkout）。需要按机器覆盖的配置写进 profile 自己的 `cordis.patch.yml`（user 层），不要写进仓库。
+`agent.cordis.yml` 和 `cordis.patch.yml` 的 entry 列表**逐条完全相同，没有任何允许差异**——两份文件都不含机器相关路径。
+
+plugin `name` 用的是**本包子路径**（`@local/dsh-comfyui-chenxin-preset/loader.js`、`@local/dsh-comfyui-chenxin-preset/plugins/prompt-forge/dist/src/plugin/index.js`）：Node 通过 profile 的 `node_modules` 条目（一个指向 checkout 的 `link:`）解析它，checkout 搬到哪儿都成立。`comfyui-loader.presetRoot` 保持 `null` 让 loader.js 回落到自己的 `__dirname`（Node 会把 symlink 模块解析到 realpath，所以 profile 里的链接照样指向 checkout）。
+
+**不要用 `./loader.js` 这种写法**——dsh-app-boot 的 `anchorInsertedPluginNames` 确实会把 `./` 名字改写成 file URL，但它只在 `entry.group && Array.isArray(entry.config)` 时才递归进 config。本 preset 行是普通 object config，嵌套的 `./` 名字会以字面量交到 loader 手里、再按 profile 目录解析，结果是 preset 静默挂不上（预设在菜单里直接消失，日志里只有一行 warn）。这个坑真踩过，见 `docs/KNOWN-ISSUES.md` #28。
+
+需要按机器覆盖的配置写进 profile 自己的 `cordis.patch.yml`（user 层），不要写进仓库。
 
 两份必须锁步——改一份就要改另一份，然后跑
 
@@ -57,7 +63,7 @@ DSH 只通过 **bundle** 装载预设（`plugin_manager` 装一个声明了 `dsh
 python scripts/check_lockstep.py
 ```
 
-它断言四件事：entry 列表逐条相同、两份文件都不含机器相关路径、每个 `./` 入口在磁盘上真实存在、`preset.yml` 的 name/description 与 patch 一致。为什么这条要紧：**DSH 读的是 `cordis.patch.yml`**，`agent.cordis.yml` 只是给人读的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。
+它断言四件事：entry 列表逐条相同、两份文件都不含机器相关路径（`./` 相对路径也算不合规，理由同上）、每个入口在磁盘上真实存在、`preset.yml` 的 name/description 与 patch 一致。为什么这条要紧：**DSH 读的是 `cordis.patch.yml`**，`agent.cordis.yml` 只是给人读的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。
 
 > **`plugins/prompt-forge/dist/` 不入 git**（构建产物）。所以全新 clone 里 patch 指向的入口文件还不存在，而 dsh-app-boot 会把 bundle 加载失败静默塞进 `skippedBundles`（不打印任何东西）——表现是「预设起来了但没有 prompt-forge 工具」。`scripts/setup.ps1` / `setup.sh` 现在会在第 5 步自动 `npm ci && npm run build`；如果你跳过了 setup，手动跑一次 `cd plugins/prompt-forge && npm ci && npm run build`。
 

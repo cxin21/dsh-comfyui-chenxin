@@ -12,7 +12,8 @@
     "optimize:loop": "node scripts/optimize-loop.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint src tests"
+    "lint": "eslint src tests",
+    "verify:host-shape": "node scripts/verify-host-shape.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

@@ -13,8 +13,7 @@ import {
   createProductionEvidenceDeps,
   createProductionCriticProvider,
 } from '../pe-framework/pipeline/judge-assembly.js';
-import { createSubagentTextRunner } from '../pe-framework/llm/subagent-text.js';
-import { createSubagentToolRunner } from '../pe-framework/llm/subagent-tool-runner.js';
+import { createTransportRunner, hasSubagentSeam } from '../pe-framework/llm/transport.js';
 import { createCancelGuard } from '../pe-framework/llm/cancel.js';
 import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js';
 // audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
@@ -34,6 +33,7 @@ import type { SemanticBlueprint } from '../pe-framework/blueprint/semantic-schem
 import z from '@deepseek-ai/schemastery';
 import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import { registerOrReuseNamespace, migrateLegacySettingsSection } from '../pe-framework/profiles/storage-v2.js';
+import { createDirectIntentProvider } from '../pe-framework/intent/direct-provider.js';
 import { orchestrateDirecting } from '../pe-framework/directing/orchestrate.js';
 import { emitEngineering } from '../pe-framework/directing/engineering/emit.js';
 import type { DirectingIr } from '../pe-framework/directing/ir-schema.js';
@@ -42,7 +42,6 @@ import { sceneToShotsChecked } from '../pe-framework/schema/scenes.js';
 import type { H3ShotsInput } from '../pe-framework/schema/h3-shots.js';
 import type { Config } from '../plugin/config.js';
 import type { Context } from '@deepseek-ai/cordis';
-import { complete } from '../llm/complete.js';
 import { resolveRoute, type ExecLike } from '../llm/route.js';
 import { resolveJoyExtraOptions, filterJoyExtraClauses } from '../pe-framework/sanitize/joy-extra.js';
 import { recordGeneration } from '../pe-framework/feedback/store.js';
@@ -53,11 +52,7 @@ import { resolveRating } from '../pe-framework/safety/rating.js';
 
 import { checkBoundaries } from '../pe-framework/safety/boundaries.js';
 import { recommendArtDirection } from '../pe-framework/aesthetics/recommend.js';
-import {
-  analyzeBlueprintIncremental,
-  parseBlueprintJson,
-  ANIMA_BLUEPRINT_PERSONA,
-} from '../pe-framework/blueprint/analyzer.js';
+import { analyzeBlueprintIncremental } from '../pe-framework/blueprint/analyzer.js';
 import {
   applyArtDirectionCards,
   type ArtDirectionRecommendation,
@@ -245,91 +240,6 @@ function mergeRepairSlots(
 function injectBlueprintCoreRating(d: AuthorDraft, rating: Rating): AuthorDraft {
   if (d.blueprint) d.blueprint.core.rating = rating;
   return d;
-}
-
-/** 缺省 intent（真实运行）：经 ctx.llm 走 complete 组装；测试一律注入 provider（route 在 execute 入口经 resolveRoute 解析） */
-async function defaultIntent(
-  ctx: Context,
-  route: { provider: string; model: string },
-  req: AuthorIntentRequest,
-  signal?: AbortSignal,
-): Promise<AuthorDraft> {
-  // M5-T2（D4）：蓝图形态 parity——降级面（provider seam 未装配）与主面行为一致：system 用
-  // req.persona（ANIMA 蓝图 persona，registry 下行），解析走 parseBlueprintJson(+expectedMedia)。
-  if (req.blueprintMode === true) {
-    const user =
-      (req.feedback
-        ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n`
-        : '') +
-      (req.catalogCandidates && req.catalogCandidates.length > 0
-        ? `可用 catalog 规范候选（Anima tag 知识库中已验证存在的规范写法——写法权威源，命中概念的 tag 应优先采用候选的拼写形式，未命中概念保留你的写法）:\n${req.catalogCandidates.join(', ')}\n\n`
-        : '') +
-      `创作意图: ${req.input}`;
-    const { text } = await complete(ctx, {
-      provider: route.provider,
-      model: route.model,
-      system: req.persona ?? ANIMA_BLUEPRINT_PERSONA,
-      user,
-      // M5-DIAG2（用户裁定：不设 maxTokens 上限）——reasoning 模型思考预算不可预支，交由宿主 defaultMaxTokens
-      temperature: 0.3,
-      // #16：降级面必须看见调用方取消；缺省才用一次性 controller
-      signal: signal ?? new AbortController().signal,
-    });
-    const expected = req.blueprintExpectedMedia;
-    return parseBlueprintJson(text, {
-      ...(expected === 'image' || expected === 'video' || expected === 'mixed' ? { expectedMedia: expected } : {}),
-    });
-  }
-  const system =
-    req.target === 'anima'
-      ? '你是 Anima 提示词意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图拆成槽位 JSON（形如 {"slots": {"count_gender": [...], "appearance": [...], ...}}，键为 count_gender/character/appearance/clothing/pose_action/expression/camera/scene/detail_mood/narrative）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的维度给最小化合理解释，不编造情节；所有 tag 用英文 danbooru 词表写法（全小写、空格分隔），中文创意概念必须翻译成英文画面词，禁止中文字符出现在任何 tag 槽位。'
-      : '你是 MiniMax-H3 意图拆解器（one-shot 结构产出：输出由程序按 JSON Schema 机器解析，不要调用任何工具，只输出裸 JSON，无 fence 无解释）。任务：把创作意图写成 shots JSON（形如 {"shots": {"duration_seconds": 6, "shots": [{"what": "...", "ambient": "...", "music": "..."}]}}）。纪律：尊重用户原始意图——用户给的描述串保持字面语义（不增删指代），缺的字段给最小化合理解释，不编造情节；what 正文用英文书写，画面内文字与原生对白原样保留（对白放 dialogue 字段）。';
-  const user =
-    (req.feedback
-      ? `上一轮审计反馈（请修正后重新给出结构 JSON）。审计门是机器判定（tag 预算/互斥/CJK/时长公式等），违反即被拦下——只修复反馈点名的问题即可复判通过；未被点名的部分（含画师选择、已证实 tag）保持原样，不要调用任何工具:\n${req.feedback}\n\n`
-      : '') +
-    (req.catalogCandidates && req.catalogCandidates.length > 0
-      ? `可用 catalog 规范候选（Anima tag 知识库中已验证存在的规范写法——写法权威源，命中概念的 tag 应优先采用候选的拼写形式，未命中概念保留你的写法）:\n${req.catalogCandidates.join(', ')}\n\n`
-      : '') +
-    `创作意图: ${req.input}`;
-  const { text } = await complete(ctx, {
-    provider: route.provider,
-    model: route.model,
-    system,
-    user,
-    // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
-    temperature: 0.3,
-    // #16：slots/shots 降级面同样透传调用方 signal
-    signal: signal ?? new AbortController().signal,
-  });
-  // 剥离 markdown code fence 与前后非 JSON 杂质（LLM 常见 ```json ... ``` 包裹；与 subagent-provider 同款策略）
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const cleaned = (fenced ? fenced[1] : text).trim();
-  const parsed = JSON.parse(cleaned) as { slots?: Record<string, unknown>; shots?: H3ShotsInput };
-  // 归一化 slots：narrative 强制 string；其余槽强制 string[]
-  const slots = parsed.slots ? normalizeSlots(parsed.slots) : undefined;
-  if (req.target === 'anima') return { slots: slots ?? ({} as AnimaSlots) };
-  return { shots: parsed.shots ?? undefined };
-}
-
-/** LLM 输出形状兜底：narrative 强转 string；其余槽强转 string[]（数组→join / 标量→[标量] / null→[]） */
-function normalizeSlots(raw: Record<string, unknown>): AnimaSlots {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (k === 'narrative') {
-      out[k] =
-        typeof v === 'string'
-          ? v
-          : Array.isArray(v)
-            ? (v as unknown[]).map(String).join(' ')
-            : v == null
-              ? ''
-              : String(v);
-    } else {
-      out[k] = Array.isArray(v) ? (v as unknown[]).map((x) => String(x)) : v == null ? [] : [String(v)];
-    }
-  }
-  return out as AnimaSlots;
 }
 
 /* ── 视图层（意图 → runStage 内核 → 场景表单闸门合并 → Envelope + 修正闭环）── */
@@ -992,9 +902,11 @@ const blueprintScopeCache = new WeakMap<object, RepoSettingsScope | undefined>()
 
 function blueprintSettingsScope(ctx: Context): RepoSettingsScope | undefined {
   const service = (ctx as unknown as { settings?: unknown }).settings;
-  if (!service || typeof service !== 'object' || typeof (service as { register?: unknown }).register !== 'function') {
-    // 无 settings → undefined（D9 静默跳过）；有 settings 但缺 register（异常形状/误传 owner
-    // scope 假扮服务）→ 同样 undefined，由调用方落 advisory（运行期可检，不炸进程）
+  if (!service || typeof service !== 'object') {
+    // 无 settings 服务 → undefined（D9 静默跳过），由调用方落 advisory。
+    // 有 settings 但缺 register（DSH dsh-settings 0.2.2-rc.5+ 移除服务端 namespace API，
+    // 见 KNOWN-ISSUES #30）不再直接放弃——registerOrReuseNamespace 已内置文件回退存储，
+    // 蓝图落库在新 API 形态下继续工作；异常形状仍由下方 try/catch fail-open 兜住。
     return undefined;
   }
   if (blueprintScopeCache.has(service)) return blueprintScopeCache.get(service);
@@ -1217,11 +1129,17 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           ...(presetHints !== undefined ? { presetHints } : {}),
         });
 
+        // 2026-11-22（direct transport 改造）：Intent Provider 不再在 apply 期硬接线
+        // （plugin/index.ts 槽留空——host 0.2.2-rc.5 移除 ctx.subagents.start，那一行会让
+        // 整包 14 个工具在 apply 期抛错 → fiber rejected → 预设里 prompt-forge 静默失能）。
+        // 槽为空时用 direct provider：走 intent core（persona/schema/taskText/parse 与
+        // subagent 路同源），transport = ctx.llm.stream 直连，模型路由完全跟随会话。
+        const directProvider = createDirectIntentProvider(ctx);
         const provider =
           _intentProvider ??
           ((req: AuthorIntentRequest, exec2?: ExecLike) => {
             const live = (exec2 ?? exec) as ExecLike;
-            return defaultIntent(ctx, resolveRoute(live), req, live.signal);
+            return directProvider(req, live);
           });
         // Task 7：intent persona/schema 方言化——从 dialect 注册表取（ANIMA_*/H3_* 常量），未注册则 undefined → provider 内 DEFAULT 兜底
         // t22 F2：clarify 透传（→ analyzeIntent opts.clarify），否则参数声明了但运行期静默 no-op
@@ -1257,20 +1175,27 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // （docs/2026-09-12-camera-language-research.md §2）
         const criticParent =
           (exec as unknown as ExecLike | undefined)?.agent ?? (ctx as { agent?: unknown } | undefined)?.agent;
-        // 2026-09-15（用户定案「全部 LLM 调用一次性子代理」终态）：扩写/增量蓝图的嵌套 LLM 调用
-        // 统一走子代理形态（三方可见）；subagents 未注册时保持 complete 直连兜底（无 Agent 会话可用）。
-        const subagentsReady = Boolean((ctx as { subagents?: { start?: unknown } | undefined })?.subagents?.start);
+        // 2026-11-22（transport）：LLM runner 统一走 transport 抽象（direct 默认 / subagent 回退）。
+        // 旧的 `subagentsReady` 布尔门在 host 0.2.2-rc.5 上恒为 false（ctx.subagents.start 已移除）
+        // → enrich/评审/成文/审计/修复全部变 undefined → 静默失效（无报错、无 advisory）。
+        // transport 层按能力选路并让「不可用」显式化（两条路都不可用 → runner 为 undefined，
+        // 对应管线按既有 fail-open 规则降级 + 机器门兜底）。
+        const transportRunner = (labelPrefix: string): ((taskText: string) => Promise<string>) | undefined =>
+          createTransportRunner(ctx, {
+            resolveRoute: () => resolveRoute(exec as ExecLike),
+            parent: criticParent,
+            labelPrefix,
+            signal: exec.signal,
+          });
         const asLlm =
-          (runner: ReturnType<typeof createSubagentTextRunner>) => (req: { system: string; user: string }) =>
-            runner(`${req.system}\n\n${req.user}`);
-        // #16 T-02（对抗审查 P1-3）：caller signal 透传进全部 11 处 runner 工厂——取消时
-        // bindExternalAbort 联动内部 controller，host 真正中止在途子代理（T-01 能力的生产消费面）。
-        const enrichLlm = subagentsReady
-          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent, signal: exec.signal }))
-          : undefined;
-        const blueprintLlm = subagentsReady
-          ? asLlm(createSubagentTextRunner(ctx, { labelPrefix: 'pm-blueprint', parent: criticParent, signal: exec.signal }))
-          : undefined;
+          (runner: ((taskText: string) => Promise<string>) | undefined) =>
+            runner
+              ? (req: { system: string; user: string }) => runner(`${req.system}\n\n${req.user}`)
+              : undefined;
+        // #16 T-02（对抗审查 P1-3）：caller signal 透传进全部 runner 工厂——取消时
+        // bindExternalAbort 联动内部 controller，host 真正中止在途调用。
+        const enrichLlm = asLlm(transportRunner('pm-enrich'));
+        const blueprintLlm = asLlm(transportRunner('pm-blueprint'));
         // R17（修复计划 R17）：runEnrich brief 层随 h3 直译路径移除而退出——h3 新鲜请求一律 routing
         // 到 directing 编排器（§3），不消费七维 brief；此处保留调用 = 每次出稿白烧 1 次 LLM 且产物被
         // 弃用。enrich 参数对 h3 已无消费面；显式 outputLang 亦无消费面 → advisory 可观测。
@@ -1322,11 +1247,17 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             }
           }
           if (!script.trim()) throw new Error('target=h3 requires non-empty input or script (spec §3)');
-          const saRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-script-analyst', parent: criticParent, signal: exec.signal }) : undefined;
-          const bdRunner = subagentsReady ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-beat-director', parent: criticParent, signal: exec.signal }) : undefined;
-          const swRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-writer', parent: criticParent, signal: exec.signal }) : undefined;
-          const caRunner = subagentsReady && judgeMode !== 'off' ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-continuity-auditor', parent: criticParent, signal: exec.signal }) : undefined;
-          const srRunner = subagentsReady ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-shot-repairer', parent: criticParent, signal: exec.signal }) : undefined;
+          const saRunner = transportRunner('pm-script-analyst');
+          const bdRunner = transportRunner('pm-beat-director');
+          const swRunner = transportRunner('pm-shot-writer');
+          const caRunner = judgeMode !== 'off' ? transportRunner('pm-continuity-auditor') : undefined;
+          const srRunner = transportRunner('pm-shot-repairer');
+          // 2026-11-22（direct transport 能力降级可观测）：direct transport 是纯文本 one-shot，
+          // 无 host 工具回填能力 → 原来靠 toolFilter 开放 catalog_search 的三个 runner 降级为
+          // 文本形态（catalog 证据改由确定性检索包 + 机器门承担）。显式 advisory，不静默。
+          if (!hasSubagentSeam(ctx)) {
+            preflightAdvisories.push('catalog_tool_unavailable_direct_transport');
+          }
           // R15（spec §4 工程输出物）：三件套落盘接线——目录不可解析 → advisory 可观测，fail-open 不阻塞出稿
           const emitDir = resolveDirectingEmitDir(a.project);
           const emitFailures: string[] = [];
@@ -1421,7 +1352,12 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             // 此处注释曾在该中间态遗留「直连」表述，现正名。注入 seam（测试/e2e mock）优先级不变。
             criticProvider:
               _judgeDeps?.criticProvider ??
-              createProductionCriticProvider(ctx, { parent: criticParent, signal: exec.signal }),
+              createProductionCriticProvider(ctx, {
+                parent: criticParent,
+                signal: exec.signal,
+                // 2026-11-22（direct transport）：direct 评审路径需要模型路由（插件不内置默认模型）
+                resolveRoute: () => resolveRoute(exec as ExecLike),
+              }),
             evidenceDeps: _judgeDeps?.evidenceDeps ?? createProductionEvidenceDeps(target as 'anima' | 'h3'),
             originalIntent: input,
             declaredRating: resolved.rating, // M2-T2（spec §7 P3）：T13 四接线点从编排流可达
@@ -1515,20 +1451,13 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // S3 成文(pm-writer 工具查字典) → S4 双轨审核(机器门 ∥ pm-auditor 每轮必跑) →
         // S5 修复(pm-repairer)；检索层已废除（A1）。编排细节在 compositing/orchestrate.ts。
         if (target === 'anima' && draft.semantic) {
-          const enrichRunner = subagentsReady
-            ? createSubagentTextRunner(ctx, { labelPrefix: 'pm-enrich', parent: criticParent, signal: exec.signal })
-            : undefined;
-          // A2：成文/审计/修复三个 LLM 均开放 catalog_search 工具（toolFilter allow）
-          const writerRunner = subagentsReady
-            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-writer', parent: criticParent, signal: exec.signal })
-            : undefined;
-          const auditorRunner =
-            subagentsReady && judgeMode !== 'off'
-              ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-auditor', parent: criticParent, signal: exec.signal })
-              : undefined;
-          const repairRunner = subagentsReady
-            ? createSubagentToolRunner(ctx, { labelPrefix: 'pm-repairer', parent: criticParent, signal: exec.signal })
-            : undefined;
+          const enrichRunner = transportRunner('pm-enrich');
+          // A2：成文/审计/修复三个 LLM 原开放 catalog_search 工具（toolFilter allow）——
+          // 2026-11-22 direct transport 无工具能力 → 降级为文本 runner（catalog 证据由
+          // 确定性检索包 + 机器门 verifyTag/search 承担；不可用事实由上方 advisory 暴露）。
+          const writerRunner = transportRunner('pm-writer');
+          const auditorRunner = judgeMode !== 'off' ? transportRunner('pm-auditor') : undefined;
+          const repairRunner = transportRunner('pm-repairer');
           // A5：机审 fabricated_tag 直查 catalog（canonical/alias/artist 同步级联，毫秒级）
           const verifyTag = (tag: string): boolean => searchCatalogSync(tag, { mode: 'auto', limit: 5 }).length > 0;
           // A6：回退直查缝

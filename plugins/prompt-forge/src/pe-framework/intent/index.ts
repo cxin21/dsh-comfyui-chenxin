@@ -6,22 +6,48 @@
 export type { AuthorIntentFn, AuthorIntentRequest, AuthorDraft } from '../../tools/prompt-author.js';
 
 import {
-  createSubagentIntentProvider,
   type SubagentProviderOptions,
-
 } from './subagent-provider.js';
+import { createDirectIntentProvider } from './direct-provider.js';
 import type { Context } from '@deepseek-ai/cordis';
 import type { AuthorIntentFn } from '../../tools/prompt-author.js';
 
 export type { SubagentLikeRun, SubagentProviderOptions } from './subagent-provider.js';
 export { createSubagentIntentProvider } from './subagent-provider.js';
 
+/* ── 2026-11-22：transport 抽象 ──
+ * intent core（persona/schema/taskText/parse）已从 subagent-provider 抽出，两条 transport 共用：
+ *   - direct（ctx.llm.stream 直连）—— host 0.2.2-rc.5 移除 ctx.subagents.start 后的默认路径；
+ *   - subagent（ctx.subagents.start）—— 旧 host 回退。
+ * 导出 core 与 direct provider，供 plugin 装配与测试使用。
+ */
+export {
+  createDirectIntentProvider,
+  type DirectIntentProviderOptions,
+} from './direct-provider.js';
+export {
+  buildIntentTaskText,
+  resolveIntentPersonaSchema,
+  parseIntentDraft,
+  extractJsonCandidate,
+  applyBlueprintClarify,
+  dumpIntentRequest,
+  normalizeSlots,
+  type IntentPromptOptions,
+} from './core.js';
+
 /**
  * 默认 Intent Provider：在 plugin/apply 内用 ctx 创建闭包后传入。
  * ownerCtx 在这里一次性绑定；返回的 AuthorIntentFn 可直接 setAuthorIntentProvider 装入。
+ *
+ * 2026-11-22：默认走 direct transport（host 0.2.2-rc.5 的 subagents 只有 startActivation，
+ * 没有 start → 旧实现会在 apply 期硬接线就抛错，整包 14 个工具拒载）。
+ * transport 本身在**调用期**按能力解析：direct 优先，`PM_TRANSPORT=subagent` 可切回旧形态，
+ * direct 不可用时自动回退 subagent（老 host 行为不变）。
+ * 若需显式指定某一条形态，请直接用 createDirectIntentProvider / createSubagentIntentProvider。
  */
 export function createDefaultIntentProvider(ctx: Context, opts: SubagentProviderOptions = {}): AuthorIntentFn {
-  return createSubagentIntentProvider(ctx, opts);
+  return createDirectIntentProvider(ctx, opts);
 }
 
 /* ── T4: intent 薄包装（resolver 组装，PE 引擎复用）── */

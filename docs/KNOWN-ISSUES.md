@@ -624,6 +624,50 @@ means documented behavior with no code change required.
 
 ---
 
+## 30. prompt-forge 在 host 0.2.2-rc.5 上静默失能 — settings / subagents 两个 seam 都被移除 `[FIXED]`
+
+- **Where**: `plugins/prompt-forge/src/plugin/index.ts`（apply 期硬接线）、
+  `src/pe-framework/profiles/storage-v2.ts`、`src/pe-framework/intent/*`、
+  `src/pe-framework/llm/transport.ts`、`src/pe-framework/eval/critic.ts`。
+- **What**: 预设在菜单里、能被选中，3 个 camera skill 与 3 个 CLI 工具都正常，
+  但 **prompt-forge 的 14 个工具一个都没有**。会话里的 agent 还把它误诊成
+  「只有 chrome-devtools 和 amap 两条 MCP 连接」——原生插件工具根本不在 MCP 目录里。
+- **Why**: 两个 host API 断裂，都在 apply 阶段致命：
+  1. **settings**：host 的 `dsh-settings` 0.2.2-rc.5 只剩
+     `configure/describe/prepareDocument/update/replace/mutate/write`
+     （namespace 是 profile entry id），任意 namespace 的 `register/get` 已删。
+     插件 apply 的第一件事就是 `registerOrReuseNamespace()` →
+     `ctx.settings.register(ns, schema)` → `TypeError` → apply 拒绝 → fiber rejected。
+  2. **subagents**：host 的 subagents 公开面只有 `startActivation(spec)`，
+     **没有 `start(spec)`**。插件把整条 LLM 编排押在 `ctx.subagents.start` 这一个 seam 上：
+     intent provider / critic provider / text runner / tool runner 全线依赖它，
+     而 intent provider 的 guard 挂在**工厂**上 → apply 期硬接线直接 throw。
+  取证：asar 抽取 host 源码 + 本地 harness（`plugins/prompt-forge/scripts/verify-host-shape.mjs`
+  按 host 真实服务形状挂载 dist）。host 侧不留日志（`logger.warn` / `ctx.logger.error`
+  没进 crash 日志），只有 UI 预设卡的 broken 文案与「工具面缺 14 个」这一差异能定位它。
+- **Impact**: 预设「在」，但 prompt-forge 静默失能——用户拿到的是 agent 手写的
+  Anima 草稿，而不是 `prompt_author` 出稿；且因为 apply 失败被 `auditRows` 归类为
+  `never started`，错误文案指向「没启动」而不是「API 变了」，极易误诊。
+- **Fix**:
+  - **settings**：feature-detect（`typeof ctx.settings.register !== 'function'`）→
+    落到文件回退存储 `data/runtime/prompt-forge/settings.json`（tmp+rename 原子写），
+    旧 host 路径完全不变。
+  - **LLM 编排**：从 host seam 里抽成插件自己的 **transport 抽象**——`intent core`
+    （persona/schema/taskText/parse）与 transport 分离，subagent 与 direct 两条路
+    共用同一份 core（顺带修掉 anima `compositingMode` 分支只在子代理侧存在、
+    直连会静默降级成 legacy slots 的漂移）。transport = `direct`（`ctx.llm.stream`
+    直连，默认）/ `subagent`（`PM_TRANSPORT=subagent`，或 direct 不可用时自动回退）。
+  - **apply 期只「绑定 ctx」**：不再硬接线一个会抛错的 provider；transport 在**调用期**
+    按能力解析 → 失败表现为单次调用的可观测错误，不再是挂载失败导致整包工具失能。
+  - **能力降级要可见**：host 的 `ContentBlockMap` 没有 `tool-result` 块，
+    「模型→调工具→回填结果」在 direct 路径无法闭环；因此 direct 路径下
+    `catalog_search` 这类工具交互降级，出 advisory `catalog_tool_unavailable_direct_transport`，
+    compositing 的确定性机器门（`verifyTag` / `search` 直查 catalog）继续承担证据职责。
+  - **回归闸门**：`scripts/verify-host-shape.mjs`（`npm run verify:host-shape`）
+    按 host 真实服务形状挂载 **dist**，断言 14 个工具全部注册——它就是那场事故的闸门。
+
+---
+
 ## Environment note — `billion-context` overrides compaction rows
 
 Not a preset defect, recorded so it is not re-discovered as one. In this

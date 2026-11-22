@@ -11,7 +11,7 @@ import type { BlueprintV1 } from '../blueprint/schema.js';
 import { checkConcreteness } from '../aesthetics/check.js';
 import { countTokensH3 } from '../audit/tokenizer-h3.js';
 import type { CriticProvider } from '../eval/critic.js';
-import { createSubagentCriticProvider } from '../eval/critic.js';
+import { createDirectCriticProvider } from '../eval/critic.js';
 import type { EvidenceDeps } from '../eval/evidence.js';
 import { searchCatalog } from '../dialect/anima-catalog.js';
 
@@ -84,15 +84,24 @@ export function createProductionEvidenceDeps(target: 'anima' | 'h3'): EvidenceDe
 }
 
 /**
- * 生产 CriticProvider 装配 = createSubagentCriticProvider(ownerCtx)。
- * T3 carry：ownerCtx 必须含 agent 供 parent 归属；缺 agent / ctx.subagents 未注册时
- * provider 内部抛错 → 管线层 skipped 降级（可接受，不在此兜底）。
- * 2026-09-12 P0：opts.parent 透传（工具层从 exec.agent 线穿调用方 Agent，缺 parent 时
- * host 装配子代理直接 TypeError——详见 docs/2026-09-12-camera-language-research.md §2）。
+ * 生产 CriticProvider 装配（2026-11-22：改为 transport 选路）。
+ *
+ * 此前固定 = createSubagentCriticProvider（硬依赖 ctx.subagents.start）；host 0.2.2-rc.5
+ * 移除该 seam 后 provider 内部抛错 → judge 轮静默 skipped（评审失效、出稿照常，风险不可见）。
+ * 现在按能力选路：direct（ctx.llm.stream 直连）优先，subagent 保留为回退——两条路共用
+ * critic.ts 的 buildCriticTaskText，保证提示词与解析完全一致。
+ *
+ * opts.parent 透传（工具层从 exec.agent 线穿调用方 Agent，缺 parent 时 host 装配子代理直接 TypeError）。
+ * opts.resolveRoute 供 direct 路径惰性解析模型路由（插件不内置默认模型，完全跟随会话路由）。
  */
 export function createProductionCriticProvider(
   ownerCtx: SubagentHostCtx,
-  opts?: { timeoutMs?: number; parent?: unknown; signal?: AbortSignal },
+  opts?: {
+    timeoutMs?: number;
+    parent?: unknown;
+    signal?: AbortSignal;
+    resolveRoute?: () => { provider: string; model: string };
+  },
 ): CriticProvider {
-  return createSubagentCriticProvider(ownerCtx, opts);
+  return createDirectCriticProvider(ownerCtx, opts);
 }

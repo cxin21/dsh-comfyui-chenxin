@@ -30,7 +30,13 @@ function mountingCtx(marker: string, profiles: Record<string, string> = {}, disa
   const ctx = {
     marker,
     tools: { register: () => () => undefined },
-    llm: { stream: async function* () {} },
+    // direct transport（host 0.2.2-rc.5 起是默认路径）：LLM 调用打在**当次挂载的 ctx** 上，
+    // 所以这里记录 marker，用来断言「重挂载后只打到新 ctx」。
+    llm: {
+      stream: async function* () {
+        started.push(marker);
+      },
+    },
     subagents: {
       start: async () => {
         started.push(marker);
@@ -106,7 +112,12 @@ describe('plugin apply 的模块槽跟 effect 同生共死', () => {
     const rebound = getAuthorIntentProvider();
     expect(rebound).not.toBeNull();
     expect(rebound).not.toBe(mounted);
-    await rebound!({ input: 'x', target: 'anima' } as never).catch(() => undefined);
+    // 2026-11-22 transport 抽象：provider 的 transport 在**调用期**按能力解析，
+    // 模型路由完全跟随调用方（exec）——所以调用必须带上会话路由。
+    await rebound!(
+      { input: 'x', target: 'anima' } as never,
+      { agent: { options: { provider: 'p', model: 'm' } }, signal: new AbortController().signal } as never,
+    ).catch(() => undefined);
     expect(first.started).toEqual([]);
     expect(second.started).toEqual(['new']);
   });

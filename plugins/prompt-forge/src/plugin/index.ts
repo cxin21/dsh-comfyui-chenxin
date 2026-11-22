@@ -6,6 +6,7 @@ import { registerReverseTool } from '../tools/prompt-reverse.js';
 import { registerMinimaxTool } from '../tools/minimax-scenario.js';
 import { registerProfileListTool, type ProfileScope } from '../tools/profile-list.js';
 import { registerAuthorTool, setAuthorIntentProvider } from '../tools/prompt-author.js';
+import { createDefaultIntentProvider } from '../pe-framework/intent/index.js';
 import { registerCompileTool } from '../tools/prompt-compile.js';
 import { registerCatalogSearchTool } from '../tools/catalog-search.js';
 import { registerCatalogRelationsTool } from '../tools/catalog-relations.js';
@@ -24,12 +25,15 @@ import {
 } from '../pe-framework/profiles/storage-v2.js';
 import '../pe-framework/dialect/anima.js';
 import '../pe-framework/dialect/h3.js';
-import { createDefaultIntentProvider } from '../pe-framework/intent/index.js';
 import { setPresetRoot } from '../pe-framework/resources/resolve.js';
 import { Config, type Config as ConfigShape } from './config.js';
 
 export const name = 'prompt-forge';
-export const inject = ['tools', 'llm', 'settings', 'subagents'];
+// KNOWN-ISSUES #30（host dsh 0.2.2-rc.5）：subagents.start seam 已被移除，preset scope 下
+// apply 期硬接线会直接拒载（14 工具全灭）。intent/扩写/评审在调用期按 subagentsReady 分流，
+// 新 host 自动全走 ctx.llm 直连；'subagents' 不再进 inject（inject 只声明挂载期依赖，
+// 运行期 ctx.subagents 仍可经 scope 链解析，旧 host 行为不受影响）。
+export const inject = ['tools', 'llm', 'settings'];
 export { Config };
 
 export function apply(ctx: Context, config: ConfigShape) {
@@ -63,10 +67,14 @@ export function apply(ctx: Context, config: ConfigShape) {
     setPresetRoot(config.presetRoot);
     // 注入 resolver 自定义 profile 源（兼证 Task 9 契约）
     setCustomProfileSource(() => Object.entries(profileScope.get()).map(([id, profileJson]) => ({ id, profileJson })));
-    // R2: 装入默认 Intent Provider（intent 走 DSH one-shot subagent；ownerCtx 一次性绑定；返回 AuthorIntentFn 单参）
-    //     必须早于 author 工具注册/调用。
-    // 2026-09-15 复位（用户定案「全部 LLM 调用一次性子代理」+ session-init 污染已由用户在
-    // 会话初始化代理侧修复）：intent 恢复子代理形态（与扩写/评审三方一致）。
+    // Intent Provider 在 apply 期装配：模块槽与工具注册同生共死（卸载即回安全缺省）。
+    // 2026-11-22 关键修正（host 0.2.2-rc.5 拒载事故）：provider 的**构造**不再可能抛错。
+    // 旧实现把 createSubagentIntentProvider(ctx) 硬接线在 apply 期，而它的工厂级 guard
+    // （ctx.subagents.start 缺失即 throw）会让整包 14 个工具在预设里静默失能
+    // （预设在、其它插件在、只有 prompt-forge 没了）。
+    // 现在工厂只「绑定 ctx」，transport 在**调用期**按能力解析：
+    //   direct（ctx.llm.stream 直连，默认）→ subagent（PM_TRANSPORT=subagent 或 direct 不可用时回退）。
+    // 失败因此表现为单次调用的可观测错误，而不是挂载失败。
     setAuthorIntentProvider(createDefaultIntentProvider(ctx));
     // enable=false 必须同时作用于按 id 引用（resolveExpand/resolveReverse 走 findProfileById）
     setBuiltinFilter((id) => overrides.all()[id]?.enabled === false);

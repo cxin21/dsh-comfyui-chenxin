@@ -23,6 +23,38 @@ export interface CompleteWithBlocksOptions extends Omit<CompleteOptions, 'user'>
   blocks: ContentBlock[];
 }
 
+/**
+ * one-shot taskText 直送（2026-11-22 transport 抽象）。
+ *
+ * 与 subagent transport 的 `prompt: [{type:'text', text: taskText}]` **逐字同形**——
+ * 这是两条路径 parity 的前提：同一份 taskText 在 direct / subagent 两侧送给模型的内容完全一致，
+ * 不因「direct 有 system 字段、subagent 全在 user 消息」而产生行为差异。
+ * 因此本函数不设 system（system:'' 由适配器丢弃，等价于不设）。
+ */
+export interface CompleteTaskTextOptions {
+  provider: string;
+  model: string;
+  taskText: string;
+  maxTokens?: number;
+  temperature?: number;
+  signal: AbortSignal;
+}
+
+export async function completeTaskText(
+  ctx: Context,
+  opts: CompleteTaskTextOptions,
+): Promise<{ text: string; usage?: TokenUsage; finish: FinishReason }> {
+  return runStream(ctx, {
+    provider: opts.provider,
+    model: opts.model,
+    system: '',
+    content: [{ type: 'text', text: opts.taskText }],
+    maxTokens: opts.maxTokens,
+    temperature: opts.temperature,
+    signal: opts.signal,
+  });
+}
+
 async function runStream(
   ctx: Context,
   opts: {

@@ -59,19 +59,40 @@ if (-not (Test-Path $PythonExe)) {
 }
 
 # ── 3. Install third-party PyPI dependencies ─────────────────────────────
+#
+# Pinned by requirements.lock at the preset root. The six local packages do
+# not upper-bound their transitive deps, so without a lock two machines set up
+# a week apart drift onto different httpx / huggingface_hub / tokenizers builds
+# and the workflow assets stop matching. The lock is the contract.
+#
+# If the lock is missing (old checkout), fall back to the single hard pin this
+# script used before, and say so loudly — a silent fallback is how the drift
+# comes back.
 
-$ThirdParty = @('tokenizers==0.22.2')
-foreach ($pkg in $ThirdParty) {
-    $name, $spec = $pkg -split '==', 2
-    $installed = $null
-    try { $installed = & $PythonExe -m pip show $name 2>$null } catch {}
-    if ($installed -and $installed -match "Version:\s*$([regex]::Escape($spec))") {
-        Write-Host "[comfyui-chenxin] $pkg already satisfied"
-    } else {
-        Write-Host "[comfyui-chenxin] pip install $pkg"
-        & $PythonExe -m pip install $pkg --quiet
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "[comfyui-chenxin] pip install $pkg failed (continuing; install_local will surface any import errors)"
+$LockFile = Join-Path $PresetDir 'requirements.lock'
+if (Test-Path $LockFile) {
+    Write-Host "[comfyui-chenxin] installing pinned deps from requirements.lock"
+    & $PythonExe -m pip install -r $LockFile --quiet
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "[comfyui-chenxin] pip install -r requirements.lock failed (exit $LASTEXITCODE)"
+        exit 1
+    }
+} else {
+    Write-Warning "[comfyui-chenxin] requirements.lock not found at $LockFile - falling back to unpinned deps."
+    Write-Warning "[comfyui-chenxin] Dependency versions will NOT be reproducible. Restore the lock file."
+    $ThirdParty = @('tokenizers==0.22.2')
+    foreach ($pkg in $ThirdParty) {
+        $name, $spec = $pkg -split '==', 2
+        $installed = $null
+        try { $installed = & $PythonExe -m pip show $name 2>$null } catch {}
+        if ($installed -and $installed -match "Version:\s*$([regex]::Escape($spec))") {
+            Write-Host "[comfyui-chenxin] $pkg already satisfied"
+        } else {
+            Write-Host "[comfyui-chenxin] pip install $pkg"
+            & $PythonExe -m pip install $pkg --quiet
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "[comfyui-chenxin] pip install $pkg failed (continuing; install_local will surface any import errors)"
+            }
         }
     }
 }

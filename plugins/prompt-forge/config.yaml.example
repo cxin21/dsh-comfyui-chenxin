@@ -1,0 +1,23 @@
+# prompt-forge 插件配置示例
+#
+# 这是 DSH 原生 Cordis 插件，不是独立 MCP server——没有自己的 db / transport / port。
+# LLM 路由完全跟随当前 DSH 会话（会话用什么 provider/model，prompt-forge 就用什么），
+# 所以这里**没有任何 provider / apiKey / model 字段**。
+#
+# 用法：把本文件复制成同目录的 config.yaml，只填你需要的键，其余删掉或保持注释。
+# 全部键都是可选的——不建 config.yaml 也能正常加载（走下表默认值）。
+
+# 采样温度，作用于本插件发起的 LLM 调用（intent 子代理 / 蓝图扩展 / fast 评审）。
+# 默认 0.7。调低更确定（重跑同样输入更接近同样输出），调高更发散。
+temperature: 0.7
+
+# preset 根目录，仅用于资源路径解析（assets/knowledge/、assets/style-presets/、
+# temp/ 输出目录都以此为基准）。
+#
+# 通常**不用填**：缺省时会依次尝试
+#   1) shell 环境变量 DSH_COMFYUI_PRESET_ROOT
+#   2) 进程环境变量 DSH_COMFYUI_PRESET_ROOT
+#   3) 从插件自身位置向上回溯找到含 plugins/prompt-forge 的目录
+# 只有在「插件被复制/软链到别处、又不想设环境变量」时才需要显式写死。
+#
+# presetRoot: 'D:/DSH/projects/dsh-comfyui-chenxin'

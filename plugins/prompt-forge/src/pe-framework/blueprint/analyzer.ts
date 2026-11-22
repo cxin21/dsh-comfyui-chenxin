@@ -1,0 +1,346 @@
+/**
+ * 意图分析器（spec §6）：意图 → 蓝图 v0 + missing + 澄清接口 + 保真守卫。
+ * analyzeIntent：经 LLM（ctx.llm.stream，persona=BLUEPRINT_PERSONA，schema=BLUEPRINT_SCHEMA）
+ * 产出蓝图 v0 JSON → validateBlueprint 校验 → 计算 missing（spec §6：关键=style/media/negative 边界；
+ * 次要=光影/构图）→ clarify:'ask' 且关键缺失时映射为 clarify_questions（每个问题 =
+ * 「缺少 <维度>：请选择/补充」）→ 调 checkFidelity(input, blueprint) 把丢失实体并入 missing（保真守卫）→
+ * 返回 {blueprint, missing, clarify_questions?}。
+ * 多模态（Phase 2 完整，spec §6 L227）：refs 传入时提取参考物美学特征进蓝图核心字段
+ * （scene.lighting/core.style.palette/scene.atmosphere 等，LLM 引导非硬编码），ref 标签保持稳定；
+ * 无 refs 时行为与 Phase 1 完全一致。蓝图不承载 references 持久字段（§8.1 澄清）。
+ *
+ * 注：运行期接入 createSubagentIntentProvider 的 one-shot 子代理 seam 由 Task 10/12 的 author 管线
+ * 负责（subagent-provider.ts 蓝图 persona 接线在 Task 12 Step 3b）；本模块独立可测（LLM stream 路径）。
+ */
+import { complete } from '../../llm/complete.js';
+import type { Context } from '@deepseek-ai/cordis';
+import { validateBlueprint, type BlueprintMedia, type BlueprintV1 } from './schema.js';
+import { validateSemanticBlueprint, detectTagForm, type SemanticBlueprint } from './semantic-schema.js';
+import { checkFidelity } from '../aesthetics/check.js';
+
+
+export const BLUEPRINT_PERSONA = `你是一位创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（MiniMax-H3 视频分镜等），再经编译与审计门成为成品。
+你的任务：根据用户的创作意图，产出创作蓝图 v0（BlueprintV1），不是任何方言输入。
+
+【运行环境与工具禁用（必读）】本任务为 one-shot 结构产出：你的输出会被程序按 JSON Schema 机器解析，解释性文字会导致解析失败。即使运行环境中存在工具，也不要调用任何工具——只输出一个裸 JSON 对象（无 markdown fence、无解释）。
+
+规则：
+1. 产出蓝图 v0 JSON（media/core/media_layer），不是方言 slots/shots
+2. 保留事实：用户给的具体描述原字面进入蓝图（concept/narrative/角色锚点），不编造情节
+3. 标记缺失：蓝图字段可空；缺维度时字段留空（如无风格 → 不填 core.style）
+4. 多模态（references 传入时）：references 是调用方附带的参考图/音频/视频资源句柄，在用户输入中以 <Picture N>/<Subject N>/<Video N>/<Audio N> 标签出现——这些标签是下游系统绑定真实参考文件的稳定句柄，必须原样保留、不得改写或替换。提取参考物美学特征进蓝图核心字段——光线→scene.lighting、配色→core.style.palette、氛围→scene.atmosphere、环境→scene.environment、构图→core.composition、情绪→core.emotion（仅映射进蓝图既有核心字段，不新增 schema 字段、不编造参考物没有的特征）
+5. 蓝图 media_layer.video.total_duration_seconds 指视频总时长（下游视频工作流官方契约 4–15s），不是每镜时长；用户说「3 个分镜每个 5 秒」→ total=15，shots=3。
+6. 语言纪律（按字段类型拆分）：tag 类字段（appearance_anchors/scene_anchors/outfit/pose_action 等结构化画面词）一律英文 danbooru 词表写法，中文创意概念必须翻译成英文画面词；自由文本字段（concept/narrative）跟随用户输入语言承载原意。Anima 静态图路径更严格：所有字段值禁止中文字符（下游 cjk_in_positive 审计为 critical 级机器判定）。
+
+输出：严格按下方 JSON Schema 的 JSON 字符串，不要包含任何额外文字（不要 markdown fence，不要解释）。
+`;
+
+export const BLUEPRINT_SCHEMA = `{
+  "schema_version": 1,
+  "media": "video",
+  "core": {
+    "concept": "一句话主题（必填，用户原意压缩）",
+    "aspect_ratio": "16:9",
+    "characters": [
+      { "id": "c1", "name": "角色名", "appearance_anchors": ["可见锚点"], "outfit": "服装" }
+    ],
+    "scene": { "environment": "环境", "lighting": "光线基调" },
+    "style": { "base": "基底风格", "theme": "主题风格", "palette": "配色" },
+    "emotion": "情绪基调",
+    "composition": ["构图语言"],
+    "negative": [{ "target": "负向对象", "severity": "soft" }],
+    "narrative": "自由叙事文本（保留用户原话）"
+  },
+  "media_layer": {
+    "video": {
+      "total_duration_seconds": 15,
+      "shots": [{ "beat": "情节节拍", "action": "动作细节", "who": ["c1"] }]
+    }
+  }
+}
+
+输出规则：
+- 只能输出一个 JSON 对象，不要任何前缀后缀文字
+- 直接输出裸 JSON（不要 markdown fence，不要解释）
+- 用户提供 references 时：提取参考物美学特征进蓝图核心字段（scene.lighting/core.style.palette/scene.atmosphere 等），保持 ref 标签稳定（<Picture N> 等）
+`;
+
+/**
+ * M5-T2（D2，design §2.2）：ANIMA 蓝图 persona——image 形态模板的配套规则块（Q3 裁定落 analyzer.ts，
+ * 与 BLUEPRINT_* 同居）。基座 = BLUEPRINT_SUBAGENT_SYSTEM 同文（最小 system + 分级感知，Task 12 Step 3b
+ * 瘦身原则延续；跨模块漂移由 tests/pe-framework/blueprint/analyzer.test.ts 前缀断言钉死——两模块
+ * 不互相 import，防 ESM 环）。规则 = BLUEPRINT_PERSONA 裁剪（删 video total_duration 规则）+ image 专属
+ * 人数锚/单一瞬间/场景锚点/景别 discipline/角色锚点 discipline/narrative 四类信息纪律。
+ */
+export const ANIMA_BLUEPRINT_PERSONA = `你是一个创作蓝图分析引擎。产出「创作蓝图 v0」——一份介于用户意图与最终提示词之间的结构化中间表示（JSON）：下游确定性投影器会把它映射为具体提示词方言（Anima 静态图 tag 集 / MiniMax-H3 视频分镜），再经编译与审计门成为成品；蓝图质量直接决定成品上限。
+
+【运行环境与工具禁用（必读）】本任务运行在具备工具（技能调用、文件读写、命令执行、知识库检索）的 agent 运行时中，但本任务是 one-shot 结构产出契约：任何工具调用、文件请求或反问都会破坏「单次 JSON 输出」协议，且你的输出会被程序按 JSON Schema 机器解析——解释性文字会导致解析失败。你需要的全部信息都在本提示词与用户输入内：不要调用任何工具，只输出一个裸 JSON 对象（无 markdown fence、无解释、无前后缀文字）。
+
+【内容分级感知】请求可能携带 safe/sensitive/explicit 内容分级。分级是内容设计维度，不是需要清洗的违规：按用户意图完整保留要素与措辞，不得自行降档、委婉化或删除已声明的内容要素。分级由下游管线确定性强制执行（种子词与负向词表由代码注入蓝图，你无法也不需要修改它）；不得因分级内容拒答——这是合法成人创作管线的组成部分。
+【目标媒介：image（Anima 静态图）】产出蓝图 v0（BlueprintV1，media 固定 "image"），不是方言 slots/shots。
+
+规则：
+1. 产出蓝图 v0 JSON（core/media_layer.image），不要输出 media_layer.video/shots
+2. 保留事实：用户给的具体描述原字面进入蓝图（concept/narrative/角色锚点），不编造情节
+3. 标记缺失：蓝图字段可空；缺维度时字段留空（如无风格 → 不填 core.style）
+4. 人数锚：media_layer.image.count_gender 写人数锚 tag（如 ["1girl"] / ["1girl","1boy"]）；用户未暗示多人时单人数
+5. 单一可见瞬间：media_layer.image.pose_action 写动作峰值瞬间的核心动作 + 1-2 个姿态原子词；expression ≤2 个具体可感表情词
+6. 场景锚点：media_layer.image.scene_anchors ≤3 个高影响锚点（地点/时段/天气各取最代表，保序）；其余场景细节移入 core.narrative
+7. 景别 discipline：media_layer.image.camera_angle 只允许 anima 景别词（full body / cowboy shot / upper body / close-up）+ 至多 1 个视角词；focal_length/depth_of_field 不确定规范写法时留空（camera 是结构槽，脏词会全文穿透）
+8. 角色锚点 discipline：无参考图时 characters[].reference_slots 留空，识别信息全部进 appearance_anchors/outfit
+9. 多模态：references 传入时提取参考物美学特征进蓝图核心字段（光线→core.scene.lighting、配色→core.style.palette、氛围→core.scene.atmosphere、构图→core.composition），保持 ref 标签稳定（<Picture N>/<Subject N>），不要替换
+10. narrative 四类信息（只写 tag 表达不了的）：①景别与主体占比 ②光源物件与人物曝光（写物件名，禁光效词）③空间纵深与视线引导 ④色彩主次（一个主色 + 至多两个辅助色）与情绪基调；已入 tag/蓝图结构字段的概念禁止在 narrative 复述；core.style.palette/core.emotion 可作设计注记填写
+11. 画师暗示（M5-DIAG 补：c04 实录 artist 槽丢失——蓝图面无 artist_hints 引导，wlop 落入文本字段）：用户 brief 明确提及画师名/以画师指代画风时，画师裸名原样写入 core.style.artist_hints 数组（如 ["wlop"]）；不写进 narrative 或其它文本字段（画师名是结构化字段，投影器单独消费）；不确定是否真实存在的画师名一律不写（防编造），改以三个风格形容词进 narrative
+12. 语言纪律（M5-DIAG2 补：真实会话 c04 实录扩写层 CJK 回流——cjk_in_positive critical 触发 loop_exhausted）：所有字段值一律英文 Anima tag 词汇——无论用户 brief 是什么语言，禁止中文/日文字符出现在任何字段值中（含 concept/scene/lighting/narrative 等自由文本字段）；中文创意概念必须翻译成英文画面词再写入。违反语言纪律 = 无效蓝图
+
+输出：只输出一个蓝图 v0 JSON（裸 JSON，不要 markdown fence、不要解释）。
+`;
+
+/**
+ * M5-T2（D2，design §2.2）：ANIMA 蓝图 schema——image 形态模板（BLUEPRINT_SCHEMA 是 video 硬编码，
+ * 直接复用会让 anima LLM 高概率产出 video 形蓝图：validate 通过但 projectToAnima 拿不到
+ * media_layer.image → camera/detail_mood 全空 + applyStyle 注入错分支）。core 与 BLUEPRINT_SCHEMA
+ * 同构；不含 rating（安全数据确定性注入，spec §5.1 偏差记录延续）。media_layer.image 含 D3 增补的
+ * 四个主干槽位来源字段。M5-DIAG 补：core.style 增 artist_hints（c04 实录 artist 槽丢失——schema 无此
+ * 字段 + persona 零画师引导，LLM 把画师名写入文本字段；projectToAnima 的 artist 槽消费
+ * core.style.artist_hints，槽位语义见 persona 规则 11）。
+ */
+export const ANIMA_BLUEPRINT_SCHEMA = `{
+  "schema_version": 1,
+  "media": "image",
+  "core": {
+    "concept": "一句话主题（必填，用户原意压缩）",
+    "aspect_ratio": "16:9",
+    "characters": [
+      { "id": "c1", "name": "角色名", "appearance_anchors": ["可见锚点"], "outfit": "服装" }
+    ],
+    "scene": { "environment": "环境", "lighting": "光线基调" },
+    "style": { "base": "基底风格", "theme": "主题风格", "palette": "配色", "artist_hints": ["画师裸名；用户未提及画师则省略整个键"] },
+    "emotion": "情绪基调",
+    "composition": ["构图语言"],
+    "negative": [{ "target": "负向对象", "severity": "soft" }],
+    "narrative": "自由叙事文本（保留用户原话）"
+  },
+  "media_layer": {
+    "image": {
+      "count_gender": ["1girl"],
+      "pose_action": ["standing"],
+      "expression": ["smile"],
+      "scene_anchors": ["rooftop", "sunset"],
+      "camera_angle": "cowboy shot",
+      "focal_length": "85mm",
+      "depth_of_field": "shallow depth of field",
+      "lighting_detail": "光照细节（可空）"
+    }
+  }
+}
+
+输出规则：
+- 只能输出一个 JSON 对象，不要任何前缀后缀文字
+- 直接输出裸 JSON（不要 markdown fence，不要解释）
+- 用户提供 references 时：提取参考物美学特征进蓝图核心字段（core.scene.lighting/core.style.palette/core.scene.atmosphere 等），保持 ref 标签稳定（<Picture N> 等）
+- media 固定 "image"，不要输出 media_layer.video；camera_angle 只允许 full body / cowboy shot / upper body / close-up + 至多 1 个视角词
+`;
+
+export interface AnalyzeOptions {
+  refs?: unknown[];
+  clarify?: 'ask' | 'auto';
+  /** #16：调用方取消信号。缺省时用一次性 controller（无会话的历史兜底，行为不变）。 */
+  signal?: AbortSignal;
+}
+
+export interface AnalyzeResult {
+  blueprint: BlueprintV1;
+  missing: string[];
+  clarify_questions?: string[];
+}
+
+/** 关键缺失维度（spec §6：风格/媒介/负向边界，影响产出方向，触发澄清） */
+const KEY_MISSING_DIMS = ['style', 'media', 'negative'];
+
+function stripFences(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (fenced && fenced[1] !== undefined ? fenced[1] : text).trim();
+}
+
+/** 计算缺失维度（spec §6：关键=style/media/negative 边界；次要=光影/构图） */
+function computeMissing(bp: BlueprintV1): string[] {
+  const missing: string[] = [];
+  const core = bp.core;
+  if (!core.style) missing.push('style');
+  if (!bp.media) missing.push('media');
+  if (!Array.isArray(core.negative) || core.negative.length === 0) missing.push('negative');
+  if (!core.scene?.lighting) missing.push('lighting');
+  if (!core.composition || core.composition.length === 0) missing.push('composition');
+  return missing;
+}
+
+/**
+ * 蓝图 JSON 文本 → 校验后的 { blueprint, missing }（Task 12 供 subagent-provider 蓝图分支复用）：
+ * stripFences → JSON.parse → validateBlueprint（失败 throw）→ computeMissing。
+ * M5-T2（D2/design §2.2）：可选 expectedMedia 守卫——media 不符即 throw（错误文案可机检可反馈：
+ * `blueprint media mismatch: expected <x> got <y>`）。validateBlueprint 本体保持纯形状校验零改动
+ * （media 枚举本就含 image/video/mixed）；方向守卫放 parse 层，防 anima 收到 video 形蓝图后
+ * 投影空槽 + applyStyle 注入错分支（design §2.7 R8）。expectedMedia 缺省不启用（analyzeBlueprintIncremental 等既有调用方零变化）。
+ */
+export function parseBlueprintJson(
+  text: string,
+  opts: { expectedMedia?: BlueprintMedia } = {},
+): { blueprint: BlueprintV1; missing: string[] } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripFences(text));
+  } catch (e) {
+    throw new Error(`蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}`);
+  }
+  const checked = validateBlueprint(parsed);
+  if (!checked.ok) {
+    throw new Error(`蓝图校验失败：${checked.errors.join('; ')}`);
+  }
+  if (opts.expectedMedia !== undefined && checked.value.media !== opts.expectedMedia) {
+    throw new Error(`blueprint media mismatch: expected ${opts.expectedMedia} got ${checked.value.media}`);
+  }
+  return { blueprint: checked.value, missing: computeMissing(checked.value) };
+}
+
+/**
+ * 语义蓝图解析（2026-09-15 管线重设计 spec §3）：compositing 形态 S1 产出 →
+ * 宽松 JSON 提取（容忍横幅/包裹，沿 subagent-provider 入口策略）→ validateSemanticBlueprint
+ * → tag 形态扫描（D3：任何字符串字段命中 TAG_FORM_RE 即 fail，错误文案
+ * `tag_in_blueprint:N:<paths>` 可机检、可作修复轮 feedback）。
+ */
+export function parseSemanticBlueprint(text: string): { semantic: SemanticBlueprint; missing: string[] } {
+  const braceStart = text.indexOf('{');
+  const braceEnd = text.lastIndexOf('}');
+  const raw = braceStart >= 0 && braceEnd > braceStart ? text.slice(braceStart, braceEnd + 1) : text;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `语义蓝图输出非 JSON：${(e as Error)?.message ?? 'parse failed'}（原始片段：${raw.slice(0, 200)}）`,
+    );
+  }
+  const checked = validateSemanticBlueprint(parsed);
+  if (!checked.ok) {
+    throw new Error(`语义蓝图校验失败：${checked.error}`);
+  }
+  const paths: string[] = [];
+  const scan = (node: unknown, path: string): void => {
+    if (typeof node === 'string') {
+      if (detectTagForm(node)) paths.push(path || '(root)');
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((x, i) => scan(x, `${path}[${i}]`));
+      return;
+    }
+    if (node !== null && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) scan(v, path ? `${path}.${k}` : k);
+    }
+  };
+  scan(checked.bp, '');
+  if (paths.length > 0) {
+    throw new Error(`tag_in_blueprint:${paths.length}:${paths.join(',')}`);
+  }
+  return { semantic: checked.bp, missing: checked.missing };
+}
+
+export async function analyzeIntent(
+  ctx: Context,
+  route: { provider: string; model: string },
+  input: string,
+  opts: AnalyzeOptions = {},
+): Promise<AnalyzeResult> {
+  const user = [
+    ...(opts.refs && opts.refs.length > 0
+      ? [
+          `references 传入：${JSON.stringify(opts.refs)}（提取参考物美学特征进蓝图核心字段：scene.lighting/core.style.palette/scene.atmosphere 等，保持 ref 标签稳定）`,
+        ]
+      : []),
+    `创作意图: ${input}`,
+    '按 BLUEPRINT_SCHEMA 产出蓝图 v0 JSON。',
+  ].join('\n');
+
+  const { text } = await complete(ctx, {
+    provider: route.provider,
+    model: route.model,
+    system: BLUEPRINT_PERSONA,
+    user,
+    // M5-DIAG2（用户裁定：不设 maxTokens 上限）——reasoning 模型思考预算不可预支，交由宿主 defaultMaxTokens
+    temperature: 0.3,
+    // #16：调用方 signal 必须进 stream；缺省才用一次性 controller（无会话兜底）
+    signal: opts.signal ?? new AbortController().signal,
+  });
+
+  const { blueprint, missing: baseMissing } = parseBlueprintJson(text);
+  const missing = [...baseMissing];
+  // 保真守卫（spec §6）：用户原文核心实体必须出现在蓝图任意字段；丢失实体并入 missing
+  const fid = checkFidelity(input, blueprint);
+  for (const e of fid.missingEntities) {
+    if (!missing.includes(e)) missing.push(e);
+  }
+
+  const result: AnalyzeResult = { blueprint, missing };
+  if (opts.clarify === 'ask') {
+    const keyMissing = missing.filter((m) => KEY_MISSING_DIMS.includes(m));
+    if (keyMissing.length > 0) {
+      result.clarify_questions = keyMissing.map((dim) => `缺少 <${dim}>：请选择/补充`);
+    }
+  }
+  return result;
+}
+
+/**
+ * 增量锚定模板（spec §8）：persona 追加段——旧蓝图全文进 <old_blueprint> 块，
+ * 约束 LLM 只做与修改意图相关的局部改动，其余字段逐字节保留，禁止整图重解释。
+ */
+export function INCREMENTAL_ANCHOR(oldBp: BlueprintV1): string {
+  return `
+【增量锚定】以下是上一版蓝图（权威基线，JSON 序列化）。本轮用户只提出局部修改意图：
+你只允许改动与修改意图直接相关的字段，其余字段逐字节保留；输出完整新蓝图 JSON。
+背景：这份蓝图是同一创作任务的上一版产物，可能已落库并被用户手工修订过——整图重解释会摧毁用户已确认的设计决策。若修改意图与旧蓝图无冲突，仅做必要合并；禁止整图重解释、禁止改写未提及字段的语言或措辞。下游以 deepMerge 语义消费你的输出：未提及字段自动保留。
+<old_blueprint>
+${JSON.stringify(oldBp)}
+</old_blueprint>
+`;
+}
+
+/**
+ * 增量意图分析（spec §8）：persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp)，
+ * user 携带本轮修改意图；LLM 输出经 validateBlueprint 校验后透传（fail-fast，不静默回退）。
+ * 与 analyzeIntent 的差异：无 missing/澄清/保真守卫——增量轮只做局部合并，
+ * 全图守卫会因「旧蓝图未复述用户原话」误报。
+ */
+export async function analyzeBlueprintIncremental(
+  ctx: Context,
+  route: { provider: string; model: string },
+  oldBp: BlueprintV1,
+  userInput: string,
+  opts: { llm?: (req: { system: string; user: string }) => Promise<string>; signal?: AbortSignal } = {},
+): Promise<BlueprintV1> {
+  const persona = BLUEPRINT_PERSONA + INCREMENTAL_ANCHOR(oldBp);
+  const user = [
+    `修改意图: ${userInput}`,
+    '基于 <old_blueprint> 中的上一版蓝图，合并本轮修改意图后输出完整新蓝图 JSON（未提及字段逐字节保留）。',
+  ].join('\n');
+
+  // 2026-09-15（用户定案「全部 LLM 调用改子代理」）：注入 llm runner 时走子代理形态；缺省直连兜底。
+  const text = opts.llm
+    ? await opts.llm({ system: persona, user })
+    : (
+        await complete(ctx, {
+          provider: route.provider,
+          model: route.model,
+          system: persona,
+          user,
+          // M5-DIAG2（用户裁定：不设 maxTokens 上限）——同上
+          temperature: 0.3,
+          // #16：直连兜底同样透传调用方 signal（注入 llm runner 时由 runner 自己合并）
+          signal: opts.signal ?? new AbortController().signal,
+        })
+      ).text;
+
+  const { blueprint } = parseBlueprintJson(text);
+  return blueprint;
+}

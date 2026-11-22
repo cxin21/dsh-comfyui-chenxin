@@ -4,14 +4,16 @@ Single authoritative description of the preset. If code and this document disagr
 
 ## What this preset does
 
-Five DSH skills + three shared Python packages let the agent author prompts for two generative models (Anima, MiniMax H3) and execute three fixed ComfyUI workflows (Anima camera, MiniMax H3 video, Flux2-Klein multiview).
+Three DSH skills + three shared Python packages let the agent author prompts for two generative models (Anima, MiniMax H3) and execute three fixed ComfyUI workflows (Anima camera, MiniMax H3 video, Flux2-Klein multiview). Prompt authoring itself is the prompt-forge plugin (not a skill).
 
 ```
 skills/                                  runtime/
 ├── camera-image/       (Anima camera workflow)         ├── comfyui_http/    (stdlib HTTP)
 ├── camera-video/       (MiniMax H3 video workflow)     ├── comfyui_mcp/     (stdio JSON-RPC client)
-├── camera-multiview/   (Multi-view character workflow) └── chenxin_runtime/ (P1 envelope + camera engine)
-└── camera-multiview/   (Flux2-Klein character sheet)
+└── camera-multiview/   (Flux2-Klein character sheet)   └── chenxin_runtime/ (P1 envelope + camera engine)
+
+plugins/prompt-forge/  (prompt authoring kernel: prompt_author / prompt_compile / prompt_audit)
+assets/knowledge/       (tag-catalog.sqlite / tags.sqlite / H3 tokenizer, from GitHub Releases)
 ```
 
 ## Interaction model
@@ -96,7 +98,7 @@ skills/<name>/
 └── knowledge/                # skill-specific data (anima catalog sqlite, h3 tokenizer snapshot)
 ```
 
-5 skills × this layout, plus `runtime/` with 3 packages following the same `<pkg>/__init__.py` + `<pkg>/cli.py` pattern.
+3 skills × this layout, plus `runtime/` with 3 packages following the same `<pkg>/__init__.py` + `<pkg>/cli.py` pattern.
 
 ## Maintenance operations
 
@@ -105,6 +107,6 @@ skills/<name>/
 | Fresh install / repair | `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1` |
 | Re-write local packages only | `<preset>\.venv\Scripts\python.exe scripts/install_local.py` |
 | Verify SKILL.md contracts | `<preset>\.venv\Scripts\python.exe scripts/check_contracts.py` |
-| Rebuild Anima catalog | prompt-master `catalog_build` DSH tool |
+| Rebuild Anima catalog | prompt-forge `catalog_build` DSH tool |
 | Verify camera assets | `<camera-cli> assets verify --stage <stage>` |
 | Reset tokenizer snapshot (h3) | Re-download from GitHub Releases into `assets/knowledge/minimax-h3-prompt/` |

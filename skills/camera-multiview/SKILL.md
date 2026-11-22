@@ -19,7 +19,7 @@ Do not call when:
 - The user has no reference images yet — they need a generation step first (use `camera-image`).
 - The user wants a single image, not a multi-view set — use `camera-image`.
 - The user wants video — use `camera-video`.
-- The user wants prose, prompts, or creative direction — those are different: `prompt_author (target=anima)` (prompt-master plugin) or the host.
+- The user wants prose, prompts, or creative direction — those are different: `prompt_author (target=anima)` (prompt-forge plugin) or the host.
 
 ## First principle
 
@@ -338,6 +338,22 @@ Before shipping a run:
 [ ] --timeout >= 600 (typical run takes ~470s)
 [ ] --output-dir is writable
 ```
+
+## No prompt input
+
+This workflow takes **no prompt**: the request is exactly
+`{full_body_image, face_image}` and the graph is fixed. So there is nothing
+here for `prompt_author` to author, and you should not invent a `prompt` field.
+
+What still applies from the prompt-forge plugin:
+
+- The two input images are usually products of `camera_image` (or another
+  `prompt_author (target=anima)` → `camera-image` run). If the user wants the
+  character designed first, route through **camera-image**, not here.
+- `prompt_feedback` (`action=record`) can rate the upstream authoring run; the
+  multiview run itself has no `generation_id`.
+- If the user asks for a *different* character rather than more views of an
+  existing one, this is the wrong skill — send them to camera-image.
 
 ## See also
 

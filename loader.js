@@ -84,9 +84,18 @@ const CONSOLE_SCRIPTS = [
   },
 ]
 
-// Provider identity. `rank` mirrors @deepseek-ai/dsh-skill's BUNDLED_SKILL_RANK
-// so a workspace's project-dsh / user-dsh skills (lower rank) outrank the
-// preset's bundled copies when the same name is registered twice.
+// Provider identity. `rank` mirrors @deepseek-ai/dsh-skill's BUNDLED_SKILL_RANK.
+//
+// Rank only breaks ties *within one layer*. This provider is registered from
+// the agent preset's standing composition, so its skills land in the preset's
+// layer; dsh-skill-filesystem's project-dsh / user-dsh roots land in the
+// global layer. The skill registry merges global first and lets the nearest
+// layer win a duplicate name outright (see SkillRegistry's class doc in
+// @deepseek-ai/dsh-skill: "the nearest layer's entry wins a duplicate name
+// outright, and the rank order decides duplicates only within one layer"), so
+// inside a preset session these bundled skills take precedence over same-name
+// copies in `<project>/.dsh/skills` or `<dshHome>/skills` regardless of rank.
+// PROVIDER_RANK therefore only orders us against other preset-layer providers.
 const PROVIDER_NAME = 'comfyui-chenxin-bundled'
 const PROVIDER_RANK = 600
 
@@ -131,18 +140,28 @@ function resolvePresetRoot(ctx, config) {
   return presetRoot
 }
 
-// Verify the preset root has the expected structure.
-function verifyPresetRoot(presetRoot) {
+// Inspect the preset root's expected structure without failing.
+//
+// This used to throw on the first missing SKILL.md. Because apply() called it
+// before registering anything, one wrong preset root took the whole plugin
+// down — the skill provider was never registered either, so the session lost
+// three skills *and* three tools over a single bad path. Callers now get a
+// report and decide what to do with it.
+function inspectPresetRoot(presetRoot) {
+  const present = []
+  const missing = []
   for (const skill of SKILLS) {
     const skillMd = path.join(presetRoot, ...skill.file.split('/'))
-    if (!fs.existsSync(skillMd)) {
-      throw new Error(
-        'comfyui-chenxin preset: SKILL.md not found at ' + skillMd + '. ' +
-        'The preset directory must contain skills/ and runtime/ subdirectories. ' +
-        'Reinstall the preset from the source distribution.'
-      )
-    }
+    let exists = false
+    try { exists = fs.existsSync(skillMd) } catch (_) { exists = false }
+    if (exists) present.push({ def: skill, skillMd })
+    else missing.push({ def: skill, skillMd })
   }
+  return { present, missing }
+}
+
+function errorText(err) {
+  return err && err.message ? err.message : String(err)
 }
 
 // Resolve the Python venv Scripts directory. Returns null if not set up.
@@ -297,13 +316,13 @@ function readParsedSkill(skillMdPath) {
 
 // ── Custom skill provider registration ──────────────────────────────────
 
-function registerBundledSkillProvider(ctx, presetRoot) {
+function registerBundledSkillProvider(ctx, presetRoot, skillDefs) {
   const skills = ctx.get('skills')
   if (!skills) throw new Error('skills service unavailable')
 
   // Resolve absolute paths once. The provider reads files on every list() /
   // get() call so edits to SKILL.md land without restarting the session.
-  const files = SKILLS.map((def) => ({
+  const files = skillDefs.map((def) => ({
     def,
     skillMdPath: path.join(presetRoot, ...def.file.split('/')),
     directory: null,
@@ -364,7 +383,7 @@ function registerBundledSkillProvider(ctx, presetRoot) {
   // temp, rename over).
   const skillsDir = path.join(presetRoot, 'skills')
   // Pre-compute the basenames we care about so we can filter directory events.
-  const watched = new Set(SKILLS.map((def) => path.basename(def.file)))
+  const watched = new Set(skillDefs.map((def) => path.basename(def.file)))
 
   let watcher = null
   let invalidateTimer = null
@@ -459,9 +478,13 @@ function introspectActions(scriptExe, graceMs = 5000) {
 function registerCliTools(ctx, presetRoot, venvScripts) {
   const sub = ctx.get('subprocess')
   const tools = ctx.get('tools')
-  if (!sub) throw new Error('subprocess service unavailable')
-  if (!tools) throw new Error('tools registry unavailable')
+  if (!sub || !tools) {
+    console.warn('[comfyui-chenxin] CLI tools skipped: ' +
+      (!sub ? 'subprocess service unavailable' : 'tools registry unavailable'))
+    return 0
+  }
 
+  let registered = 0
   for (const def of CONSOLE_SCRIPTS) {
     const toolName = def.name
     const exeName = def.script + (process.platform === 'win32' ? '.exe' : '')
@@ -539,8 +562,9 @@ function registerCliTools(ctx, presetRoot, venvScripts) {
         return { exit_code: outcome.exitCode, envelope: envelope, stderr: stderrText }
       }
     })
+    registered += 1
   }
-  return CONSOLE_SCRIPTS.length
+  return registered
 }
 
 // ── Plugin entry ─────────────────────────────────────────────────────────
@@ -552,16 +576,46 @@ module.exports = {
   inject: ['skills', 'tools', 'subprocess'],
   apply(ctx, config) {
     const presetRoot = resolvePresetRoot(ctx, config || {})
-    verifyPresetRoot(presetRoot)
-    const skillCount = registerBundledSkillProvider(ctx, presetRoot)
     console.log('[comfyui-chenxin] presetRoot=' + presetRoot)
-    console.log('[comfyui-chenxin] registered ' + skillCount + ' bundled skills via ctx.skills provider (with file watcher)')
+
+    // Failure domains are kept separate on purpose: a bad SKILL.md must not
+    // cost the session its CLI tools, and a missing venv must not cost it the
+    // skills. Each stage reports and degrades on its own.
+    const { present, missing } = inspectPresetRoot(presetRoot)
+    if (missing.length > 0) {
+      for (const m of missing) {
+        console.warn('[comfyui-chenxin] SKILL.md not found at ' + m.skillMd + ' — skill "' + m.def.name + '" will not load.')
+      }
+      if (present.length === 0) {
+        console.warn('[comfyui-chenxin] no bundled skills found under ' + presetRoot +
+          '. The preset directory must contain skills/ and runtime/ subdirectories; ' +
+          'reinstall the preset from the source distribution.')
+      } else {
+        console.warn('[comfyui-chenxin] loading ' + present.length + ' of ' + SKILLS.length +
+          ' bundled skills; fix the paths above to restore the rest.')
+      }
+    }
+
+    if (present.length > 0) {
+      try {
+        const skillCount = registerBundledSkillProvider(ctx, presetRoot, present.map(p => p.def))
+        console.log('[comfyui-chenxin] registered ' + skillCount + ' bundled skills via ctx.skills provider (with file watcher)')
+      } catch (e) {
+        // A provider registration failure (duplicate name, disposed scope) is
+        // reported rather than thrown so the CLI tools below still get a chance.
+        console.warn('[comfyui-chenxin] skill provider registration failed: ' + errorText(e))
+      }
+    }
 
     const venvScripts = resolveVenvScripts(presetRoot)
     if (venvScripts) {
-      const toolCount = registerCliTools(ctx, presetRoot, venvScripts)
-      console.log('[comfyui-chenxin] venvScripts=' + venvScripts)
-      console.log('[comfyui-chenxin] registered ' + toolCount + ' CLI tools')
+      try {
+        const toolCount = registerCliTools(ctx, presetRoot, venvScripts)
+        console.log('[comfyui-chenxin] venvScripts=' + venvScripts)
+        console.log('[comfyui-chenxin] registered ' + toolCount + ' CLI tools')
+      } catch (e) {
+        console.warn('[comfyui-chenxin] CLI tool registration failed: ' + errorText(e))
+      }
     } else {
       printSetupHint(presetRoot)
     }

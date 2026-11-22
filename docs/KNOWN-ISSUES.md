@@ -104,6 +104,105 @@ means documented behavior with no code change required.
 
 ---
 
+## 10. docs/architecture.md — skill count drift after the 5→3 refactor `[FIXED]`
+
+- **Where**: `docs/architecture.md` ("What this preset does" tree, intro
+  sentence, "Skill anatomy" closing line)
+- **What**: the intro still said "Five DSH skills", the anatomy section
+  said "5 skills × this layout", and the tree listed `camera-multiview`
+  twice — leftovers from the 5→3 skill deletion refactor (see commits
+  "docs: 全仓过时计数并移除死技能文档 (5→3)").
+- **Impact**: the file self-describes as the single authoritative
+  architecture description; a wrong count inside it undermines that claim.
+- **Fix**: count corrected to three, duplicate tree line removed, tree now
+  also lists `plugins/prompt-forge/` and `assets/knowledge/` so the
+  five-part layout (skills / runtime / plugin / knowledge / docs) is
+  stated once.
+
+## 11. docs/troubleshooting.md — "5 个 CLI" heading over a 3-entry array `[FIXED]`
+
+- **Where**: `docs/troubleshooting.md` §7 ("检查当前状态（一行命令）")
+- **What**: heading said "5 个 CLI 都能跑吗？" while the PowerShell array
+  under it correctly enumerates 3 CLIs.
+- **Impact**: misleading health-check instructions during incident
+  triage.
+- **Fix**: heading corrected to "3 个 CLI". The array was already right.
+
+## 12. Repo hygiene — pip temp dirs, HF tmp residue, one-off debug artifacts `[FIXED]`
+
+- **Where**: repo root (`pip-build-tracker-*` ×1, `pip-ephem-wheel-cache-*`
+  ×1, `pip-install-*` ×1, `pip-unpack-*` ×17 — all PyPI wheel unpack
+  caches from an interrupted `tokenizers` install, already installed in
+  `.venv`), `data/runtime/hf-cache/` (9 `model.onnx.tmp.*` partial
+  downloads), `temp/` (one failed-test log `compositing-fail.txt` and
+  one-off issue drafts `issue-15-body.md` / `issue-17-comment.md`).
+- **What**: interrupted tooling leaves temp directories in the repo root;
+  none were gitignored, so `git status` showed ~21 `??` entries that are
+  pure noise. The hf tmp files are partial-download residue from the
+  vector build.
+- **Impact**: violates "repo is truth" — a fresh reader cannot tell
+  residue from content; git status noise hides real changes.
+- **Fix**: residue deleted; `.gitignore` now covers `pip-*` temp dir
+  patterns so a future interrupted install cannot pollute status again.
+
+## 13. cordis.patch.yml — dual-maintenance entry list, no sync statement in the source file `[MITIGATED]`
+
+- **Where**: `agent.cordis.yml` ↔ `cordis.patch.yml`
+- **What**: the patch restates every assembly entry verbatim as the
+  deployed bundle form (with two intentional differences: absolute
+  `file:///` paths and a pinned `presetRoot`). The patch header documents
+  this, but the source file did not — nothing told an editor of
+  `agent.cordis.yml` that a second file must change in lockstep.
+- **Impact**: silent drift risk between the portable and deployed forms.
+- **Disposition**: `[MITIGATED]` — a SYNC OBLIGATION comment block was
+  added to the top of `agent.cordis.yml` naming the one allowed difference
+  set; full de-duplication (generating the patch from the source list)
+  would need a build step and is deferred as a separate work item.
+
+## 14. prompt-forge test fixture — catalog checksum mismatch vs production assets `[OPEN]`
+
+- **Where**: `plugins/prompt-forge` `compositing-wiring` test vs
+  `assets/knowledge/anima-prompt-v1/` (observed in a preserved test log:
+  `manifest=a2e3cdc5… actual=c5fd14b8…`, plus 2 wiring tests timing out
+  at 30s).
+- **What**: the test's golden catalog checksum does not match the
+  production `tags.sqlite`/`tag-catalog.sqlite` present on disk. Likely
+  the fixture expects a small golden sample while the machine holds the
+  full ~1GB production snapshot (shipped via GitHub Releases).
+- **Impact**: prompt-forge's test suite fails on a machine with
+  production assets; does not affect preset-level contract checks
+  (`check_contracts.py` passes all 6 gates).
+- **Disposition**: `[OPEN]` — needs a deliberate fix (either the fixture
+  should pin its own sample catalog and skip the checksum when only
+  production assets exist, or fidelity capture must be re-run); touching
+  the manifest to silence the mismatch would break the production
+  integrity gate and was NOT done.
+
+## 15. Plugin rename prompt-master → prompt-forge — settings namespace is a data contract `[FIXED]`
+
+- **Where**: `plugins/prompt-forge` — three settings namespaces
+  (`*-custom-profiles`, `*-profile-overrides`, `*-blueprints`) wired in
+  `src/plugin/index.ts`, `src/pe-framework/profiles/storage-v2.ts`,
+  `src/tools/prompt-author.ts` (blueprintSettingsScope).
+- **What**: renaming the plugin directory/package is cheap, but the
+  settings namespace keys are persisted user data (custom profiles,
+  builtin override toggles, M5 blueprints). Renaming the keys bare would
+  orphan every existing record on upgraded machines.
+- **Impact**: silent data loss if renamed without migration; plugin name
+  and stored keys drifting apart if renamed without keys.
+- **Fix**: keys renamed to `prompt-forge-*` **plus** a one-shot lazy
+  migration `migrateLegacySettingsSection` (storage-v2.ts, called at all
+  three wiring points): after registering the new key, if the new section
+  is empty and the legacy `prompt-master-*` section has data, the legacy
+  section is copied over. Idempotent (short-circuits once the new section
+  is non-empty); legacy data is copied, never deleted; any migration
+  failure is swallowed so plugin load never blocks (same fail-open
+  discipline as blueprint saves). Registry test updated to assert the new
+  key names. Full rationale and layer-by-layer checklist:
+  `plugins/prompt-forge/docs/RENAME-2026-11-22.md`.
+
+---
+
 ## How to close an entry
 
 1. Fix the code (separate approved work item).

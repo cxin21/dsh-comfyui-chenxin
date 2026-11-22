@@ -6,9 +6,16 @@
 
 | 用户说 | 你该做的 | 调用的 CLI |
 |---|---|---|
-| 写 Anima 提示词 / 把一段描述变成 Anima tag | 调用 `prompt_author` (target=`anima`) 拿 `positive` + `negative`，**别直接跑 ComfyUI**；要确定性编译/审计用 `prompt_compile` / `prompt_audit`（prompt-master 插件） | `prompt_author` (target=anima) |
-| 写 MiniMax H3 视频提示词 / 验证 H3 prompt 长度 | 调用 `prompt_author` (target=`h3`) / `prompt_compile` (shots)（prompt-master 插件） | `prompt_author` (target=h3) |
+| 写 Anima 提示词 / 把一段描述变成 Anima tag | 调用 `prompt_author` (target=`anima`) 拿 `positive` + `negative`，**别直接跑 ComfyUI**；要确定性编译/审计用 `prompt_compile` / `prompt_audit`（prompt-forge 插件） | `prompt_author` (target=anima) |
+| 写 MiniMax H3 视频提示词 / 验证 H3 prompt 长度 | 调用 `prompt_author` (target=`h3`) / `prompt_compile` (shots)（prompt-forge 插件） | `prompt_author` (target=h3) |
 | 用户对出稿满意/不满意，想打分或补充反馈 | 调用 `prompt_feedback` (action=`record`)，`generation_id` 从 `prompt_author` envelope 顶层复制（UPSERT：重复评分覆盖旧评） | `prompt_feedback` (action=record) |
+| 想确认某个 tag / 画师 / 别名在不在 Anima 词表里，或找相近写法 | 调用 `catalog_search`（纯查询零 LLM；`mode=auto` 走 canonical→alias→fuzzy→semantic，`exact` 只精确匹配；`limit` 1–20 默认 5）。命中带 `source`，`overlay_artist_registry` 表示来自 overlay 登记 | `catalog_search` |
+| 想把一位画师登记进 overlay（源 tags.sqlite 不动） | 调用 `catalog_artist_add`，`evidence` **必填且非空**（凭什么是这位画师的证据）；UPSERT 幂等，重复登记覆盖旧值。登记后 `catalog_search` 会以 `alias` + `source=overlay_artist_registry` 填隙 | `catalog_artist_add` |
+| 只有一句短想法，想扩成完整提示词 | 调用 `prompt_expand`（`profile` 默认 `pe_expand_natural`；`output_lang=zh/en`；`length=short/medium/long`；`dry_run` 先看不写）。扩出来的东西要落到具体模型，再交给 `prompt_author` / `prompt_compile` | `prompt_expand` |
+| 手上有图 / 会话里有图片附件，想反推成提示词 | 调用 `prompt_reverse`（`profile=pe_reverse_descriptive/sd/danbooru`；`media_target=image/anima/h3`；`dry_run` 可选）。反推结果再走 `prompt_author` 精修 | `prompt_reverse` |
+| 想看 H3 官方场景模板 / 探索场景库 | 调用 `minimax_scenario`（`scenario_id` 留空返回场景列表）。**只用于预览与探索**；正式出稿必须走 `prompt_author (target=h3)` 或 `prompt_compile`。该工具有 rating gate | `minimax_scenario` |
+| 想查看 / 搜索 / 增删改提示词 profile | 调用 `profile_list`（`action=list/search/get/save/delete/enable/sort/export/import/validate_import`；`target` 缺省时自动推导 anima/h3/sd/danbooru/mj/generic）。`save` 强制 `builtin:false`——内置 profile 改不了，只能另存 | `profile_list` |
+| 自己调好了一套风格，想存成可复用预设 | 调用 `style_save`（StylePresetV2 JSON 写入 `plugins/prompt-forge/assets/style-presets/`）。`id` 白名单 `^[a-z0-9_]+$`，重复 id 直接拒（`style_preset_id_conflict`），tmp+rename 原子写。**写入后当前进程内不可见，重启后 `style_list` 才看得到**（见 advisory）；要提交版本库请用户自己做 | `style_save` |
 | 跑 Anima 图（t2i / i2i） | 先 `camera-image describe --summary` 看契约，写 req.json，再 `camera-image run` | `camera_image` |
 | 跑 MiniMax H3 视频 | `camera-video describe --summary` → 写 req.json → `camera-video run` | `camera_video` |
 | 跑多视图角色卡 / 三视图 / 多姿态 | `camera-multiview describe` → 写 req.json → `camera-multiview run` | `camera_multiview` |
@@ -35,10 +42,10 @@
 - `camera-image run` 默认会**问你 y/N**（group plan / asset verification），自动化场景必须加 `--yes`。
 - `camera-video run` 和 `camera-multiview run` **不接受 `--yes`**（argparse 会直接 exit code 2），它们没有交互式 prompt，会直接 enqueue。不要照搬 `camera-image` 的 flag。
 - 所有 CLI 都接受 `--json`（loader 已经自动加），**调 CLI 时不用自己加 `--json`**。
-- 写 Anima / H3 提示词**不走 CLI**：由 prompt-master 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` 处理，CLI 只负责 camera-* 的执行。
+- 写 Anima / H3 提示词**不走 CLI**：由 prompt-forge 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` 处理，CLI 只负责 camera-* 的执行。
 - `prompt_author` 的 `rating`（`safe` 默认 / `sensitive` / `explicit`）：内容分级声明——预检在任何 LLM 前定档（关键词命中自动升档记 `rating_escalated` advisory），硬边界违规（未成年/非自愿/兽）0 token 抛错；声明档位确定性注入蓝图 `core.rating` 并透传 enrich/评审；成功 envelope 顶层另有 `rating`/`aesthetics`/`style` 三字段（spec §9）。`judge_mode`（`fast`（默认）/ `strict` / `off`）：LLM 证据化评审，`off`=显式关闭回退旧路径。`enrich`（默认 `true`）：先 LLM 扩写为七维度 brief 再拆解（`false` 显式关闭；**M5 起 anima 默认路径走蓝图形态，`enrich` 参数在蓝图形态下被忽略并出 `enrich_ignored_blueprint` advisory——brief 层存活面 = h3 / blueprint_id / 未迁移方言**）；`outputLang`（`en`/`zh`/`ja`）：输出语言偏好（anima 恒锁 en；仅 h3 显式生效）。成功 envelope 顶层字段：`generation_id`（反馈回写用）、`judge`（评审结果，含 `verdict`/`score`/`findings`；跳过时 `judge.skipped=true`）、`debate`（评审-修订全程留痕）、`judgeFeedback`（needs_revision 终态的 findings 投影）、`enrichment`（七维度 brief，`source=user/enriched` 可追溯；M5 起 anima 默认路径无此字段——蓝图形态由扩展层承担，h3/blueprint_id 路径仍有）、`blueprint_id`（M5：anima 蓝图落库成功时的条件顶层键，=generation_id，可直接作下次 `prompt_author` 的 `blueprint_id` 输入增量续链）。评审/enrich 任何故障不阻塞出稿。旧的 `audit_only` 参数已删除——只审计用 `prompt_audit`。`style_list` 查风格预设 id（category/rating 上限/applies_to/query 过滤，82 条；sensitive/explicit 预设仅 anima），id 传给 `prompt_author.style_id`。
 - **成本提示**：缺省一次 `prompt_author` ≈ 3 次 LLM 调用（intent + 蓝图扩展/brief enrich + fast 评审，pass 情形；修正轮更多）；要省成本可显式传 `judge_mode:'off'`、`enrich:false`（或两者都关）。
-- **M5 迁移（anima 默认蓝图形态，2026-09-13）**：标准 `prompt_author (target=anima)` 默认走蓝图链——intent 子代理产出 BlueprintV1（image 形 + expectedMedia 守卫）→ 确定性 `core.rating` 注入 → art_direction 显式卡注入 → `enrichBlueprint` 美学扩展 → `projectToAnima` 投影 → 编译/审计；runEnrich 七维 brief 层退出默认路径（首轮调用数持平）。运行时回滚不用发版：环境变量 `PM_AUTHOR_INTENT_FORM=slots` 切回旧 slots 直译路径（advisory `intent_form_override` 可观测，非法值 fail-fast）。成功出口蓝图落库（fail-open：settings 缺失/写失败仅 advisory `blueprint_save_failed`，不阻塞出稿），落库成功即 `blueprint_id` 有料（见上）；envelope 另增 `observability.blueprint`（form/media/missing_count/expansions_count/repairs_count/anchor_rounds）。设计稿：`plugins/prompt-master/docs/specs/2026-09-13-blueprint-form-migration-design.md`。
+- **M5 迁移（anima 默认蓝图形态，2026-09-13）**：标准 `prompt_author (target=anima)` 默认走蓝图链——intent 子代理产出 BlueprintV1（image 形 + expectedMedia 守卫）→ 确定性 `core.rating` 注入 → art_direction 显式卡注入 → `enrichBlueprint` 美学扩展 → `projectToAnima` 投影 → 编译/审计；runEnrich 七维 brief 层退出默认路径（首轮调用数持平）。运行时回滚不用发版：环境变量 `PM_AUTHOR_INTENT_FORM=slots` 切回旧 slots 直译路径（advisory `intent_form_override` 可观测，非法值 fail-fast）。成功出口蓝图落库（fail-open：settings 缺失/写失败仅 advisory `blueprint_save_failed`，不阻塞出稿），落库成功即 `blueprint_id` 有料（见上）；envelope 另增 `observability.blueprint`（form/media/missing_count/expansions_count/repairs_count/anchor_rounds）。设计稿：`plugins/prompt-forge/docs/specs/2026-09-13-blueprint-form-migration-design.md`。
 - `--request` 文件路径用绝对路径或 preset 内相对路径，不要依赖 cwd。
 - **跨 skill 的字段不可移植**：每个 skill 的 request schema 独立，先 `describe --summary` 看 `result.request` 的 schema 描述，不要凭印象从其他 skill 抄。
 
@@ -55,7 +62,7 @@ temp/<skill>/<task>/
 约定：
 - agent 写的请求文件放到 `temp/<skill>/<task>/` 下面（skill 名与 CLI 名一致：camera-image / camera-video / camera-multiview）
 - camera-* 的产物默认落 `<preset>/temp/<skill>/`（不传 `--output-dir` 时），也可显式 `--output-dir` 覆盖到别处
-- prompt-master 的 `catalog_build` 工具从 `assets/knowledge/anima-prompt-v1/tags.sqlite` 重建 `tag-catalog.sqlite` + manifest；`catalog_relations` 读写 `temp/anima-prompt-v1/relation-overlay.sqlite`
+- prompt-forge 的 `catalog_build` 工具从 `assets/knowledge/anima-prompt-v1/tags.sqlite` 重建 `tag-catalog.sqlite` + manifest；`catalog_relations` 读写 `temp/anima-prompt-v1/relation-overlay.sqlite`
 - 引擎 workflow 缓存（每次 run 写 1 个 json）落在 `temp/runtime/.workflow_cache/`，随 temp 一起清理
 - `prompt_feedback` 的生成/反馈记录落在 `data/runtime/feedback.sqlite`（node:sqlite；generations 保留 90 天懒清理，feedback 永久保留，孤儿行在 `list` 里标 `orphaned: true`）；首次使用时自动从旧位置 `temp/runtime/feedback.sqlite` 迁移（含 -wal/-shm）
 - 不要写到 `skills/<name>/` 下面（那是技能包源码 + 只读 knowledge/，与项目无关；历史遗留的 `out/` 已迁到 `temp/`）
@@ -71,7 +78,7 @@ temp/<skill>/<task>/
 
 | Envelope code | 出处 | 怎么修 |
 |---|---|---|
-| `catalog_build_failed` / `input_file_missing` | prompt-master (catalog) | 知识资产缺失 / 重建失败 → 跑 `catalog_build` 工具重建 |
+| `catalog_build_failed` / `input_file_missing` | prompt-forge (catalog) | 知识资产缺失 / 重建失败 → 跑 `catalog_build` 工具重建 |
 | audit critical gates（`field_order` / `cut_timestamps` / `ref_count` / `budget` / 其余 rule） | prompt_author / prompt_compile / prompt_audit | 看 Envelope 的 `next_action`：`retry_input`→按 `repair_hints` 改入参；`auto_repair`→引擎已修，检查 `observability.repairs`；`manual`→人工接手（`loop_exhausted`） |
 | `invalid_request` | camera-* | req.json 路径/格式不对 |
 | `input_file_missing` | camera-* | 路径在硬盘上不存在，修复路径 |

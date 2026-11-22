@@ -1,6 +1,6 @@
 # ComfyUI Chenxin Preset
 
-DSH 预设：3 个 camera 技能 + 1 个提示词创作插件（prompt-master）+ 共享运行时，让 agent 在本机 ComfyUI 上完成 Anima / MiniMax H3 提示词编写与生图生视频。
+DSH 预设：3 个 camera 技能 + 1 个提示词创作插件（prompt-forge）+ 共享运行时，让 agent 在本机 ComfyUI 上完成 Anima / MiniMax H3 提示词编写与生图生视频。
 
 ![GitHub stars](https://img.shields.io/github/stars/cxin21/dsh-comfyui-chenxin)
 ![GitHub license](https://img.shields.io/github/license/cxin21/dsh-comfyui-chenxin)
@@ -11,7 +11,7 @@ DSH 预设：3 个 camera 技能 + 1 个提示词创作插件（prompt-master）
 
 ## ✨ 功能亮点
 
-- **3 个开箱即用的 camera CLI 技能 + 提示词创作插件**：生图 + 生视频 + 多视图角色卡；Anima / MiniMax H3 提示词编写由 prompt-master 插件承担
+- **3 个开箱即用的 camera CLI 技能 + 提示词创作插件**：生图 + 生视频 + 多视图角色卡；Anima / MiniMax H3 提示词编写由 prompt-forge 插件承担
 - **Anima 文生图 / 图生图**：`camera-image`（t2i / i2i），pinned 工作流零配置
 - **MiniMax H3 视频**：`camera-video`（t2v / i2v / multi-i2v），支持跨段参考图与参考音频
 - **多视图角色卡**：`camera-multiview`（Flux2-Klein），一张卡出多视角
@@ -30,7 +30,7 @@ git clone https://github.com/cxin21/dsh-comfyui-chenxin.git
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 # 重启 DSH，会话起来后 loader 会自动注册 3 个 CLI 工具
-# （camera_image / camera_video / camera_multiview）；提示词创作由 prompt-master 插件承担
+# （camera_image / camera_video / camera_multiview）；提示词创作由 prompt-forge 插件承担
 ```
 
 > **大文件不走 git**：三个知识库快照（共 ~993 MB）体积过大，托管在
@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 ┌──────────────────────────────────────────────────────────────────────┐
 │  agent ──► loader.js ──► ctx.skills (catalog) + ctx.tools (3 个 CLI)   │
 │                                                                      │
-│  plugins/prompt-master  ← 提示词创作内核（Anima/H3 编译+审计+管理）    │
+│  plugins/prompt-forge  ← 提示词创作内核（Anima/H3 编译+审计+管理）    │
 │  assets/knowledge/      ← 知识资产（tag-catalog/tags/tokenizer 等）   │
 │  skills/camera-image    ← Anima camera workflow（t2i/i2i）            │
 │  skills/camera-video    ← MiniMax H3 视频（t2v/i2v/multi-i2v）        │
@@ -63,8 +63,8 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 | 我想做 | 用这个 | 然后用 |
 |---|---|---|
-| 写 Anima 提示词（slot → 单行 positive/negative） | `prompt_author` (target=anima) / `prompt_compile`（prompt-master 插件） | `camera-image` |
-| 写 MiniMax H3 视频提示词（T2VA / I2VA / FL2VA / L2VA / Ref2VA） | `prompt_author` (target=h3) / `prompt_compile`（prompt-master 插件） | `camera-video` |
+| 写 Anima 提示词（slot → 单行 positive/negative） | `prompt_author` (target=anima) / `prompt_compile`（prompt-forge 插件） | `camera-image` |
+| 写 MiniMax H3 视频提示词（T2VA / I2VA / FL2VA / L2VA / Ref2VA） | `prompt_author` (target=h3) / `prompt_compile`（prompt-forge 插件） | `camera-video` |
 | 跑 Anima 图（text→image / image→image） | `camera-image` | — |
 | 跑 MiniMax H3 视频 | `camera-video` | — |
 | 跑多视图角色卡（Flux2-Klein） | `camera-multiview` | — |
@@ -97,10 +97,10 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 │   └── runtime/.workflow_cache/         ← 引擎缓存（10-deep LRU）
 ├── data/
 │   └── runtime/                         ← prompt_feedback 反馈记录（feedback.sqlite）
-├── assets/knowledge/                    ← 知识资产（prompt-master 只读消费）
+├── assets/knowledge/                    ← 知识资产（prompt-forge 只读消费）
 │   ├── anima-prompt-v1/                 ← tag-catalog.sqlite / tags.sqlite / manifest.json
 │   └── minimax-h3-prompt/               ← tokenizer.json / tokenizer_config.json / chat_template.json
-├── plugins/prompt-master/               ← 提示词创作内核（编译+审计+管理工具）
+├── plugins/prompt-forge/               ← 提示词创作内核（编译+审计+管理工具）
 ├── skills/
 │   ├── camera-image/
 │   │   ├── SKILL.md
@@ -149,15 +149,15 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 > 此表是汇总；**每个 skill 的 SKILL.md 里的 failure-modes 表是权威**（个别 error code 映射到不同 exit，例如 camera-multiview 的 `McpError` 映射到 5、`AssetError` 映射到 4）。
 
-Anima/H3 提示词创作由 prompt-master 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` 工具承担（不走 CLI）；camera-* CLI 只负责执行渲染，始终吐 envelope。
+Anima/H3 提示词创作由 prompt-forge 插件的 `prompt_author` / `prompt_compile` / `prompt_audit` 工具承担（不走 CLI）；camera-* CLI 只负责执行渲染，始终吐 envelope。
 
 ## 下一步
 
 - **新用户**：先读 [`AGENTS.md`](AGENTS.md)，看任务→工具路由
-- **agent**：提示词创作走 prompt-master 工具（`prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` / `catalog_search` / `catalog_relations` / `catalog_build`）；渲染执行走 host tool `camera_image` / `camera_video` / `camera_multiview`（loader 已注册）
+- **agent**：提示词创作走 prompt-forge 工具（`prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` / `catalog_search` / `catalog_relations` / `catalog_build`）；渲染执行走 host tool `camera_image` / `camera_video` / `camera_multiview`（loader 已注册）
 - **开发者 / 调试**：读 [`docs/development.md`](docs/development.md) + [`docs/cli-cookbook.md`](docs/cli-cookbook.md)
 - **已知问题 / 审计**：读 [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md)
 
 ## 参与贡献
 
-欢迎 issue 与 PR：bug 报告请附完整 CLI envelope（`errors[].code`）与 exit code；环境搭建与提交前质量门见 [CONTRIBUTING.md](CONTRIBUTING.md)（`scripts/check_contracts.py` 契约 gate + `plugins/prompt-master` 测试）。新增动作只改对应 skill 的 `cli.py`——loader 经 `--list-actions` 自动发现；固定工作流 asset 结构不要动（[AGENTS.md](AGENTS.md) §4）。
+欢迎 issue 与 PR：bug 报告请附完整 CLI envelope（`errors[].code`）与 exit code；环境搭建与提交前质量门见 [CONTRIBUTING.md](CONTRIBUTING.md)（`scripts/check_contracts.py` 契约 gate + `plugins/prompt-forge` 测试）。新增动作只改对应 skill 的 `cli.py`——loader 经 `--list-actions` 自动发现；固定工作流 asset 结构不要动（[AGENTS.md](AGENTS.md) §4）。

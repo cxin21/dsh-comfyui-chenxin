@@ -380,9 +380,9 @@ temp/camera-multiview/multiview-1/
 
 ---
 
-## prompt-master 插件工具（DSH tool，不走 CLI）
+## prompt-forge 插件工具（DSH tool，不走 CLI）
 
-写 Anima / H3 提示词的 `prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` 是 **prompt-master 插件的 DSH 工具**，由 agent 直接调用，不经过 `.venv` CLI。完整工具表见 `plugins/prompt-master/docs/usage-prompt-engineering.md`。
+写 Anima / H3 提示词的 `prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` 是 **prompt-forge 插件的 DSH 工具**，由 agent 直接调用，不经过 `.venv` CLI。完整工具表见 `plugins/prompt-forge/docs/usage-prompt-engineering.md`。
 
 ### `prompt_author` 的 `rating` 参数（M1，spec §5）
 
@@ -397,7 +397,7 @@ temp/camera-multiview/multiview-1/
 
 ### `prompt_author` 默认流（M5 起蓝图形态，2026-09-13）
 
-标准 `target=anima` 默认走蓝图链：intent 子代理产出 BlueprintV1（image 形 + expectedMedia 守卫）→ 确定性 `core.rating` 注入 → art_direction 显式卡注入 → `enrichBlueprint` 美学扩展 → `projectToAnima` 投影 → 编译/审计；七维 brief 扩写（runEnrich）退出默认路径，`enrich` 参数在蓝图形态下被忽略（advisory `enrich_ignored_blueprint`）。运行时回滚开关：环境变量 `PM_AUTHOR_INTENT_FORM=slots` 切回旧 slots 直译路径（无需发版，advisory `intent_form_override` 可观测）。成功出口蓝图落库（fail-open：settings 缺失/写失败仅 advisory `blueprint_save_failed`）；落库成功时 envelope 顶层出现条件键 `blueprint_id`（=generation_id），可直接作为下一次 `prompt_author` 的 `blueprint_id` 输入做增量锚定续链；envelope 另增 `observability.blueprint` 痕迹，anima 默认路径顶层 `enrichment` 字段消失（brief 层退出）。设计稿：`plugins/prompt-master/docs/specs/2026-09-13-blueprint-form-migration-design.md`。
+标准 `target=anima` 默认走蓝图链：intent 子代理产出 BlueprintV1（image 形 + expectedMedia 守卫）→ 确定性 `core.rating` 注入 → art_direction 显式卡注入 → `enrichBlueprint` 美学扩展 → `projectToAnima` 投影 → 编译/审计；七维 brief 扩写（runEnrich）退出默认路径，`enrich` 参数在蓝图形态下被忽略（advisory `enrich_ignored_blueprint`）。运行时回滚开关：环境变量 `PM_AUTHOR_INTENT_FORM=slots` 切回旧 slots 直译路径（无需发版，advisory `intent_form_override` 可观测）。成功出口蓝图落库（fail-open：settings 缺失/写失败仅 advisory `blueprint_save_failed`）；落库成功时 envelope 顶层出现条件键 `blueprint_id`（=generation_id），可直接作为下一次 `prompt_author` 的 `blueprint_id` 输入做增量锚定续链；envelope 另增 `observability.blueprint` 痕迹，anima 默认路径顶层 `enrichment` 字段消失（brief 层退出）。设计稿：`plugins/prompt-forge/docs/specs/2026-09-13-blueprint-form-migration-design.md`。
 
 ### `style_list`（M1，spec §9）
 

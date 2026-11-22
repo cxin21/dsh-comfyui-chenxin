@@ -5,6 +5,12 @@ __pycache__/
 .venv/
 venv/
 
+# pip temp dirs left behind by interrupted installs (build-tracker / unpack / install)
+pip-build-tracker-*/
+pip-ephem-wheel-cache-*/
+pip-install-*/
+pip-unpack-*/
+
 # Node caches
 .npm-cache/
 node_modules/

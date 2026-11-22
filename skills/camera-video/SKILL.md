@@ -1,7 +1,7 @@
 ---
 name: camera-video
-description: "Execute MiniMax-H3 video generation on ComfyUI and save one video per run. Three stages — text-to-video (`t2v`), single-reference (`i2v`), and multi-reference (`multi-i2v`). The prompt comes from `prompt_author (target=h3)` (prompt-master plugin); this skill just runs the fixed MiniMax H3 workflow on your ComfyUI server. Do NOT use for prompt authoring — call `prompt_author (target=h3)` first."
-whenToUse: "User wants one MiniMax H3 video rendered. Use after the prompt is authored by `prompt_author (target=h3)` (prompt-master plugin) and before any post-processing."
+description: "Execute MiniMax-H3 video generation on ComfyUI and save one video per run. Three stages — text-to-video (`t2v`), single-reference (`i2v`), and multi-reference (`multi-i2v`). The prompt comes from `prompt_author (target=h3)` (prompt-forge plugin); this skill just runs the fixed MiniMax H3 workflow on your ComfyUI server. Do NOT use for prompt authoring — call `prompt_author (target=h3)` first."
+whenToUse: "User wants one MiniMax H3 video rendered. Use after the prompt is authored by `prompt_author (target=h3)` (prompt-forge plugin) and before any post-processing."
 ---
 
 # Camera Video
@@ -27,7 +27,7 @@ Call this skill when:
 Do not call this skill when:
 
 - The user wants a still image → `camera-image` (Anima) or `camera-multiview` (Flux2-Klein).
-- The user wants an H3 prompt authored or validated → `prompt_author (target=h3)` / `prompt_compile` / `prompt_audit` (prompt-master plugin).
+- The user wants an H3 prompt authored or validated → `prompt_author (target=h3)` / `prompt_compile` / `prompt_audit` (prompt-forge plugin).
 - The user wants to switch models or change the workflow structure → out of scope.
 
 ## First principle
@@ -214,7 +214,7 @@ JSON
 ### Example 4 — From a `prompt_author (target=h3)` output
 
 ```bash
-# 1. Author the H3 prompt via the prompt-master plugin (target=h3 → result.text)
+# 1. Author the H3 prompt via the prompt-forge plugin (target=h3 → result.text)
 #    (no CLI; call the prompt_author tool in-session)
 
 # 2. Extract `result.text` from the envelope (in-session), then wrap for camera-video
@@ -253,9 +253,30 @@ jq -n --arg p "$PROMPT" '{
 
 If the wait times out but the prompt is still queued/running, the run returns a non-error envelope with `queue_status` set and `artifacts: []` — retry later.
 
+## Getting the prompt (prompt-forge)
+
+This skill **executes** a prompt. It does not write one. If the user has not
+handed you a finished H3 prompt, get one from the prompt-forge plugin first:
+
+| Situation | Tool | Notes |
+|---|---|---|
+| User described a shot in words | `prompt_author` (`target=h3`) | Returns `text`, which you wrap into the `prompt` field of the request. The h3 path still runs the seven-dimension brief layer (`enrich`), unlike anima. |
+| You already have a prompt and want the H3 gates run | `prompt_compile` (shots) / `prompt_audit` | Deterministic: field order, cut timestamps, ref count, budget. Read `next_action` on failure. |
+| User wants to browse H3 scene templates | `minimax_scenario` | **Preview / exploration only.** `scenario_id` empty returns the list. Has a rating gate. Ship through `prompt_author (target=h3)` or `prompt_compile`, never by pasting a scenario straight in. |
+| User has an image and wants the prompt that made it | `prompt_reverse` | `media_target=h3` for this skill. |
+| User wants a rating on a past authoring run | `prompt_feedback` (`action=record`) | `generation_id` comes from the `prompt_author` envelope top level. UPSERT. |
+
+Then put the result in the request's `prompt` field (see Request schema above).
+
+The prompt-forge tools are Host Tools, not CLI subcommands — check that
+`prompt_author` exists in the session. If it does not, the plugin is not
+mounted; the user must enable the ComfyUI Chenxin preset. The audit rules and
+dialect packages are not reproducible from this document, so do not hand-roll
+an H3 prompt when the tool is missing — say so instead.
+
 ## See also
 
 - [`camera_video/runtime/`](camera_video/runtime/) — request schema validation, graph build, asset loading
 - [`../../docs/cli-cookbook.md`](../../docs/cli-cookbook.md) — every CLI invocation form
 - [`../../docs/troubleshooting.md`](../../docs/troubleshooting.md) — error recovery
-- prompt-master plugin — `prompt_author (target=h3)` authors the prompt first
+- prompt-forge plugin — `prompt_author (target=h3)` authors the prompt first

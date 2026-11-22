@@ -157,7 +157,7 @@ camera-image run --stage t2i --request req.json --output-dir temp/camera-image/ 
 
 `code` 是真错误，`advisories` 是非阻塞警告。先看 `errors`，再看 `advisories`。
 
-> 2026-08-31 起 anima / h3 提示词编译 CLI 已并入 prompt-master 插件（`prompt_author` / `prompt_audit`）。以下六个小节（`brief_validation_failed` / `catalog_read_failed` / `h3_audit_failed` / `budget_exceeded` / `tokenizer_integrity_failed` / `official_envelope_violated`）描述的报错主体（原 CLI）已移除；审计规则与 stage 预算语义由 prompt-master 承载（`h3_audit_failed` 现以 advisory 形式存在于 prompt-master 编排链）；`tokenizer.json` 现为 GitHub Releases 资产（`assets/knowledge/minimax-h3-prompt/`），损坏时重新下载解压。
+> 2026-08-31 起 anima / h3 提示词编译 CLI 已并入 prompt-forge 插件（`prompt_author` / `prompt_audit`）。以下六个小节（`brief_validation_failed` / `catalog_read_failed` / `h3_audit_failed` / `budget_exceeded` / `tokenizer_integrity_failed` / `official_envelope_violated`）描述的报错主体（原 CLI）已移除；审计规则与 stage 预算语义由 prompt-forge 承载（`h3_audit_failed` 现以 advisory 形式存在于 prompt-forge 编排链）；`tokenizer.json` 现为 GitHub Releases 资产（`assets/knowledge/minimax-h3-prompt/`），损坏时重新下载解压。
 
 ### `brief_validation_failed`（anima）
 
@@ -228,7 +228,7 @@ setup 会重装 tokenizers，install_local 不动 tokenizer snapshot（那是 Py
 
 `audio cannot be the only reference type` —— 不能只有音频。
 
-### `generation_not_found`（prompt_feedback / prompt-master 插件）
+### `generation_not_found`（prompt_feedback / prompt-forge 插件）
 
 `prompt_feedback(action=record)` 的 `generation_id` 在生成记录库中不存在：
 
@@ -239,7 +239,7 @@ setup 会重装 tokenizers，install_local 不动 tokenizer snapshot（那是 Py
 
 注意：`record` 是 UPSERT——同 `generation_id` 再次评分会覆盖旧评（补评历史不保留）。
 
-### `prompt_author` 缺省评审/扩写（prompt-master 插件）
+### `prompt_author` 缺省评审/扩写（prompt-forge 插件）
 
 缺省 `judge_mode='fast'` + `enrich=true`（每次 author ≈ 3 次 LLM 调用：intent + enrich + fast 评审，pass 情形；修正轮更多）：
 
@@ -297,7 +297,7 @@ ComfyUI 拒收 API graph（通常因为节点缺模型、显存不够）。看 e
 ## 7. 检查当前状态（一行命令）
 
 ```powershell
-# 5 个 CLI 都能跑吗？
+# 3 个 CLI 都能跑吗？
 @('camera-image','camera-video','camera-multiview') | ForEach-Object {
     $r = & "<preset>\.venv\Scripts\$_.exe" --list-actions 2>&1 | Out-String
     Write-Host "$_ : $($r.Split("`n").Count) actions"

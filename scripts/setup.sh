@@ -32,7 +32,18 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
 fi
 PYTHON="$VENV_DIR/bin/python"
 
-# 3. Install packages (local-path dependencies require source order)
+# 3. Install pinned third-party deps (see requirements.lock header for why)
+LOCK_FILE="$PRESET_DIR/requirements.lock"
+if [ -f "$LOCK_FILE" ]; then
+  echo "[comfyui-chenxin] installing pinned deps from requirements.lock"
+  "$PYTHON" -m pip install -r "$LOCK_FILE" --quiet
+else
+  echo "WARNING: requirements.lock not found at $LOCK_FILE — dependency versions will not be reproducible." >&2
+  echo "WARNING: falling back to unpinned tokenizers; restore the lock file." >&2
+  "$PYTHON" -m pip install 'tokenizers==0.22.2' --quiet
+fi
+
+# 4. Install packages (local-path dependencies require source order)
 for rel in \
   runtime/comfyui_http \
   runtime/comfyui_mcp \
@@ -50,13 +61,13 @@ do
   fi
 done
 
-# 4. Self-check: every CLI must report its actions
+# 5. Self-check: every CLI must report its actions
 for script in camera-image camera-video camera-multiview; do
   actions="$("$VENV_DIR/bin/$script" --list-actions)"
   echo "[comfyui-chenxin] $script actions: $(echo "$actions" | tr '\n' ' ')"
 done
 
-# 5. Node.js check (required for camera execution via comfyui-mcp)
+# 6. Node.js check (required for camera execution via comfyui-mcp)
 if ! command -v npx >/dev/null 2>&1; then
   echo "WARNING: npx not found on PATH. camera-* execution requires Node.js." >&2
 fi

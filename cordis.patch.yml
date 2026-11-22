@@ -1,8 +1,16 @@
 # ComfyUI Chenxin agent preset, migrated from the legacy
 # ~/.dsh/.agent-presets/ directory form (agent.cordis.yml + preset.yml)
 # into a dsh bundle declaration. Entry list is restated verbatim from
-# agent.cordis.yml; presetRoot is pinned to this checkout so the loader
-# finds skills/, runtime/ and .venv/ in one place.
+# agent.cordis.yml.
+#
+# This file is portable: it carries no machine-specific paths. `./` in a
+# plugin `name` is resolved by dsh-app-boot's anchorInsertedPluginNames
+# against the directory holding THIS patch file, so it points inside the
+# installed checkout wherever that checkout lives. `presetRoot: null` lets
+# loader.js fall back to its own __dirname (Node resolves a symlinked module
+# to its realpath, so the link in the profile still lands on the checkout).
+# Anything that needs a per-machine override belongs in the profile's own
+# cordis.patch.yml (the user layer), not here.
 - insert:
     - id: preset-comfyui-chenxin
       name: '@deepseek-ai/dsh-agent-preset'
@@ -90,11 +98,11 @@
                   tailChars: 512
 
           - id: comfyui-loader
-            name: 'file:///D:/DSH/projects/dsh-comfyui-chenxin/loader.js'
+            name: './loader.js'
             config:
-              presetRoot: 'D:/DSH/projects/dsh-comfyui-chenxin'
+              presetRoot: null
 
           - id: prompt-forge
-            name: 'file:///D:/DSH/projects/dsh-comfyui-chenxin/plugins/prompt-forge/dist/src/plugin/index.js'
+            name: './plugins/prompt-forge/dist/src/plugin/index.js'
             config:
               temperature: 0.7

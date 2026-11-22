@@ -1,25 +1,33 @@
 """Lockstep gate: prove cordis.patch.yml restates agent.cordis.yml.
 
-`agent.cordis.yml` is the portable form (used when the preset lives at
-``~/.dsh/.agent-presets/comfyui-chenxin/``); ``cordis.patch.yml`` is the
-deployed bundle form consumed by DSH's bundle installer. The patch restates
-every assembly entry verbatim. Two differences are allowed, and only these:
+``agent.cordis.yml`` is the portable, human-readable form; ``cordis.patch.yml``
+is the deployed bundle form advertised by ``package.json`` (``dsh.bundle.patch``)
+and consumed by DSH's bundle installer. The patch restates every assembly entry
+verbatim, and **no difference between the two files is allowed**.
 
-  1. ``comfyui-loader.name``      ``./loader.js``  ->  ``file:///<abs>/loader.js``
-  2. ``comfyui-loader.config.presetRoot``  ``null``  ->  ``<abs checkout>``
+Neither file may carry a machine-specific path. A ``./``-relative plugin
+``name`` is anchored by dsh-app-boot's ``anchorInsertedPluginNames`` against the
+directory holding the patch file, so it points inside the installed checkout
+wherever that checkout lives; ``presetRoot: null`` lets ``loader.js`` fall back
+to its own ``__dirname`` (Node resolves a symlinked module to its realpath, so
+the link a profile installs still lands on the checkout).
 
-and the same absolute-path treatment for ``prompt-forge.name``
-(``./plugins/prompt-forge/dist/src/plugin/index.js`` -> ``file:///<abs>/...``).
+This gate asserts four things:
 
-Those are deployment mechanics, not content. Anything else that differs is
-drift: the two files describe different agents, and the one that actually
-runs (the patch) is not the one a human reviews when editing the source.
+  1. the entry lists are identical (ids, order, names, config, key by key);
+  2. neither file contains a ``file:`` / absolute plugin name or config value
+     (a per-machine override belongs in the profile's own user-layer patch);
+  3. every ``./``-relative plugin entry exists on disk -- ``plugins/prompt-forge/
+     dist/`` is gitignored build output, and dsh-app-boot swallows a failed
+     bundle load into ``skippedBundles`` without printing anything, so a fresh
+     clone otherwise boots with no prompt-forge tools and no error;
+  4. ``preset.yml``'s name/description match the patch's preset entry.
 
-``KNOWN-ISSUES.md`` #13 recorded the dual-maintenance risk and added a
-SYNC OBLIGATION comment; a comment cannot fail. This gate can.
+``KNOWN-ISSUES.md`` #13 recorded the dual-maintenance risk and added a SYNC
+OBLIGATION comment; a comment cannot fail. This gate can.
 
 Usage:  python scripts/check_lockstep.py
-Exit:   0 = entries match within the allowed difference set, 1 = drift.
+Exit:   0 = both files agree and are portable, 1 = drift or a broken entry point.
 """
 
 from __future__ import annotations
@@ -40,11 +48,19 @@ PRESET_YML = ROOT / "preset.yml"
 
 PRESET_ENTRY_ID = "preset-comfyui-chenxin"
 
-# Entries whose `name` legitimately becomes an absolute file:/// URL in the
-# deployed form (bundle form has no cwd to resolve relative paths against).
-ABSOLUTE_PATH_ENTRIES = {"comfyui-loader", "prompt-forge"}
-# Config keys whose value legitimately becomes the pinned checkout path.
-PINNED_ROOT_KEYS = {("comfyui-loader", "presetRoot")}
+# The two files must be byte-equivalent in meaning: cordis.patch.yml is what
+# dsh actually loads, agent.cordis.yml is the human-readable twin. There is
+# deliberately NO allowed-difference set.
+#
+# This used to allow three deployment rewrites (loader.js / prompt-forge names
+# -> file:/// absolute URLs, presetRoot null -> pinned checkout). dsh-app-boot
+# resolves `./`-relative plugin names against the patch's own directory, and
+# Node resolves a symlinked module to its realpath, so loader.js's __dirname
+# fallback already lands on the checkout. Pinning those paths was redundant and
+# made the published patch machine-coupled; it is gone, and the gate now
+# rejects any difference at all.
+ABSOLUTE_PATH_ENTRIES: set[str] = set()
+PINNED_ROOT_KEYS: set[tuple[str, str]] = set()
 
 
 def load_plugins(path: Path) -> list[dict]:
@@ -80,11 +96,36 @@ def load_plugins(path: Path) -> list[dict]:
     raise SystemExit(f"FAIL: {path.name} has no insert entry id={PRESET_ENTRY_ID}")
 
 
-def is_absolute_form(rel: str, actual) -> bool:
-    """True when `actual` is exactly `rel` rewritten to file:///<abs>."""
-    if not isinstance(actual, str) or not actual.startswith("file:///"):
-        return False
-    return actual[len("file:///") :].replace("\\", "/").endswith(rel.lstrip("./"))
+def check_portable(plugins: list[dict]) -> list[str]:
+    """No machine-specific path may be committed to either assembly file.
+
+    This is the assertion that would have caught the original defect: the
+    curated patch shipped ``file:///D:/DSH/...`` names and a pinned
+    ``presetRoot``, so every clone outside this machine loaded the wrong code
+    (or nothing). Both files must stay relative so the bundle works wherever it
+    is installed.
+    """
+    problems: list[str] = []
+    for entry in plugins:
+        eid = entry.get("id")
+        name = entry.get("name")
+        if isinstance(name, str) and (
+            name.startswith("file:") or Path(name).is_absolute()
+        ):
+            problems.append(
+                f"{eid}.name is machine-specific ({name!r}); use a ./relative path"
+            )
+        cfg = entry.get("config")
+        if isinstance(cfg, dict):
+            for key, value in cfg.items():
+                absolute = isinstance(value, str) and (
+                    Path(value).is_absolute() or value.startswith("file:")
+                )
+                if absolute and not value.startswith("!!"):
+                    problems.append(
+                        f"{eid}.{key} is machine-specific ({value!r}); leave it null"
+                    )
+    return problems
 
 
 def compare(source: list[dict], patch: list[dict]) -> list[str]:
@@ -110,10 +151,7 @@ def compare(source: list[dict], patch: list[dict]) -> list[str]:
             continue  # already reported as missing
 
         if entry["name"] != other["name"]:
-            if eid in ABSOLUTE_PATH_ENTRIES and is_absolute_form(entry["name"], other["name"]):
-                pass  # allowed deployment rewrite
-            else:
-                problems.append(f"{eid}: name {entry['name']!r} vs {other['name']!r}")
+            problems.append(f"{eid}: name {entry['name']!r} vs {other['name']!r}")
 
         s_cfg = entry.get("config")
         p_cfg = other.get("config")
@@ -135,8 +173,7 @@ def compare(source: list[dict], patch: list[dict]) -> list[str]:
                 problems.append(f"{eid}.{key}: only in source (value={s_cfg[key]!r})")
                 continue
             if (eid, key) in PINNED_ROOT_KEYS:
-                if s_cfg[key] is None and isinstance(p_cfg[key], str):
-                    continue  # null -> pinned checkout is the allowed diff
+                continue  # no pinned root any more; kept for clarity
             if s_cfg[key] != p_cfg[key]:
                 problems.append(f"{eid}.{key}: {s_cfg[key]!r} vs {p_cfg[key]!r}")
 
@@ -161,11 +198,40 @@ def check_preset_metadata(source_plugins: list[dict]) -> list[str]:
     return problems
 
 
+def check_entry_points(plugins: list[dict]) -> list[str]:
+    """Every ./relative plugin entry must exist on disk.
+
+    ``plugins/prompt-forge/dist/`` is gitignored (build output), so a fresh
+    clone has the patch but not the file it points at. dsh-app-boot wraps each
+    bundle load in try/catch and pushes failures into ``skippedBundles``
+    without printing anything — so a missing build shows up as "the plugin
+    silently did nothing", not as an error. This turns that silence into a
+    failing check.
+    """
+    problems: list[str] = []
+    for entry in plugins:
+        name = entry.get("name")
+        if not isinstance(name, str) or not (
+            name.startswith("./") or name.startswith("../")
+        ):
+            continue
+        target = (ROOT / name).resolve()
+        if not target.is_file():
+            hint = ""
+            if "plugins/prompt-forge/dist/" in name.replace("\\", "/"):
+                hint = " — run: cd plugins/prompt-forge && npm ci && npm run build"
+            problems.append(f"{entry.get('id')}.name points at a missing file: {name}{hint}")
+    return problems
+
+
 def main() -> int:
     source = load_plugins(SOURCE)
     patch = load_plugins(PATCH)
 
     problems = compare(source, patch)
+    problems += check_portable(source)
+    problems += check_portable(patch)
+    problems += check_entry_points(patch)
     problems += check_preset_metadata(source)
 
     if problems:
@@ -173,14 +239,20 @@ def main() -> int:
         for p in problems:
             print(f"  - {p}")
         print(
-            "\nFix both files. Allowed differences only:"
-            "\n  comfyui-loader.name  ./loader.js -> file:///<abs>/loader.js"
-            "\n  comfyui-loader.config.presetRoot  null -> <checkout>"
-            "\n  prompt-forge.name  ./plugins/... -> file:///<abs>/plugins/...\n"
+            "\nThe two assembly files must agree exactly, and neither may carry a"
+            "\nmachine-specific path. Fix both files:"
+            "\n  - a plugin name is a ./relative path (dsh-app-boot anchors it to"
+            "\n    the patch's own directory at load time)"
+            "\n  - comfyui-loader.config.presetRoot stays null (loader.js falls back"
+            "\n    to its own __dirname, which Node realpaths through the profile"
+            "\n    symlink); put per-machine overrides in the profile's own"
+            "\n    cordis.patch.yml instead\n"
         )
         return 1
 
-    print(f"OK   lockstep — {len(source)} entries, allowed difference set only")
+    print(f"OK   lockstep — {len(source)} entries, files agree exactly")
+    print("OK   portability — no machine-specific paths in either file")
+    print("OK   entry points — every ./relative plugin entry exists on disk")
     print("OK   preset.yml name/description match the patch entry")
     return 0
 

@@ -7,7 +7,9 @@
 #      (bypasses pip's build-isolation path, which has been observed to
 #      fail on some Windows configurations; installs directly via .pth +
 #      distlib launchers)
-#   4. Self-check every CLI via --list-actions
+#   4. Build plugins/prompt-forge (dist/ is gitignored, so a fresh clone
+#      has no compiled entry point until this runs)
+#   5. Self-check every CLI via --list-actions
 #
 # Camera execution additionally requires Node.js (npx) on PATH because
 # every run goes through the comfyui-mcp server.
@@ -107,7 +109,47 @@ Write-Host "[comfyui-chenxin] running install_local.py"
 & $PythonExe $Installer --preset $PresetDir
 if ($LASTEXITCODE -ne 0) { Write-Error "install_local.py failed"; exit $LASTEXITCODE }
 
-# ── 5. Self-check every CLI ──────────────────────────────────────────────
+# ── 5. Build the prompt-forge plugin ─────────────────────────────────────
+#
+# cordis.patch.yml mounts the plugin from
+# plugins/prompt-forge/dist/src/plugin/index.js, and dist/ is gitignored
+# build output. On a fresh clone that file does not exist, dsh-app-boot
+# swallows the failure into its skippedBundles list without printing
+# anything, and the preset comes up with no prompt-forge tools at all —
+# which reads as "the plugin is broken" rather than "it was never built".
+# Build it here so setup produces a working install in one pass.
+
+$PluginDir = Join-Path $PresetDir 'plugins/prompt-forge'
+$PluginEntry = Join-Path $PluginDir 'dist/src/plugin/index.js'
+if (-not (Test-Path $PluginEntry)) {
+    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+        Write-Warning "npm not found on PATH — cannot build plugins/prompt-forge."
+        Write-Warning "The preset will load without prompt-forge tools. Install Node.js, then run:"
+        Write-Warning "  cd plugins/prompt-forge; npm ci; npm run build"
+    } else {
+        Write-Host "[comfyui-chenxin] building prompt-forge plugin (dist/ is not committed)"
+        Push-Location $PluginDir
+        try {
+            if (Test-Path (Join-Path $PluginDir 'package-lock.json')) {
+                & npm ci --silent
+            } else {
+                & npm install --silent
+            }
+            if ($LASTEXITCODE -ne 0) { Write-Warning "npm install failed (exit $LASTEXITCODE)" }
+            & npm run build --silent
+            if ($LASTEXITCODE -ne 0) { Write-Warning "npm run build failed (exit $LASTEXITCODE)" }
+        } finally {
+            Pop-Location
+        }
+        if (-not (Test-Path $PluginEntry)) {
+            Write-Warning "prompt-forge build did not produce $PluginEntry — the preset will load without its tools."
+        }
+    }
+} else {
+    Write-Host "[comfyui-chenxin] prompt-forge dist already present, skipping build"
+}
+
+# ── 6. Self-check every CLI ──────────────────────────────────────────────
 
 $Scripts = Join-Path $VenvDir 'Scripts'
 $Required = @('camera-image', 'camera-video', 'camera-multiview')
@@ -130,7 +172,7 @@ if ($Failed.Count -gt 0) {
     exit 1
 }
 
-# ── 6. Node.js (camera execution needs npx) ──────────────────────────────
+# ── 7. Node.js (camera execution needs npx) ──────────────────────────────
 
 $npx = Get-Command npx -ErrorAction SilentlyContinue
 if (-not $npx) {

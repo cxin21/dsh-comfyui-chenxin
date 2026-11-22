@@ -149,22 +149,23 @@ means documented behavior with no code change required.
 
 - **Where**: `agent.cordis.yml` ↔ `cordis.patch.yml`
 - **What**: the patch restates every assembly entry verbatim as the
-  deployed bundle form (with two intentional differences: absolute
-  `file:///` paths and a pinned `presetRoot`). The patch header documents
-  this, but the source file did not — nothing told an editor of
-  `agent.cordis.yml` that a second file must change in lockstep.
+  deployed bundle form. The patch header documented this, but the source
+  file did not — nothing told an editor of `agent.cordis.yml` that a
+  second file must change in lockstep.
 - **Impact**: silent drift risk between the portable and deployed forms.
   The patch is the copy DSH actually loads, so a drift means the edit a
   human reviewed is not the edit that runs.
 - **Fix**: two layers, because a comment cannot fail.
   1. A SYNC OBLIGATION comment block at the top of `agent.cordis.yml`
-     names the one allowed difference set (plus the same treatment for
-     `prompt-forge.name`), so an editor is told before they edit.
-  2. `scripts/check_lockstep.py` makes it testable: it parses both files,
-     compares entry id set, order, `name` and `config` key by key, and
-     fails unless the only differences are the three deployment rewrites.
-     It also asserts `preset.yml`'s name/description match the patch's
-     preset entry (the description had already drifted once — #18).
+     names the lockstep rule, so an editor is told before they edit.
+  2. `scripts/check_lockstep.py` makes it testable. It originally
+     tolerated three "deployment rewrites" (absolute `file:///` names and
+     a pinned `presetRoot`); those are now gone (#26), so the gate asserts
+     the entry lists are **identical with no allowed difference at all**,
+     that neither file carries a machine-specific path, that every `./`
+     entry point exists on disk, and that `preset.yml`'s name/description
+     match the patch's preset entry (the description had already drifted
+     once — #18).
   Wired into `CONTRIBUTING.md`'s quality gates and `docs/development.md`'s
   task table. Full de-duplication (generating the patch from the source
   list) would still need a build step and remains a separate work item;
@@ -474,6 +475,78 @@ means documented behavior with no code change required.
 
 ---
 
+## 26. `cordis.patch.yml` pinned this machine's absolute paths — published broken `[FIXED]`
+
+- **Where**: `cordis.patch.yml` (`comfyui-loader.name`, `comfyui-loader.config.presetRoot`, `prompt-forge.name`), `scripts/check_lockstep.py`.
+- **What**: the deployed bundle form carried three machine couplings —
+  `name: 'file:///D:/DSH/projects/dsh-comfyui-chenxin/loader.js'`,
+  `presetRoot: 'D:/DSH/projects/dsh-comfyui-chenxin'`, and
+  `name: 'file:///D:/DSH/projects/dsh-comfyui-chenxin/plugins/prompt-forge/dist/src/plugin/index.js'`.
+  They were introduced when the preset was migrated off the legacy directory
+  form, on the assumption that the patch had to name its entry points by
+  absolute URL. It does not.
+- **Why the assumption was wrong** (three independent facts):
+  1. `dsh-app-boot`'s `anchorInsertedPluginNames` rewrites any insert `name`
+     that is absolute **or** starts with `./`/`../` into
+     `pathToFileURL(resolve(dirname(patchFile), name))`. A `./`-relative name
+     is therefore already resolved against the patch's own directory — the
+     absolute form adds nothing.
+  2. `bundlePatchPaths(packageDir, bundle)` anchors bundle patches at the
+     installed package directory, so `./` always means "inside whichever
+     checkout is installed".
+  3. `loader.js`'s `resolvePresetRoot` ends with
+     `if (!presetRoot) presetRoot = PRESET_DIR` where `PRESET_DIR = __dirname`
+     — and Node resolves a symlinked module to its realpath, so the profile's
+     `link:` symlink still yields the checkout directory. Verified directly:
+     `require.resolve('<profile>/node_modules/@local/dsh-comfyui-chenxin-preset/loader.js')`
+     returns `D:\DSH\projects\dsh-comfyui-chenxin\loader.js`.
+- **Impact**: the patch was already pushed to
+  `github.com/cxin21/dsh-comfyui-chenxin`, so every clone outside this machine
+  either failed to load the preset or — worse, if that path happened to exist —
+  loaded a different copy of the code. The failure is silent:
+  `dsh-app-boot` wraps bundle loading in try/catch and files failures into
+  `skippedBundles` without printing anything, so the symptom is "the preset is
+  there but nothing works".
+- **Fix**: both files now carry `./loader.js`,
+  `./plugins/prompt-forge/dist/src/plugin/index.js` and `presetRoot: null`.
+  `check_lockstep.py` dropped its `ABSOLUTE_PATH_ENTRIES` / `PINNED_ROOT_KEYS`
+  allowance (now empty sets, so the two files must be identical) and gained a
+  `check_portable()` assertion that fails on any `file:`-prefixed or absolute
+  plugin name or config value. Per-machine overrides belong in the profile's
+  own user-layer `cordis.patch.yml`, documented in `README.md`.
+  The three published values were also the only reason the two files differed
+  at all; with them gone, #13's "allowed difference set" is now empty.
+
+## 27. `plugins/prompt-forge/dist/` is gitignored — a fresh clone booted with no tools `[FIXED]`
+
+- **Where**: `plugins/prompt-forge/.gitignore` (`dist/`), `cordis.patch.yml` (`prompt-forge.name`), `scripts/setup.ps1`, `scripts/setup.sh`.
+- **What**: the patch points `prompt-forge` at
+  `./plugins/prompt-forge/dist/src/plugin/index.js`, which is TypeScript build
+  output and is not committed (`git ls-tree -r HEAD | grep -c 'prompt-forge/dist/'`
+  = 0; the directory is ~7.6 MB / 1252 files on a built machine). Neither setup
+  script built it — `grep -n npm scripts/setup.ps1 scripts/setup.sh` returned
+  nothing before this fix.
+- **Impact**: on a fresh clone, `scripts/setup.ps1` installed all six Python
+  packages, reported success, and the preset then loaded with **no
+  prompt-forge tools at all and no error message** (see #26 for why it is
+  silent). The 14-tool surface documented in `AGENTS.md` §1 simply was not
+  there, with nothing pointing at the cause.
+- **Fix**:
+  1. Both setup scripts gained a **build step** (`scripts/setup.ps1` step 5,
+     `scripts/setup.sh` step 5): skip if `dist/src/plugin/index.js` already
+     exists, otherwise `npm ci` (falling back to `npm install`) then
+     `npm run build`, with an explicit warning listing the manual command when
+     `npm` is not on `PATH` or the build fails. Later steps renumbered.
+  2. `check_lockstep.py` gained `check_entry_points()`: every `./`-relative
+     plugin `name` in the patch must resolve to a file that actually exists,
+     and a missing `plugins/prompt-forge/dist/…` entry is reported together
+     with the exact command that builds it. This turns the silent
+     `skippedBundles` failure into a red gate.
+  3. `README.md` documents the situation in a callout under the install
+     section.
+
+---
+
 ## Environment note — `billion-context` overrides compaction rows
 
 Not a preset defect, recorded so it is not re-discovered as one. In this
@@ -498,4 +571,5 @@ is installed. Two consequences worth knowing:
 1. Fix the code (separate approved work item).
 2. Update the SKILL.md / docs if the behavior changed.
 3. Mark the entry `[FIXED]` (or `[MITIGATED]`) with what changed.
-4. Run `scripts/check_contracts.py` to confirm the contract still holds.
+4. Run `scripts/check_contracts.py`, `scripts/check_loader.mjs` and
+   `scripts/check_lockstep.py` to confirm the contracts still hold.

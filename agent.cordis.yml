@@ -2,12 +2,18 @@
 #
 # SYNC OBLIGATION: cordis.patch.yml restates every entry below verbatim (in
 # its `plugins:` list) as the deployed bundle form. When you edit an entry
-# here, make the SAME edit there — the two files are kept in lockstep by
-# review, not by a tool. Differences allowed between them, and only these:
-#   - patch pins loader.js / prompt-forge paths to file:/// absolute URLs
-#     and presetRoot to the checkout (deployment form; this file stays
-#     portable with ./loader.js + presetRoot: null).
-# Anything else that differs is drift and must be fixed in both files.
+# here, make the SAME edit there.
+#
+# The two files must agree EXACTLY — there is no allowed-difference set.
+# Neither may carry a machine-specific path: a `./`-relative plugin name is
+# anchored by dsh-app-boot to the directory holding the patch file, and
+# presetRoot stays null so loader.js falls back to its own __dirname (Node
+# realpaths a symlinked module, so the profile's link still lands here).
+# Per-machine overrides belong in the profile's own cordis.patch.yml.
+#
+# Enforced by `python scripts/check_lockstep.py`, which also fails when a
+# `./` entry point is missing on disk (plugins/prompt-forge/dist/ is build
+# output and is not committed — run scripts/setup first).
 #
 # Persona + host skill stack + compaction + basic tools + loader (single
 # plugin that registers the 3 bundled SKILL.md files into the host's
@@ -16,12 +22,14 @@
 # provided by the prompt-forge plugin (prompt_author / prompt_compile /
 # prompt_audit), not by CLI wrapper tools or bundled skills.
 #
-# Self-contained: copy this directory to ~/.dsh/.agent-presets/comfyui-chenxin/
-# and the 3 SKILL.md files appear in the session skill catalog (names +
-# descriptions only). The model loads any skill's full instructions on demand
-# by calling the `skill` tool, or automatically when the user types
-# `/skill-name`. To enable the 3 CLI tools, run scripts/setup.ps1 (Windows)
-# or scripts/setup.sh (macOS/Linux) ONCE per machine; then restart DSH.
+# Self-contained: installed as a dsh bundle (see README §「让 DSH 认到这个
+# preset」— the legacy ~/.dsh/.agent-presets/ directory form is no longer read
+# by any code), the 3 SKILL.md files appear in the session skill catalog
+# (names + descriptions only). The model loads any skill's full instructions
+# on demand by calling the `skill` tool, or automatically when the user types
+# `/skill-name`. To enable the 3 CLI tools and build the prompt-forge plugin,
+# run scripts/setup.ps1 (Windows) or scripts/setup.sh (macOS/Linux) ONCE per
+# machine; then restart DSH.
 #
 # Path injection (highest priority first):
 #   1. agent.cordis.yml `config.presetRoot` (this file)

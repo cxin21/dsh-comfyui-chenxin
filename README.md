@@ -49,13 +49,17 @@ DSH 只通过 **bundle** 装载预设（`plugin_manager` 装一个声明了 `dsh
 | `cordis.patch.yml` | **DSH 真正加载的**那份（`insert` 一条 `preset-comfyui-chenxin`） |
 | `agent.cordis.yml` | 同一份 entry 列表的可移植形态，供人阅读与评审 |
 
-`agent.cordis.yml` 和 `cordis.patch.yml` 的 entry 列表逐条相同，只允许三项部署差异：`loader.js` 与 `prompt-forge` 的 `name` 从相对路径变成 `file:///` 绝对路径，`loader.presetRoot` 从 `null` 变成 checkout 路径。两份必须锁步——改一份就要改另一份，然后跑
+`agent.cordis.yml` 和 `cordis.patch.yml` 的 entry 列表**逐条完全相同，没有任何允许差异**——两份文件都不含机器相关路径。`./` 开头的 plugin `name` 由 dsh-app-boot 在加载时锚定到 patch 文件所在目录，`comfyui-loader.presetRoot` 保持 `null` 让 loader.js 回落到自己的 `__dirname`（Node 会把 symlink 模块解析到 realpath，所以 profile 里的链接照样指向 checkout）。需要按机器覆盖的配置写进 profile 自己的 `cordis.patch.yml`（user 层），不要写进仓库。
+
+两份必须锁步——改一份就要改另一份，然后跑
 
 ```powershell
 python scripts/check_lockstep.py
 ```
 
-它只容忍上面三项差异，其它任何出入都判 drift。为什么这条要紧：**DSH 读的是 `cordis.patch.yml`**，`agent.cordis.yml` 只是给人读的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。
+它断言四件事：entry 列表逐条相同、两份文件都不含机器相关路径、每个 `./` 入口在磁盘上真实存在、`preset.yml` 的 name/description 与 patch 一致。为什么这条要紧：**DSH 读的是 `cordis.patch.yml`**，`agent.cordis.yml` 只是给人读的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。
+
+> **`plugins/prompt-forge/dist/` 不入 git**（构建产物）。所以全新 clone 里 patch 指向的入口文件还不存在，而 dsh-app-boot 会把 bundle 加载失败静默塞进 `skippedBundles`（不打印任何东西）——表现是「预设起来了但没有 prompt-forge 工具」。`scripts/setup.ps1` / `setup.sh` 现在会在第 5 步自动 `npm ci && npm run build`；如果你跳过了 setup，手动跑一次 `cd plugins/prompt-forge && npm ci && npm run build`。
 
 > 旧版 DSH 用 `$DSH_HOME/.agent-presets/<id>/` 目录装载（`preset.yml` + `agent.cordis.yml`）。**那个目录现在没有任何代码读取**，所以本仓库不再提供该形态的安装步骤；`agent.cordis.yml` 保留只是为了可读性 + 锁步 gate。
 

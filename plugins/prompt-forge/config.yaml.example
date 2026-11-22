@@ -20,4 +20,4 @@ temperature: 0.7
 #   3) 从插件自身位置向上回溯找到含 plugins/prompt-forge 的目录
 # 只有在「插件被复制/软链到别处、又不想设环境变量」时才需要显式写死。
 #
-# presetRoot: 'D:/DSH/projects/dsh-comfyui-chenxin'
+# presetRoot: '<你的 checkout 绝对路径>'

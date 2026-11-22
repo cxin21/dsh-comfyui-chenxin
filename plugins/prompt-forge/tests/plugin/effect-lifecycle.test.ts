@@ -1,4 +1,6 @@
 import { describe, expect, it, afterEach } from 'vitest';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Context } from '@deepseek-ai/cordis';
 import { apply } from '../../src/plugin/index.js';
 import { getPresetRoot, setPresetRoot } from '../../src/pe-framework/resources/resolve.js';
@@ -12,7 +14,11 @@ import { getAuthorIntentProvider, setAuthorIntentProvider } from '../../src/tool
  * 验收：卸载后再挂载，槽指向新挂载；卸载后调用不得静默沿用旧 ctx。
  */
 
-const PRESET = "D:/DSH/projects/dsh-comfyui-chenxin";
+// The slot only has to round-trip whatever was mounted, but plugin.apply also
+// reads assets/style-presets off presetRoot during registration — so derive the
+// checkout root from this file instead of baking a machine path into the suite.
+// tests/plugin/<file> -> plugins/prompt-forge/tests/plugin -> ../../../../ = checkout root
+const PRESET = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
 type Disposer = () => void;
 

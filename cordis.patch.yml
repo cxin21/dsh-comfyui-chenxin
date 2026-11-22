@@ -1,0 +1,100 @@
+# ComfyUI Chenxin agent preset, migrated from the legacy
+# ~/.dsh/.agent-presets/ directory form (agent.cordis.yml + preset.yml)
+# into a dsh bundle declaration. Entry list is restated verbatim from
+# agent.cordis.yml; presetRoot is pinned to this checkout so the loader
+# finds skills/, runtime/ and .venv/ in one place.
+- insert:
+    - id: preset-comfyui-chenxin
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: comfyui-chenxin
+        name: ComfyUI Chenxin
+        description: Anima / MiniMax H3 提示词作者与 Camera 工作流执行器。loader.js 自动发现项目根，注册 3 个 skill（camera-image / camera-video / camera-multiview，来自 skills/*/SKILL.md）；并在 `.venv` 就绪（3 个 console script 齐全）时额外注册 3 个 Host Tool（camera_image / camera_video / camera_multiview）。venv 未就绪时只打 setup 提示，skill 仍可用。
+        order: 20
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                You are the ComfyUI Chenxin agent. You author prompts for Anima and MiniMax H3
+                via the prompt-forge plugin, and execute camera workflows via local Python
+                console scripts.
+
+                The preset bundles three camera Skills under skills/, exposed via the standard
+                skill catalog (see <available_skills> in your system reminder):
+                - camera-image: Anima camera workflow (t2i/i2i)
+                - camera-video: MiniMax H3 video workflow (T2V/I2V/multi-I2V)
+                - camera-multiview: Flux2-Klein multiview generation
+
+                When the user's task matches a skill's description, call the `skill` tool with
+                the EXACT name from the catalog to load its full instructions. Do NOT act on
+                skill-domain tasks before loading — the catalog contains summaries only, not
+                the full instructions. Load all applicable skills, then follow them.
+
+                Anima / MiniMax-H3 prompt authoring is handled by the prompt-forge plugin
+                (prompt_author / prompt_compile / prompt_audit) — there is no CLI wrapper.
+                When the CLI wrapper Tools (camera_image / camera_video / camera_multiview)
+                are registered, prefer them over directly spawning the console scripts. All
+                CLI calls return P1 JSON Envelope responses; surface advisories to the user
+                verbatim. If the CLI Tools are NOT registered, follow the SKILL.md
+                instructions using your own reasoning and the bundled references/.
+              suffix: null
+              complete: false
+
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 4096
+                  headChars: 2048
+                  tailChars: 512
+
+          - id: comfyui-loader
+            name: 'file:///D:/DSH/projects/dsh-comfyui-chenxin/loader.js'
+            config:
+              presetRoot: 'D:/DSH/projects/dsh-comfyui-chenxin'
+
+          - id: prompt-forge
+            name: 'file:///D:/DSH/projects/dsh-comfyui-chenxin/plugins/prompt-forge/dist/src/plugin/index.js'
+            config:
+              temperature: 0.7

@@ -8,8 +8,10 @@
 |---|---|
 | 全新机器首次安装 | `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1` |
 | 拉了新代码 / 改了源码 / venv 状态乱了 | 同上（幂等，会修复一切） |
-| 只重写本地包（不重装 tokenizers） | `<preset>\.venv\Scripts\python.exe scripts/install_local.py` |
+| 只重写本地包（不重装第三方依赖） | `<preset>\.venv\Scripts\python.exe scripts/install_local.py` |
 | 验证 SKILL.md 契约没漂移 | `<preset>\.venv\Scripts\python.exe scripts/check_contracts.py` |
+| 验证 loader 接线与失败域隔离 | `node scripts/check_loader.mjs` |
+| 验证装配清单（patch ↔ source）未漂移 | `<preset>\.venv\Scripts\python.exe scripts/check_lockstep.py` |
 | 单独看一个 CLI 的 actions | `<preset>\.venv\Scripts\<cli>.exe --list-actions` |
 
 ---
@@ -24,7 +26,7 @@
 
 1. **定位 Python**：先看 `<preset>/.venv/Scripts/python.exe`，没有就在 PATH 里找 `python` / `python3` / `py`
 2. **建 venv**：复用现有的，没就 `python -m venv .venv`
-3. **装第三方依赖**：`pip install tokenizers==0.22.2`（h3 prompt 唯一需要的 PyPI 包）
+3. **装第三方依赖**：`pip install -r requirements.lock`（17 个包全部钉版；锁文件缺失时警告并回退到 `tokenizers==0.22.2`）
 4. **装本地包**：调 `install_local.py` —— **绕开 `pip install -e`**（原因见 `architecture.md`）
 5. **自检 3 个 CLI**：每个跑 `--list-actions`，必须返回非空
 6. **提示 Node.js**：`npx` 没找到就 warn（camera 执行需要，但 prompt 编写不需要）
@@ -200,9 +202,9 @@ contract drift in skills/camera-image/SKILL.md:  example block rejected by camer
 ## 脚本的依赖关系
 
 ```
-setup.ps1
+setup.ps1 / setup.sh
   ├── 创建/复用 .venv
-  ├── pip install tokenizers
+  ├── pip install -r requirements.lock          ← 第三方依赖（钉版）
   ├── python .venv/Scripts/python.exe scripts/install_local.py
   └── 自检 3 个 .exe
 
@@ -215,9 +217,37 @@ check_contracts.py
   ├── import 3 个 skill 的运行时
   ├── strip_jsonc()                            ← 自实现的 JSONC 注释剥离
   └── 每个 skill 的 parse_request()             ← 用 skill 自己的 parser
+
+check_loader.mjs                               ← node scripts/check_loader.mjs
+  ├── mock Cordis context（skills / tools / subprocess）
+  ├── 调 loader.apply()，不改真实注册表
+  └── 断言失败域隔离：坏 SKILL.md 不拖垮 CLI 工具，缺 skills 服务不拖垮工具
+
+check_lockstep.py                              ← python scripts/check_lockstep.py
+  ├── PyYAML 解析 agent.cordis.yml 与 cordis.patch.yml
+  ├── 比对 entry id 集合、顺序、name、config 逐键
+  └── 只容忍三项部署差异；preset.yml 的 name/description 也一并核对
 ```
 
 `check_contracts.py` 用 `sys.path.insert(...)` 把 3 个 skill 目录加进去（因为它们是 source-tree package，importable 不需要 pip install）。前提是 venv 已经 setup 好了。
+
+`check_loader.mjs` 不需要 venv，只需要 Node.js；它验证的是 `loader.js` 的接线（`agent.cordis.yml` 挂载的就是这个文件），而 `check_contracts.py` 验证的是请求 schema 与资产 pin。两个都要跑。
+
+`check_lockstep.py` 只需要 PyYAML（`requirements.lock` 里已有 `PyYAML`），不需要 venv 里的本地包。它证明 `cordis.patch.yml` 不只是「看起来和 source 一样」——两份清单只在三项部署差异内不同：
+
+1. `comfyui-loader.name`：`./loader.js` → `file:///<checkout>/loader.js`
+2. `comfyui-loader.config.presetRoot`：`null` → `<checkout>`
+3. `prompt-forge.name`：`./plugins/...` → `file:///<checkout>/plugins/...`
+
+其它任何差异都算 drift。为什么需要这个门：patch 才是 DSH 真正加载的那份，source 是人编辑的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。`KNOWN-ISSUES.md` #13 只加了 SYNC OBLIGATION 注释——注释不会失败，这个 gate 会。
+
+### 第三方依赖锁（`requirements.lock`）
+
+6 个本地包对 PyPI 依赖**不设上界**，所以锁文件是唯一的钉版点。`requirements.lock` 只含第三方包，本地 6 个包**故意不在里面**（它们跟随源码树，不跟随锁文件）。
+
+改锁文件的正确姿势：在一个真正跑通过的 venv 里 `python -m pip freeze`，diff，然后带「为什么变」一起提交。为了钉而钉，锁会烂成无法修的古董。文件头记录了参考环境（Python 3.12.10 / Windows）与采集日期。
+
+两个 setup 脚本都在锁文件缺失时**大声警告**并回退到旧的单包钉法——静默回退就是漂移回来的路径。
 
 ---
 

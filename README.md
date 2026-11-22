@@ -39,6 +39,33 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 
 `scripts/setup.ps1` 会创建 `<preset>/.venv`、装 `tokenizers`、把 6 个本地包装进 venv、自检 3 个 CLI，全部幂等。详见 `docs/development.md`。
 
+### 让 DSH 认到这个 preset
+
+DSH 只通过 **bundle** 装载预设（`plugin_manager` 装一个声明了 `dsh.bundle.patch` 的包）。仓库里两份装配文件的分工是：
+
+| 文件 | 作用 |
+|---|---|
+| `package.json` | bundle 声明，`dsh.bundle.patch` 指向 `cordis.patch.yml` |
+| `cordis.patch.yml` | **DSH 真正加载的**那份（`insert` 一条 `preset-comfyui-chenxin`） |
+| `agent.cordis.yml` | 同一份 entry 列表的可移植形态，供人阅读与评审 |
+
+`agent.cordis.yml` 和 `cordis.patch.yml` 的 entry 列表逐条相同，只允许三项部署差异：`loader.js` 与 `prompt-forge` 的 `name` 从相对路径变成 `file:///` 绝对路径，`loader.presetRoot` 从 `null` 变成 checkout 路径。两份必须锁步——改一份就要改另一份，然后跑
+
+```powershell
+python scripts/check_lockstep.py
+```
+
+它只容忍上面三项差异，其它任何出入都判 drift。为什么这条要紧：**DSH 读的是 `cordis.patch.yml`**，`agent.cordis.yml` 只是给人读的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。
+
+> 旧版 DSH 用 `$DSH_HOME/.agent-presets/<id>/` 目录装载（`preset.yml` + `agent.cordis.yml`）。**那个目录现在没有任何代码读取**，所以本仓库不再提供该形态的安装步骤；`agent.cordis.yml` 保留只是为了可读性 + 锁步 gate。
+
+装成 bundle 一次即可，装完 profile 的 `package.json` 里 `dsh.profile.bundles` 会多一项，重启 DSH 后新会话可在预设菜单里选 `ComfyUI Chenxin`：
+
+- **Desktop**：侧栏 **Plugins** 页面 → **Add plugin**，填入本 checkout 的绝对路径 → 安装后 **Enable now**。或对 agent 说「用 plugin_manager 安装 `link:<checkout 绝对路径>`」。桌面端的 profile 由 Electron 拥有，`dsh plugin` 命令会拒绝管理它（设置里的 **Built-in plugins** 只是只读清单）。
+- **命令行 profile**：`dsh plugin --profile <name> add link:<checkout 绝对路径>`（需 pnpm 在 `PATH` 上）。
+
+`link:` 意味着改源码后要重新构建（`cd plugins/prompt-forge && npm run build`）并重启才生效；它用这个 checkout 的依赖，不会另装一份。安装 bundle 会在 Host 进程里执行插件代码，需要 Full access 或一次批准。
+
 ## 这是什么
 
 ```
@@ -78,12 +105,18 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 ├── README.md                            ← 本文件
 ├── AGENTS.md                            ← agent 工作守则
 ├── preset.yml                           ← loader 注册元数据
+├── package.json                         ← DSH bundle 声明（指向 cordis.patch.yml）
 ├── loader.js                            ← DSH 插件入口
-├── agent.cordis.yml                     ← Cordis 组合配置（loader config 入口）
+├── agent.cordis.yml                     ← Cordis 组合配置（可移植形态）
+├── cordis.patch.yml                     ← 同一组合的部署形态（bundle 消费）
+├── requirements.lock                    ← 第三方依赖钉版（17 个包）
 ├── scripts/
 │   ├── setup.ps1                        ← 一键安装（幂等）
+│   ├── setup.sh                         ← 同上，POSIX
 │   ├── install_local.py                 ← 绕开 pip 的本地包安装器
-│   └── check_contracts.py               ← SKILL.md 契约 gate
+│   ├── check_contracts.py               ← SKILL.md 契约 gate
+│   ├── check_loader.mjs                 ← loader 接线 / 失败域隔离 gate
+│   └── check_lockstep.py                ← agent.cordis.yml ↔ cordis.patch.yml 一致性 gate
 ├── docs/
 │   ├── architecture.md                  ← 设计原理与契约
 │   ├── cli-cookbook.md                  ← 每个 CLI 的完整使用手册
@@ -154,10 +187,10 @@ Anima/H3 提示词创作由 prompt-forge 插件的 `prompt_author` / `prompt_com
 ## 下一步
 
 - **新用户**：先读 [`AGENTS.md`](AGENTS.md)，看任务→工具路由
-- **agent**：提示词创作走 prompt-forge 工具（`prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `style_list` / `catalog_search` / `catalog_relations` / `catalog_build`）；渲染执行走 host tool `camera_image` / `camera_video` / `camera_multiview`（loader 已注册）
+- **agent**：提示词创作走 prompt-forge 的 14 个工具（`prompt_author` / `prompt_compile` / `prompt_audit` / `prompt_feedback` / `prompt_expand` / `prompt_reverse` / `minimax_scenario` / `style_list` / `style_save` / `profile_list` / `catalog_search` / `catalog_artist_add` / `catalog_relations` / `catalog_build`，逐个的用途与入参见 [`AGENTS.md`](AGENTS.md) §1）；渲染执行走 host tool `camera_image` / `camera_video` / `camera_multiview`（loader 已注册）
 - **开发者 / 调试**：读 [`docs/development.md`](docs/development.md) + [`docs/cli-cookbook.md`](docs/cli-cookbook.md)
 - **已知问题 / 审计**：读 [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md)
 
 ## 参与贡献
 
-欢迎 issue 与 PR：bug 报告请附完整 CLI envelope（`errors[].code`）与 exit code；环境搭建与提交前质量门见 [CONTRIBUTING.md](CONTRIBUTING.md)（`scripts/check_contracts.py` 契约 gate + `plugins/prompt-forge` 测试）。新增动作只改对应 skill 的 `cli.py`——loader 经 `--list-actions` 自动发现；固定工作流 asset 结构不要动（[AGENTS.md](AGENTS.md) §4）。
+欢迎 issue 与 PR：bug 报告请附完整 CLI envelope（`errors[].code`）与 exit code；环境搭建与提交前质量门见 [CONTRIBUTING.md](CONTRIBUTING.md)（`scripts/check_contracts.py` 契约 gate + `scripts/check_loader.mjs` loader 接线 gate + `plugins/prompt-forge` 测试）。新增动作只改对应 skill 的 `cli.py`——loader 经 `--list-actions` 自动发现；固定工作流 asset 结构不要动（[AGENTS.md](AGENTS.md) §4）。

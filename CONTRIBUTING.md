@@ -12,7 +12,7 @@
 ## 欢迎的贡献
 
 - **Bug 报告**：附完整 P1 envelope（`errors[].code` 与 `advisories`）、CLI exit code、`--list-actions` 输出、ComfyUI 后端版本；先对照 [`docs/troubleshooting.md`](docs/troubleshooting.md) 的错误恢复表
-- **文档改进**：以一手实测为准；`SKILL.md` 的 failure-modes 表是 exit code 的权威，改动须同步通过 `scripts/check_contracts.py`
+- **文档改进**：以一手实测为准；`SKILL.md` 的 failure-modes 表是 exit code 的权威，改动须同步通过 `scripts/check_contracts.py`；改了 `loader.js` 或 `preset.yml` 须跑 `node scripts/check_loader.mjs`；改了 `agent.cordis.yml` 或 `cordis.patch.yml` 须跑 `scripts/check_lockstep.py`
 - **新增 skill 动作**：只改对应 skill 的 `cli.py` —— loader 通过 `--list-actions` 动态发现，无需改 `loader.js`
 - **prompt-forge 插件**：提示词创作内核，见 [`plugins/prompt-forge/AGENTS.md`](plugins/prompt-forge/AGENTS.md) 与其自带测试
 
@@ -26,7 +26,9 @@
 ## 提交前质量门
 
 - `python scripts/check_contracts.py` —— SKILL.md 契约 gate（前提：`.venv` 已 setup）
-- `cd plugins/prompt-forge` 后跑测试（`vitest run`，依赖按仓库内 `bun.lock` 安装）—— 全绿才算完成
+- `node scripts/check_loader.mjs` —— loader 接线 gate（不需要 venv；验证坏 SKILL.md 不拖垮 CLI 工具、缺 skills 服务不拖垮工具）
+- `python scripts/check_lockstep.py` —— 装配清单 gate（不需要 venv 里的本地包，但需要 PyYAML；验证 `cordis.patch.yml` 与 `agent.cordis.yml` 只在允许的三项部署差异内不同）
+- `cd plugins/prompt-forge` 后跑测试（`npm ci` 按 `package-lock.json` 安装，再 `npm test`）—— 全绿才算完成
 
 ## 提交约定
 

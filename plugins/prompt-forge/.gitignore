@@ -1,4 +1,4 @@
-# Prompt Master — node project gitignore (migrated into comfyui-chenxin preset)
+# prompt-forge — node project gitignore (migrated into comfyui-chenxin preset)
 
 # Node
 node_modules/
@@ -19,3 +19,6 @@ dist/
 .env
 config.yaml
 *.report.json
+
+# Vitest run cache (per-machine, no diagnostic value once the run is read)
+.vitest-last.json

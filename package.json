@@ -1,0 +1,7 @@
+{
+  "name": "@local/dsh-comfyui-chenxin-preset",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

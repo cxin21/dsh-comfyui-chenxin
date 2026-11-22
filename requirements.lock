@@ -1,0 +1,37 @@
+# Locked third-party dependencies for the ComfyUI Chenxin preset venv.
+#
+# Why this file exists: the six local packages (runtime/comfyui_http,
+# runtime/comfyui_mcp, runtime/chenxin_runtime, skills/camera-image,
+# skills/camera-video, skills/camera-multiview) declare *no upper bounds* on
+# their PyPI dependencies. Without a lock, two machines set up a week apart get
+# different httpx / huggingface_hub / tokenizers builds, and the workflow
+# assets, the tokenizer behaviour and the MCP subprocess all silently drift.
+#
+# Scope: third-party packages only. The six local packages are installed from
+# this source tree by scripts/install_local.py and are intentionally absent —
+# their versions follow the checkout, not this file.
+#
+# Reference environment: Python 3.12.10 / Windows, captured 2026-11-22 from a
+# venv that passes `--list-actions` on all three CLIs and completes a run.
+#
+# Updating: re-run `python -m pip freeze` in a venv you have actually exercised,
+# diff it, and commit the result with a note on what changed and why. Pinning
+# without a reason is how a lock rots into an unfixable museum.
+
+PyYAML==6.0.3
+anyio==4.15.1
+certifi==2026.10.23
+click==8.5.0
+colorama==0.4.6
+filelock==4.2.4
+fsspec==2026.9.0
+h11==0.16.0
+hf-xet==1.7.0
+httpcore==1.0.9
+httpx==0.28.1
+huggingface_hub==1.33.0
+idna==3.20
+packaging==26.3
+tokenizers==0.22.2
+tqdm==4.70.1
+typing_extensions==4.16.0

@@ -1,24 +1,22 @@
 # ComfyUI Chenxin Agent Preset
 #
-# SYNC OBLIGATION: cordis.patch.yml restates every entry below verbatim (in
-# its `plugins:` list) as the deployed bundle form. When you edit an entry
-# here, make the SAME edit there.
+# SYNC OBLIGATION: cordis.patch.yml restates every entry below (in its
+# `plugins:` list) as the deployed bundle form. When you edit an entry here,
+# regenerate the patch:  python scripts/render_patch.py
+# (or run scripts/setup.ps1 / setup.sh, which render it for you).
 #
-# The two files must agree EXACTLY — there is no allowed-difference set.
-# Neither may carry a machine-specific path: plugin `name` values are subpath
-# specifiers of this package (resolved through the profile's node_modules entry,
-# which is a `link:` to the checkout), and presetRoot stays null so loader.js
-# falls back to its own __dirname. Per-machine overrides belong in the
-# profile's own cordis.patch.yml.
+# This file is the PORTABLE SOURCE: it carries no machine-specific paths. The
+# deployed patch differs from it in exactly three values — the two local
+# plugin `name`s become file:///<checkout>/... URLs and presetRoot null becomes
+# <checkout>. Those rewrites are required because DSH imports preset entries
+# from a host-side base where `./` and `@local/*` do not resolve (see
+# docs/KNOWN-ISSUES.md #28/#29). Do NOT "fix" them back to relative names.
 #
-# Note: `./loader.js` does NOT work here. dsh-app-boot anchors `./` names to the
-# patch directory only for entries it recurses into (`group` + array config);
-# this preset row is a plain object config, so a nested `./` name would reach
-# the loader verbatim and resolve against the profile directory instead.
-#
-# Enforced by `python scripts/check_lockstep.py`, which also fails when an
-# entry point is missing on disk (plugins/prompt-forge/dist/ is build output
-# and is not committed — run scripts/setup first).
+# `scripts/check_lockstep.py` enforces that those three deployment rewrites are
+# the ONLY differences — any other drift fails the gate — and that they point
+# at this checkout. It also fails when an entry point is missing on disk
+# (plugins/prompt-forge/dist/ is build output and is not committed — run
+# scripts/setup first).
 #
 # Persona + host skill stack + compaction + basic tools + loader (single
 # plugin that registers the 3 bundled SKILL.md files into the host's
@@ -165,7 +163,7 @@
 # <preset>/.venv/ exists with 3 console scripts, also registers 3 CLI
 # wrapper Tools.
 - id: comfyui-loader
-  name: '@local/dsh-comfyui-chenxin-preset/loader.js'
+  name: './loader.js'
   config:
     # Override the preset root here if auto-discovery fails. Leave unset to use
     # shellEnv / process.env / __dirname (preset's own directory) fallback.
@@ -174,6 +172,6 @@
 # ── Prompt Forge plugin（仅本 preset 装配；项目随 preset 一起迁移到 plugins/prompt-forge）──
 # 零 provider 配置：模型路由完全跟随当前 DSH 会话（resolveRoute 三环：会话 route → agent options → 报错）
 - id: prompt-forge
-  name: '@local/dsh-comfyui-chenxin-preset/plugins/prompt-forge/dist/src/plugin/index.js'
+  name: './plugins/prompt-forge/dist/src/plugin/index.js'
   config:
     temperature: 0.7

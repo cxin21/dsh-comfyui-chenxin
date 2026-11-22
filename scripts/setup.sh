@@ -94,6 +94,21 @@ else
   echo "[comfyui-chenxin] prompt-forge dist already present, skipping build"
 fi
 
+# 5b. Render cordis.patch.yml for THIS checkout
+# cordis.patch.yml is a generated deployment artifact. DSH imports a preset's
+# nested plugin entries from a HOST-side base, where only absolute file:///
+# URLs resolve reliably (./ is not anchored in a plain-object config; @local/
+# <pkg> only exists in the profile's node_modules). The paths are therefore
+# machine-specific — render_patch.py derives them from agent.cordis.yml (the
+# portable source) and the current checkout. See KNOWN-ISSUES #26/#28/#29.
+if [ -f "$PRESET_DIR/scripts/render_patch.py" ]; then
+  echo "[comfyui-chenxin] rendering cordis.patch.yml for $PRESET_DIR"
+  "$PYTHON" "$PRESET_DIR/scripts/render_patch.py" --checkout "$PRESET_DIR" || {
+    echo "ERROR: render_patch.py failed" >&2
+    exit 1
+  }
+fi
+
 # 6. Self-check: every CLI must report its actions
 for script in camera-image camera-video camera-multiview; do
   actions="$("$VENV_DIR/bin/$script" --list-actions)"

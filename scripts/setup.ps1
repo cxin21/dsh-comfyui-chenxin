@@ -109,6 +109,20 @@ Write-Host "[comfyui-chenxin] running install_local.py"
 & $PythonExe $Installer --preset $PresetDir
 if ($LASTEXITCODE -ne 0) { Write-Error "install_local.py failed"; exit $LASTEXITCODE }
 
+# ── 4b. Render cordis.patch.yml for THIS checkout ────────────────────────
+#
+# cordis.patch.yml is a generated deployment artifact. DSH imports a
+# preset's nested plugin entries from a HOST-side base, where only absolute
+# file:/// URLs resolve reliably (./ is not anchored in a plain-object
+# config; @local/<pkg> only exists in the profile's node_modules). The
+# paths are therefore specific to each machine — render_patch.py derives
+# them from agent.cordis.yml (the portable source) and the current checkout.
+# See KNOWN-ISSUES #26/#28/#29.
+$Renderer = Join-Path $PresetDir 'scripts/render_patch.py'
+Write-Host "[comfyui-chenxin] rendering cordis.patch.yml for $PresetDir"
+& $PythonExe $Renderer --checkout $PresetDir
+if ($LASTEXITCODE -ne 0) { Write-Error "render_patch.py failed"; exit $LASTEXITCODE }
+
 # ── 5. Build the prompt-forge plugin ─────────────────────────────────────
 #
 # cordis.patch.yml mounts the plugin from

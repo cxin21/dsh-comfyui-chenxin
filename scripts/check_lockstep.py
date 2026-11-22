@@ -1,40 +1,41 @@
-"""Lockstep gate: prove cordis.patch.yml restates agent.cordis.yml.
+"""Lockstep gate: prove cordis.patch.yml is the correct deployment of agent.cordis.yml.
 
-``agent.cordis.yml`` is the portable, human-readable form; ``cordis.patch.yml``
-is the deployed bundle form advertised by ``package.json`` (``dsh.bundle.patch``)
-and consumed by DSH's bundle installer. The patch restates every assembly entry
-verbatim, and **no difference between the two files is allowed**.
+``agent.cordis.yml`` is the portable, human-editable source. ``cordis.patch.yml``
+is what DSH actually loads (``dsh.bundle.patch`` in package.json), generated
+from it by ``scripts/render_patch.py``. Three deployment rewrites are allowed,
+and only these:
 
-Neither file may carry a machine-specific path. A ``./``-relative plugin
-``name`` is anchored by dsh-app-boot's ``anchorInsertedPluginNames`` against the
-directory holding the patch file, so it points inside the installed checkout
-wherever that checkout lives; ``presetRoot: null`` lets ``loader.js`` fall back
-to its own ``__dirname`` (Node resolves a symlinked module to its realpath, so
-the link a profile installs still lands on the checkout).
+  1. ``comfyui-loader.name``       ``./loader.js`` -> ``file:///<checkout>/loader.js``
+  2. ``comfyui-loader.config.presetRoot``  ``null`` -> ``<checkout>``
+  3. ``prompt-forge.name``         ``./plugins/...`` -> ``file:///<checkout>/plugins/...``
 
-This gate asserts four things:
+They are forced by DSH's resolution chain: a preset's nested entries are
+imported from a host-side base, where ``./`` (not anchored for a plain-object
+config) and ``@local/...`` (only in the profile's node_modules) both fail, while
+``file:///<abs>`` resolves. See KNOWN-ISSUES #26/#28/#29. The rewrites must be
+generated per machine, never hard-coded — this gate asserts the patch's absolute
+paths point at THIS checkout.
 
-  1. the entry lists are identical (ids, order, names, config, key by key);
-  2. neither file contains a ``file:`` / absolute plugin name or config value
-     (a per-machine override belongs in the profile's own user-layer patch);
-  3. every ``./``-relative plugin entry exists on disk -- ``plugins/prompt-forge/
-     dist/`` is gitignored build output, and dsh-app-boot swallows a failed
-     bundle load into ``skippedBundles`` without printing anything, so a fresh
-     clone otherwise boots with no prompt-forge tools and no error;
-  4. ``preset.yml``'s name/description match the patch's preset entry.
+Anything else that differs is drift: the file DSH runs would not be the file a
+human reviews. #13 recorded the dual-maintenance risk with a comment; a comment
+cannot fail, this gate can.
 
-``KNOWN-ISSUES.md`` #13 recorded the dual-maintenance risk and added a SYNC
-OBLIGATION comment; a comment cannot fail. This gate can.
+Asserted here:
+  1. entry ids/order/config match key by key, modulo the 3 deployment rewrites;
+  2. the patch's rewritten paths are absolute URLs under THIS checkout;
+  3. the source file itself carries no machine-specific path;
+  4. every local plugin entry exists on disk (dist/ is gitignored build output);
+  5. ``preset.yml``'s name/description match the patch's preset entry.
 
 Usage:  python scripts/check_lockstep.py
-Exit:   0 = both files agree and are portable, 1 = drift or a broken entry point.
+Exit:   0 = patch is a correct deployment of the source, 1 = drift or broken entry.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 try:
     import yaml
@@ -49,43 +50,43 @@ PRESET_YML = ROOT / "preset.yml"
 
 PRESET_ENTRY_ID = "preset-comfyui-chenxin"
 
-# Plugin `name` values are subpath specifiers of this package, resolved by Node
-# through the profile's node_modules entry (a `link:` to this checkout). The
-# package name is read from package.json so a rename only has to happen once.
-try:
-    PACKAGE_NAME: str = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["name"]
-except (OSError, KeyError, ValueError) as error:  # pragma: no cover - environment guard
-    print(f"FAIL: cannot read package name from package.json ({error})", file=sys.stderr)
-    raise SystemExit(1)
-
-# The two files must be byte-equivalent in meaning: cordis.patch.yml is what
-# dsh actually loads, agent.cordis.yml is the human-readable twin. There is
-# deliberately NO allowed-difference set.
-#
-# This used to allow three deployment rewrites (loader.js / prompt-forge names
-# -> file:/// absolute URLs, presetRoot null -> pinned checkout). Those are
-# gone: the patch now uses package subpaths, which are machine-independent, so
-# the gate rejects any difference at all.
-ABSOLUTE_PATH_ENTRIES: set[str] = set()
-PINNED_ROOT_KEYS: set[tuple[str, str]] = set()
+# The only entries whose `name` may be rewritten to a file:/// URL, and the
+# only config key that may be pinned to the checkout, in the deployed patch.
+ABSOLUTE_PATH_ENTRIES = {"comfyui-loader", "prompt-forge"}
+PINNED_ROOT_KEYS = {("comfyui-loader", "presetRoot")}
 
 
-def is_package_subpath(name: str) -> bool:
-    """True for ``@local/dsh-comfyui-chenxin-preset/...`` style specifiers.
+def file_url_path(actual: str) -> Path:
+    """Map a ``file:///...`` URL to a local Path (handles Windows ``/D:/``)."""
+    parsed = urlparse(actual)
+    path = unquote(parsed.path)
+    # On Windows file:///D:/x parses to '/D:/x' — drop the leading slash so
+    # pathlib reads the drive letter. On POSIX '/x' stays absolute.
+    if path.startswith("/") and len(path) > 2 and path[2] == ":":
+        path = path[1:]
+    return Path(path).resolve()
 
-    These carry no machine path: Node resolves them via the profile's
-    node_modules entry, wherever the checkout happens to live.
-    """
-    return name == PACKAGE_NAME or name.startswith(PACKAGE_NAME + "/")
+
+def is_absolute_form(rel: str, actual) -> bool:
+    """True when `actual` is exactly `rel` rewritten to file:///<checkout>."""
+    if not isinstance(actual, str) or not actual.startswith("file:///"):
+        return False
+    parsed = urlparse(actual)
+    if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
+        return False
+    target = file_url_path(actual)
+    expected = (ROOT / rel[2:]).resolve()  # strip leading "./"
+    return target == expected
 
 
-def package_subpath(name: str) -> str | None:
-    """``<pkg>/a/b`` -> ``a/b``; ``<pkg>`` -> ``""``; otherwise None."""
-    if name == PACKAGE_NAME:
-        return ""
-    if name.startswith(PACKAGE_NAME + "/"):
-        return name[len(PACKAGE_NAME) + 1 :]
-    return None
+def is_pinned_checkout(value) -> bool:
+    """True when `value` is exactly this checkout as an absolute path."""
+    if not isinstance(value, str):
+        return False
+    try:
+        return Path(value).resolve() == ROOT.resolve()
+    except OSError:
+        return False
 
 
 def load_plugins(path: Path) -> list[dict]:
@@ -106,11 +107,9 @@ def load_plugins(path: Path) -> list[dict]:
     if not isinstance(doc, list):
         raise SystemExit(f"FAIL: {path.name} is neither a list nor an object")
 
-    # Flat entry list: every element is an entry with an id.
     if doc and all(isinstance(e, dict) and "insert" not in e for e in doc):
         return doc
 
-    # Patch groups: find the preset insert.
     for group in doc:
         if not isinstance(group, dict):
             continue
@@ -121,45 +120,66 @@ def load_plugins(path: Path) -> list[dict]:
     raise SystemExit(f"FAIL: {path.name} has no insert entry id={PRESET_ENTRY_ID}")
 
 
-def check_portable(plugins: list[dict]) -> list[str]:
-    """No machine-specific path may be committed to either assembly file.
-
-    This is the assertion that would have caught the original defect: the
-    curated patch shipped ``file:///D:/DSH/...`` names and a pinned
-    ``presetRoot``, so every clone outside this machine loaded the wrong code
-    (or nothing).
-
-    Package subpath specifiers (``@local/dsh-comfyui-chenxin-preset/...``) are
-    machine-independent: Node resolves them through the profile's node_modules
-    entry, which is a ``link:`` to the checkout — so they are allowed. A
-    ``file:`` URL or an absolute path is not.
-    """
+def check_source_portable(plugins: list[dict]) -> list[str]:
+    """The human-editable source must carry no machine-specific path."""
     problems: list[str] = []
     for entry in plugins:
         eid = entry.get("id")
         name = entry.get("name")
-        if isinstance(name, str) and not is_package_subpath(name):
+        if isinstance(name, str):
             if name.startswith("file:") or Path(name).is_absolute():
                 problems.append(
-                    f"{eid}.name is machine-specific ({name!r}); "
-                    f"use a {PACKAGE_NAME}/<subpath> specifier"
+                    f"{eid}.name is machine-specific ({name!r}) in the source; "
+                    "use a ./-relative name (render_patch.py generates the URL)"
                 )
-            elif name.startswith("./") or name.startswith("../"):
+            elif name.startswith("../"):
                 problems.append(
-                    f"{eid}.name is ./-relative ({name!r}); dsh-app-boot only "
-                    f"anchors ./ names for group entries with an array config, so "
-                    f"this resolves against the PROFILE directory at load time and "
-                    f"fails. Use a {PACKAGE_NAME}/<subpath> specifier"
+                    f"{eid}.name escapes the checkout ({name!r}) in the source"
                 )
         cfg = entry.get("config")
         if isinstance(cfg, dict):
             for key, value in cfg.items():
-                absolute = isinstance(value, str) and (
+                if isinstance(value, str) and not value.startswith("!!") and (
                     Path(value).is_absolute() or value.startswith("file:")
-                )
-                if absolute and not value.startswith("!!"):
+                ):
                     problems.append(
-                        f"{eid}.{key} is machine-specific ({value!r}); leave it null"
+                        f"{eid}.{key} is machine-specific ({value!r}) in the source; "
+                        "leave it null"
+                    )
+    return problems
+
+
+def check_patch_deployment(plugins: list[dict]) -> list[str]:
+    """The deployed patch may only differ in the 3 rewrites, pinned to THIS checkout."""
+    problems: list[str] = []
+    for entry in plugins:
+        eid = entry.get("id")
+        name = entry.get("name")
+        if eid in ABSOLUTE_PATH_ENTRIES:
+            if not (isinstance(name, str) and name.startswith("file:///")):
+                problems.append(
+                    f"{eid}.name must be a file:/// URL in the patch "
+                    "(run python scripts/render_patch.py), got {name!r}"
+                )
+        elif isinstance(name, str) and (
+            name.startswith("file:") or Path(name).is_absolute()
+        ):
+            problems.append(f"{eid}.name is machine-specific in the patch ({name!r})")
+
+        cfg = entry.get("config")
+        if isinstance(cfg, dict):
+            for key, value in cfg.items():
+                if (eid, key) in PINNED_ROOT_KEYS:
+                    if not is_pinned_checkout(value):
+                        problems.append(
+                            f"{eid}.{key} must be THIS checkout "
+                            f"({ROOT.as_posix()!r}) in the patch, got {value!r}"
+                        )
+                elif isinstance(value, str) and not value.startswith("!!") and (
+                    Path(value).is_absolute() or value.startswith("file:")
+                ):
+                    problems.append(
+                        f"{eid}.{key} is machine-specific in the patch ({value!r})"
                     )
     return problems
 
@@ -187,13 +207,16 @@ def compare(source: list[dict], patch: list[dict]) -> list[str]:
             continue  # already reported as missing
 
         if entry["name"] != other["name"]:
-            problems.append(f"{eid}: name {entry['name']!r} vs {other['name']!r}")
+            if eid in ABSOLUTE_PATH_ENTRIES and is_absolute_form(
+                entry["name"], other["name"]
+            ):
+                pass  # allowed deployment rewrite (validated separately)
+            else:
+                problems.append(f"{eid}: name {entry['name']!r} vs {other['name']!r}")
 
         s_cfg = entry.get("config")
         p_cfg = other.get("config")
 
-        # `compaction` carries a list config (group + isolate), not a mapping.
-        # It has no allowed-difference keys, so it must match exactly.
         if not isinstance(s_cfg, dict) or not isinstance(p_cfg, dict):
             if s_cfg != p_cfg:
                 problems.append(f"{eid}.config: {s_cfg!r} vs {p_cfg!r}")
@@ -209,14 +232,15 @@ def compare(source: list[dict], patch: list[dict]) -> list[str]:
                 problems.append(f"{eid}.{key}: only in source (value={s_cfg[key]!r})")
                 continue
             if (eid, key) in PINNED_ROOT_KEYS:
-                continue  # no pinned root any more; kept for clarity
+                if s_cfg[key] is None and is_pinned_checkout(p_cfg[key]):
+                    continue  # null -> this checkout is the allowed diff
             if s_cfg[key] != p_cfg[key]:
                 problems.append(f"{eid}.{key}: {s_cfg[key]!r} vs {p_cfg[key]!r}")
 
     return problems
 
 
-def check_preset_metadata(source_plugins: list[dict]) -> list[str]:
+def check_preset_metadata() -> list[str]:
     """preset.yml and the patch's preset entry must describe the same preset."""
     problems: list[str] = []
     preset = yaml.safe_load(PRESET_YML.read_text(encoding="utf-8"))
@@ -235,36 +259,29 @@ def check_preset_metadata(source_plugins: list[dict]) -> list[str]:
 
 
 def check_entry_points(plugins: list[dict]) -> list[str]:
-    """Every plugin entry must point at something that exists in this checkout.
+    """Every local plugin entry in the source must exist in this checkout.
 
-    ``plugins/prompt-forge/dist/`` is gitignored (build output), so a fresh
-    clone has the patch but not the file it points at. dsh-app-boot wraps each
-    bundle load in try/catch and pushes failures into ``skippedBundles``
-    without printing anything — so a missing build shows up as "the plugin
-    silently did nothing", not as an error. This turns that silence into a
-    failing check.
-
-    Package subpaths are mapped back onto this checkout (``<pkg>/a/b`` ->
-    ``<ROOT>/a/b``); ``./``-relative names are resolved against ROOT as well.
-    Bare package specifiers are left to node_modules and skipped.
+    ``plugins/prompt-forge/dist/`` is gitignored build output, so a fresh clone
+    has the source but not the file the patch points at. The Loader swallows a
+    failed import into an unstarted fiber, so this turns silence into a red gate.
     """
     problems: list[str] = []
     for entry in plugins:
         name = entry.get("name")
         if not isinstance(name, str):
             continue
-
-        subpath = package_subpath(name)
-        if subpath is not None:
-            target = ROOT / subpath if subpath else ROOT
-        elif name.startswith("./") or name.startswith("../"):
+        if name.startswith("./") or name.startswith("../"):
             target = ROOT / name
+        elif name.startswith("file:"):
+            target = file_url_path(name)
+        elif Path(name).is_absolute():
+            target = Path(name)
         else:
             continue  # bare package specifier — resolved from node_modules
 
-        if not target.exists():
+        if not target.resolve().exists():
             hint = ""
-            if "plugins/prompt-forge/dist" in name.replace("\\", "/"):
+            if "plugins/prompt-forge/dist" in str(target).replace("\\", "/"):
                 hint = " — run: cd plugins/prompt-forge && npm ci && npm run build"
             problems.append(
                 f"{entry.get('id')}.name points at a missing file: {name}{hint}"
@@ -277,32 +294,28 @@ def main() -> int:
     patch = load_plugins(PATCH)
 
     problems = compare(source, patch)
-    problems += check_portable(source)
-    problems += check_portable(patch)
-    problems += check_entry_points(patch)
-    problems += check_preset_metadata(source)
+    problems += check_source_portable(source)
+    problems += check_patch_deployment(patch)
+    problems += check_entry_points(source)
+    problems += check_preset_metadata()
 
     if problems:
         print(f"DRIFT: {len(problems)} problem(s)\n")
         for p in problems:
             print(f"  - {p}")
         print(
-            "\nThe two assembly files must agree exactly, and neither may carry a"
-            "\nmachine-specific path. Fix both files:"
-            f"\n  - a plugin name is a {PACKAGE_NAME}/<subpath> specifier (resolved"
-            "\n    through the profile's node_modules link), NOT ./relative and NOT"
-            "\n    an absolute path — dsh-app-boot only anchors ./ names for group"
-            "\n    entries, so a nested ./ name resolves against the profile dir"
-            "\n  - comfyui-loader.config.presetRoot stays null (loader.js falls back"
-            "\n    to its own __dirname, which Node realpaths through the profile"
-            "\n    symlink); put per-machine overrides in the profile's own"
-            "\n    cordis.patch.yml instead\n"
+            "\nFix source (agent.cordis.yml) by hand, then regenerate the patch:"
+            "\n  python scripts/render_patch.py"
+            "\nAllowed differences (patch vs source), and only these:"
+            "\n  comfyui-loader.name       ./loader.js -> file:///<this-checkout>/loader.js"
+            "\n  comfyui-loader.presetRoot null -> <this-checkout>"
+            "\n  prompt-forge.name         ./plugins/... -> file:///<this-checkout>/plugins/...\n"
         )
         return 1
 
-    print(f"OK   lockstep — {len(source)} entries, files agree exactly")
-    print("OK   portability — no machine-specific paths in either file")
-    print("OK   entry points — every plugin entry exists in this checkout")
+    print(f"OK   lockstep — {len(source)} entries, 3 deployment rewrites only")
+    print("OK   portability — source has no machine paths; patch pinned to this checkout")
+    print("OK   entry points — every local plugin entry exists in this checkout")
     print("OK   preset.yml name/description match the patch entry")
     return 0
 

@@ -233,14 +233,15 @@ check_lockstep.py                              ← python scripts/check_lockstep
 
 `check_loader.mjs` 不需要 venv，只需要 Node.js；它验证的是 `loader.js` 的接线（`agent.cordis.yml` 挂载的就是这个文件），而 `check_contracts.py` 验证的是请求 schema 与资产 pin。两个都要跑。
 
-`check_lockstep.py` 只需要 PyYAML（`requirements.lock` 里已有 `PyYAML`），不需要 venv 里的本地包。它断言四件事：
+`check_lockstep.py` 只需要 PyYAML（`requirements.lock` 里已有 `PyYAML`），不需要 venv 里的本地包。它断言五件事：
 
-1. **entry 列表逐条相同** —— `cordis.patch.yml` 与 `agent.cordis.yml` 没有任何允许差异
-2. **两份都不含机器相关路径** —— 不允许 `file:///...`、绝对路径，**也不允许 `./` 相对路径**；plugin `name` 必须写成本包子路径 `@local/dsh-comfyui-chenxin-preset/<subpath>`（Node 经 profile 的 `node_modules` 链接解析，checkout 位置无关）
-3. **每个入口文件真实存在** —— 包内子路径映射回本 checkout 后检查；抓「全新 clone 没有 `dist/`」这类静默失败
-4. **`preset.yml` 的 name/description 与 patch 一致**
+1. **entry 列表除 3 项部署重写外逐条相同** —— `cordis.patch.yml` 与 `agent.cordis.yml` 只允许 `comfyui-loader.name`、`comfyui-loader.config.presetRoot`、`prompt-forge.name` 这三项不同
+2. **源不含机器路径** —— `agent.cordis.yml` 里不允许 `file:///...`、绝对路径或 `../`；plugin `name` 写 `./` 相对路径，`presetRoot` 写 `null`
+3. **patch 指向本 checkout** —— 三项重写必须是 `file:///<本 checkout>/...` 且 `presetRoot` 指向本 checkout；不能是入库的死路径或别机路径
+4. **每个入口文件真实存在** —— patch 的 `file:///` 路径映射回本 checkout 后检查；抓「全新 clone 没有 `dist/`」这类静默失败
+5. **`preset.yml` 的 name/description 与 patch 一致**
 
-第 2 条和第 3 条各对应一个真实缺陷，第 2 条还额外踩过一次回归。绝对路径那次：patch 曾把 `loader.js` / `prompt-forge` 的 name 和 `presetRoot` 钉成本机 `D:/DSH/...`，入库后任何别的机器 clone 都加载失败。而改成 `./loader.js` **修错了方向**：dsh-app-boot 的 `anchorInsertedPluginNames` 只在 `entry.group && Array.isArray(entry.config)` 时才递归进 config，本 preset 行是普通 object config，于是嵌套的 `./` 名字以字面量落到 loader 手上、再按 profile 目录解析 → preset 静默挂不上，预设在菜单里直接消失。用包内子路径是因为它走 Node 的模块解析（profile 的 `link:` 指向 checkout），不依赖锚定递归。见 `docs/KNOWN-ISSUES.md` #28。第 3 条：`plugins/prompt-forge/dist/` 是 gitignore 的构建产物，全新 clone 里它不存在，而 dsh-app-boot 会把 bundle 加载失败静默吞进 `skippedBundles`，表现为「预设起来了但没有 prompt-forge 工具」；两个 setup 脚本现在会自动构建。
+这三条路径约束各对应一个真实缺陷。`./` 那次：dsh-app-boot 的 `anchorInsertedPluginNames` 只在 `entry.group && Array.isArray(entry.config)` 时才递归进 config，本 preset 行是普通 object config，嵌套的 `./` 名字以字面量落到 loader 手上、按 profile 目录解析 → preset 静默消失。`@local/<pkg>` 那次：这个包链接只在 profile 的 `node_modules`，而 preset 内部 entry 从 **host 侧 base** import（`ERR_MODULE_NOT_FOUND`，Loader 吞错 → `never started`）。只有绝对 `file:///` 在 host base、profile base、checkout base 下都能解析——但绝对路径是按机器的，所以由 `scripts/render_patch.py` 从源生成 patch，并在每机 setup 时重渲染，绝不能把某台机器的路径入库。见 `docs/KNOWN-ISSUES.md` #28/#29。第 4 条：`plugins/prompt-forge/dist/` 是 gitignore 的构建产物，全新 clone 里它不存在，而 dsh-app-boot 会把 bundle 加载失败静默吞进 `skippedBundles`，表现为「预设起来了但没有 prompt-forge 工具」；两个 setup 脚本现在会自动构建。
 
 为什么需要这个门：patch 才是 DSH 真正加载的那份，source 是人编辑的那份；两者漂移时，你改的东西不会生效，而不改的东西会生效。`KNOWN-ISSUES.md` #13 只加了 SYNC OBLIGATION 注释——注释不会失败，这个 gate 会。
 

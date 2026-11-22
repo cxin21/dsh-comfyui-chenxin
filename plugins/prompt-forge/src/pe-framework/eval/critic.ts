@@ -15,6 +15,7 @@ import type { AuditGate, Rating } from '../types.js';
 import { tokensOf } from '../tokens.js';
 import { DEFAULT_SUBAGENT_TIMEOUT_MS } from '../intent/subagent-provider.js';
 import { resolveTransport } from '../llm/transport.js';
+import { getWorkflowEngine } from '../workflow/registry.js';
 import { bindExternalAbort } from '../llm/cancel.js';
 
 export type CriticFinding = {
@@ -521,6 +522,16 @@ export function createDirectCriticProvider(
   opts?: { timeoutMs?: number; parent?: unknown; signal?: AbortSignal; resolveRoute?: () => { provider: string; model: string } },
 ): CriticProvider {
   return async function directCritic(req: { persona: string; schema: string; user: string }): Promise<string> {
+    const taskText = buildCriticTaskText(req);
+    // 2026-11-22（工作流层）：若本次调用已注册工作流引擎，critic 节点走引擎 → trace 留痕。
+    const engine = getWorkflowEngine(ownerCtx);
+    if (engine) {
+      const text = await engine.runRole({ id: 'critic', role: 'critic', labelPrefix: 'pm-critic' }, taskText);
+      if (text.trim().length === 0) {
+        throw new Error('DirectCriticProvider 未产出 assistant 文本');
+      }
+      return text;
+    }
     const transport = resolveTransport(ownerCtx, {
       resolveRoute: opts?.resolveRoute,
       parent: opts?.parent ?? ownerCtx?.agent,
@@ -531,7 +542,7 @@ export function createDirectCriticProvider(
     if (!transport) {
       throw new Error('DirectCriticProvider 不可用：ctx.llm.stream 与 ctx.subagents.start 均不可用');
     }
-    const text = await transport.run(buildCriticTaskText(req));
+    const text = await transport.run(taskText);
     if (text.trim().length === 0) {
       throw new Error('DirectCriticProvider 未产出 assistant 文本');
     }

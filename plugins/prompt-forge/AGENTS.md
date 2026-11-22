@@ -55,7 +55,12 @@ npm run build   # tsc → 把 src 改动编译进 dist/
 - `src/pe-framework/aesthetics/` — 具体性/保真检查 + 词库（lexicon.ts）
 - `src/pe-framework/dialect/` — 方言包（h3.ts / anima.ts / registry / package）
 - `src/pe-framework/audit/` — H3 审计规则（rules-h3.ts，含 CJK 感知 semanticShot）
-- `src/pe-framework/intent/` — 意图分析（analyzer / subagent-provider）
+- `src/pe-framework/intent/` — 意图分析（analyzer / core / personas / direct-provider / subagent-provider）
+- `src/pe-framework/workflow/` — 角色化节点工作流（engine：执行器解析/失败分类/重试/逐节点 trace；
+  guard：工作流执行期间拒绝 prompt_author 嵌套再入，防 teammate 继承父工具面造成的自指回路；
+  registry：ctx→engine 弱映射，让模块级单例的 intent/critic provider 挂到本次调用的引擎上）
+- `src/pe-framework/llm/transport.ts` — LLM 执行器抽象（direct / subagent / subagent-v2=teammate），
+  `PM_TRANSPORT=direct|team|subagent` 切换；节点级 executor/prefer 可覆盖全局
 - `src/pe-framework/eval/` — LLM 评委（judge.ts，可选路径）
 - `src/tools/` — prompt_author / prompt_compile / prompt_audit 工具定义（注册清单权威源 =
   `tests/plugin/registry.test.ts` 精确名单，14 工具；M3 T2 起 +style_save 预设入库写工具，

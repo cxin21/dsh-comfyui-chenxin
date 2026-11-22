@@ -98,6 +98,24 @@ export interface EnvelopeObservability {
     /** 审计 LLM 本轮裁决（pass/needs_revision/skipped） */
     auditor: string;
   };
+  /**
+   * 2026-11-22（LLM 工作流层）：逐角色节点的执行 trace。
+   * 一条流水线 = 若干节点（intent / enrich / writer / auditor / repairer / critic …），
+   * 每个节点记录：角色、实际执行器（direct / subagent-v2 / subagent）、耗时、尝试次数、失败分类。
+   * 这是「角色化 LLM 团队」的第一手可观测证据——谁在跑、用哪种形态、失败在哪。
+   */
+  workflow?: {
+    nodes: Array<{
+      id: string;
+      role: string;
+      executor: string;
+      ok: boolean;
+      ms: number;
+      attempts: number;
+      error?: { code: string; message: string };
+    }>;
+    totalMs: number;
+  };
 }
 
 export interface EnvelopeNextAction {

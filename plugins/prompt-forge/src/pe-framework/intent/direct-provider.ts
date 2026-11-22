@@ -14,6 +14,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { AuthorIntentFn, AuthorIntentRequest, AuthorDraft } from '../../tools/prompt-author.js';
 import { resolveRoute, type ExecLike } from '../../llm/route.js';
 import { resolveTransport } from '../llm/transport.js';
+import { getWorkflowEngine } from '../workflow/registry.js';
 import {
   applyBlueprintClarify,
   buildIntentTaskText,
@@ -42,24 +43,32 @@ export function createDirectIntentProvider(
         'direct Intent Provider 需要调用上下文（exec）：请从 Agent 会话内调用 prompt_author（路由完全跟随会话）。',
       );
     }
-    const transport = resolveTransport(ctx, {
-      resolveRoute: () => resolveRoute(live),
-      parent: live.agent ?? (ctx as { agent?: unknown } | undefined)?.agent,
-      labelPrefix: 'pm-author',
-      signal: live.signal,
-    });
-    if (!transport) {
-      throw new Error(
-        'Intent Provider 不可用：ctx.llm.stream 与 ctx.subagents.start 均不可用（host 未加载 LLM 服务或 subagent 服务）。',
-      );
-    }
     // B7（外部基准 2026-09）：catalog 候选召回注入——检索证据进生成回路
     const candidates = (Array.isArray(req.catalogCandidates) ? req.catalogCandidates : []).filter(
       (c) => typeof c === 'string' && c.trim(),
     );
     const resolved = resolveIntentPersonaSchema(req, opts);
     const taskText = buildIntentTaskText(req, resolved, candidates);
-    const text = await transport.run(taskText);
+    // 2026-11-22（工作流层）：若本次调用已注册工作流引擎，intent 节点走引擎 →
+    // trace 里留下「角色=intent、执行器、耗时、失败分类」，并与其它角色共享执行器策略。
+    const engine = getWorkflowEngine(ctx);
+    let text: string;
+    if (engine) {
+      text = await engine.runRole({ id: 'intent', role: 'intent', labelPrefix: 'pm-intent' }, taskText);
+    } else {
+      const transport = resolveTransport(ctx, {
+        resolveRoute: () => resolveRoute(live),
+        parent: live.agent ?? (ctx as { agent?: unknown } | undefined)?.agent,
+        labelPrefix: 'pm-author',
+        signal: live.signal,
+      });
+      if (!transport) {
+        throw new Error(
+          'Intent Provider 不可用：ctx.llm.stream 与 ctx.subagents.start 均不可用（host 未加载 LLM 服务或 subagent 服务）。',
+        );
+      }
+      text = await transport.run(taskText);
+    }
     if (opts._testOverride) {
       const o = opts._testOverride(text, req);
       if (o) return applyBlueprintClarify(o, req);

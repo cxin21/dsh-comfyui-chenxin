@@ -14,21 +14,26 @@
  *   - transport ——「把一段 taskText 变成一段 assistant 文本」的两个实现。
  * 两条 transport 拿到**同一份 taskText**，行为等价由结构保证。
  *
- * ## 两个实现
+ * ## 三个实现
  * - **direct**：`ctx.llm.stream` 直连。依赖面只有 LLM 服务本身，不随 host 的 subagent API 变形而失效。
  *   用户裁定「不通过调用 subagents 的方式」→ 默认走这条。
- * - **subagent**：`ctx.subagents.start` 一次性 spawn（保留旧行为，供回退与老 host）。
+ * - **subagent-v2**：`ctx.subagents.startActivation(spec)`（host 0.2.2-rc.5 新 seam）——
+ *   每个角色节点 = 一个有名有姓的 teammate，带自己的输出契约与模型路由；这是「团队形态」。
+ * - **subagent**：`ctx.subagents.start` 一次性 spawn（旧 seam，保留旧行为，供老 host 回退）。
  *
  * ## 开关
- * `PM_TRANSPORT=direct|subagent`
- *   - `direct`（默认）：优先 direct，direct 不可用时回退 subagent。
- *   - `subagent`：优先 subagent（等价于旧行为），subagent 不可用时回退 direct。
+ * `PM_TRANSPORT=direct|team|subagent`
+ *   - `direct`（默认）：direct → subagent-v2 → subagent。
+ *   - `team`：subagent-v2 → subagent → direct（角色节点走 teammate）。
+ *   - `subagent`：subagent → subagent-v2 → direct（等价于旧行为）。
+ * 另有节点级偏好 `TransportOptions.prefer`（工作流引擎用）：被偏好的执行器排到最前。
  */
 import type { Context } from '@deepseek-ai/cordis';
 import { completeTaskText } from '../../llm/complete.js';
 import { createSubagentTextRunner } from './subagent-text.js';
+import { createSubagentV2Runner, hasSubagentV2Seam } from './subagent-v2.js';
 
-export type TransportKind = 'direct' | 'subagent';
+export type TransportKind = 'direct' | 'subagent' | 'subagent-v2';
 
 export interface TransportOptions {
   /**
@@ -42,6 +47,11 @@ export interface TransportOptions {
   labelPrefix?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * 节点级执行器偏好（工作流引擎用）：被偏好的执行器排到候选序列最前。
+   * 未指定时按 PM_TRANSPORT / 能力探测排序。
+   */
+  prefer?: TransportKind;
 }
 
 export interface LlmTransport {
@@ -108,14 +118,56 @@ export function createSubagentTransport(ctx: Context, opts: TransportOptions = {
 }
 
 /**
- * 按能力 + 开关选一条 transport。
+ * subagent-v2 transport：host 0.2.2-rc.5 的新 seam（`ctx.subagents.startActivation`）。
+ * 每个角色节点 = 一个有名有姓的 teammate（团队形态）：自己的角色 prompt、
+ * 自己的输出契约（outputSchema）、自己的模型路由（agentOptions），
+ * 结果按 delivery:'caller' 回给插件。
+ *
+ * 注意：新 seam 的 spec 里**没有工具白名单**（旧 seam 的 toolFilter），
+ * 子代理可用工具由它自己的 composition 决定——需要 catalog 证据时改为
+ * 在 prompt 里注入确定性检索结果。
+ */
+export function createSubagentV2Transport(ctx: Context, opts: TransportOptions = {}): LlmTransport | undefined {
+  if (!hasSubagentV2Seam(ctx)) return undefined;
+  const runner = createSubagentV2Runner(ctx as never, {
+    parent: opts.parent,
+    signal: opts.signal,
+    labelPrefix: opts.labelPrefix,
+    timeoutMs: opts.timeoutMs,
+  });
+  if (!runner) return undefined;
+  return {
+    kind: 'subagent-v2',
+    run: (taskText: string) => runner(taskText),
+  };
+}
+
+/**
+ * 按能力 + 开关 + 节点偏好选一条 transport。
  * 返回 undefined = 两条路都不可用（调用方应 fail-open 或给出可观测错误，不得静默出空稿）。
+ *
+ * 排序：
+ *   - 节点级 prefer 排最前（工作流引擎：某个角色可以单独走团队形态）；
+ *   - 其余按 PM_TRANSPORT：direct（默认）→ subagent-v2 → subagent；
+ *     subagent → subagent → subagent-v2 → direct；team → subagent-v2 → subagent → direct。
  */
 export function resolveTransport(ctx: Context, opts: TransportOptions = {}): LlmTransport | undefined {
   const mode = (process.env.PM_TRANSPORT ?? 'direct').trim().toLowerCase();
-  const order: TransportKind[] = mode === 'subagent' ? ['subagent', 'direct'] : ['direct', 'subagent'];
+  const base: TransportKind[] =
+    mode === 'subagent'
+      ? ['subagent', 'subagent-v2', 'direct']
+      : mode === 'team'
+        ? ['subagent-v2', 'subagent', 'direct']
+        : ['direct', 'subagent-v2', 'subagent'];
+  // 节点级 prefer 排在最前（即使它也在 base 序列里）——节点级偏好覆盖全局开关。
+  const order = opts.prefer ? [opts.prefer, ...base.filter((kind) => kind !== opts.prefer)] : base;
   for (const kind of order) {
-    const transport = kind === 'direct' ? createDirectTransport(ctx, opts) : createSubagentTransport(ctx, opts);
+    const transport =
+      kind === 'direct'
+        ? createDirectTransport(ctx, opts)
+        : kind === 'subagent-v2'
+          ? createSubagentV2Transport(ctx, opts)
+          : createSubagentTransport(ctx, opts);
     if (transport) return transport;
   }
   return undefined;

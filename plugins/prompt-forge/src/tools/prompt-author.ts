@@ -13,7 +13,14 @@ import {
   createProductionEvidenceDeps,
   createProductionCriticProvider,
 } from '../pe-framework/pipeline/judge-assembly.js';
-import { createTransportRunner, hasSubagentSeam } from '../pe-framework/llm/transport.js';
+import { hasSubagentSeam } from '../pe-framework/llm/transport.js';
+import { WorkflowEngine } from '../pe-framework/workflow/engine.js';
+import { clearWorkflowEngine, setWorkflowEngine } from '../pe-framework/workflow/registry.js';
+import {
+  beginWorkflowScope,
+  endWorkflowScope,
+  isNestedWorkflowCall,
+} from '../pe-framework/workflow/guard.js';
 import { createCancelGuard } from '../pe-framework/llm/cancel.js';
 import { orchestrateCompositing } from '../pe-framework/compositing/orchestrate.js';
 // audit P1：nl_tag_overlap 向量层生产装配件（PM_VECTOR_OVERLAP=off 可关）
@@ -1058,6 +1065,18 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
       // 声明在 try 外：finally 的 dispose 需要跨块可见（try 内 const 对 catch/finally 不可见）。
       const cancel = createCancelGuard(exec.signal, 'prompt_author');
       const rx = <T>(p: Promise<T>): Promise<T> => cancel.race(p);
+      // 2026-11-23（工作流守卫）：团队形态下 teammate 继承父 agent 的工具面，可能再调 prompt_author →
+      // 形成自指回路（新 seam 无 toolFilter 做架构级隔离）。判据是**调用者身份**而不是「有没有工作流在跑」——
+      // 后者会误伤同一会话里并发的另一个顶层 prompt_author 调用。
+      const callerAgentId = (exec as unknown as { agent?: { id?: string } } | undefined)?.agent?.id;
+      if (isNestedWorkflowCall(ctx, callerAgentId)) {
+        throw new Error(
+          'nested_workflow_refused：prompt_author 正在工作流节点内被再次调用（团队形态的 teammate 继承父工具面导致的自指回路）。' +
+            '请直接调用顶层 prompt_author，或让 teammate 只做单次角色任务。',
+        );
+      }
+      // 作用域在本次执行期间开启（finally 关闭）：期间由工作流派生的 teammate 再次调用会被识别为嵌套。
+      beginWorkflowScope(ctx, callerAgentId);
       try {
         // M5-DIAG2：诊断包裹——CRASH stack 落盘后原样 rethrow（行为零变化，仅证据采集）
         const target = String(a.target || 'anima') as Target;
@@ -1180,13 +1199,26 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // → enrich/评审/成文/审计/修复全部变 undefined → 静默失效（无报错、无 advisory）。
         // transport 层按能力选路并让「不可用」显式化（两条路都不可用 → runner 为 undefined，
         // 对应管线按既有 fail-open 规则降级 + 机器门兜底）。
-        const transportRunner = (labelPrefix: string): ((taskText: string) => Promise<string>) | undefined =>
-          createTransportRunner(ctx, {
-            resolveRoute: () => resolveRoute(exec as ExecLike),
-            parent: criticParent,
-            labelPrefix,
-            signal: exec.signal,
-          });
+        // 2026-11-22（LLM 工作流层）：角色节点 = 一等公民。
+        // 每条角色调用（intent / enrich / writer / auditor / repairer / h3 五槽位 / critic）
+        // 都经工作流引擎执行：引擎负责**执行器选择**（direct ↔ 团队 teammate）、
+        // **失败分类**、**有限重试**、**逐节点 trace**（角色 + 执行器 + 耗时 + 尝试次数）。
+        // 控制流（修复轮/审计门/预算台账）仍留在编排器——引擎不吞业务语义。
+        const workflow = new WorkflowEngine({
+          ctx,
+          resolveRoute: () => resolveRoute(exec as ExecLike),
+          parent: criticParent,
+          signal: exec.signal,
+        });
+        setWorkflowEngine(ctx, workflow);
+        // 角色 runner：不可用时返回 undefined（保持既有「runner 缺失 → 管线 fail-open 降级」语义）。
+        const roleRunner = (
+          role: string,
+          labelPrefix: string,
+        ): ((taskText: string) => Promise<string>) | undefined => {
+          if (!workflow.hasExecutor({ id: role, role })) return undefined;
+          return (taskText: string) => workflow.runRole({ id: role, role, labelPrefix }, taskText);
+        };
         const asLlm =
           (runner: ((taskText: string) => Promise<string>) | undefined) =>
             runner
@@ -1194,8 +1226,8 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
               : undefined;
         // #16 T-02（对抗审查 P1-3）：caller signal 透传进全部 runner 工厂——取消时
         // bindExternalAbort 联动内部 controller，host 真正中止在途调用。
-        const enrichLlm = asLlm(transportRunner('pm-enrich'));
-        const blueprintLlm = asLlm(transportRunner('pm-blueprint'));
+        const enrichLlm = asLlm(roleRunner('enrich', 'pm-enrich'));
+        const blueprintLlm = asLlm(roleRunner('blueprint', 'pm-blueprint'));
         // R17（修复计划 R17）：runEnrich brief 层随 h3 直译路径移除而退出——h3 新鲜请求一律 routing
         // 到 directing 编排器（§3），不消费七维 brief；此处保留调用 = 每次出稿白烧 1 次 LLM 且产物被
         // 弃用。enrich 参数对 h3 已无消费面；显式 outputLang 亦无消费面 → advisory 可观测。
@@ -1247,11 +1279,11 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             }
           }
           if (!script.trim()) throw new Error('target=h3 requires non-empty input or script (spec §3)');
-          const saRunner = transportRunner('pm-script-analyst');
-          const bdRunner = transportRunner('pm-beat-director');
-          const swRunner = transportRunner('pm-shot-writer');
-          const caRunner = judgeMode !== 'off' ? transportRunner('pm-continuity-auditor') : undefined;
-          const srRunner = transportRunner('pm-shot-repairer');
+          const saRunner = roleRunner('script-analyst', 'pm-script-analyst');
+          const bdRunner = roleRunner('beat-director', 'pm-beat-director');
+          const swRunner = roleRunner('shot-writer', 'pm-shot-writer');
+          const caRunner = judgeMode !== 'off' ? roleRunner('continuity-auditor', 'pm-continuity-auditor') : undefined;
+          const srRunner = roleRunner('shot-repairer', 'pm-shot-repairer');
           // 2026-11-22（direct transport 能力降级可观测）：direct transport 是纯文本 one-shot，
           // 无 host 工具回填能力 → 原来靠 toolFilter 开放 catalog_search 的三个 runner 降级为
           // 文本形态（catalog 证据改由确定性检索包 + 机器门承担）。显式 advisory，不静默。
@@ -1312,6 +1344,8 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
           const h3Observability = {
             corrections: outcome.corrections,
             loopExhausted: outcome.loopExhausted,
+            // 2026-11-22（工作流层）：逐角色节点 trace（角色 / 执行器 / 耗时 / 尝试次数）
+            workflow: workflow.snapshot(),
           };
           const h3TopLevel: Record<string, unknown> = {
             generation_id: generationId,
@@ -1451,13 +1485,13 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         // S3 成文(pm-writer 工具查字典) → S4 双轨审核(机器门 ∥ pm-auditor 每轮必跑) →
         // S5 修复(pm-repairer)；检索层已废除（A1）。编排细节在 compositing/orchestrate.ts。
         if (target === 'anima' && draft.semantic) {
-          const enrichRunner = transportRunner('pm-enrich');
+          const enrichRunner = roleRunner('enrich', 'pm-enrich');
           // A2：成文/审计/修复三个 LLM 原开放 catalog_search 工具（toolFilter allow）——
           // 2026-11-22 direct transport 无工具能力 → 降级为文本 runner（catalog 证据由
           // 确定性检索包 + 机器门 verifyTag/search 承担；不可用事实由上方 advisory 暴露）。
-          const writerRunner = transportRunner('pm-writer');
-          const auditorRunner = judgeMode !== 'off' ? transportRunner('pm-auditor') : undefined;
-          const repairRunner = transportRunner('pm-repairer');
+          const writerRunner = roleRunner('writer', 'pm-writer');
+          const auditorRunner = judgeMode !== 'off' ? roleRunner('auditor', 'pm-auditor') : undefined;
+          const repairRunner = roleRunner('repairer', 'pm-repairer');
           // A5：机审 fabricated_tag 直查 catalog（canonical/alias/artist 同步级联，毫秒级）
           const verifyTag = (tag: string): boolean => searchCatalogSync(tag, { mode: 'auto', limit: 5 }).length > 0;
           // A6：回退直查缝
@@ -1534,6 +1568,8 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
                 fallback_used: outcome.fallbackUsed,
                 auditor: outcome.auditor?.verdict ?? 'skipped',
               },
+              // 2026-11-22（工作流层）：逐角色节点 trace
+              workflow: workflow.snapshot(),
               designNotes: [
                 ...outcome.v1.subjects.map((s) => `主体（${s.count}）: ${s.identity}`),
                 `场景: ${outcome.v1.core.scene.environment} / ${outcome.v1.core.scene.lighting_idea}`,
@@ -1782,6 +1818,8 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
                 repairs_count: repairs.length,
                 anchor_rounds: corrections - correctionsInitial,
               },
+              // 2026-11-22（工作流层）：逐角色节点 trace
+              workflow: workflow.snapshot(),
             },
             {
               generation_id: generationId,
@@ -1891,6 +1929,8 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
             canonicalSubstitutions: canon.canonicalSubstitutions,
             substitutions: canon.substitutions,
             designNotes: designNotesOf(projStage),
+            // 2026-11-22（工作流层）：逐角色节点 trace
+            workflow: workflow.snapshot(),
           },
           {
             generation_id: generationId,
@@ -1909,6 +1949,8 @@ export function registerAuthorTool(ctx: Context, _config: Config) {
         trace(cancelled ? 'CANCELLED' : 'CRASH', err instanceof Error ? (err.stack ?? err.message) : String(err));
         throw err;
       } finally {
+        clearWorkflowEngine(ctx);
+        endWorkflowScope(ctx);
         cancel.dispose();
       }
     },

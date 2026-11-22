@@ -656,7 +656,10 @@ means documented behavior with no code change required.
     （persona/schema/taskText/parse）与 transport 分离，subagent 与 direct 两条路
     共用同一份 core（顺带修掉 anima `compositingMode` 分支只在子代理侧存在、
     直连会静默降级成 legacy slots 的漂移）。transport = `direct`（`ctx.llm.stream`
-    直连，默认）/ `subagent`（`PM_TRANSPORT=subagent`，或 direct 不可用时自动回退）。
+    直连，默认）/ `subagent`（`PM_TRANSPORT=subagent`，或 direct 不可用时自动回退）
+    / `subagent-v2`（`PM_TRANSPORT=team`，走 host 0.2.2-rc.5 的
+    `ctx.subagents.startActivation(spec)`——每个角色节点一个有名有姓的 teammate，
+    带自己的 `outputSchema` 与 `agentOptions`；见 #31）。
   - **apply 期只「绑定 ctx」**：不再硬接线一个会抛错的 provider；transport 在**调用期**
     按能力解析 → 失败表现为单次调用的可观测错误，不再是挂载失败导致整包工具失能。
   - **能力降级要可见**：host 的 `ContentBlockMap` 没有 `tool-result` 块，
@@ -665,6 +668,44 @@ means documented behavior with no code change required.
     compositing 的确定性机器门（`verifyTag` / `search` 直查 catalog）继续承担证据职责。
   - **回归闸门**：`scripts/verify-host-shape.mjs`（`npm run verify:host-shape`）
     按 host 真实服务形状挂载 **dist**，断言 14 个工具全部注册——它就是那场事故的闸门。
+
+## 31. 提示词流水线没有「角色」这一层 — 角色散落各分支，执行器无法切换 `[FIXED]`
+
+- **Where**: `plugins/prompt-forge/src/pe-framework/workflow/{types,engine,guard,registry}.ts`、
+  `src/pe-framework/llm/subagent-v2.ts`、`src/pe-framework/llm/transport.ts`、
+  `src/tools/prompt-author.ts`。
+- **What**: 每个角色（intent / enrich / writer / auditor / repairer / script-analyst /
+  beat-director / shot-writer / continuity-auditor / critic）其实**早已**各有
+  persona / schema / parser，但「谁在跑、用哪种执行器、失败怎么办」散落在
+  `orchestrateCompositing` / `orchestrateDirecting` 的各分支里——没有声明式的节点身份，
+  也没有在「进程内直连 ↔ 团队 teammate」之间切换的公共接口。
+- **Why**: 需求（「一条流程，节点角色不同」）被写成了命令式控制流，而不是节点图。
+  后果：加一个角色要改多个分支 → 角色之间开始漂移（审计反复批的 drift 反模式）；
+  换执行器只能逐个调用点打补丁。
+- **Impact**: 修好 #30 之后，`direct` 与旧 `subagent` 两条路已经可用，但**团队形态**
+  （host 0.2.2-rc.5 的 `ctx.subagents.startActivation(spec)`）无法接入——它需要
+  「节点」这个抽象，而不是又一个函数调用点。
+- **Fix**:
+  - **角色升格为一等公民**：`WorkflowNodeSpec{id, role, executor, maxAttempts, labelPrefix}`；
+    `WorkflowEngine` 负责执行器解析、失败分类（`transport_unavailable` / `llm_failed` /
+    `cancelled`）、有限重试（**取消不重试**）与逐节点 trace。控制流仍归编排器——
+    引擎不吞流程形状。
+  - **团队执行器**：`subagent-v2` 走 `ctx.subagents.startActivation(spec)`，每个角色节点
+    一个有名有姓的 teammate，带自己的 `outputSchema` 与 `agentOptions`；
+    `PM_TRANSPORT=direct|team|subagent` 切换，节点级 `executor`/`prefer` 可覆盖全局。
+  - **能力边界要写清楚**：新 seam 的 spec 里**没有工具白名单**（旧 seam 的
+    `toolFilter: {allow: []}` 没了）→ teammate 的工具集由它自己的 composition 决定，
+    可能继承父 agent 工具面（含 `prompt_author`）形成自指回路。因此
+    `workflow/guard.ts` 按**调用者身份**判嵌套（teammate 的 agent ≠ 工作流发起者 → 拒绝
+    `nested_workflow_refused`；同一会话的并发顶层调用 → 放行），而不是「工作流在跑就全拒」；
+    需要 catalog 证据时改为在 prompt 里注入确定性检索结果。
+  - **可观测**：逐节点 trace 经 `observability.workflow` 进入 envelope——一次调用后
+    能看到每个角色是谁、用什么执行器跑的、失败了没。
+  - **回归闸门**：`tests/pe-framework/workflow/engine.test.ts`、
+    `tests/pe-framework/llm/subagent-v2.test.ts`、`npm run verify:host-shape`。
+- **设计稿**: `plugins/prompt-forge/docs/specs/2026-11-23-role-workflow-design.md`。
+
+---
 
 ---
 

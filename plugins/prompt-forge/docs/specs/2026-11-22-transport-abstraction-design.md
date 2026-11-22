@@ -47,10 +47,12 @@ intent core（与 transport 无关）        transport（两种实现）
 
 ### 开关
 
-`PM_TRANSPORT=direct|subagent`
+`PM_TRANSPORT=direct|team|subagent`
 
-- `direct`（默认）：优先 direct，direct 不可用时回退 subagent。
-- `subagent`：优先 subagent，等价于旧行为。
+- `direct`（默认）：direct → subagent-v2 → subagent。
+- `team`：subagent-v2 → subagent → direct（角色节点走 teammate，见
+  [2026-11-23-role-workflow-design.md](./2026-11-23-role-workflow-design.md)）。
+- `subagent`：subagent → subagent-v2 → direct，等价于旧行为。
 
 ### apply 期的纪律
 
@@ -72,3 +74,8 @@ host 的 `ContentBlockMap` 里没有 `tool-result` 块，`ctx.llm.stream` 是一
 
 `npm run verify:host-shape`（`scripts/verify-host-shape.mjs`）：按 host 真实服务形状
 挂载 **dist**，断言 14 个工具全部注册。它复刻的正是事故现场——形状不对，工具就少。
+
+## 后续
+
+角色化节点工作流（节点身份 / 执行器切换 / 逐节点 trace / 团队 teammate 形态）见
+[2026-11-23-role-workflow-design.md](./2026-11-23-role-workflow-design.md)。
